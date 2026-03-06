@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const BUILD_TAG = "accept-tracker-invite-proxy-v2_env_fallback_20260305";
+const BUILD_TAG = "accept-tracker-invite-proxy-v3_edge_url_fallback_20260305";
 
 function json(res, status, payload) {
   res
@@ -15,25 +15,6 @@ function getEnvFirst(...names) {
     const v = String(process.env[n] || "").trim();
     if (v) return v;
   }
-  return "";
-}
-
-function getSupabaseFunctionsBaseUrl() {
-  const explicit = getEnvFirst("SUPABASE_FUNCTIONS_URL", "VITE_SUPABASE_FUNCTIONS_URL");
-  if (explicit) return explicit.replace(/\/+$/, "");
-
-  const sbUrl = getEnvFirst("SUPABASE_URL", "VITE_SUPABASE_URL");
-  if (!sbUrl) return "";
-
-  try {
-    const u = new URL(sbUrl);
-    const host = u.hostname;
-    if (host.endsWith(".supabase.co")) {
-      const projectRef = host.replace(".supabase.co", "");
-      return `https://${projectRef}.functions.supabase.co`;
-    }
-  } catch {}
-
   return "";
 }
 
@@ -52,6 +33,62 @@ function hmacHex(secret, msg) {
   return crypto.createHmac("sha256", secret).update(msg).digest("hex");
 }
 
+function buildFunctionCandidates(functionName) {
+  const sbUrl = getEnvFirst("SUPABASE_URL", "VITE_SUPABASE_URL").replace(/\/+$/, "");
+  const explicitFunctions = getEnvFirst("SUPABASE_FUNCTIONS_URL", "VITE_SUPABASE_FUNCTIONS_URL").replace(/\/+$/, "");
+
+  const urls = [];
+
+  if (explicitFunctions) {
+    // Caso 1: viene como https://project.functions.supabase.co
+    urls.push(`${explicitFunctions}/${functionName}`);
+
+    // Caso 2: viene como https://project.supabase.co/functions/v1
+    if (explicitFunctions.includes("/functions/v1")) {
+      urls.push(`${explicitFunctions}/${functionName}`);
+    }
+  }
+
+  if (sbUrl) {
+    // Caso 3: URL REST estándar
+    urls.push(`${sbUrl}/functions/v1/${functionName}`);
+
+    // Caso 4: derivar functions.supabase.co desde SUPABASE_URL
+    try {
+      const u = new URL(sbUrl);
+      const host = u.hostname;
+      if (host.endsWith(".supabase.co")) {
+        const projectRef = host.replace(".supabase.co", "");
+        urls.push(`https://${projectRef}.functions.supabase.co/${functionName}`);
+      }
+    } catch {}
+  }
+
+  return [...new Set(urls.filter(Boolean))];
+}
+
+async function tryPostJson(url, rawBody, headers) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: rawBody,
+  });
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    url,
+    data,
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return json(res, 405, {
@@ -64,10 +101,9 @@ export default async function handler(req, res) {
   try {
     const SUPABASE_URL = getEnvFirst("SUPABASE_URL", "VITE_SUPABASE_URL");
     const SUPABASE_ANON_KEY = getEnvFirst("SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY");
-    const SUPABASE_FUNCTIONS_BASE = getSupabaseFunctionsBaseUrl();
     const TRACKER_PROXY_SECRET = getEnvFirst("TRACKER_PROXY_SECRET", "VITE_TRACKER_PROXY_SECRET");
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_FUNCTIONS_BASE || !TRACKER_PROXY_SECRET) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !TRACKER_PROXY_SECRET) {
       return json(res, 500, {
         ok: false,
         build_tag: BUILD_TAG,
@@ -75,18 +111,7 @@ export default async function handler(req, res) {
         diag: {
           has_SUPABASE_URL: !!SUPABASE_URL,
           has_SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY,
-          has_SUPABASE_FUNCTIONS_BASE: !!SUPABASE_FUNCTIONS_BASE,
           has_TRACKER_PROXY_SECRET: !!TRACKER_PROXY_SECRET,
-          env_names_checked: {
-            SUPABASE_URL: !!String(process.env.SUPABASE_URL || "").trim(),
-            VITE_SUPABASE_URL: !!String(process.env.VITE_SUPABASE_URL || "").trim(),
-            SUPABASE_ANON_KEY: !!String(process.env.SUPABASE_ANON_KEY || "").trim(),
-            VITE_SUPABASE_ANON_KEY: !!String(process.env.VITE_SUPABASE_ANON_KEY || "").trim(),
-            SUPABASE_FUNCTIONS_URL: !!String(process.env.SUPABASE_FUNCTIONS_URL || "").trim(),
-            VITE_SUPABASE_FUNCTIONS_URL: !!String(process.env.VITE_SUPABASE_FUNCTIONS_URL || "").trim(),
-            TRACKER_PROXY_SECRET: !!String(process.env.TRACKER_PROXY_SECRET || "").trim(),
-            VITE_TRACKER_PROXY_SECRET: !!String(process.env.VITE_TRACKER_PROXY_SECRET || "").trim(),
-          },
         },
       });
     }
@@ -146,41 +171,57 @@ export default async function handler(req, res) {
     const fn = "accept-tracker-invite";
     const signature = hmacHex(TRACKER_PROXY_SECRET, `${fn}.${ts}.${rawBody}`);
 
-    const edgeUrl = `${SUPABASE_FUNCTIONS_BASE}/accept-tracker-invite`;
+    const candidates = buildFunctionCandidates(fn);
 
-    const edgeRes = await fetch(edgeUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Proxy-Ts": ts,
-        "X-Proxy-Signature": signature,
-      },
-      body: rawBody,
-    });
-
-    let edgeJson = null;
-    try {
-      edgeJson = await edgeRes.json();
-    } catch {
-      edgeJson = null;
-    }
-
-    if (!edgeRes.ok) {
-      return json(res, edgeRes.status, {
+    if (!candidates.length) {
+      return json(res, 500, {
         ok: false,
         build_tag: BUILD_TAG,
-        error: "EDGE_CALL_FAILED",
-        edge_status: edgeRes.status,
-        edge_response: edgeJson,
+        error: "NO_EDGE_URL_CANDIDATES",
       });
     }
 
-    return json(res, 200, {
-      ok: true,
+    const headers = {
+      "Content-Type": "application/json",
+      "X-Proxy-Ts": ts,
+      "X-Proxy-Signature": signature,
+    };
+
+    const attempts = [];
+    for (const url of candidates) {
+      try {
+        const result = await tryPostJson(url, rawBody, headers);
+        attempts.push(result);
+
+        if (result.ok) {
+          return json(res, 200, {
+            ok: true,
+            build_tag: BUILD_TAG,
+            proxy_user_id: user_id,
+            proxy_org_id: org_id,
+            edge_url_used: result.url,
+            edge_response: result.data,
+            attempts,
+          });
+        }
+      } catch (e) {
+        attempts.push({
+          ok: false,
+          status: 0,
+          url,
+          data: { error: e?.message || String(e) },
+        });
+      }
+    }
+
+    const last = attempts[attempts.length - 1] || null;
+
+    return json(res, last?.status || 502, {
+      ok: false,
       build_tag: BUILD_TAG,
-      proxy_user_id: user_id,
-      proxy_org_id: org_id,
-      edge_response: edgeJson,
+      error: "EDGE_CALL_FAILED",
+      edge_url_candidates: candidates,
+      attempts,
     });
   } catch (e) {
     return json(res, 500, {
