@@ -20,7 +20,9 @@ function pickOrgIdFromSearch(search) {
   try {
     const sp = new URLSearchParams(search || "");
     const candidates = [sp.get("org"), sp.get("org_id"), sp.get("orgId")].filter(Boolean);
-    for (const c of candidates) if (isUuid(c)) return String(c);
+    for (const c of candidates) {
+      if (isUuid(c)) return String(c);
+    }
   } catch {}
   return null;
 }
@@ -48,6 +50,28 @@ function parseHashTokens(hash) {
     access_token: hp.get("access_token") || "",
     refresh_token: hp.get("refresh_token") || "",
   };
+}
+
+function hasMagicLinkInHash(hash) {
+  const { access_token, refresh_token } = parseHashTokens(hash);
+  return !!access_token && !!refresh_token && looksLikeJwt(access_token);
+}
+
+function shouldForceDisclosureNow(search, hash) {
+  try {
+    const sp = new URLSearchParams(search || "");
+    const forceDisclosure =
+      sp.get("show_disclosure") === "1" || sp.get("force_disclosure") === "1";
+
+    const forceOnceFromSession =
+      sessionStorage.getItem(SS_FORCE_DISCLOSURE) === "1";
+
+    const hasMagicLinkTokens = hasMagicLinkInHash(hash);
+
+    return forceDisclosure || forceOnceFromSession || hasMagicLinkTokens;
+  } catch {
+    return hasMagicLinkInHash(hash);
+  }
 }
 
 function sleep(ms) {
@@ -90,7 +114,9 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     (async () => {
       try {
-        if (i18n?.resolvedLanguage !== lang) await i18n.changeLanguage(lang);
+        if (i18n?.resolvedLanguage !== lang) {
+          await i18n.changeLanguage(lang);
+        }
       } catch {}
     })();
   }, [i18n, lang]);
@@ -108,7 +134,26 @@ export default function TrackerGpsPage() {
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
 
-  const [disclosureAccepted, setDisclosureAccepted] = useState(false);
+  const [disclosureAccepted, setDisclosureAccepted] = useState(() => {
+    try {
+      const forced = shouldForceDisclosureNow(
+        window.location.search,
+        window.location.hash
+      );
+      if (forced) return false;
+      return localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const [mustShowDisclosure, setMustShowDisclosure] = useState(() => {
+    try {
+      return shouldForceDisclosureNow(window.location.search, window.location.hash);
+    } catch {
+      return false;
+    }
+  });
 
   const [debug, setDebug] = useState({
     session_exists: null,
@@ -128,6 +173,7 @@ export default function TrackerGpsPage() {
     last_invoke_token_len: 0,
     last_token_ttl_sec: null,
     last_http_status: null,
+    must_show_disclosure: null,
   });
 
   const watchIdRef = useRef(null);
@@ -146,34 +192,25 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     try {
-      const sp = new URLSearchParams(location.search || "");
-      const forceDisclosure =
-        sp.get("show_disclosure") === "1" ||
-        sp.get("force_disclosure") === "1";
+      const forced = shouldForceDisclosureNow(
+        window.location.search,
+        window.location.hash
+      );
 
-      const { access_token, refresh_token } = parseHashTokens(window.location.hash);
-      const hasMagicLinkTokens =
-        !!access_token && !!refresh_token && looksLikeJwt(access_token);
-
-      const forceOnceFromSession =
-        sessionStorage.getItem(SS_FORCE_DISCLOSURE) === "1";
-
-      if (forceDisclosure || hasMagicLinkTokens || forceOnceFromSession) {
+      if (forced) {
+        setMustShowDisclosure(true);
         setDisclosureAccepted(false);
-
-        try {
-          if (hasMagicLinkTokens) {
-            sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
-          } else {
-            sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
-          }
-        } catch {}
-
-        return;
+      } else {
+        setMustShowDisclosure(false);
+        setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
       }
 
-      setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
+      setDebug((d) => ({
+        ...d,
+        must_show_disclosure: forced,
+      }));
     } catch {
+      setMustShowDisclosure(false);
       setDisclosureAccepted(false);
     }
   }, [location.search]);
@@ -362,6 +399,8 @@ export default function TrackerGpsPage() {
 
     try {
       sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
+      setMustShowDisclosure(true);
+      setDisclosureAccepted(false);
     } catch {}
 
     (async () => {
@@ -675,8 +714,10 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId, membershipStatus, disclosureAccepted]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
+  const shouldRenderDisclosure =
+    trackerReady && hasSession && (mustShowDisclosure || !disclosureAccepted);
 
-  if (trackerReady && hasSession && !disclosureAccepted) {
+  if (shouldRenderDisclosure) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
         <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5">
@@ -707,6 +748,7 @@ export default function TrackerGpsPage() {
                 localStorage.setItem(LS_DISCLOSURE_ACCEPTED, "1");
                 sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
               } catch {}
+              setMustShowDisclosure(false);
               setDisclosureAccepted(true);
               setLastError(null);
               setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
