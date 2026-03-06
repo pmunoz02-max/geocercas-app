@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
+import LocationDisclosure, {
+  LS_DISCLOSURE_ACCEPTED,
+} from "../components/LocationDisclosure";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
@@ -95,6 +98,8 @@ export default function TrackerGpsPage() {
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
 
+  const [disclosureAccepted, setDisclosureAccepted] = useState(false);
+
   const [debug, setDebug] = useState({
     session_exists: null,
     token_looks_jwt: null,
@@ -124,6 +129,14 @@ export default function TrackerGpsPage() {
   const didHashSessionRef = useRef(false);
 
   const PRIMARY = supabase;
+
+  useEffect(() => {
+    try {
+      setDisclosureAccepted(localStorage.getItem(LS_DISCLOSURE_ACCEPTED) === "1");
+    } catch {
+      setDisclosureAccepted(false);
+    }
+  }, []);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
@@ -565,7 +578,7 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId, PRIMARY, t]);
 
   useEffect(() => {
-    if (!trackerReady || !hasSession) return;
+    if (!trackerReady || !hasSession || !disclosureAccepted) return;
 
     if (!("geolocation" in navigator)) {
       setStatus(
@@ -617,15 +630,11 @@ export default function TrackerGpsPage() {
       setLastError(err?.message || String(err));
     };
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      handleSuccess,
-      handleError,
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 20000,
-      }
-    );
+    watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 20000,
+    });
 
     return () => {
       cancelled = true;
@@ -633,10 +642,11 @@ export default function TrackerGpsPage() {
         navigator.geolocation.clearWatch(watchIdRef.current);
       }
     };
-  }, [trackerReady, hasSession, membershipStatus, t]);
+  }, [trackerReady, hasSession, membershipStatus, disclosureAccepted, t]);
 
   useEffect(() => {
     if (!trackerReady || !hasSession) return;
+    if (!disclosureAccepted) return;
     if (membershipStatus !== "ok") return;
     if (!orgId) return;
 
@@ -680,12 +690,40 @@ export default function TrackerGpsPage() {
     return () => {
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [trackerReady, hasSession, orgId, membershipStatus]);
+  }, [trackerReady, hasSession, orgId, membershipStatus, disclosureAccepted]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
+      {!disclosureAccepted && trackerReady && hasSession ? (
+        <LocationDisclosure
+          onAccepted={() => {
+            setDisclosureAccepted(true);
+            setLastError(null);
+            setStatus(
+              t("trackerGps.status.sessionOkPreparing", {
+                defaultValue: "Session OK. Preparing tracker…",
+              })
+            );
+          }}
+          title={t("trackerGps.disclosure.title", {
+            defaultValue: "Ubicación en segundo plano",
+          })}
+          body1={t("trackerGps.disclosure.body1", {
+            defaultValue:
+              "App Geocercas recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
+          })}
+          body2={t("trackerGps.disclosure.body2", {
+            defaultValue:
+              "Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión.",
+          })}
+          continueLabel={t("trackerGps.disclosure.continue", {
+            defaultValue: "Continuar",
+          })}
+        />
+      ) : null}
+
       <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
         <h1 className="text-lg font-semibold text-center">
           {t("trackerGps.title", { defaultValue: "Tracker GPS" })}
