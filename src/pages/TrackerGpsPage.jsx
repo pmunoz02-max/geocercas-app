@@ -9,6 +9,7 @@ const TICK_MS = 30_000;
 
 const LS_TRACKER_ORG_KEY = "geocercas_tracker_org_id";
 const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
+const SS_FORCE_DISCLOSURE = "geocercas_force_disclosure_once";
 
 function isUuid(v) {
   const s = String(v ?? "").trim();
@@ -150,8 +151,16 @@ export default function TrackerGpsPage() {
         sp.get("show_disclosure") === "1" ||
         sp.get("force_disclosure") === "1";
 
-      if (forceDisclosure) {
+      const forceOnceFromSession =
+        sessionStorage.getItem(SS_FORCE_DISCLOSURE) === "1";
+
+      if (forceDisclosure || forceOnceFromSession) {
         setDisclosureAccepted(false);
+
+        try {
+          sessionStorage.removeItem(SS_FORCE_DISCLOSURE);
+        } catch {}
+
         return;
       }
 
@@ -160,6 +169,16 @@ export default function TrackerGpsPage() {
       setDisclosureAccepted(false);
     }
   }, [location.search]);
+
+  useEffect(() => {
+    try {
+      const { access_token, refresh_token } = parseHashTokens(window.location.hash);
+
+      if (access_token && refresh_token && looksLikeJwt(access_token)) {
+        sessionStorage.setItem(SS_FORCE_DISCLOSURE, "1");
+      }
+    } catch {}
+  }, []);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
@@ -414,7 +433,10 @@ export default function TrackerGpsPage() {
         setHasSession(false);
         setStatus(tt("trackerGps.status.noSession", "No active tracker session."));
         setLastError(
-          tt("trackerGps.errors.openFromMagicLinkOnly", "Open this page only from your Tracker Magic Link.")
+          tt(
+            "trackerGps.errors.openFromMagicLinkOnly",
+            "Open this page only from your Tracker Magic Link."
+          )
         );
         return;
       }
