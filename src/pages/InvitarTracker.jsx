@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useAuthSafe } from "@/context/auth.js";
+import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
 
 function normalizeEmail(v) {
   return String(v || "").trim().toLowerCase();
@@ -13,7 +15,6 @@ function isTruthy(v) {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
-// âœ… Label consistente desde Personal
 function pickPersonalLabel(row) {
   const nombre = String(row?.nombre || "").trim();
   const apellido = String(row?.apellido || "").trim();
@@ -21,8 +22,19 @@ function pickPersonalLabel(row) {
 
   const fullName = [nombre, apellido].filter(Boolean).join(" ").trim();
 
-  if (fullName && email) return `${fullName} â€” ${email}`;
+  if (fullName && email) return `${fullName} — ${email}`;
   return email || fullName || "(sin datos)";
+}
+
+function normalizePlanLabel(planCode) {
+  const v = String(planCode || "").toLowerCase();
+  if (v === "pro") return "PRO";
+  if (v === "enterprise") return "ENTERPRISE";
+  if (v === "elite_plus") return "ELITE PLUS";
+  if (v === "elite") return "ELITE";
+  if (v === "starter") return "STARTER";
+  if (v === "free") return "FREE";
+  return v ? v.toUpperCase() : "—";
 }
 
 export default function InvitarTracker() {
@@ -30,10 +42,16 @@ export default function InvitarTracker() {
   const { t, i18n } = useTranslation();
   const auth = useAuthSafe();
 
+  const {
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    planCode,
+    isFree,
+  } = useOrgEntitlements();
+
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
 
-  // âœ… ahora son rows desde public.personal
   const [people, setPeople] = useState([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [emailInput, setEmailInput] = useState("");
@@ -59,7 +77,6 @@ export default function InvitarTracker() {
     };
   }, [auth, orgId]);
 
-  // Idioma para emails (prioridad: ?lang= -> i18n -> fallback 'es')
   const lang = useMemo(() => {
     try {
       const qp = new URLSearchParams(window.location.search);
@@ -74,7 +91,6 @@ export default function InvitarTracker() {
     return "es";
   }, [i18n]);
 
-  // âœ… Mapa de emails permitidos: SOLO Personal vigente/activo
   const allowedEmails = useMemo(() => {
     const set = new Set();
     for (const r of people) {
@@ -84,7 +100,15 @@ export default function InvitarTracker() {
     return set;
   }, [people]);
 
-  // âœ… Utilidad: obtiene JWT (access_token) desde el cliente
+  const inviteBlockedByPlan = useMemo(() => {
+    return !entitlementsLoading && isFree;
+  }, [entitlementsLoading, isFree]);
+
+  async function getAccessToken() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  }
+
   async function getCallerJwt() {
     const { data, error } = await supabase.auth.getSession();
     if (error) throw error;
@@ -92,7 +116,6 @@ export default function InvitarTracker() {
     return String(token || "").trim();
   }
 
-  // 1) Cargar People desde PERSONAL (no desde memberships)
   useEffect(() => {
     let cancelled = false;
 
@@ -105,9 +128,15 @@ export default function InvitarTracker() {
         setLoadingPeople(false);
         setErrMsg(
           t("inviteTracker.errors.noOrg", {
-            defaultValue: "No se pudo determinar la organizaciÃ³n activa.",
+            defaultValue: "No se pudo determinar la organización activa.",
           })
         );
+        return;
+      }
+
+      if (entitlementsLoading || isFree) {
+        setPeople([]);
+        setLoadingPeople(false);
         return;
       }
 
@@ -124,9 +153,7 @@ export default function InvitarTracker() {
 
         const rows = Array.isArray(data) ? data : [];
 
-        // âœ… Filtrado â€œactivo/vigenteâ€ robusto
         const filtered = rows.filter((r) => {
-          // prioridad: activo_bool -> activo -> vigente -> true
           const ab = r?.activo_bool;
           const a = r?.activo;
           const v = r?.vigente;
@@ -152,15 +179,13 @@ export default function InvitarTracker() {
     return () => {
       cancelled = true;
     };
-  }, [orgId, t]);
+  }, [orgId, t, entitlementsLoading, isFree]);
 
-  // 2) Cuando seleccionan del droplist, sincroniza email
   useEffect(() => {
     if (!selectedKey) return;
     setEmailInput(selectedKey);
   }, [selectedKey]);
 
-  // âœ… Nombre (opcional) tomado de la persona seleccionada (para email mÃ¡s bonito)
   const selectedPerson = useMemo(() => {
     const key = normalizeEmail(selectedKey);
     if (!key) return null;
@@ -172,12 +197,21 @@ export default function InvitarTracker() {
     setOkMsg(null);
     setErrMsg(null);
 
+    if (inviteBlockedByPlan) {
+      setErrMsg(
+        t("inviteTracker.errors.planBlocked", {
+          defaultValue: "Tu plan actual no permite invitar trackers. Actualiza a PRO o superior.",
+        })
+      );
+      return;
+    }
+
     const cleanEmail = normalizeEmail(emailInput);
 
     if (!orgId) {
       setErrMsg(
         t("inviteTracker.errors.noOrg", {
-          defaultValue: "No se pudo determinar la organizaciÃ³n activa.",
+          defaultValue: "No se pudo determinar la organización activa.",
         })
       );
       return;
@@ -186,17 +220,16 @@ export default function InvitarTracker() {
     if (!cleanEmail || !cleanEmail.includes("@")) {
       setErrMsg(
         t("inviteTracker.errors.invalidEmail", {
-          defaultValue: "Email invÃ¡lido.",
+          defaultValue: "Email inválido.",
         })
       );
       return;
     }
 
-    // âœ… REGLA: solo personas existentes en PERSONAL
     if (!allowedEmails.has(cleanEmail)) {
       setErrMsg(
         t("inviteTracker.errors.notInOrg", {
-          defaultValue: "Ese email no existe en Personal de esta organizaciÃ³n.",
+          defaultValue: "Ese email no existe en Personal de esta organización.",
         })
       );
       return;
@@ -205,7 +238,6 @@ export default function InvitarTracker() {
     try {
       setBusy(true);
 
-      // âœ… JWT desde el cliente (NO depende de /api/auth/session)
       const caller_jwt = await getCallerJwt();
       if (!caller_jwt) {
         setErrMsg(
@@ -233,7 +265,7 @@ export default function InvitarTracker() {
           role: "tracker",
           lang,
           name,
-          caller_jwt, // âœ… clave para evitar NO_SESSION por /api/auth/session
+          caller_jwt,
         }),
       });
 
@@ -275,7 +307,7 @@ export default function InvitarTracker() {
       const emailSent = body?.email_sent;
 
       let msg = t("inviteTracker.ok.generated", {
-        defaultValue: "InvitaciÃ³n generada para {{email}}.",
+        defaultValue: "Invitación generada para {{email}}.",
         email: cleanEmail,
       });
 
@@ -295,10 +327,86 @@ export default function InvitarTracker() {
   }
 
   const selectPlaceholder = loadingPeople
-    ? t("common.loading", { defaultValue: "Cargandoâ€¦" })
+    ? t("common.loading", { defaultValue: "Cargando…" })
     : people.length === 0
       ? t("inviteTracker.empty.noMembers", { defaultValue: "Sin personal disponible" })
-      : t("common.select", { defaultValue: "â€” Selecciona â€”" });
+      : t("common.select", { defaultValue: "— Selecciona —" });
+
+  if (entitlementsLoading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900">Invitar tracker</h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Validando plan de la organización...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (entitlementsError) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900">Invitar tracker</h1>
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            No se pudo validar el plan de la organización.
+            <div className="mt-2 break-all font-mono text-xs">{entitlementsError}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (inviteBlockedByPlan) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-xl font-semibold text-gray-900">
+              {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+            </h1>
+
+            <button
+              type="button"
+              onClick={() => navigate("/tracker")}
+              className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
+            >
+              {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
+            </button>
+          </div>
+
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+            <div className="text-base font-semibold">
+              Esta función requiere PRO o superior.
+            </div>
+            <div className="mt-2 text-sm">
+              Plan detectado: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+            </div>
+            <div className="mt-1 text-sm">
+              Org activa: <span className="font-mono">{who.org_id || "—"}</span>
+            </div>
+            <div className="mt-3 text-sm">
+              El plan FREE no permite invitar nuevos trackers a la organización.
+            </div>
+          </div>
+
+          {orgId ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-gray-700 mb-3">
+                Actualiza esta organización para habilitar invitaciones de trackers.
+              </div>
+              <UpgradeToProButton
+                orgId={orgId}
+                getAccessToken={getAccessToken}
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -317,19 +425,18 @@ export default function InvitarTracker() {
           </button>
         </div>
 
-        {/* DiagnÃ³stico */}
         <div className="mt-4 rounded-xl border bg-slate-50 p-3 text-xs text-slate-700">
           <div>
             <b>{t("inviteTracker.diag.orgUsed", { defaultValue: "Org usada" })}:</b>{" "}
-            {who.org_id || "â€”"}
+            {who.org_id || "—"}
           </div>
           <div>
             <b>{t("inviteTracker.diag.user", { defaultValue: "Usuario" })}:</b>{" "}
-            {who.email || "â€”"} ({who.user_id || "â€”"})
+            {who.email || "—"} ({who.user_id || "—"})
           </div>
           <div className="mt-1">
             <b>{t("inviteTracker.diag.membersLoaded", { defaultValue: "Personal cargado" })}:</b>{" "}
-            {loadingPeople ? t("common.loading", { defaultValue: "Cargandoâ€¦" }) : String(people.length)}
+            {loadingPeople ? t("common.loading", { defaultValue: "Cargando…" }) : String(people.length)}
           </div>
         </div>
 
@@ -424,8 +531,8 @@ export default function InvitarTracker() {
             ].join(" ")}
           >
             {busy
-              ? t("common.sending", { defaultValue: "Enviandoâ€¦" })
-              : t("inviteTracker.sendInvite", { defaultValue: "Enviar invitaciÃ³n" })}
+              ? t("common.sending", { defaultValue: "Enviando…" })
+              : t("inviteTracker.sendInvite", { defaultValue: "Enviar invitación" })}
           </button>
         </form>
       </div>
