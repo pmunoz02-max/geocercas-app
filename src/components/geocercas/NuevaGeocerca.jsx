@@ -10,6 +10,10 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAuthSafe } from "@/auth/AuthProvider.jsx";
 import { useTranslation } from "react-i18next";
 
+import { supabase } from "@/lib/supabaseClient.js";
+import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
+
 import { listGeofences, getGeofence, upsertGeofence, deleteGeofence } from "../../lib/geofencesApi.js";
 
 const DATA_SOURCE = null;
@@ -25,6 +29,8 @@ function Banner({ banner, onClose }) {
       ? "bg-red-900/60 border-red-500/50 text-red-100"
       : banner.type === "ok"
       ? "bg-emerald-900/60 border-emerald-500/50 text-emerald-100"
+      : banner.type === "warn"
+      ? "bg-amber-900/60 border-amber-500/50 text-amber-100"
       : "bg-slate-900/60 border-slate-500/50 text-slate-100";
 
   return (
@@ -37,6 +43,22 @@ function Banner({ banner, onClose }) {
       >
         OK
       </button>
+    </div>
+  );
+}
+
+function EntitlementCard({ title, value, tone = "default" }) {
+  const toneClass =
+    tone === "accent"
+      ? "border-emerald-500/40 bg-emerald-950/30"
+      : tone === "warn"
+      ? "border-amber-500/40 bg-amber-950/30"
+      : "border-slate-700 bg-slate-950/40";
+
+  return (
+    <div className={`rounded-xl border p-3 ${toneClass}`}>
+      <div className="text-[11px] uppercase tracking-wide text-slate-400">{title}</div>
+      <div className="mt-1 text-base font-semibold text-slate-100">{value}</div>
     </div>
   );
 }
@@ -104,7 +126,7 @@ function parsePairs(text) {
     const lat = Number(parts[0]);
     const lng = Number(parts[1]);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    out.push([lng, lat]); // GeoJSON expects [lng,lat]
+    out.push([lng, lat]);
   }
   return out;
 }
@@ -146,10 +168,60 @@ function getLastGeomanLayer(map) {
   return last;
 }
 
+function normalizePlanLabel(planCode) {
+  const v = String(planCode || "free").toLowerCase();
+  if (v === "pro") return "PRO";
+  if (v === "enterprise") return "ENTERPRISE";
+  if (v === "elite_plus") return "ELITE PLUS";
+  return v.toUpperCase();
+}
+
+function extractErrorText(err) {
+  const parts = [
+    err?.message,
+    err?.details,
+    err?.hint,
+    err?.error_description,
+    err?.response?.data?.message,
+    err?.response?.data?.error,
+  ]
+    .filter(Boolean)
+    .map((x) => String(x).trim());
+
+  return parts.join(" | ");
+}
+
+function isPlanLimitError(err) {
+  const text = extractErrorText(err).toLowerCase();
+  return (
+    text.includes("limit_exceeded") ||
+    text.includes("plan limit") ||
+    text.includes("límite") ||
+    text.includes("max_geocercas") ||
+    text.includes("geofence limit") ||
+    text.includes("excede") ||
+    text.includes("p0001")
+  );
+}
+
 /* ----------------------------- Component ----------------------------- */
 export default function NuevaGeocerca() {
   const { t } = useTranslation();
   const { currentOrg } = useAuthSafe();
+
+  const {
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    planCode,
+    maxGeocercas,
+    isFree,
+    isPro,
+    isEnterprise,
+    isElite,
+    isElitePlus,
+    isStarter,
+    refresh: refreshEntitlements,
+  } = useOrgEntitlements();
 
   const mapRef = useRef(null);
   const featureGroupRef = useRef(null);
@@ -180,15 +252,24 @@ export default function NuevaGeocerca() {
 
   const [showLoading, setShowLoading] = useState(false);
 
+  async function getAccessToken() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  }
+
   const showErr = useCallback((msg, err) => {
     try {
-      console.error("[NuevaGeocerca] ", msg, err);
+      console.error("[NuevaGeocerca]", msg, err);
     } catch {}
     setBanner({ type: "error", text: String(msg || "Error") });
   }, []);
 
   const showOk = useCallback((msg) => {
     setBanner({ type: "ok", text: String(msg || "OK") });
+  }, []);
+
+  const showWarn = useCallback((msg) => {
+    setBanner({ type: "warn", text: String(msg || "Warning") });
   }, []);
 
   const clearCanvas = useCallback(() => {
@@ -287,6 +368,55 @@ export default function NuevaGeocerca() {
     scheduleFitToGeo(viewFeature);
   }, [viewId, viewFeature, scheduleFitToGeo]);
 
+  const currentGeofenceCount = useMemo(() => {
+    return Array.isArray(geofenceList) ? geofenceList.filter((x) => !x?._optimistic).length : 0;
+  }, [geofenceList]);
+
+  const hasFiniteGeofenceLimit = useMemo(() => {
+    return Number.isFinite(Number(maxGeocercas)) && Number(maxGeocercas) > 0;
+  }, [maxGeocercas]);
+
+  const geofenceSlotsLeft = useMemo(() => {
+    if (!hasFiniteGeofenceLimit) return null;
+    return Math.max(Number(maxGeocercas) - currentGeofenceCount, 0);
+  }, [hasFiniteGeofenceLimit, maxGeocercas, currentGeofenceCount]);
+
+  const geofenceLimitReached = useMemo(() => {
+    if (!hasFiniteGeofenceLimit) return false;
+    return currentGeofenceCount >= Number(maxGeocercas);
+  }, [hasFiniteGeofenceLimit, currentGeofenceCount, maxGeocercas]);
+
+  const canCreateGeofence = useMemo(() => {
+    if (!hasFiniteGeofenceLimit) return true;
+    return currentGeofenceCount < Number(maxGeocercas);
+  }, [hasFiniteGeofenceLimit, currentGeofenceCount, maxGeocercas]);
+
+  const planTone = useMemo(() => {
+    if (geofenceLimitReached) return "warn";
+    if (isPro || isEnterprise || isElite || isElitePlus) return "accent";
+    return "default";
+  }, [geofenceLimitReached, isPro, isEnterprise, isElite, isElitePlus]);
+
+  const planSummaryText = useMemo(() => {
+    if (entitlementsLoading) {
+      return t("geocercas.plan.loading", { defaultValue: "Cargando plan..." });
+    }
+
+    if (entitlementsError) {
+      return t("geocercas.plan.error", { defaultValue: "No se pudieron cargar los límites del plan." });
+    }
+
+    if (!hasFiniteGeofenceLimit) {
+      return t("geocercas.plan.unlimited", { defaultValue: "Geocercas sin límite configurado." });
+    }
+
+    return t("geocercas.plan.usage", {
+      defaultValue: "Uso actual: {{used}} / {{max}} geocercas",
+      used: currentGeofenceCount,
+      max: Number(maxGeocercas),
+    });
+  }, [entitlementsLoading, entitlementsError, hasFiniteGeofenceLimit, currentGeofenceCount, maxGeocercas, t]);
+
   const handleDrawFromCoords = useCallback(() => {
     const pairs = parsePairs(coordText);
     if (!pairs.length) {
@@ -326,6 +456,15 @@ export default function NuevaGeocerca() {
         return;
       }
 
+      if (hasFiniteGeofenceLimit && !canCreateGeofence) {
+        showWarn(
+          t("geocercas.plan.limitReached", {
+            defaultValue: "Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
+          })
+        );
+        return;
+      }
+
       let fc = null;
 
       if (draftFeature) {
@@ -346,7 +485,6 @@ export default function NuevaGeocerca() {
         fc = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
       }
 
-      // optimistic list (por nombre)
       setGeofenceList((prev) => {
         const optimistic = { id: `optim-${Date.now()}`, name: nm, _optimistic: true };
         const next = [optimistic, ...(prev || [])];
@@ -363,10 +501,6 @@ export default function NuevaGeocerca() {
         return unique;
       });
 
-      // ✅ Guardado en geofences (single source of truth)
-      // - polygon_geojson obligatorio
-      // - radius_m NOT NULL (aunque sea polígono)
-      // - NO enviamos "active" (por compat si la columna no existe)
       await upsertGeofence({
         name: nm,
         polygon_geojson: fc,
@@ -381,19 +515,43 @@ export default function NuevaGeocerca() {
       setViewCentroid(centroidFeatureFromGeojson(fc));
       setViewId((x) => x + 1);
 
-      await refreshGeofenceList();
+      await Promise.allSettled([refreshGeofenceList(), refreshEntitlements()]);
       setGeofenceName("");
       showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
     } catch (e) {
-      showErr(
-        t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }),
-        e
-      );
+      const isLimit = isPlanLimitError(e);
+
+      if (isLimit) {
+        showWarn(
+          t("geocercas.plan.limitReached", {
+            defaultValue: "Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
+          })
+        );
+      } else {
+        showErr(
+          t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }),
+          e
+        );
+      }
+
       try {
-        await refreshGeofenceList();
+        await Promise.allSettled([refreshGeofenceList(), refreshEntitlements()]);
       } catch {}
     }
-  }, [geofenceName, currentOrg?.id, draftFeature, t, refreshGeofenceList, showErr, showOk, clearCanvas]);
+  }, [
+    geofenceName,
+    currentOrg?.id,
+    draftFeature,
+    t,
+    refreshGeofenceList,
+    refreshEntitlements,
+    showErr,
+    showOk,
+    showWarn,
+    clearCanvas,
+    hasFiniteGeofenceLimit,
+    canCreateGeofence,
+  ]);
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
@@ -422,7 +580,7 @@ export default function NuevaGeocerca() {
       setViewFeature(null);
       setViewCentroid(null);
 
-      await refreshGeofenceList();
+      await Promise.allSettled([refreshGeofenceList(), refreshEntitlements()]);
       clearCanvas();
       setDraftFeature(null);
 
@@ -430,7 +588,7 @@ export default function NuevaGeocerca() {
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
     }
-  }, [selectedNames, currentOrg?.id, refreshGeofenceList, clearCanvas, t, showErr, showOk, geofenceList]);
+  }, [selectedNames, currentOrg?.id, refreshGeofenceList, refreshEntitlements, clearCanvas, t, showErr, showOk, geofenceList]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
@@ -534,54 +692,143 @@ export default function NuevaGeocerca() {
     <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
       <Banner banner={banner} onClose={() => setBanner(null)} />
 
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="space-y-0.5">
-          <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">
-            {t("geocercas.titleNew", { defaultValue: "New geofence" })}
-          </h1>
-          <p className="hidden md:block text-xs text-slate-300">
-            {t("geocercas.subtitleNew", { defaultValue: "Draw a geofence on the map and assign it to your personnel or activities." })}
-          </p>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <div className="space-y-0.5">
+            <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">
+              {t("geocercas.titleNew", { defaultValue: "New geofence" })}
+            </h1>
+            <p className="hidden md:block text-xs text-slate-300">
+              {t("geocercas.subtitleNew", {
+                defaultValue: "Draw a geofence on the map and assign it to your personnel or activities.",
+              })}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
+            <input
+              type="text"
+              className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
+              placeholder={t("geocercas.placeholderName", { defaultValue: "Geofence name" })}
+              value={geofenceName}
+              onChange={(e) => setGeofenceName(e.target.value)}
+            />
+
+            <button
+              onClick={() => {
+                setCoordText("");
+                setCoordModalOpen(true);
+              }}
+              className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
+              type="button"
+            >
+              {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
+            </button>
+
+            <button
+              onClick={handleSave}
+              disabled={entitlementsLoading || !canCreateGeofence}
+              className={`rounded-lg font-semibold px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap ${
+                entitlementsLoading || !canCreateGeofence
+                  ? "bg-slate-600 text-slate-300 cursor-not-allowed"
+                  : "bg-emerald-600 text-white"
+              }`}
+              type="button"
+            >
+              {t("geocercas.buttonSave", { defaultValue: "Save geofence" })}
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
-          <input
-            type="text"
-            className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
-            placeholder={t("geocercas.placeholderName", { defaultValue: "Geofence name" })}
-            value={geofenceName}
-            onChange={(e) => setGeofenceName(e.target.value)}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <EntitlementCard
+            title={t("billing.planCurrent", { defaultValue: "Plan actual" })}
+            value={normalizePlanLabel(planCode)}
+            tone={planTone}
           />
 
-          <button
-            onClick={() => {
-              setCoordText("");
-              setCoordModalOpen(true);
-            }}
-            className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
-            type="button"
-          >
-            {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
-          </button>
+          <EntitlementCard
+            title={t("geocercas.planUsageTitle", { defaultValue: "Geocercas" })}
+            value={
+              entitlementsLoading
+                ? t("common.actions.loading", { defaultValue: "Loading..." })
+                : hasFiniteGeofenceLimit
+                ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
+                : t("geocercas.plan.unlimitedShort", { defaultValue: "Ilimitadas" })
+            }
+            tone={planTone}
+          />
 
-          <button
-            onClick={handleSave}
-            className="rounded-lg font-semibold bg-emerald-600 text-white px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
-            type="button"
-          >
-            {t("geocercas.buttonSave", { defaultValue: "Save geofence" })}
-          </button>
+          <EntitlementCard
+            title={t("geocercas.planAvailableTitle", { defaultValue: "Disponibles" })}
+            value={
+              entitlementsLoading
+                ? t("common.actions.loading", { defaultValue: "Loading..." })
+                : geofenceSlotsLeft === null
+                ? t("geocercas.plan.unlimitedShort", { defaultValue: "Ilimitadas" })
+                : String(geofenceSlotsLeft)
+            }
+            tone={geofenceLimitReached ? "warn" : "default"}
+          />
+        </div>
+
+        <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
+          <p className="text-xs text-slate-300">{planSummaryText}</p>
+
+          {entitlementsError ? (
+            <p className="mt-2 text-xs text-red-300">{entitlementsError}</p>
+          ) : null}
+
+          {!entitlementsLoading && geofenceLimitReached ? (
+            <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-950/30 p-3 space-y-3">
+              <div className="text-sm font-semibold text-amber-200">
+                {t("geocercas.plan.limitReachedTitle", {
+                  defaultValue: "Has alcanzado el límite de geocercas de tu plan.",
+                })}
+              </div>
+              <div className="text-xs text-amber-100">
+                {t("geocercas.plan.limitReachedBody", {
+                  defaultValue: "Para crear más geocercas, actualiza tu organización a PRO.",
+                })}
+              </div>
+
+              {currentOrg?.id ? (
+                <div className="pt-1">
+                  <UpgradeToProButton orgId={currentOrg.id} getAccessToken={getAccessToken} />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!entitlementsLoading && !geofenceLimitReached && isFree ? (
+            <div className="mt-2 text-xs text-slate-400">
+              {t("geocercas.plan.freeHint", {
+                defaultValue: "Plan FREE activo. Cuando alcances el límite, podrás hacer upgrade a PRO desde aquí.",
+              })}
+            </div>
+          ) : null}
+
+          {!entitlementsLoading && (isStarter || isPro || isEnterprise || isElite || isElitePlus) ? (
+            <div className="mt-2 text-xs text-slate-400">
+              {t("geocercas.plan.activePaidHint", {
+                defaultValue: "Tu organización tiene un plan con mayor capacidad habilitada.",
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
 
       <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
-        {/* Panel */}
         <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
-          <h2 className="text-sm font-semibold text-slate-100 mb-2">{t("geocercas.panelTitle", { defaultValue: "Geofences" })}</h2>
+          <h2 className="text-sm font-semibold text-slate-100 mb-2">
+            {t("geocercas.panelTitle", { defaultValue: "Geofences" })}
+          </h2>
 
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
             {geofenceList.length === 0 && (
-              <div className="text-xs text-slate-400">{t("geocercas.noGeofences", { defaultValue: "No geofences" })}</div>
+              <div className="text-xs text-slate-400">
+                {t("geocercas.noGeofences", { defaultValue: "No geofences" })}
+              </div>
             )}
 
             {geofenceList.map((g) => (
@@ -613,7 +860,9 @@ export default function NuevaGeocerca() {
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
-              {showLoading ? t("common.actions.loading", { defaultValue: "Loading..." }) : t("geocercas.buttonShowOnMap", { defaultValue: "Show on map" })}
+              {showLoading
+                ? t("common.actions.loading", { defaultValue: "Loading..." })
+                : t("geocercas.buttonShowOnMap", { defaultValue: "Show on map" })}
             </button>
 
             <button
@@ -641,7 +890,6 @@ export default function NuevaGeocerca() {
           {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
-        {/* Map */}
         <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
           <MapContainer
             center={[-0.2, -78.5]}
@@ -753,7 +1001,9 @@ export default function NuevaGeocerca() {
             </h2>
 
             <p className="text-xs text-slate-400">
-              {t("geocercas.modalHintRule", { defaultValue: "1 point = small square | 2 points = rectangle | 3+ = polygon" })}
+              {t("geocercas.modalHintRule", {
+                defaultValue: "1 point = small square | 2 points = rectangle | 3+ = polygon",
+              })}
               <br />
               {t("geocercas.modalInstruction", { defaultValue: "Format:" })}{" "}
               <span className="font-mono text-[11px]">lat,lng</span>{" "}
