@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton.jsx";
+import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton.jsx";
 
 function formatDate(value) {
   if (!value) return "—";
@@ -119,6 +120,17 @@ export default function Billing() {
     return !!currentOrgId && effectivePlanCode === "free";
   }, [currentOrgId, effectivePlanCode]);
 
+  const hasStripeSubscription = useMemo(() => {
+    return !!billing?.stripe_customer_id || !!billing?.stripe_subscription_id;
+  }, [billing]);
+
+  const shouldShowManageButton = useMemo(() => {
+    if (!currentOrgId) return false;
+    if (!hasStripeSubscription) return false;
+
+    return ["trialing", "active", "past_due", "canceled"].includes(effectivePlanStatus);
+  }, [currentOrgId, hasStripeSubscription, effectivePlanStatus]);
+
   if (loading || !ready) return null;
 
   if (!authenticated || !user) {
@@ -164,43 +176,64 @@ export default function Billing() {
             {billingError}
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">
-                Plan actual
+          <>
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  Plan actual
+                </div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {labelPlan(effectivePlanCode)}
+                </div>
               </div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">
-                {labelPlan(effectivePlanCode)}
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  Estado
+                </div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {labelStatus(effectivePlanStatus)}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  Trial hasta
+                </div>
+                <div className="mt-1 text-base font-medium text-slate-900">
+                  {formatDate(billing?.trial_ends_at)}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  Período actual hasta
+                </div>
+                <div className="mt-1 text-base font-medium text-slate-900">
+                  {formatDate(billing?.current_period_end)}
+                </div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">
-                Estado
-              </div>
-              <div className="mt-1 text-lg font-semibold text-slate-900">
-                {labelStatus(effectivePlanStatus)}
-              </div>
-            </div>
+            {shouldShowManageButton ? (
+              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  Gestión de suscripción
+                </div>
+                <p className="mt-1 text-sm text-slate-600">
+                  Abre Stripe Customer Portal para actualizar tarjeta, cancelar o revisar tu suscripción.
+                </p>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">
-                Trial hasta
+                <div className="mt-4">
+                  <ManageSubscriptionButton
+                    orgId={currentOrgId}
+                    getAccessToken={getAccessToken}
+                    returnUrl={`${window.location.origin}/billing`}
+                  />
+                </div>
               </div>
-              <div className="mt-1 text-base font-medium text-slate-900">
-                {formatDate(billing?.trial_ends_at)}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">
-                Período actual hasta
-              </div>
-              <div className="mt-1 text-base font-medium text-slate-900">
-                {formatDate(billing?.current_period_end)}
-              </div>
-            </div>
-          </div>
+            ) : null}
+          </>
         )}
 
         {!billingLoading && !billingError && billing?.cancel_at_period_end ? (
