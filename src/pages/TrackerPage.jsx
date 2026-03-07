@@ -1,13 +1,37 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 import Tracker from "./Tracker.jsx";
+import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
+
+function normalizePlanLabel(planCode) {
+  const v = String(planCode || "").toLowerCase();
+  if (v === "pro") return "PRO";
+  if (v === "enterprise") return "ENTERPRISE";
+  if (v === "elite_plus") return "ELITE PLUS";
+  if (v === "elite") return "ELITE";
+  if (v === "starter") return "STARTER";
+  if (v === "free") return "FREE";
+  return v ? v.toUpperCase() : "—";
+}
 
 export default function TrackerPage() {
   const { user, currentOrg, setCurrentOrg } = useAuth();
+  const {
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    planCode,
+    isFree,
+  } = useOrgEntitlements();
 
   const [resolviendoOrg, setResolviendoOrg] = useState(true);
   const [error, setError] = useState(null);
+
+  async function getAccessToken() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  }
 
   useEffect(() => {
     let cancelado = false;
@@ -27,7 +51,6 @@ export default function TrackerPage() {
         let orgId = null;
         let role = null;
 
-        // 1) CANÓNICO: memberships
         const { data: membership, error: membershipErr } = await supabase
           .from("memberships")
           .select("org_id, role, is_default, revoked_at")
@@ -46,7 +69,6 @@ export default function TrackerPage() {
           role = membership.role || "tracker";
         }
 
-        // 2) Fallback legacy solo si memberships no resolvió nada
         if (!orgId) {
           const { data: legacyRows, error: legacyErr } = await supabase
             .from("user_organizations")
@@ -74,7 +96,6 @@ export default function TrackerPage() {
           return;
         }
 
-        // 3) Leer datos de organización
         const { data: orgData, error: orgErr } = await supabase
           .from("organizations")
           .select("id, name, slug")
@@ -96,7 +117,6 @@ export default function TrackerPage() {
           setCurrentOrg(orgObj);
         }
 
-        // 4) Persistir org activa (best-effort)
         try {
           await supabase.rpc("set_current_org", { p_org_id: orgId });
         } catch (e) {
@@ -123,6 +143,13 @@ export default function TrackerPage() {
     };
   }, [user, currentOrg, setCurrentOrg]);
 
+  const orgName = currentOrg?.name || "tu organización";
+  const currentOrgId = currentOrg?.id || null;
+
+  const trackerBlockedByPlan = useMemo(() => {
+    return !entitlementsLoading && isFree;
+  }, [entitlementsLoading, isFree]);
+
   if (!user) {
     return (
       <div className="p-6 max-w-xl mx-auto">
@@ -147,7 +174,68 @@ export default function TrackerPage() {
     );
   }
 
-  const orgName = currentOrg?.name || "tu organización";
+  if (entitlementsLoading) {
+    return (
+      <div className="p-6 max-w-xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-2">Validando plan…</h1>
+        <p className="text-gray-600 text-sm">
+          Estamos verificando si tu organización tiene habilitado el módulo Tracker.
+        </p>
+      </div>
+    );
+  }
+
+  if (entitlementsError) {
+    return (
+      <div className="p-6 max-w-xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-3">Tracker</h1>
+        <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded px-4 py-3 text-sm">
+          No se pudo validar el plan de la organización. Intenta nuevamente.
+          <div className="mt-2 font-mono text-xs break-all">{entitlementsError}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (trackerBlockedByPlan) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto space-y-4">
+        <h1 className="text-2xl font-semibold">Tracker</h1>
+
+        <div className="border border-amber-300 bg-amber-50 text-amber-900 rounded-xl px-4 py-4">
+          <div className="text-base font-semibold">
+            El módulo Tracker no está disponible en el plan actual.
+          </div>
+          <div className="mt-2 text-sm">
+            Organización: <span className="font-semibold">{orgName}</span>
+          </div>
+          <div className="mt-1 text-sm">
+            Plan detectado: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+          </div>
+          <div className="mt-3 text-sm">
+            Para enviar y gestionar posiciones en tiempo real, actualiza esta organización a PRO o superior.
+          </div>
+        </div>
+
+        {currentOrgId ? (
+          <div className="border rounded-xl p-4 bg-white">
+            <div className="text-sm text-gray-700 mb-3">
+              Haz upgrade para habilitar Tracker en esta organización.
+            </div>
+            <UpgradeToProButton
+              orgId={currentOrgId}
+              getAccessToken={getAccessToken}
+            />
+          </div>
+        ) : null}
+
+        <div className="border border-slate-200 bg-slate-50 text-slate-700 rounded-xl px-4 py-3 text-sm">
+          El backend sigue siendo la autoridad. Este bloqueo es visual y de experiencia
+          de usuario para reflejar el plan activo de la organización.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-xl mx-auto">
