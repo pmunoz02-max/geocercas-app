@@ -5,9 +5,10 @@ import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
 /**
- * ProtectedShell â€” Tabs
+ * ProtectedShell — Tabs
  * - Tab "Geocerca" abre el MAPA (ruta /geocerca)
  * - La pantalla hub/listado queda en /geocercas (sin tab)
+ * - Billing / Pricing visibles solo para perfiles de gestión
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -28,7 +29,7 @@ function buildTabs({ role, isAppRoot }) {
   const tabs = [
     { path: "/inicio", labelKey: "app.tabs.inicio" },
 
-    // âœ… MAPA / CONSTRUCTOR
+    // MAPA / CONSTRUCTOR
     { path: "/geocerca", labelKey: "app.tabs.geocerca" },
 
     { path: "/personal", labelKey: "app.tabs.personal" },
@@ -40,7 +41,11 @@ function buildTabs({ role, isAppRoot }) {
   ];
 
   if (isAdmin) {
-    tabs.push({ path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" });
+    tabs.push(
+      { path: "/pricing", labelKey: "app.tabs.pricing" },
+      { path: "/billing", labelKey: "app.tabs.billing" },
+      { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" }
+    );
   }
 
   if (isAppRoot) {
@@ -69,4 +74,3 @@ export default function ProtectedShell() {
     </div>
   );
 }
-
