@@ -2,6 +2,8 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
+import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
 
 import {
   MapContainer,
@@ -43,6 +45,17 @@ function formatTime(dtString) {
   } catch {
     return dtString;
   }
+}
+
+function normalizePlanLabel(planCode) {
+  const v = String(planCode || "").toLowerCase();
+  if (v === "pro") return "PRO";
+  if (v === "enterprise") return "ENTERPRISE";
+  if (v === "elite_plus") return "ELITE PLUS";
+  if (v === "elite") return "ELITE";
+  if (v === "starter") return "STARTER";
+  if (v === "free") return "FREE";
+  return v ? v.toUpperCase() : "—";
 }
 
 function resolveTrackerAuthIdFromPersonal(row) {
@@ -453,6 +466,13 @@ export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
 
+  const {
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    planCode,
+    isFree,
+  } = useOrgEntitlements();
+
   const [orgId, setOrgId] = useState(null);
   const [orgIdSource, setOrgIdSource] = useState("—");
   const [orgResolveError, setOrgResolveError] = useState("");
@@ -499,6 +519,11 @@ export default function TrackerDashboard() {
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
+  async function getAccessToken() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+  }
+
   const todayStrUtc = useMemo(() => {
     const d = new Date();
     const yyyy = d.getUTCFullYear();
@@ -507,8 +532,7 @@ export default function TrackerDashboard() {
     return `${yyyy}-${mm}-${dd}`;
   }, []);
 
-  // ✅ 100% SaaS: NO URL / NO LocalStorage. Solo backend (RPC).
-  const resolveOrgId = useCallback(async ({ forceRpc = true } = {}) => {
+  const resolveOrgId = useCallback(async () => {
     setOrgResolveError("");
     setErrorMsg("");
     setInfoMsg("");
@@ -541,7 +565,7 @@ export default function TrackerDashboard() {
   }, []);
 
   useEffect(() => {
-    resolveOrgId({ forceRpc: true });
+    resolveOrgId();
   }, [resolveOrgId]);
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
@@ -699,7 +723,7 @@ export default function TrackerDashboard() {
       } else {
         if (pickedFallbackFirstActive) {
           setInfoMsg(
-            `No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío.`
+            "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío."
           );
         } else {
           setInfoMsg(`No hay geocercas activas disponibles para esta org (${currentOrgId}).`);
@@ -712,7 +736,11 @@ export default function TrackerDashboard() {
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
-    const { data, error } = await supabase.from("personal").select("*").eq("org_id", currentOrgId).order("nombre", { ascending: true });
+    const { data, error } = await supabase
+      .from("personal")
+      .select("*")
+      .eq("org_id", currentOrgId)
+      .order("nombre", { ascending: true });
 
     if (error) {
       setPersonalRows([]);
@@ -721,8 +749,6 @@ export default function TrackerDashboard() {
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
-  // ✅ FIX UNIVERSAL: recorded_at puede venir NULL en PROD
-  // Filtramos por (recorded_at >= from) OR (recorded_at IS NULL AND created_at >= from)
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -752,7 +778,6 @@ export default function TrackerDashboard() {
         const selectCols =
           "id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at";
 
-        // OR universal: recorded_at >= from OR (recorded_at is null AND created_at >= from)
         const orTime =
           `recorded_at.gte.${fromIso},and(recorded_at.is.null,created_at.gte.${fromIso})`;
 
@@ -836,21 +861,21 @@ export default function TrackerDashboard() {
   );
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || entitlementsLoading || isFree) return;
     (async () => {
       await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
     })();
-  }, [orgId, fetchAssignments, fetchPersonalCatalog]);
+  }, [orgId, entitlementsLoading, isFree, fetchAssignments, fetchPersonalCatalog]);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || entitlementsLoading || isFree) return;
     fetchGeofences(orgId, assignments);
-  }, [orgId, assignments, fetchGeofences]);
+  }, [orgId, assignments, entitlementsLoading, isFree, fetchGeofences]);
 
   useEffect(() => {
-    if (!orgId) return;
+    if (!orgId || entitlementsLoading || isFree) return;
     fetchPositions(orgId, { showSpinner: true });
-  }, [orgId, assignmentTrackers, timeWindowId, selectedTrackerId, fetchPositions]);
+  }, [orgId, assignmentTrackers, timeWindowId, selectedTrackerId, entitlementsLoading, isFree, fetchPositions]);
 
   const personalByUserId = useMemo(() => {
     const m = new Map();
@@ -910,6 +935,76 @@ export default function TrackerDashboard() {
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
+  const trackerBlockedByPlan = !entitlementsLoading && isFree;
+
+  if (entitlementsLoading) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+        <div className="px-3 md:px-6 py-6 max-w-3xl">
+          <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Validando plan de la organización...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (entitlementsError) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+        <div className="px-3 md:px-6 py-6 max-w-3xl">
+          <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-amber-900">
+            <div className="font-semibold">No se pudo validar el plan de la organización.</div>
+            <div className="mt-2 text-sm break-all">{entitlementsError}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (trackerBlockedByPlan) {
+    return (
+      <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+        <div className="px-3 md:px-6 py-6 max-w-3xl space-y-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              Este módulo no está disponible en el plan actual de la organización.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-amber-900">
+            <div className="text-base font-semibold">
+              El dashboard de tracking requiere PRO o superior.
+            </div>
+            <div className="mt-2 text-sm">
+              Plan detectado: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+            </div>
+            <div className="mt-1 text-sm">
+              Org activa: <span className="font-mono">{effectiveOrgText}</span>
+            </div>
+            <div className="mt-3 text-sm">
+              Haz upgrade para visualizar posiciones, rutas y geocercas desde este panel.
+            </div>
+          </div>
+
+          {orgId ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-gray-700 mb-3">
+                Actualiza esta organización para habilitar Tracker Dashboard.
+              </div>
+              <UpgradeToProButton
+                orgId={orgId}
+                getAccessToken={getAccessToken}
+              />
+            </div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -942,7 +1037,7 @@ export default function TrackerDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => resolveOrgId({ forceRpc: true })}
+              onClick={() => resolveOrgId()}
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             >
