@@ -8,18 +8,23 @@ const SB_ANON = Deno.env.get("SB_ANON") || "";
 const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE") || "";
 const APP_URL = Deno.env.get("APP_URL") || "https://preview.tugeocercas.com";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+function corsHeaders(req: Request) {
+  const origin = req.headers.get("origin") ?? "*";
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Credentials": "true",
+    Vary: "Origin",
+  };
+}
 
-function json(status: number, body: Record<string, unknown>) {
+function json(req: Request, status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
-      ...corsHeaders,
+      ...corsHeaders(req),
       "Content-Type": "application/json",
     },
   });
@@ -39,7 +44,7 @@ async function getUserFromAccessToken(accessToken: string) {
   });
 
   if (!res.ok) {
-    const text = await res.text();
+    const text = await res.text().catch(() => "");
     throw new Error(`Auth validation failed: ${res.status} ${text}`);
   }
 
@@ -54,48 +59,56 @@ function normalizeReturnUrl(rawReturnUrl?: unknown) {
   }
 
   try {
-    const u = new URL(rawReturnUrl);
+    const candidate = new URL(rawReturnUrl);
     const appBase = new URL(APP_URL);
 
-    if (u.origin !== appBase.origin) {
+    if (candidate.origin !== appBase.origin) {
       return fallback;
     }
 
-    return u.toString();
+    return candidate.toString();
   } catch {
     return fallback;
   }
 }
 
+function getBearer(req: Request) {
+  const authHeader =
+    req.headers.get("Authorization") || req.headers.get("authorization") || "";
+
+  if (!authHeader.startsWith("Bearer ")) return "";
+  return authHeader.slice("Bearer ".length).trim();
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(req),
+    });
   }
 
   if (req.method !== "POST") {
-    return json(405, { error: "Method not allowed." });
+    return json(req, 405, { error: "Method not allowed." });
   }
 
   try {
     if (!STRIPE_SECRET_KEY) {
-      return json(500, { error: "Missing STRIPE_SECRET_KEY." });
+      return json(req, 500, { error: "Missing STRIPE_SECRET_KEY." });
     }
+
     if (!SB_URL || !SB_SERVICE_ROLE) {
-      return json(500, { error: "Missing Supabase service env vars." });
+      return json(req, 500, { error: "Missing Supabase service env vars." });
     }
 
-    const authHeader = req.headers.get("Authorization") || "";
-    const accessToken = authHeader.startsWith("Bearer ")
-      ? authHeader.slice("Bearer ".length)
-      : "";
-
+    const accessToken = getBearer(req);
     if (!accessToken) {
-      return json(401, { error: "Missing bearer token." });
+      return json(req, 401, { error: "Missing bearer token." });
     }
 
     const user = await getUserFromAccessToken(accessToken);
     if (!user?.id) {
-      return json(401, { error: "Invalid user session." });
+      return json(req, 401, { error: "Invalid user session." });
     }
 
     const body = await req.json().catch(() => ({}));
@@ -103,7 +116,7 @@ Deno.serve(async (req) => {
     const returnUrl = normalizeReturnUrl(body?.return_url);
 
     if (!orgId) {
-      return json(400, { error: "Missing org_id." });
+      return json(req, 400, { error: "Missing org_id." });
     }
 
     const admin = createClient(SB_URL, SB_SERVICE_ROLE, {
@@ -125,20 +138,20 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (billingError) {
-      return json(500, {
+      return json(req, 500, {
         error: "Could not load org billing.",
         details: billingError.message,
       });
     }
 
     if (!billing) {
-      return json(404, { error: "Billing record not found for org." });
+      return json(req, 404, {
+        error: "Billing record not found for org.",
+      });
     }
 
     let stripeCustomerId = String(billing.stripe_customer_id || "").trim();
-    const stripeSubscriptionId = String(
-      billing.stripe_subscription_id || "",
-    ).trim();
+    const stripeSubscriptionId = String(billing.stripe_subscription_id || "").trim();
 
     const stripe = new Stripe(STRIPE_SECRET_KEY, {
       apiVersion: "2024-06-20",
@@ -161,7 +174,7 @@ Deno.serve(async (req) => {
 
         if (updateError) {
           console.warn(
-            "[stripe-create-portal-session] Could not backfill stripe_customer_id:",
+            "[stripe-create-portal-session] backfill stripe_customer_id failed:",
             updateError.message,
           );
         }
@@ -169,9 +182,12 @@ Deno.serve(async (req) => {
     }
 
     if (!stripeCustomerId) {
-      return json(400, {
+      return json(req, 400, {
         error:
           "No Stripe customer is linked to this organization. Portal unavailable.",
+        org_id: orgId,
+        plan_code: billing.plan_code,
+        plan_status: billing.plan_status,
       });
     }
 
@@ -180,18 +196,19 @@ Deno.serve(async (req) => {
       return_url: returnUrl,
     });
 
-    return json(200, {
+    return json(req, 200, {
       ok: true,
       url: session.url,
       customer_id: stripeCustomerId,
       org_id: orgId,
       plan_code: billing.plan_code,
       plan_status: billing.plan_status,
+      return_url: returnUrl,
     });
   } catch (err) {
     console.error("[stripe-create-portal-session] error", err);
 
-    return json(500, {
+    return json(req, 500, {
       error: "Failed to create Stripe Customer Portal session.",
       details: err instanceof Error ? err.message : String(err),
     });

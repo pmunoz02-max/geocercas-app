@@ -1,34 +1,31 @@
 // src/components/Billing/UpgradeToProButton.jsx
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
+import { supabase } from "@/lib/supabaseClient.js";
 
 /**
- * Botón universal para abrir Stripe Checkout (PREVIEW/TEST).
- * Requiere orgId (UUID). Usa getAccessToken() para obtener JWT.
+ * Botón universal para abrir Stripe Checkout (PREVIEW / TEST).
+ * Requiere orgId (UUID) y getAccessToken().
  *
- * Mejoras:
- * - Envía success_url y cancel_url explícitas basadas en window.location.origin
+ * Ventajas:
+ * - No depende de projectRef hardcodeado
+ * - Usa supabase.functions.invoke igual que el portal
+ * - Envía success_url y cancel_url explícitas
  * - Muestra detail real devuelto por la Edge Function
- * - Mantiene todo aislado a preview
  */
 export default function UpgradeToProButton({
   orgId,
   plan = "PRO",
-  projectRef = "mujwsfhkocsuuahlrssn",
-  getAccessToken, // async () => string | null
+  getAccessToken,
   className = "",
 }) {
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const [msg, setMsg] = useState("");
 
-  const endpoint = useMemo(
-    () => `https://${projectRef}.functions.supabase.co/stripe-create-checkout`,
-    [projectRef]
-  );
-
-  const isUuid = (v) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+  function isUuid(v) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       String(v || "").trim()
     );
+  }
 
   function getOriginSafe() {
     try {
@@ -64,7 +61,7 @@ export default function UpgradeToProButton({
     loading || !orgId || !isUuid(orgId) || typeof getAccessToken !== "function";
 
   async function startCheckout() {
-    setMsg(null);
+    setMsg("");
 
     try {
       if (!orgId || !isUuid(orgId)) {
@@ -92,60 +89,36 @@ export default function UpgradeToProButton({
         return;
       }
 
-      const payload = {
-        plan: String(plan || "PRO").trim().toUpperCase(),
-        org_id: String(orgId || "").trim(),
-        success_url,
-        cancel_url,
-      };
-
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const out = await res.json().catch(async () => {
-        try {
-          const raw = await res.text();
-          return { raw };
-        } catch (_) {
-          return { raw: "No response body" };
+      const { data, error } = await supabase.functions.invoke(
+        "stripe-create-checkout",
+        {
+          body: {
+            plan: String(plan || "PRO").trim().toUpperCase(),
+            org_id: String(orgId || "").trim(),
+            success_url,
+            cancel_url,
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
-      });
-
-      if (!res.ok) {
-        const baseMessage =
-          out?.message ||
-          out?.error ||
-          out?.raw ||
-          "Error desconocido al crear Checkout.";
-
-        const detailText =
-          stringifyDetail(out?.detail) ||
-          stringifyDetail(out?.raw) ||
-          "";
-
-        const debugBits = [
-          `Error ${res.status}: ${baseMessage}`,
-          detailText ? `Detalle: ${detailText}` : "",
-        ].filter(Boolean);
-
-        setMsg(debugBits.join("\n\n"));
-        return;
-      }
-
-      if (out?.url) {
-        window.location.href = out.url;
-        return;
-      }
-
-      setMsg(
-        "Respuesta inesperada: no vino url desde stripe-create-checkout. Revisa logs de la función."
       );
+
+      if (error) {
+        throw new Error(error.message || "No se pudo crear la sesión de Checkout.");
+      }
+
+      if (!data?.url) {
+        const detailText =
+          stringifyDetail(data?.detail) ||
+          stringifyDetail(data) ||
+          "Stripe no devolvió URL de Checkout.";
+
+        setMsg(detailText);
+        return;
+      }
+
+      window.location.href = data.url;
     } catch (e) {
       setMsg(`Error: ${String(e?.message ?? e)}`);
     } finally {
@@ -164,15 +137,14 @@ export default function UpgradeToProButton({
         </div>
 
         <div className="text-sm text-slate-700">
-          <b>Org ID:</b> <span className="font-mono">{orgId || "(no resuelta)"}</span>
+          <b>Org ID:</b> <span className="font-mono break-all">{orgId || "(no resuelta)"}</span>
         </div>
 
         <div className="text-xs text-slate-500 break-all">
-          Endpoint: <code className="font-mono">{endpoint}</code>
-        </div>
-
-        <div className="text-xs text-slate-500 break-all">
-          Return URL base: <code className="font-mono">{typeof window !== "undefined" ? window.location.origin : "(sin window)"}</code>
+          Return URL base:{" "}
+          <code className="font-mono">
+            {typeof window !== "undefined" ? window.location.origin : "(sin window)"}
+          </code>
         </div>
 
         <button
@@ -191,11 +163,11 @@ export default function UpgradeToProButton({
           {loading ? "Abriendo Stripe..." : "Suscribirme a PRO"}
         </button>
 
-        {msg && (
+        {msg ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 whitespace-pre-wrap break-words">
             {msg}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
