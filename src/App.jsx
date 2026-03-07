@@ -31,10 +31,11 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 
-// ✅ Billing pages (NEW)
+// ✅ Billing / Pricing pages
 import Billing from "./pages/Billing.jsx";
 import BillingSuccess from "./pages/BillingSuccess.jsx";
 import BillingCancel from "./pages/BillingCancel.jsx";
+import Pricing from "./pages/Pricing.jsx";
 
 // Help pages
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
@@ -45,7 +46,6 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 function RootEntry() {
   const location = useLocation();
 
-  // Compat: implicit hash tokens (si aún llega alguno viejo)
   const hash = typeof location.hash === "string" ? location.hash : "";
   const hasAccessToken = hash.includes("access_token=");
   if (hasAccessToken) {
@@ -53,7 +53,6 @@ function RootEntry() {
     return <Navigate to={target} replace />;
   }
 
-  // PKCE: si por alguna razón cae /?code=..., lo manda al callback
   const sp = new URLSearchParams(location.search || "");
   const code = sp.get("code");
   if (code) {
@@ -153,12 +152,20 @@ function AppRoutes() {
       >
         <Route path="/inicio" element={<Inicio />} />
 
-        {/* ✅ Billing routes (protected; Billing requiere org para comprar) */}
+        {/* ✅ Billing / Pricing */}
         <Route
           path="/billing"
           element={
             <RequireOrg>
               <Billing />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/pricing"
+          element={
+            <RequireOrg>
+              <Pricing />
             </RequireOrg>
           }
         />
@@ -261,6 +268,5 @@ function AppRoutes() {
 }
 
 export default function App() {
-  // ✅ Router vive SOLO en src/main.jsx
   return <AppRoutes />;
 }

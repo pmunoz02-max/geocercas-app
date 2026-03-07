@@ -1,5 +1,6 @@
 // src/pages/Billing.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton.jsx";
@@ -20,6 +21,10 @@ function labelPlan(planCode) {
   const v = String(planCode || "free").toLowerCase();
   if (v === "pro") return "PRO";
   if (v === "free") return "FREE";
+  if (v === "enterprise") return "ENTERPRISE";
+  if (v === "starter") return "STARTER";
+  if (v === "elite") return "ELITE";
+  if (v === "elite_plus") return "ELITE+";
   return v.toUpperCase();
 }
 
@@ -149,11 +154,23 @@ export default function Billing() {
   return (
     <div className="max-w-4xl mx-auto px-6 py-10 space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h1 className="text-2xl font-semibold text-slate-900">Billing</h1>
+        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Billing</h1>
+            <p className="mt-2 text-slate-600">
+              Monetización en <b>PREVIEW</b> (Stripe TEST). No afecta producción.
+            </p>
+          </div>
 
-        <p className="mt-2 text-slate-600">
-          Monetización en <b>PREVIEW</b> (Stripe TEST). No afecta producción.
-        </p>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              to="/pricing"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+            >
+              Ver planes
+            </Link>
+          </div>
+        </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
           <div>
@@ -244,10 +261,29 @@ export default function Billing() {
       </div>
 
       {shouldShowUpgradeButton ? (
-        <UpgradeToProButton
-          orgId={currentOrgId}
-          getAccessToken={getAccessToken}
-        />
+        <div className="space-y-4">
+          <UpgradeToProButton
+            orgId={currentOrgId}
+            getAccessToken={getAccessToken}
+          />
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="text-sm font-semibold text-slate-900">
+              ¿Quieres comparar antes de subir de plan?
+            </div>
+            <p className="mt-1 text-sm text-slate-600">
+              Revisa la página de planes para comparar Free, Pro y Enterprise.
+            </p>
+            <div className="mt-4">
+              <Link
+                to="/pricing"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+              >
+                Ver planes
+              </Link>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-800">
           Ya existe un plan activo para esta organización. No se muestra el botón de upgrade.
