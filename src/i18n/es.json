@@ -999,47 +999,92 @@
     "title": "Tracker GPS"
   },
   "trackerDashboard": {
-    "filters": {
-      "allGeofences": "Todas las geocercas",
-      "allTrackers": "Todos los trackers",
-      "geofenceLabel": "Geocerca",
-      "timeWindowLabel": "Ventana",
-      "timeWindowSuffix": "horas",
-      "trackerLabel": "Tracker"
+    "title": "Tracker Dashboard",
+    "timeWindows": {
+      "1h": "1 hora",
+      "6h": "6 horas",
+      "12h": "12 horas",
+      "24h": "24 horas"
     },
-    "legend": {
-      "points": "pts",
-      "title": "Leyenda de trackers"
+    "sections": {
+      "filters": "Filtros",
+      "diagnostics": "Diagnóstico",
+      "map": "Mapa"
+    },
+    "labels": {
+      "window": "Ventana",
+      "tracker": "Tracker",
+      "geofences": "Geocercas",
+      "all": "Todos",
+      "activeOrg": "Org activa",
+      "activeOrgDebug": "Org (Activa)",
+      "detectedPlan": "Plan detectado"
+    },
+    "actions": {
+      "resolveOrgAgain": "Re-resolver org (RPC)",
+      "refresh": "Actualizar",
+      "loading": "Cargando…",
+      "centerGeofence": "Centrar geocerca"
+    },
+    "states": {
+      "validatingPlan": "Validando plan de la organización...",
+      "planValidationFailed": "No se pudo validar el plan de la organización.",
+      "moduleUnavailable": "Este módulo no está disponible en el plan actual de la organización.",
+      "requiresPro": "El dashboard de tracking requiere PRO o superior.",
+      "upgradeHint": "Haz upgrade para visualizar posiciones, rutas y geocercas desde este panel.",
+      "upgradeOrgPrompt": "Actualiza esta organización para habilitar Tracker Dashboard.",
+      "resolvingActiveOrg": "Resolviendo organización activa…"
     },
     "messages": {
-      "autoRefresh": "Los puntos se actualizan automáticamente. No necesitas recargar la página.",
-      "checkConsole": "Revisa la consola si persiste.",
-      "error": "Error cargando datos de tracking.",
-      "loading": "Cargando datos de tracking…",
-      "noData": "No se encontraron posiciones para los filtros seleccionados.",
-      "noOrg": "Debes seleccionar una organización."
+      "loadAssignmentsError": "Error cargando asignaciones (tracker_assignments).",
+      "loadGeofencesError": "Error al cargar geocercas (geofences).",
+      "loadPositionsError": "Error al cargar posiciones.",
+      "noActiveAssignments": "No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).",
+      "noActiveGeofencesForAssignments": "Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org ({{orgId}}).",
+      "fallbackGeofenceShown": "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío.",
+      "noActiveGeofencesForOrg": "No hay geocercas activas disponibles para esta org ({{orgId}}).",
+      "noVisibleGeofences": "No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).",
+      "orgResolveError": "Error resolviendo org"
     },
-    "popup": {
-      "accuracy": "Precisión",
-      "activity": "Actividad",
-      "countHere": "Registros en esta posición",
-      "geofence": "Geocerca",
-      "inside": "Dentro de geocerca",
-      "no": "No",
-      "time": "Hora",
+    "badges": {
+      "assignments": "assignments",
+      "trackers": "trackers",
+      "geofences": "geocercas",
+      "polys": "polys",
+      "circles": "circles",
+      "positions": "posiciones",
+      "source": "src",
+      "assignedIds": "assignedIds",
+      "selected": "selected",
+      "bounds": "bounds",
+      "viewport": "viewport",
+      "intersects": "intersects"
+    },
+    "map": {
+      "initializing": "Inicializando mapa…",
+      "statusPrefix": "map",
+      "circleLabel": "{{name}} (círculo)"
+    },
+    "tooltip": {
       "tracker": "Tracker",
-      "yes": "Sí"
+      "time": "Hora",
+      "lat": "Lat",
+      "lng": "Lng",
+      "accuracy": "Acc",
+      "speed": "Vel",
+      "source": "Src"
     },
-    "subtitle": "Los puntos se actualizan automáticamente. La frecuencia de envío la define el administrador.",
-    "summary": {
-      "geofencesActive": "Geocercas activas",
-      "lastPoint": "Último punto registrado",
-      "noPoints": "Sin puntos para el filtro actual.",
-      "pointsInMap": "Puntos en mapa (filtro actual)",
-      "title": "Resumen",
-      "trackersProfiles": "Trackers (perfiles)"
-    },
-    "title": "Dashboard de Tracking en tiempo real"
+    "multiGeofence": {
+      "labelBase": "Geocercas",
+      "labelNone": "Geocercas: Ninguna",
+      "labelAll": "Geocercas: Todas ({{count}})",
+      "labelSelected": "Geocercas: {{count}}",
+      "searchPlaceholder": "Buscar geocerca…",
+      "showAll": "Mostrar todas",
+      "hideAll": "Ocultar todas",
+      "noResults": "Sin resultados…",
+      "close": "Cerrar"
+    }
   },
   "trackerGps": {
     "debugCopyPaste": "Copiar/pegar (debug)",
@@ -1091,5 +1136,77 @@
     },
     "title": "Tracker GPS",
     "waitingCoords": "Esperando coordenadas…"
+  },
+  "pricing": {
+    "common": {
+      "currentPlan": "Plan actual",
+      "loading": "Cargando...",
+      "unlimited": "Ilimitadas"
+    },
+    "actions": {
+      "goToBilling": "Ir a Billing",
+      "contactSales": "Contactar ventas"
+    },
+    "page": {
+      "title": "Planes y precios",
+      "previewNotice": {
+        "prefix": "Esta pantalla trabaja en",
+        "middle": "y reutiliza Stripe en modo",
+        "suffix": "No afecta producción."
+      }
+    },
+    "summary": {
+      "detectedPlan": "Plan detectado",
+      "maxGeofences": "Máx. geocercas",
+      "maxTrackers": "Máx. trackers"
+    },
+    "free": {
+      "title": "Free",
+      "subtitle": "Para comenzar",
+      "price": "$0",
+      "description": "Pensado para validar el uso inicial de la plataforma.",
+      "currentPlanMessage": "Ya estás usando el plan Free.",
+      "features": {
+        "validateFlow": "Ideal para empezar y validar el flujo base",
+        "upToTrackers": "Hasta {{count}} tracker",
+        "geofenceLimits": "Geocercas con límite por plan",
+        "billingAndUpgrade": "Acceso a Billing y futura ruta de upgrade",
+        "backendEnforcement": "Backend sigue aplicando enforcement real"
+      }
+    },
+    "pro": {
+      "title": "Pro",
+      "subtitle": "Operación SaaS activa",
+      "price": "Stripe TEST",
+      "description": "Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
+      "higherPlanMessage": "Tu organización ya tiene un plan superior o distinto de Free.",
+      "reviewBillingMessage": "Revisa Billing para administrarlo.",
+      "features": {
+        "upToTrackers": "Hasta {{count}} trackers por organización",
+        "upToGeofences": "Hasta {{count}} geocercas",
+        "trackerEnabled": "Módulo Tracker habilitado",
+        "invitesEnabled": "Invitación de trackers habilitada",
+        "stripeSelfManaged": "Suscripción autogestionable con Stripe"
+      }
+    },
+    "enterprise": {
+      "title": "Enterprise",
+      "subtitle": "Venta asistida",
+      "price": "A medida",
+      "description": "Para organizaciones que requieren condiciones comerciales especiales.",
+      "features": {
+        "salesOnboarding": "Atención comercial y onboarding guiado",
+        "flexibleLimits": "Límites y condiciones ajustables",
+        "multiTeamReady": "Preparado para operación con múltiples equipos",
+        "specialAgreements": "Escalamiento comercial y acuerdos especiales",
+        "directSalesContact": "Contacto directo con ventas"
+      }
+    },
+    "notes": {
+      "title": "Notas de esta fase",
+      "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
+      "proCheckout": "El upgrade a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
+      "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
+    }
   }
 }

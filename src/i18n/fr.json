@@ -666,46 +666,91 @@
     "errorLoad": "Erreur de chargement des positions du tracker."
   },
   "trackerDashboard": {
-    "title": "Tableau de bord de suivi en temps réel",
-    "subtitle": "Les points sont mis à jour automatiquement. La fréquence d'envoi est définie par l'administrateur.",
-    "filters": {
-      "trackerLabel": "Traceur",
-      "timeWindowLabel": "Fenêtre",
-      "timeWindowSuffix": "heures",
-      "geofenceLabel": "Géofence",
-      "allTrackers": "Tous les traceurs",
-      "allGeofences": "Toutes les géofences"
+    "title": "Tableau de bord Tracker",
+    "timeWindows": {
+      "1h": "1 heure",
+      "6h": "6 heures",
+      "12h": "12 heures",
+      "24h": "24 heures"
     },
-    "summary": {
-      "title": "Résumé",
-      "geofencesActive": "Géofences actives",
-      "trackersProfiles": "Traqueurs (profils)",
-      "pointsInMap": "Points sur la carte (filtre actuel)",
-      "lastPoint": "Dernier point enregistré",
-      "noPoints": "Aucun point pour le filtre actuel."
+    "sections": {
+      "filters": "Filtres",
+      "diagnostics": "Diagnostic",
+      "map": "Carte"
     },
-    "legend": {
-      "title": "Légende du traceur",
-      "points": "points"
+    "labels": {
+      "window": "Fenêtre",
+      "tracker": "Tracker",
+      "geofences": "Géofences",
+      "all": "Tous",
+      "activeOrg": "Organisation active",
+      "activeOrgDebug": "Org (Active)",
+      "detectedPlan": "Plan détecté"
     },
-    "popup": {
-      "tracker": "Traceur",
-      "time": "L'heure",
-      "accuracy": "Précision",
-      "countHere": "Dossiers à ce poste",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "inside": "A l'intérieur d'une géofence",
-      "yes": "Oui",
-      "no": "Non"
+    "actions": {
+      "resolveOrgAgain": "Résoudre à nouveau l’org (RPC)",
+      "refresh": "Actualiser",
+      "loading": "Chargement…",
+      "centerGeofence": "Centrer la géofence"
+    },
+    "states": {
+      "validatingPlan": "Validation du plan de l’organisation...",
+      "planValidationFailed": "Impossible de valider le plan de l’organisation.",
+      "moduleUnavailable": "Ce module n’est pas disponible avec le plan actuel de l’organisation.",
+      "requiresPro": "Le tableau de bord de tracking nécessite PRO ou supérieur.",
+      "upgradeHint": "Passez à un plan supérieur pour visualiser les positions, les trajets et les géofences depuis ce panneau.",
+      "upgradeOrgPrompt": "Mettez à niveau cette organisation pour activer Tracker Dashboard.",
+      "resolvingActiveOrg": "Résolution de l’organisation active…"
     },
     "messages": {
-      "noOrg": "Vous devez sélectionner une organisation.",
-      "autoRefresh": "Les points sont mis à jour automatiquement. Il n'est pas nécessaire de recharger la page.",
-      "loading": "Chargement des données de suivi...",
-      "noData": "Aucun poste n'a été trouvé pour les filtres sélectionnés.",
-      "error": "Erreur de chargement des données de suivi.",
-      "checkConsole": "Vérifiez la console si le problème persiste."
+      "loadAssignmentsError": "Erreur lors du chargement des affectations (tracker_assignments).",
+      "loadGeofencesError": "Erreur lors du chargement des géofences (geofences).",
+      "loadPositionsError": "Erreur lors du chargement des positions.",
+      "noActiveAssignments": "Il n’y a pas d’affectations actives (tracker_assignments). Affichage de toutes les géofences actives (la géofence par défaut reste présélectionnée).",
+      "noActiveGeofencesForAssignments": "Il existe des affectations, mais aucune géofence active pour ces affectations dans l’org ({{orgId}}).",
+      "fallbackGeofenceShown": "Aucune géofence active n’a été trouvée ; 1 géofence active a été affichée comme solution de secours pour éviter que le tableau de bord reste vide.",
+      "noActiveGeofencesForOrg": "Aucune géofence active n’est disponible pour cette org ({{orgId}}).",
+      "noVisibleGeofences": "Aucune géofence active/visible n’est disponible pour cette org (ou vous n’avez pas la permission de les voir).",
+      "orgResolveError": "Erreur lors de la résolution de l’org"
+    },
+    "badges": {
+      "assignments": "assignations",
+      "trackers": "trackers",
+      "geofences": "géofences",
+      "polys": "polygones",
+      "circles": "cercles",
+      "positions": "positions",
+      "source": "src",
+      "assignedIds": "assignedIds",
+      "selected": "selected",
+      "bounds": "bounds",
+      "viewport": "viewport",
+      "intersects": "intersects"
+    },
+    "map": {
+      "initializing": "Initialisation de la carte…",
+      "statusPrefix": "carte",
+      "circleLabel": "{{name}} (cercle)"
+    },
+    "tooltip": {
+      "tracker": "Tracker",
+      "time": "Heure",
+      "lat": "Lat",
+      "lng": "Lng",
+      "accuracy": "Préc.",
+      "speed": "Vitesse",
+      "source": "Src"
+    },
+    "multiGeofence": {
+      "labelBase": "Géofences",
+      "labelNone": "Géofences : aucune",
+      "labelAll": "Géofences : toutes ({{count}})",
+      "labelSelected": "Géofences : {{count}}",
+      "searchPlaceholder": "Rechercher une géofence…",
+      "showAll": "Afficher toutes",
+      "hideAll": "Masquer toutes",
+      "noResults": "Aucun résultat…",
+      "close": "Fermer"
     }
   },
   "trackerGps": {
@@ -1088,5 +1133,77 @@
     "errorEmail": "Veuillez saisir une adresse électronique valide.",
     "errorGeneric": "Le courrier n'a pas pu être envoyé.",
     "success": "si l'e-mail existe, vous recevrez un lien pour créer un nouveau mot de passe. Vérifiez le SPAM et ouvrez-le dans le même navigateur."
+  },
+  "pricing": {
+    "common": {
+      "currentPlan": "Plan actuel",
+      "loading": "Chargement...",
+      "unlimited": "Illimitées"
+    },
+    "actions": {
+      "goToBilling": "Aller à Billing",
+      "contactSales": "Contacter les ventes"
+    },
+    "page": {
+      "title": "Plans et tarifs",
+      "previewNotice": {
+        "prefix": "Cet écran fonctionne en",
+        "middle": "et réutilise Stripe en mode",
+        "suffix": "Cela n'affecte pas la production."
+      }
+    },
+    "summary": {
+      "detectedPlan": "Plan détecté",
+      "maxGeofences": "Max. géorepérages",
+      "maxTrackers": "Max. trackers"
+    },
+    "free": {
+      "title": "Free",
+      "subtitle": "Pour commencer",
+      "price": "$0",
+      "description": "Conçu pour valider l'utilisation initiale de la plateforme.",
+      "currentPlanMessage": "Vous utilisez déjà le plan Free.",
+      "features": {
+        "validateFlow": "Idéal pour démarrer et valider le flux de base",
+        "upToTrackers": "Jusqu'à {{count}} tracker",
+        "geofenceLimits": "Géorepérages avec limite selon le plan",
+        "billingAndUpgrade": "Accès à Billing et futur parcours d'upgrade",
+        "backendEnforcement": "Le backend applique toujours le contrôle réel"
+      }
+    },
+    "pro": {
+      "title": "Pro",
+      "subtitle": "Opération SaaS active",
+      "price": "Stripe TEST",
+      "description": "Plan recommandé pour activer le module Tracker et fonctionner avec abonnement.",
+      "higherPlanMessage": "Votre organisation dispose déjà d'un plan supérieur ou différent de Free.",
+      "reviewBillingMessage": "Consultez Billing pour le gérer.",
+      "features": {
+        "upToTrackers": "Jusqu'à {{count}} trackers par organisation",
+        "upToGeofences": "Jusqu'à {{count}} géorepérages",
+        "trackerEnabled": "Module Tracker activé",
+        "invitesEnabled": "Invitation des trackers activée",
+        "stripeSelfManaged": "Abonnement autogéré avec Stripe"
+      }
+    },
+    "enterprise": {
+      "title": "Enterprise",
+      "subtitle": "Vente assistée",
+      "price": "Sur mesure",
+      "description": "Pour les organisations nécessitant des conditions commerciales spéciales.",
+      "features": {
+        "salesOnboarding": "Accompagnement commercial et onboarding guidé",
+        "flexibleLimits": "Limites et conditions ajustables",
+        "multiTeamReady": "Préparé pour une opération avec plusieurs équipes",
+        "specialAgreements": "Montée en charge commerciale et accords spéciaux",
+        "directSalesContact": "Contact direct avec les ventes"
+      }
+    },
+    "notes": {
+      "title": "Notes de cette phase",
+      "backendAuthority": "Le backend reste l'autorité réelle du plan. Cette page reflète seulement le plan et affiche les actions commerciales disponibles.",
+      "proCheckout": "La mise à niveau vers Pro réutilise le flux Stripe Checkout existant. La gestion de l'abonnement utilise Stripe Customer Portal.",
+      "enterpriseSales": "Enterprise est présenté comme canal commercial, sans activer de checkout automatique."
+    }
   }
 }

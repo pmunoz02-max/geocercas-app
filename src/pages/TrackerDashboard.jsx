@@ -20,10 +20,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 const TIME_WINDOWS = [
-  { id: "1h", labelKey: "trackerDashboard.timeWindows.1h", fallback: "1 hora", ms: 1 * 60 * 60 * 1000 },
-  { id: "6h", labelKey: "trackerDashboard.timeWindows.6h", fallback: "6 horas", ms: 6 * 60 * 60 * 1000 },
-  { id: "12h", labelKey: "trackerDashboard.timeWindows.12h", fallback: "12 horas", ms: 12 * 60 * 60 * 1000 },
-  { id: "24h", labelKey: "trackerDashboard.timeWindows.24h", fallback: "24 horas", ms: 24 * 60 * 60 * 1000 },
+  { id: "1h", labelKey: "trackerDashboard.timeWindows.1h", fallback: "1 hour", ms: 1 * 60 * 60 * 1000 },
+  { id: "6h", labelKey: "trackerDashboard.timeWindows.6h", fallback: "6 hours", ms: 6 * 60 * 60 * 1000 },
+  { id: "12h", labelKey: "trackerDashboard.timeWindows.12h", fallback: "12 hours", ms: 12 * 60 * 60 * 1000 },
+  { id: "24h", labelKey: "trackerDashboard.timeWindows.24h", fallback: "24 hours", ms: 24 * 60 * 60 * 1000 },
 ];
 
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
@@ -76,7 +76,7 @@ function parseMaybeJson(input) {
   return null;
 }
 
-// GeoJSON es [lng,lat] => Leaflet [lat,lng]
+// GeoJSON is [lng,lat] => Leaflet [lat,lng]
 function toLatLngStrict(coord) {
   if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
   const lng = Number(coord[0]);
@@ -246,7 +246,7 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   return null;
 }
 
-// ✅ escoger geometría disponible en orden de preferencia
+// choose available geometry in preferred order
 function pickGeometry(row) {
   return row?.geojson ?? row?.geom ?? row?.polygon ?? row?.geometry ?? null;
 }
@@ -280,7 +280,7 @@ function buildGeofenceLayerItems(geofenceRows) {
     }
 
     const circle = inferCircleFromRow(g);
-    if (circle)
+    if (circle) {
       items.push({
         type: "circle",
         geofenceId: g.id,
@@ -289,15 +289,19 @@ function buildGeofenceLayerItems(geofenceRows) {
         radius_m: circle.radius_m,
         idx: "c",
       });
+    }
   }
 
   return { items, skipped };
 }
 
 /** =========================
- * MultiSelect Geocercas UI
+ * MultiSelect Geofences UI
  * ========================= */
 function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
+  const { t } = useTranslation();
+  const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
+
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const rootRef = useRef(null);
@@ -327,11 +331,19 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
   }, [geofences, selectedIds, isNoneMode]);
 
   const label = useMemo(() => {
-    if (!geofences?.length) return "Geocercas";
-    if (isNoneMode) return "Geocercas: Ninguna";
-    if (!selectedIds?.length) return `Geocercas: Todas (${geofences.length})`;
-    return `Geocercas: ${effectiveSelectedCount}`;
-  }, [geofences, selectedIds, effectiveSelectedCount, isNoneMode]);
+    if (!geofences?.length) return tOr("trackerDashboard.multiGeofence.labelBase", "Geofences");
+    if (isNoneMode) return tOr("trackerDashboard.multiGeofence.labelNone", "Geofences: None");
+    if (!selectedIds?.length) {
+      return t("trackerDashboard.multiGeofence.labelAll", {
+        count: geofences.length,
+        defaultValue: `Geofences: All (${geofences.length})`,
+      });
+    }
+    return t("trackerDashboard.multiGeofence.labelSelected", {
+      count: effectiveSelectedCount,
+      defaultValue: `Geofences: ${effectiveSelectedCount}`,
+    });
+  }, [geofences, selectedIds, effectiveSelectedCount, isNoneMode, t, tOr]);
 
   const toggle = (id) => {
     const sid = String(id);
@@ -408,7 +420,7 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar geocerca…"
+              placeholder={tOr("trackerDashboard.multiGeofence.searchPlaceholder", "Search geofence…")}
               className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
@@ -421,7 +433,7 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={setAll}
             >
-              Mostrar todas
+              {tOr("trackerDashboard.multiGeofence.showAll", "Show all")}
             </button>
             <button
               type="button"
@@ -429,7 +441,7 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={setNone}
             >
-              Ocultar todas
+              {tOr("trackerDashboard.multiGeofence.hideAll", "Hide all")}
             </button>
           </div>
 
@@ -443,7 +455,11 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
                 <span className="truncate text-gray-900">{g.name || g.id}</span>
               </label>
             ))}
-            {!filtered.length && <div className="p-3 text-sm text-gray-500">Sin resultados…</div>}
+            {!filtered.length && (
+              <div className="p-3 text-sm text-gray-500">
+                {tOr("trackerDashboard.multiGeofence.noResults", "No results…")}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end mt-3">
@@ -453,7 +469,7 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
                          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               onClick={() => setOpen(false)}
             >
-              Cerrar
+              {tOr("trackerDashboard.multiGeofence.close", "Close")}
             </button>
           </div>
         </div>
@@ -549,7 +565,7 @@ export default function TrackerDashboard() {
 
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
-      if (!r2?.data) throw new Error("RPC devolvió null (sin org).");
+      if (!r2?.data) throw new Error("RPC returned null (no org).");
 
       const v = String(r2.data);
       setOrgId(v);
@@ -598,7 +614,7 @@ export default function TrackerDashboard() {
       }));
       setAssignments([]);
       setAssignmentTrackers([]);
-      setErrorMsg("Error cargando asignaciones (tracker_assignments).");
+      setErrorMsg(tOr("trackerDashboard.messages.loadAssignmentsError", "Error loading assignments (tracker_assignments)."));
       return;
     }
 
@@ -617,9 +633,14 @@ export default function TrackerDashboard() {
     }));
 
     if (rows.length === 0) {
-      setInfoMsg("No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).");
+      setInfoMsg(
+        tOr(
+          "trackerDashboard.messages.noActiveAssignments",
+          "There are no active assignments (tracker_assignments). Showing all active geofences (the default one remains preselected)."
+        )
+      );
     }
-  }, [todayStrUtc]);
+  }, [todayStrUtc, tOr]);
 
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
     if (!currentOrgId) return;
@@ -640,7 +661,10 @@ export default function TrackerDashboard() {
     if (assignedIds.length > 0) {
       q = q.in("id", assignedIds);
     } else {
-      q = q.order("is_default", { ascending: false }).order("updated_at", { ascending: false }).order("created_at", { ascending: false });
+      q = q
+        .order("is_default", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .order("created_at", { ascending: false });
     }
 
     const res = await q;
@@ -657,7 +681,7 @@ export default function TrackerDashboard() {
       }));
       setGeofenceRows([]);
       setSelectedGeofenceIds([]);
-      setErrorMsg("Error al cargar geocercas (geofences).");
+      setErrorMsg(tOr("trackerDashboard.messages.loadGeofencesError", "Error loading geofences (geofences)."));
       return;
     }
 
@@ -718,21 +742,30 @@ export default function TrackerDashboard() {
     if (normalized.length === 0) {
       if (assignedIds.length > 0) {
         setInfoMsg(
-          `Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org (${currentOrgId}).`
+          t("trackerDashboard.messages.noActiveGeofencesForAssignments", {
+            orgId: currentOrgId,
+            defaultValue: `There are assignments, but there are no active geofences for those assignments in org (${currentOrgId}).`,
+          })
+        );
+      } else if (pickedFallbackFirstActive) {
+        setInfoMsg(
+          tOr(
+            "trackerDashboard.messages.fallbackGeofenceShown",
+            "No active geofences were found; 1 active geofence was shown as a fallback so the dashboard does not remain empty."
+          )
         );
       } else {
-        if (pickedFallbackFirstActive) {
-          setInfoMsg(
-            "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío."
-          );
-        } else {
-          setInfoMsg(`No hay geocercas activas disponibles para esta org (${currentOrgId}).`);
-        }
+        setInfoMsg(
+          t("trackerDashboard.messages.noActiveGeofencesForOrg", {
+            orgId: currentOrgId,
+            defaultValue: `There are no active geofences available for this org (${currentOrgId}).`,
+          })
+        );
       }
     }
 
     setFitSignal((x) => x + 1);
-  }, []);
+  }, [t, tOr]);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
@@ -771,8 +804,8 @@ export default function TrackerDashboard() {
             const wanted = String(selectedTrackerId);
             targetIds = allowedTrackerIds.includes(wanted) ? [wanted] : allowedTrackerIds;
           }
-        } else {
-          if (selectedTrackerId !== "all") targetIds = [String(selectedTrackerId)];
+        } else if (selectedTrackerId !== "all") {
+          targetIds = [String(selectedTrackerId)];
         }
 
         const selectCols =
@@ -820,9 +853,14 @@ export default function TrackerDashboard() {
         const { data, error } = res;
 
         if (error) {
-          setDiag((d) => ({ ...d, lastPositionsError: error.message || String(error), positionsFound: 0, positionsSource: tableUsed }));
+          setDiag((d) => ({
+            ...d,
+            lastPositionsError: error.message || String(error),
+            positionsFound: 0,
+            positionsSource: tableUsed,
+          }));
           setPositions([]);
-          setErrorMsg("Error al cargar posiciones.");
+          setErrorMsg(tOr("trackerDashboard.messages.loadPositionsError", "Error loading positions."));
           return;
         }
 
@@ -857,7 +895,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, selectedTrackerId, timeWindowId]
+    [assignmentTrackers, selectedTrackerId, timeWindowId, tOr]
   );
 
   useEffect(() => {
@@ -941,9 +979,11 @@ export default function TrackerDashboard() {
     return (
       <div className="min-h-[calc(100vh-64px)] bg-gray-50">
         <div className="px-3 md:px-6 py-6 max-w-3xl">
-          <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            {tOr("trackerDashboard.title", "Tracker Dashboard")}
+          </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Validando plan de la organización...
+            {tOr("trackerDashboard.states.validatingPlan", "Validating organization plan...")}
           </p>
         </div>
       </div>
@@ -954,9 +994,13 @@ export default function TrackerDashboard() {
     return (
       <div className="min-h-[calc(100vh-64px)] bg-gray-50">
         <div className="px-3 md:px-6 py-6 max-w-3xl">
-          <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            {tOr("trackerDashboard.title", "Tracker Dashboard")}
+          </h1>
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-amber-900">
-            <div className="font-semibold">No se pudo validar el plan de la organización.</div>
+            <div className="font-semibold">
+              {tOr("trackerDashboard.states.planValidationFailed", "The organization plan could not be validated.")}
+            </div>
             <div className="mt-2 text-sm break-all">{entitlementsError}</div>
           </div>
         </div>
@@ -969,31 +1013,37 @@ export default function TrackerDashboard() {
       <div className="min-h-[calc(100vh-64px)] bg-gray-50">
         <div className="px-3 md:px-6 py-6 max-w-3xl space-y-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              {tOr("trackerDashboard.title", "Tracker Dashboard")}
+            </h1>
             <p className="mt-2 text-sm text-gray-600">
-              Este módulo no está disponible en el plan actual de la organización.
+              {tOr("trackerDashboard.states.moduleUnavailable", "This module is not available on the organization's current plan.")}
             </p>
           </div>
 
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-amber-900">
             <div className="text-base font-semibold">
-              El dashboard de tracking requiere PRO o superior.
+              {tOr("trackerDashboard.states.requiresPro", "The tracking dashboard requires PRO or higher.")}
             </div>
             <div className="mt-2 text-sm">
-              Plan detectado: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+              {tOr("trackerDashboard.labels.detectedPlan", "Detected plan")}:
+              {" "}
+              <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
             </div>
             <div className="mt-1 text-sm">
-              Org activa: <span className="font-mono">{effectiveOrgText}</span>
+              {tOr("trackerDashboard.labels.activeOrg", "Active org")}:
+              {" "}
+              <span className="font-mono">{effectiveOrgText}</span>
             </div>
             <div className="mt-3 text-sm">
-              Haz upgrade para visualizar posiciones, rutas y geocercas desde este panel.
+              {tOr("trackerDashboard.states.upgradeHint", "Upgrade to visualize positions, routes and geofences from this panel.")}
             </div>
           </div>
 
           {orgId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
-                Actualiza esta organización para habilitar Tracker Dashboard.
+                {tOr("trackerDashboard.states.upgradeOrgPrompt", "Upgrade this organization to enable Tracker Dashboard.")}
               </div>
               <UpgradeToProButton
                 orgId={orgId}
@@ -1011,25 +1061,31 @@ export default function TrackerDashboard() {
       <div className="px-3 md:px-6 py-4">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Tracker Dashboard</h1>
+            <h1 className="text-2xl font-semibold text-gray-900">
+              {tOr("trackerDashboard.title", "Tracker Dashboard")}
+            </h1>
 
             <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
               <span>
-                Org (Active): <span className="font-mono text-gray-800">{effectiveOrgText}</span>{" "}
+                {tOr("trackerDashboard.labels.activeOrgDebug", "Org (Active)")}:
+                {" "}
+                <span className="font-mono text-gray-800">{effectiveOrgText}</span>{" "}
                 <span className="text-xs text-gray-500">[{orgIdSource}]</span>
               </span>
 
-              <Badge>assignments: {diag.assignmentsRows}</Badge>
-              <Badge>geocercas: {diag.geofencesFound}</Badge>
-              <Badge>polys: {diag.geofencePolys}</Badge>
-              <Badge>circles: {diag.geofenceCircles}</Badge>
-              <Badge>posiciones: {diag.positionsFound}</Badge>
-              {diag.positionsSource && <Badge>src: {diag.positionsSource}</Badge>}
+              <Badge>{tOr("trackerDashboard.badges.assignments", "assignments")}: {diag.assignmentsRows}</Badge>
+              <Badge>{tOr("trackerDashboard.badges.geofences", "geofences")}: {diag.geofencesFound}</Badge>
+              <Badge>{tOr("trackerDashboard.badges.polys", "polys")}: {diag.geofencePolys}</Badge>
+              <Badge>{tOr("trackerDashboard.badges.circles", "circles")}: {diag.geofenceCircles}</Badge>
+              <Badge>{tOr("trackerDashboard.badges.positions", "positions")}: {diag.positionsFound}</Badge>
+              {diag.positionsSource && <Badge>{tOr("trackerDashboard.badges.source", "src")}: {diag.positionsSource}</Badge>}
             </div>
 
             {orgResolveError && (
               <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                Error resolviendo org: <span className="font-mono">{orgResolveError}</span>
+                {tOr("trackerDashboard.messages.orgResolveError", "Error resolving org")}:
+                {" "}
+                <span className="font-mono">{orgResolveError}</span>
               </div>
             )}
           </div>
@@ -1041,7 +1097,7 @@ export default function TrackerDashboard() {
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             >
-              Re-resolver org (RPC)
+              {tOr("trackerDashboard.actions.resolveOrgAgain", "Resolve org again (RPC)")}
             </button>
 
             <button
@@ -1051,7 +1107,9 @@ export default function TrackerDashboard() {
                          hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
               disabled={loading || !orgId}
             >
-              {loading ? "Cargando…" : "Actualizar"}
+              {loading
+                ? tOr("trackerDashboard.actions.loading", "Loading…")
+                : tOr("trackerDashboard.actions.refresh", "Refresh")}
             </button>
 
             <button
@@ -1061,7 +1119,7 @@ export default function TrackerDashboard() {
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
               disabled={layerItems.length === 0}
             >
-              Centrar geocerca
+              {tOr("trackerDashboard.actions.centerGeofence", "Center geofence")}
             </button>
           </div>
         </div>
@@ -1080,7 +1138,7 @@ export default function TrackerDashboard() {
 
         {!orgId && !orgResolveError && (
           <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
-            Resolviendo organización activa…
+            {tOr("trackerDashboard.states.resolvingActiveOrg", "Resolving active organization…")}
           </div>
         )}
 
@@ -1088,12 +1146,16 @@ export default function TrackerDashboard() {
           <aside className="lg:col-span-4 xl:col-span-3">
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
               <div>
-                <h2 className="text-base font-semibold text-gray-900">Filtros</h2>
+                <h2 className="text-base font-semibold text-gray-900">
+                  {tOr("trackerDashboard.sections.filters", "Filters")}
+                </h2>
               </div>
 
               <div className="space-y-3">
                 <label className="block">
-                  <span className="block text-sm font-medium text-gray-900 mb-1">Ventana</span>
+                  <span className="block text-sm font-medium text-gray-900 mb-1">
+                    {tOr("trackerDashboard.labels.window", "Window")}
+                  </span>
                   <select
                     className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1110,7 +1172,9 @@ export default function TrackerDashboard() {
                 </label>
 
                 <label className="block">
-                  <span className="block text-sm font-medium text-gray-900 mb-1">Tracker</span>
+                  <span className="block text-sm font-medium text-gray-900 mb-1">
+                    {tOr("trackerDashboard.labels.tracker", "Tracker")}
+                  </span>
                   <select
                     className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1118,7 +1182,7 @@ export default function TrackerDashboard() {
                     onChange={(e) => setSelectedTrackerId(e.target.value)}
                     disabled={!orgId}
                   >
-                    <option value="all">Todos</option>
+                    <option value="all">{tOr("trackerDashboard.labels.all", "All")}</option>
                     {trackersUi.map((x) => (
                       <option key={x.user_id} value={x.user_id}>
                         {x.label}
@@ -1128,7 +1192,9 @@ export default function TrackerDashboard() {
                 </label>
 
                 <div>
-                  <span className="block text-sm font-medium text-gray-900 mb-1">Geocercas</span>
+                  <span className="block text-sm font-medium text-gray-900 mb-1">
+                    {tOr("trackerDashboard.labels.geofences", "Geofences")}
+                  </span>
                   <MultiGeofenceSelect
                     geofences={geofenceRows.map((g) => ({ id: g.id, name: g.name }))}
                     selectedIds={selectedGeofenceIds}
@@ -1137,30 +1203,44 @@ export default function TrackerDashboard() {
                   />
                   {!geofenceRows?.length && (
                     <div className="mt-1 text-xs text-gray-500">
-                      No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).
+                      {tOr(
+                        "trackerDashboard.messages.noVisibleGeofences",
+                        "There are no active/visible geofences available for this org (or you do not have permission to view them)."
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
               <div className="pt-3 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">Diagnóstico</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                  {tOr("trackerDashboard.sections.diagnostics", "Diagnostics")}
+                </h3>
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
-                  <div><b>assignments</b>: {diag.assignmentsRows}</div>
-                  <div><b>trackers</b>: {diag.trackersFound}</div>
-                  <div><b>positions</b>: {diag.positionsFound}</div>
-                  <div><b>geofences</b>: {diag.geofencesFound}</div>
-                  <div><b>polys</b>: {diag.geofencePolys}</div>
-                  <div><b>circles</b>: {diag.geofenceCircles}</div>
-                  <div><b>assignedIds</b>: {diag.assignedGeofenceIds}</div>
-                  <div><b>selected</b>: {diag.selectedGeofences}</div>
+                  <div><b>{tOr("trackerDashboard.badges.assignments", "assignments")}</b>: {diag.assignmentsRows}</div>
+                  <div><b>{tOr("trackerDashboard.badges.trackers", "trackers")}</b>: {diag.trackersFound}</div>
+                  <div><b>{tOr("trackerDashboard.badges.positions", "positions")}</b>: {diag.positionsFound}</div>
+                  <div><b>{tOr("trackerDashboard.badges.geofences", "geofences")}</b>: {diag.geofencesFound}</div>
+                  <div><b>{tOr("trackerDashboard.badges.polys", "polys")}</b>: {diag.geofencePolys}</div>
+                  <div><b>{tOr("trackerDashboard.badges.circles", "circles")}</b>: {diag.geofenceCircles}</div>
+                  <div><b>{tOr("trackerDashboard.badges.assignedIds", "assignedIds")}</b>: {diag.assignedGeofenceIds}</div>
+                  <div><b>{tOr("trackerDashboard.badges.selected", "selected")}</b>: {diag.selectedGeofences}</div>
                 </div>
 
                 <div className="mt-2 text-[11px] text-gray-600 space-y-1">
-                  <div><b>bounds</b>: <span className="font-mono">{geofenceBoundsText}</span></div>
                   <div>
-                    <b>viewport</b>: <span className="font-mono">{viewportText}</span> |{" "}
-                    <b>intersects</b>: <span className="font-mono">{intersectsText}</span>
+                    <b>{tOr("trackerDashboard.badges.bounds", "bounds")}</b>:
+                    {" "}
+                    <span className="font-mono">{geofenceBoundsText}</span>
+                  </div>
+                  <div>
+                    <b>{tOr("trackerDashboard.badges.viewport", "viewport")}</b>:
+                    {" "}
+                    <span className="font-mono">{viewportText}</span>
+                    {" | "}
+                    <b>{tOr("trackerDashboard.badges.intersects", "intersects")}</b>:
+                    {" "}
+                    <span className="font-mono">{intersectsText}</span>
                   </div>
                 </div>
               </div>
@@ -1170,9 +1250,17 @@ export default function TrackerDashboard() {
           <section className="lg:col-span-8 xl:col-span-9">
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                <div className="text-sm font-semibold text-gray-900">Mapa</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  {tOr("trackerDashboard.sections.map", "Map")}
+                </div>
                 <div className="text-xs text-gray-600">
-                  {diag.mapCreated ? <span className="font-mono">map {diag.w}×{diag.h} z{diag.zoom ?? "—"}</span> : <span>Inicializando mapa…</span>}
+                  {diag.mapCreated ? (
+                    <span className="font-mono">
+                      {tOr("trackerDashboard.map.statusPrefix", "map")} {diag.w}×{diag.h} z{diag.zoom ?? "—"}
+                    </span>
+                  ) : (
+                    <span>{tOr("trackerDashboard.map.initializing", "Initializing map…")}</span>
+                  )}
                 </div>
               </div>
 
@@ -1239,7 +1327,12 @@ export default function TrackerDashboard() {
                           radius={it.radius_m}
                           pathOptions={{ color: "#2563eb", weight: 3, opacity: 1, fillOpacity: 0.12 }}
                         >
-                          <Tooltip sticky>{it.name} (círculo)</Tooltip>
+                          <Tooltip sticky>
+                            {t("trackerDashboard.map.circleLabel", {
+                              name: it.name,
+                              defaultValue: `${it.name} (circle)`,
+                            })}
+                          </Tooltip>
                         </Circle>
                       );
                     }
@@ -1263,17 +1356,31 @@ export default function TrackerDashboard() {
                         >
                           <Tooltip direction="top">
                             <div className="text-xs">
-                              <div><b>Tracker</b>: {trackerId}</div>
-                              <div><b>Hora</b>: {formatTime(latest.recorded_at)}</div>
-                              <div><b>Lat</b>: {latest.lat.toFixed(6)}</div>
-                              <div><b>Lng</b>: {latest.lng.toFixed(6)}</div>
+                              <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerId}</div>
+                              <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latest.recorded_at)}</div>
+                              <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latest.lat.toFixed(6)}</div>
+                              <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latest.lng.toFixed(6)}</div>
                               {latest.accuracy !== null && latest.accuracy !== undefined && (
-                                <div><b>Acc</b>: {Number(latest.accuracy).toFixed?.(0) ?? String(latest.accuracy)} m</div>
+                                <div>
+                                  <b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>:
+                                  {" "}
+                                  {Number(latest.accuracy).toFixed?.(0) ?? String(latest.accuracy)} m
+                                </div>
                               )}
                               {latest.speed !== null && latest.speed !== undefined && (
-                                <div><b>Speed</b>: {Number(latest.speed).toFixed?.(1) ?? String(latest.speed)}</div>
+                                <div>
+                                  <b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>:
+                                  {" "}
+                                  {Number(latest.speed).toFixed?.(1) ?? String(latest.speed)}
+                                </div>
                               )}
-                              {latest.source && <div><b>Src</b>: {String(latest.source)}</div>}
+                              {latest.source && (
+                                <div>
+                                  <b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>:
+                                  {" "}
+                                  {String(latest.source)}
+                                </div>
+                              )}
                             </div>
                           </Tooltip>
                         </CircleMarker>

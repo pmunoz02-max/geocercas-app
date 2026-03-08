@@ -162,6 +162,78 @@
     "modeDesc": "If login is correct, the server redirects to /auth/callback with tokens.",
     "back": "Back"
   },
+  "pricing": {
+    "common": {
+      "currentPlan": "Current plan",
+      "loading": "Loading...",
+      "unlimited": "Unlimited"
+    },
+    "actions": {
+      "goToBilling": "Go to Billing",
+      "contactSales": "Contact sales"
+    },
+    "page": {
+      "title": "Plans and pricing",
+      "previewNotice": {
+        "prefix": "This screen runs in",
+        "middle": "and reuses Stripe in",
+        "suffix": "It does not affect production."
+      }
+    },
+    "summary": {
+      "detectedPlan": "Detected plan",
+      "maxGeofences": "Max geofences",
+      "maxTrackers": "Max trackers"
+    },
+    "free": {
+      "title": "Free",
+      "subtitle": "To get started",
+      "price": "$0",
+      "description": "Designed to validate the initial use of the platform.",
+      "currentPlanMessage": "You are already using the Free plan.",
+      "features": {
+        "validateFlow": "Ideal to get started and validate the base flow",
+        "upToTrackers": "Up to {{count}} tracker",
+        "geofenceLimits": "Geofences with plan-based limits",
+        "billingAndUpgrade": "Access to Billing and future upgrade path",
+        "backendEnforcement": "Backend still applies real enforcement"
+      }
+    },
+    "pro": {
+      "title": "Pro",
+      "subtitle": "Active SaaS operation",
+      "price": "Stripe TEST",
+      "description": "Recommended plan to enable the Tracker module and operate with subscription.",
+      "higherPlanMessage": "Your organization already has a plan higher than or different from Free.",
+      "reviewBillingMessage": "Check Billing to manage it.",
+      "features": {
+        "upToTrackers": "Up to {{count}} trackers per organization",
+        "upToGeofences": "Up to {{count}} geofences",
+        "trackerEnabled": "Tracker module enabled",
+        "invitesEnabled": "Tracker invitations enabled",
+        "stripeSelfManaged": "Self-managed subscription with Stripe"
+      }
+    },
+    "enterprise": {
+      "title": "Enterprise",
+      "subtitle": "Assisted sales",
+      "price": "Custom",
+      "description": "For organizations that require special commercial conditions.",
+      "features": {
+        "salesOnboarding": "Commercial support and guided onboarding",
+        "flexibleLimits": "Adjustable limits and conditions",
+        "multiTeamReady": "Prepared for operations with multiple teams",
+        "specialAgreements": "Commercial scaling and special agreements",
+        "directSalesContact": "Direct contact with sales"
+      }
+    },
+    "notes": {
+      "title": "Notes for this phase",
+      "backendAuthority": "The backend remains the real authority for the plan. This page only reflects the plan and shows the available commercial actions.",
+      "proCheckout": "The upgrade to Pro reuses the existing Stripe Checkout flow. Subscription management reuses Stripe Customer Portal.",
+      "enterpriseSales": "Enterprise is presented as a commercial channel, without enabling automatic checkout."
+    }
+  },
   "inicio": {
     "header": {
       "badge": "Help center & resources",
@@ -666,46 +738,91 @@
     "errorLoad": "Error loading tracker positions."
   },
   "trackerDashboard": {
-    "title": "Real-time Tracking Dashboard",
-    "subtitle": "Points update automatically. The send frequency is defined by the administrator.",
-    "filters": {
-      "trackerLabel": "Tracker",
-      "timeWindowLabel": "Window",
-      "timeWindowSuffix": "hours",
-      "geofenceLabel": "Geofence",
-      "allTrackers": "All trackers",
-      "allGeofences": "All geofences"
+    "title": "Tracker Dashboard",
+    "timeWindows": {
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "12h": "12 hours",
+      "24h": "24 hours"
     },
-    "summary": {
-      "title": "Summary",
-      "geofencesActive": "Active geofences",
-      "trackersProfiles": "Trackers (profiles)",
-      "pointsInMap": "Map points (current filter)",
-      "lastPoint": "Last recorded point",
-      "noPoints": "No points for the current filter."
+    "sections": {
+      "filters": "Filters",
+      "diagnostics": "Diagnostics",
+      "map": "Map"
     },
-    "legend": {
-      "title": "Tracker legend",
-      "points": "pts"
-    },
-    "popup": {
+    "labels": {
+      "window": "Window",
       "tracker": "Tracker",
-      "time": "Time",
-      "accuracy": "Accuracy",
-      "countHere": "Records at this position",
-      "activity": "Activity",
-      "geofence": "Geofence",
-      "inside": "Inside geofence",
-      "yes": "Yes",
-      "no": "No"
+      "geofences": "Geofences",
+      "all": "All",
+      "activeOrg": "Active org",
+      "activeOrgDebug": "Org (Active)",
+      "detectedPlan": "Detected plan"
+    },
+    "actions": {
+      "resolveOrgAgain": "Resolve org again (RPC)",
+      "refresh": "Refresh",
+      "loading": "Loading…",
+      "centerGeofence": "Center geofence"
+    },
+    "states": {
+      "validatingPlan": "Validating organization plan...",
+      "planValidationFailed": "The organization plan could not be validated.",
+      "moduleUnavailable": "This module is not available on the organization's current plan.",
+      "requiresPro": "The tracking dashboard requires PRO or higher.",
+      "upgradeHint": "Upgrade to visualize positions, routes and geofences from this panel.",
+      "upgradeOrgPrompt": "Upgrade this organization to enable Tracker Dashboard.",
+      "resolvingActiveOrg": "Resolving active organization…"
     },
     "messages": {
-      "noOrg": "You must select an organization.",
-      "autoRefresh": "Points update automatically. You don’t need to refresh the page.",
-      "loading": "Loading tracking data…",
-      "noData": "No positions found for the selected filters.",
-      "error": "Error loading tracking data.",
-      "checkConsole": "Check the console if it persists."
+      "loadAssignmentsError": "Error loading assignments (tracker_assignments).",
+      "loadGeofencesError": "Error loading geofences (geofences).",
+      "loadPositionsError": "Error loading positions.",
+      "noActiveAssignments": "There are no active assignments (tracker_assignments). Showing all active geofences (the default one remains preselected).",
+      "noActiveGeofencesForAssignments": "There are assignments, but there are no active geofences for those assignments in org ({{orgId}}).",
+      "fallbackGeofenceShown": "No active geofences were found; 1 active geofence was shown as a fallback so the dashboard does not remain empty.",
+      "noActiveGeofencesForOrg": "There are no active geofences available for this org ({{orgId}}).",
+      "noVisibleGeofences": "There are no active/visible geofences available for this org (or you do not have permission to view them).",
+      "orgResolveError": "Error resolving org"
+    },
+    "badges": {
+      "assignments": "assignments",
+      "trackers": "trackers",
+      "geofences": "geofences",
+      "polys": "polys",
+      "circles": "circles",
+      "positions": "positions",
+      "source": "src",
+      "assignedIds": "assignedIds",
+      "selected": "selected",
+      "bounds": "bounds",
+      "viewport": "viewport",
+      "intersects": "intersects"
+    },
+    "map": {
+      "initializing": "Initializing map…",
+      "statusPrefix": "map",
+      "circleLabel": "{{name}} (circle)"
+    },
+    "tooltip": {
+      "tracker": "Tracker",
+      "time": "Time",
+      "lat": "Lat",
+      "lng": "Lng",
+      "accuracy": "Acc",
+      "speed": "Speed",
+      "source": "Src"
+    },
+    "multiGeofence": {
+      "labelBase": "Geofences",
+      "labelNone": "Geofences: None",
+      "labelAll": "Geofences: All ({{count}})",
+      "labelSelected": "Geofences: {{count}}",
+      "searchPlaceholder": "Search geofence…",
+      "showAll": "Show all",
+      "hideAll": "Hide all",
+      "noResults": "No results…",
+      "close": "Close"
     }
   },
   "trackerGps": {
