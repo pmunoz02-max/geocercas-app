@@ -1215,5 +1215,64 @@
     "errorEmail": "Enter a valid email.",
     "errorGeneric": "Could not send the email.",
     "success": "✅ If the email exists, you will receive a link to create a new password. Check SPAM and open it in the same browser."
+  },
+  "reports": {
+    "title": "Reports",
+    "currentOrg": "Current org",
+    "sessionLoading": "Loading your session…",
+    "noActiveSession": "There is no active session. Please sign in again.",
+    "noActiveOrg": "There is no active organization for this user.",
+    "filters": {
+      "title": "Filters",
+      "subtitle": "Select ranges and lists. Then press Generate.",
+      "reloadLists": "Reload lists",
+      "reloadFilters": "Reload filters",
+      "clearSelections": "Clear selections",
+      "clearSelectionsTitle": "Clear selections (does not clear dates)",
+      "from": "From",
+      "to": "To",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "exportCsv": "Export CSV",
+      "tipLabel": "Tip:",
+      "tipMultiSelect": "In multi-select lists use Ctrl (Windows) / Command (Mac) to select multiple.",
+      "geofences": "Geofences",
+      "people": "People",
+      "activities": "Activities",
+      "assignments": "Assignments",
+      "multi": "(multi)",
+      "assignmentFallback": "assignment",
+      "assignmentNote": "Note: if your assignments do not have personal_id, the match with marks may come back empty."
+    },
+    "results": {
+      "title": "Results",
+      "generating": "Generating report…",
+      "rows": "Rows: {{count}}",
+      "emptyHint": "There is no data yet. Adjust filters and generate.",
+      "loading": "Loading…",
+      "noDataSelectedFilters": "There is no data for the selected filters."
+    },
+    "table": {
+      "day": "Day",
+      "person": "Person",
+      "email": "Email",
+      "geofence": "Geofence",
+      "activity": "Activity",
+      "assignment": "Assignment",
+      "entry": "Entry",
+      "exit": "Exit",
+      "marks": "Marks",
+      "inside": "Inside",
+      "distanceM": "Dist (m)",
+      "rate": "Rate",
+      "dash": "—"
+    },
+    "errors": {
+      "loadFilters": "Error loading filters.",
+      "noActiveOrgOrSession": "There is no active organization or the session is not ready.",
+      "invalidDateRange": "The \"From\" date cannot be later than the \"To\" date.",
+      "generateReport": "Error generating report.",
+      "exportNoData": "There is no data to export."
+    }
   }
 }

@@ -1215,5 +1215,64 @@
       "proCheckout": "La mise à niveau vers Pro réutilise le flux Stripe Checkout existant. La gestion de l'abonnement utilise Stripe Customer Portal.",
       "enterpriseSales": "Enterprise est présenté comme canal commercial, sans activer de checkout automatique."
     }
+  },
+  "reports": {
+    "title": "Rapports",
+    "currentOrg": "Organisation actuelle",
+    "sessionLoading": "Chargement de votre session…",
+    "noActiveSession": "Aucune session active. Veuillez vous reconnecter.",
+    "noActiveOrg": "Aucune organisation active pour cet utilisateur.",
+    "filters": {
+      "title": "Filtres",
+      "subtitle": "Sélectionnez des plages et des listes. Ensuite, appuyez sur Générer.",
+      "reloadLists": "Recharger les listes",
+      "reloadFilters": "Recharger les filtres",
+      "clearSelections": "Effacer les sélections",
+      "clearSelectionsTitle": "Effacer les sélections (ne supprime pas les dates)",
+      "from": "De",
+      "to": "À",
+      "generate": "Générer",
+      "generating": "Génération…",
+      "exportCsv": "Exporter CSV",
+      "tipLabel": "Astuce :",
+      "tipMultiSelect": "Dans les listes multi-sélection, utilisez Ctrl (Windows) / Commande (Mac) pour sélectionner plusieurs éléments.",
+      "geofences": "Géofences",
+      "people": "Personnes",
+      "activities": "Activités",
+      "assignments": "Affectations",
+      "multi": "(multi)",
+      "assignmentFallback": "affectation",
+      "assignmentNote": "Remarque : si vos affectations ne contiennent pas personal_id, le croisement avec les pointages peut revenir vide."
+    },
+    "results": {
+      "title": "Résultats",
+      "generating": "Génération du rapport…",
+      "rows": "Lignes : {{count}}",
+      "emptyHint": "Il n’y a pas encore de données. Ajustez les filtres et générez.",
+      "loading": "Chargement…",
+      "noDataSelectedFilters": "Aucune donnée avec les filtres sélectionnés."
+    },
+    "table": {
+      "day": "Jour",
+      "person": "Personne",
+      "email": "Email",
+      "geofence": "Géofence",
+      "activity": "Activité",
+      "assignment": "Affectation",
+      "entry": "Entrée",
+      "exit": "Sortie",
+      "marks": "Pointages",
+      "inside": "À l’intérieur",
+      "distanceM": "Dist (m)",
+      "rate": "Tarif",
+      "dash": "—"
+    },
+    "errors": {
+      "loadFilters": "Erreur lors du chargement des filtres.",
+      "noActiveOrgOrSession": "Il n’y a pas d’organisation active ou la session n’est pas prête.",
+      "invalidDateRange": "La date « De » ne peut pas être postérieure à la date « À ».",
+      "generateReport": "Erreur lors de la génération du rapport.",
+      "exportNoData": "Il n’y a pas de données à exporter."
+    }
   }
 }

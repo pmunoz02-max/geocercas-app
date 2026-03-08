@@ -1218,5 +1218,64 @@
       "proCheckout": "El upgrade a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
       "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
     }
+  },
+  "reports": {
+    "title": "Reportes",
+    "currentOrg": "Org actual",
+    "sessionLoading": "Cargando tu sesión…",
+    "noActiveSession": "No hay sesión activa. Inicia sesión nuevamente.",
+    "noActiveOrg": "No hay organización activa para este usuario.",
+    "filters": {
+      "title": "Filtros",
+      "subtitle": "Selecciona rangos y listas. Luego presiona Generar.",
+      "reloadLists": "Recargar listas",
+      "reloadFilters": "Recargar filtros",
+      "clearSelections": "Limpiar selecciones",
+      "clearSelectionsTitle": "Limpiar selecciones (no borra fechas)",
+      "from": "Desde",
+      "to": "Hasta",
+      "generate": "Generar",
+      "generating": "Generando…",
+      "exportCsv": "Exportar CSV",
+      "tipLabel": "Tip:",
+      "tipMultiSelect": "En listas multi-select usa Ctrl (Windows) / Command (Mac) para seleccionar múltiples.",
+      "geofences": "Geocercas",
+      "people": "Personas",
+      "activities": "Actividades",
+      "assignments": "Asignaciones",
+      "multi": "(multi)",
+      "assignmentFallback": "asignación",
+      "assignmentNote": "Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacío."
+    },
+    "results": {
+      "title": "Resultados",
+      "generating": "Generando reporte…",
+      "rows": "Filas: {{count}}",
+      "emptyHint": "Aún no hay datos. Ajusta filtros y genera.",
+      "loading": "Cargando…",
+      "noDataSelectedFilters": "No hay datos con los filtros seleccionados."
+    },
+    "table": {
+      "day": "Día",
+      "person": "Persona",
+      "email": "Email",
+      "geofence": "Geocerca",
+      "activity": "Actividad",
+      "assignment": "Asignación",
+      "entry": "Entrada",
+      "exit": "Salida",
+      "marks": "Marcajes",
+      "inside": "Dentro",
+      "distanceM": "Dist (m)",
+      "rate": "Tarifa",
+      "dash": "—"
+    },
+    "errors": {
+      "loadFilters": "Error cargando filtros.",
+      "noActiveOrgOrSession": "No hay organización activa o la sesión no está lista.",
+      "invalidDateRange": "La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
+      "generateReport": "Error generando reporte.",
+      "exportNoData": "No hay datos para exportar."
+    }
   }
 }
