@@ -30,7 +30,7 @@
   },
   "app": {
     "brand": "App Geocercas",
-    "title": "Application Geofencing",
+    "title": "App Geocercas",
     "header": {
       "loggedAs": "La session a commencé par",
       "logout": "Sortie",
@@ -48,22 +48,22 @@
       "inicio": "Accueil",
       "geocerca": "Géofence",
       "nuevaGeocerca": "Géofence",
-      "personal": "Le personnel",
+      "personal": "Personnel",
       "actividades": "Activités",
       "asignaciones": "Affectations",
       "reportes": "Rapports",
       "dashboard": "Tableau des coûts",
       "dashboardCostos": "Tableau des coûts",
-      "tracker": "Traceur",
+      "tracker": "Tracker",
       "invitarTracker": "Inviter un traceur",
       "admins": "Admins",
       "home": "Accueil",
-      "invitar_tracker": "Suivi des invitations",
+      "invitar_tracker": "Inviter un tracker",
       "geocercas": "Géofences"
     }
   },
   "landing": {
-    "brandName": "Application Geofencing",
+    "brandName": "App Geocercas",
     "brandTagline": "Contrôle du personnel par géofences",
     "heroBadge": "Contrôle intelligent des champs",
     "heroTitlePrefix": "Contrôlez votre personnel",
@@ -72,13 +72,13 @@
     "heroSubtitle": "L'application Geofencing vous permet d'affecter des personnes à des zones, d'enregistrer des activités et de calculer des coûts en temps réel.",
     "ctaLogin": "Accéder au panneau de contrôle",
     "ctaMagic": "Se connecter avec le lien magique",
-    "bulletGeocercasTitle": "Géofencing",
-    "bulletGeocercasBody": "Créez et géolocalisez vos champs, vos exploitations agricoles, vos usines ou vos points de service.",
-    "bulletPersonalTitle": "Le personnel",
+    "bulletGeocercasTitle": "Géofences",
+    "bulletGeocercasBody": "Créez et gérez des géofences pour vos champs, fermes, usines ou points de service.",
+    "bulletPersonalTitle": "Personnel",
     "bulletPersonalBody": "Inscrivez votre personnel et affectez-le à des activités et à des domaines spécifiques.",
     "bulletCostsTitle": "Coûts",
     "bulletCostsBody": "Voir les tableaux de bord Power BI avec les coûts par personne, activité et géofence.",
-    "livePanelLabel": "Panel en direct",
+    "livePanelLabel": "Panneau en direct",
     "livePanelTitle": "Opérations en temps réel",
     "zonesActive": "Zones actives",
     "statusOnline": "Système en ligne",
@@ -96,10 +96,10 @@
     "loginButton": "Entrer",
     "accessTitle": "Accès avec compte autorisé",
     "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n'avez pas d'accès, veuillez demander une invitation à votre organisation.",
-    "accessHint": "Conseil : utilisez \"Magic Link\" si votre administrateur vous a invité par courrier.",
+    "accessHint": "Conseil : utilisez « Lien magique » si votre administrateur vous a invité par e-mail.",
     "reviewNote": "Note : Si vous vérifiez l'application (Google Play), utilisez les informations d'identification fournies dans la console Play (accès à l'application).",
     "privacyMiniNote": "Confidentialité : La localisation est utilisée uniquement pour les fonctions de géofencing et de suivi, conformément aux autorisations accordées par l'utilisateur.",
-    "login": "S'inscrire",
+    "login": "Se connecter",
     "heroTitle": "Gérez votre personnel à l'aide de géofences intelligentes partout dans le monde",
     "goPanel": "Aller au tableau de bord",
     "magicEnter": "Se connecter avec le lien magique",
@@ -108,7 +108,7 @@
     "email": "Courriel",
     "sending": "Envoi...",
     "sendMagic": "Envoyer le lien magique",
-    "magicNote": "Important : l'accès ne fonctionne qu'avec le vrai Magic Link.",
+    "magicNote": "Important : l’accès fonctionne uniquement avec le véritable lien magique.",
     "support": "Soutien",
     "invalidEmail": "Courriel non valide.",
     "magicLinkSent": "Nous vous avons envoyé un lien d'accès. Vérifiez votre e-mail.",
@@ -116,7 +116,7 @@
   },
   "login": {
     "title": "Se connecter",
-    "subtitle": "Connectez-vous à votre compte Geocercas App",
+    "subtitle": "Connectez-vous à votre compte App Geocercas",
     "advancedOptions": "Options avancées",
     "emailLabel": "Courriel",
     "passwordLabel": "Mot de passe",
@@ -134,15 +134,15 @@
     "modePassword": "Mot de passe",
     "modeMagic": "Lien magique",
     "submit": "Entrer",
-    "submitting": "S'inscrire...",
+    "submitting": "Connexion…",
     "magicButton": "Envoyer le lien magique",
     "magicSubmitting": "Envoi du lien...",
     "magicDescription": "Nous vous enverrons un lien sécurisé à votre adresse électronique afin que vous puissiez vous connecter sans mot de passe.",
     "emailPlaceholder": "you@example.com",
     "passwordPlaceholder": "Entrez votre mot de passe",
-    "forgotPassword": "vous avez oublié votre mot de passe ?",
-    "forgotPasswordAlt": "préférez-vous réinitialiser votre mot de passe (envoyer un e-mail) ?",
-    "loadingSession": "Chargement de votre session..",
+    "forgotPassword": "Mot de passe oublié ?",
+    "forgotPasswordAlt": "Vous préférez réinitialiser votre mot de passe ? (envoyer un e-mail)",
+    "loadingSession": "Chargement de votre session…",
     "errorMissingCredentials": "Le nom d'utilisateur ou le mot de passe est manquant.",
     "errorMissingEmail": "Vous devez saisir une adresse électronique.",
     "errorInvalidCredentials": "Informations d'identification non valides.",
@@ -165,7 +165,7 @@
   "inicio": {
     "header": {
       "badge": "Centre d'aide et de ressources",
-      "title": "Bienvenue à votre panel",
+      "title": "Bienvenue sur votre tableau de bord",
       "subtitle": "De là, vous pouvez accéder aux instructions, aux questions fréquemment posées, à l'assistance et aux nouvelles concernant l'application Geocercas."
     },
     "cards": {
@@ -184,13 +184,13 @@
       "videoDemo": {
         "badge": "Vidéo",
         "title": "Démonstration vidéo",
-        "body": "Regardez une courte démonstration du fonctionnement réel d'App Geofences.",
+        "body": "Regardez une courte démonstration du fonctionnement réel d’App Geocercas.",
         "cta": "Voir la vidéo de démonstration"
       },
       "soporte": {
         "badge": "Soutien",
         "title": "Contact / Support",
-        "body": "besoin d'aide ? Contactez-nous pour toute question relative à l'assistance technique, à la facturation ou au compte.",
+        "body": "Besoin d’aide ? Contactez-nous pour toute question liée à l’assistance technique, à la facturation ou à votre compte.",
         "cta": "Aller au soutien"
       },
       "queEs": {
@@ -229,14 +229,14 @@
     "buttonShowAll": "Afficher tout",
     "buttonDeleteSelected": "Supprimer la sélection",
     "buttonClearCanvas": "Effacer la carte",
-    "pageTitle": "Géofencing",
-    "pageSubtitle": "Gérez les géofences de votre organisation. À partir de là, vous pouvez créer de nouvelles géofences et réviser les géofences existantes.",
+    "pageTitle": "Géofences",
+    "pageSubtitle": "Gérez les géofences de votre organisation. Vous pouvez y créer de nouvelles géofences et consulter celles qui existent déjà.",
     "currentOrgLabel": "Organisation actuelle :",
     "currentUserLabel": "Utilisateur :",
     "noOrgFallback": "- (aucune organisation sélectionnée)",
     "cardNewTitle": "Nouvelle géofence",
-    "cardNewBody": "Créez une nouvelle géofence sur la carte et attribuez-la à votre personnel ou à vos activités.",
-    "cardNewCta": "Aller à Nouvelle géo-clôture →",
+    "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+    "cardNewCta": "Aller à Nouvelle géofence →",
     "cardListTitle": "Liste des géofences",
     "cardListBody": "Vous pourrez bientôt voir la liste des géofences existantes et leurs détails ici. Pour l'instant, utilisez l'option Nouvelle géofence pour créer et modifier.",
     "buttonShowOnMap": "Afficher sur la carte",
@@ -246,7 +246,7 @@
     "lng": "Lng",
     "draftLabel": "Brouillon",
     "pointsLabel": "Pts",
-    "modalTitle": "Dessin par coordonnées",
+    "modalTitle": "Tracer par coordonnées",
     "modalHintRule": "1 point = petit carré | 2 points = rectangle | 3+ = polygone",
     "modalInstruction": "Format :",
     "modalOnePerLine": "(un par ligne)",
@@ -282,7 +282,7 @@
     }
   },
   "personal": {
-    "title": "Le personnel",
+    "title": "Personnel",
     "orgInfoLabel": "Organisation :",
     "orgFallback": "Aucune organisation",
     "roleLabel": "Rôle :",
@@ -658,10 +658,10 @@
     "tableEmpty": "Pas de données à afficher"
   },
   "tracker": {
-    "title": "Traceur GPS",
+    "title": "Tracker GPS",
     "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",
     "status": {
-      "online": "Suivi en ligne",
+      "online": "Tracker en ligne",
       "offline": "Pas de données récentes"
     },
     "controls": {
@@ -687,7 +687,7 @@
     "errorLoad": "Erreur de chargement des positions du tracker."
   },
   "trackerDashboard": {
-    "title": "Tableau de bord Tracker",
+    "title": "Tracker Dashboard",
     "timeWindows": {
       "1h": "1 heure",
       "6h": "6 heures",
@@ -718,7 +718,7 @@
       "validatingPlan": "Validation du plan de l’organisation...",
       "planValidationFailed": "Impossible de valider le plan de l’organisation.",
       "moduleUnavailable": "Ce module n’est pas disponible avec le plan actuel de l’organisation.",
-      "requiresPro": "Le tableau de bord de tracking nécessite PRO ou supérieur.",
+      "requiresPro": "Le tableau de bord de suivi nécessite PRO ou supérieur.",
       "upgradeHint": "Passez à un plan supérieur pour visualiser les positions, les trajets et les géofences depuis ce panneau.",
       "upgradeOrgPrompt": "Mettez à niveau cette organisation pour activer Tracker Dashboard.",
       "resolvingActiveOrg": "Résolution de l’organisation active…"
@@ -741,12 +741,12 @@
       "polys": "polygones",
       "circles": "cercles",
       "positions": "positions",
-      "source": "src",
+      "source": "source",
       "assignedIds": "assignedIds",
-      "selected": "selected",
-      "bounds": "bounds",
+      "selected": "sélectionnées",
+      "bounds": "limites",
       "viewport": "viewport",
-      "intersects": "intersects"
+      "intersects": "intersections"
     },
     "map": {
       "initializing": "Initialisation de la carte…",
@@ -784,7 +784,7 @@
     "goHome": "Aller à l’accueil",
     "status": {
       "initializing": "Démarrage du tracker…",
-      "processingMagicLink": "Traitement du Magic Link Tracker…",
+      "processingMagicLink": "Traitement du lien magique Tracker…",
       "sessionOkPreparing": "Session OK. Préparation du tracker…",
       "readingSession": "Lecture de la session du tracker…",
       "noSession": "Aucune session tracker active.",
@@ -799,7 +799,7 @@
       "noSupabaseClient": "Client Supabase principal introuvable.",
       "setSession": "Erreur setSession :",
       "hashSession": "Erreur de session hash :",
-      "openFromMagicLinkOnly": "Ouvrez cette page uniquement depuis votre Magic Link Tracker.",
+      "openFromMagicLinkOnly": "Ouvrez cette page uniquement depuis votre lien magique Tracker.",
       "geolocationUnavailable": "Géolocalisation indisponible."
     },
     "membership": {
@@ -837,17 +837,17 @@
   },
   "inviteTracker": {
     "orgFallback": "votre organisation",
-    "title": "Suivi des invitations",
-    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un courriel manuellement pour l'inviter à participer au suivi sur {{orgName}}.",
+    "title": "Inviter un tracker",
+    "subtitle": "Sélectionnez un membre actif de votre personnel ou saisissez une adresse e-mail manuellement pour l’inviter comme tracker dans {{orgName}}.",
     "form": {
       "selectLabel": "Sélectionner le personnel actuel (facultatif)",
-      "selectPlaceholder": "-- Sélection du personnel --",
-      "selectHelp": "Si vous sélectionnez un membre du personnel, son courrier sera automatiquement rempli.",
-      "emailLabel": "Courriel du traqueur",
+      "selectPlaceholder": "-- Sélectionner du personnel --",
+      "selectHelp": "Si vous sélectionnez un membre du personnel, son e-mail sera renseigné automatiquement.",
+      "emailLabel": "E-mail du tracker",
       "emailPlaceholder": "tracker@example.com",
       "emailHelp": "Une invitation sera envoyée à cette adresse électronique.",
-      "buttonSending": "Envoi d'une invitation...",
-      "buttonSend": "Envoyer une invitation"
+      "buttonSending": "Envoi de l’invitation…",
+      "buttonSend": "Envoyer l’invitation"
     },
     "diag": {
       "orgUsed": "Organisation utilisée",
@@ -872,28 +872,28 @@
       "upgradePrompt": "Passez cette organisation à PRO pour activer les invitations de tracker."
     },
     "errors": {
-      "emailRequired": "Vous devez saisir une adresse électronique.",
-      "emailInvalid": "Veuillez saisir une adresse électronique valide.",
+      "emailRequired": "Vous devez saisir une adresse e-mail.",
+      "emailInvalid": "Veuillez saisir une adresse e-mail valide.",
       "noOrg": "Impossible de résoudre une organisation active pour cet utilisateur.",
       "planBlocked": "Le plan actuel de l’organisation n’autorise pas les invitations de tracker.",
       "notInOrg": "Votre utilisateur n’est pas lié à l’organisation active.",
       "inviteErrorPrefix": "Erreur lors de l’envoi de l’invitation"
     },
     "messages": {
-      "serverProblem": "Il y a eu un problème de contact avec le serveur d'invitation.",
-      "notOk": "L'invitation n'a pas pu être complétée. Veuillez vérifier votre courrier électronique et réessayer.",
-      "invited": "Une invitation a été envoyée à {{email}} pour qu'il se joigne en tant que traqueur à {{orgName}}.",
+      "serverProblem": "Un problème est survenu lors du contact avec le serveur d’invitation.",
+      "notOk": "L’invitation n’a pas pu être finalisée. Vérifiez l’e-mail et réessayez.",
+      "invited": "Une invitation a été envoyée à {{email}} pour rejoindre {{orgName}} en tant que tracker.",
       "magiclinkSent": "Un lien magique a été envoyé à {{email}}.",
-      "linkOnlyWithLink": "L'invitation a été créée. Utilisez ce lien pour partager l'accès : {{link}}.",
-      "linkOnlyNoLink": "L'invitation a été créée, mais aucun lien public n'a été reçu.",
-      "createdWithoutEmail": "L'accès au tracker a été créé sans envoyer d'e-mail.",
-      "genericProcessed": "L'invitation pour {{email}} a été traitée avec succès.",
-      "unexpectedError": "Erreur inattendue lors du traitement de l'invitation."
+      "linkOnlyWithLink": "L’invitation a été créée. Utilisez ce lien pour partager l’accès : {{link}}.",
+      "linkOnlyNoLink": "L’invitation a été créée, mais aucun lien public n’a été reçu.",
+      "createdWithoutEmail": "L’accès tracker a été créé sans envoi d’e-mail.",
+      "genericProcessed": "L’invitation pour {{email}} a été traitée avec succès.",
+      "unexpectedError": "Erreur inattendue lors du traitement de l’invitation."
     },
     "backToTracker": "Retour au Tracker",
     "selectPersonLabel": "Sélectionnez une personne",
     "onlyExistingNote": "Vous ne pouvez inviter que des personnes déjà existantes dans votre organisation.",
-    "emailLabel": "Courriel du traqueur",
+    "emailLabel": "E-mail du tracker",
     "emailPlaceholder": "tracker@example.com",
     "sendInvite": "Envoyer l’invitation"
   },
@@ -934,7 +934,7 @@
   "help": {
     "common": {
       "breadcrumb": "Centre d'aide",
-      "back": "Retour à",
+      "back": "Retour",
       "goHome": "Aller à l'accueil",
       "viewFaq": "Voir FAQ",
       "badge": "Centre d'aide",
@@ -996,7 +996,7 @@
           "title": "Inviter des traqueurs (téléphones de terrain)",
           "bullets": [
             "Accédez à l'outil de suivi des invitations et envoyez l'invitation par courrier.",
-            "L'invité peut se connecter avec Link magic depuis son mobile.",
+            "L’invité peut se connecter avec un lien magique depuis son mobile.",
             "Au démarrage, le traceur envoie des points GPS en fonction de l'affectation."
           ]
         },
@@ -1110,7 +1110,7 @@
   "resetPassword": {
     "title": "Réinitialiser le mot de passe",
     "subtitle": "Créez un nouveau mot de passe pour votre compte.",
-    "loading": "Préparation du lien de récupération...",
+    "loading": "Préparation du lien de récupération…",
     "invalidOrExpired": "Le lien de récupération n'est pas valide ou a expiré. Demandez-en un nouveau.",
     "noSession": "Il n'y a pas de session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
     "noticeType": "Session détectée. Si ce lien n'était pas un lien de récupération, reconnectez-vous normalement.",
@@ -1122,7 +1122,7 @@
     "passwordMin": "Le mot de passe doit comporter au moins 8 caractères.",
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "saveButton": "Enregistrer le nouveau mot de passe",
-    "saving": "Économiser...",
+    "saving": "Enregistrement…",
     "updateFailed": "Le mot de passe n'a pas pu être mis à jour. Veuillez réessayer.",
     "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
     "success": "Le mot de passe a été mis à jour avec succès. Vous pouvez maintenant vous connecter.",
@@ -1144,7 +1144,7 @@
     "timeout": "L'authentification a pris trop de temps. Veuillez réessayer.",
     "invalidOrExpiredLink": "Le lien n'est pas valide, a expiré ou a été utilisé.",
     "errorTitle": "Échec de l'authentification",
-    "backToLogin": "Retour au login"
+    "backToLogin": "Retour à la connexion"
   },
   "home": {
     "welcome": "Bienvenue sur App Geocercas",
@@ -1177,19 +1177,19 @@
     "retry": "Réessayer"
   },
   "forgot": {
-    "back": "Retour à la page d'accueil",
+    "back": "Retour à la connexion",
     "title": "Réinitialiser le mot de passe",
     "subtitle": "Nous vous enverrons un lien pour créer un nouveau mot de passe. Si vous ne le recevez pas, veuillez vérifier les SPAM.",
     "tip": "Conseil : si le lien échoue, générez-en un nouveau et ouvrez-le dans une fenêtre incognito.",
     "email": "Courriel",
     "emailPh": "tu@correo.com",
-    "sending": "Envoi..",
+    "sending": "Envoi…",
     "send": "Envoyer le lien",
     "noteTitle": "Note",
     "noteDesc": "Le lien passera par /auth/callback et vous enverra à /reset-password pour créer le nouveau mot de passe.",
     "errorEmail": "Veuillez saisir une adresse électronique valide.",
     "errorGeneric": "Le courrier n'a pas pu être envoyé.",
-    "success": "si l'e-mail existe, vous recevrez un lien pour créer un nouveau mot de passe. Vérifiez le SPAM et ouvrez-le dans le même navigateur."
+    "success": "✅ Si l’e-mail existe, vous recevrez un lien pour créer un nouveau mot de passe. Vérifiez le dossier SPAM et ouvrez-le dans le même navigateur."
   },
   "pricing": {
     "common": {
@@ -1198,7 +1198,7 @@
       "unlimited": "Illimitées"
     },
     "actions": {
-      "goToBilling": "Aller à Billing",
+      "goToBilling": "Aller à la facturation",
       "contactSales": "Contacter les ventes"
     },
     "page": {
@@ -1224,7 +1224,7 @@
         "validateFlow": "Idéal pour démarrer et valider le flux de base",
         "upToTrackers": "Jusqu'à {{count}} tracker",
         "geofenceLimits": "Géorepérages avec limite selon le plan",
-        "billingAndUpgrade": "Accès à Billing et futur parcours d'upgrade",
+        "billingAndUpgrade": "Accès à la facturation et futur parcours de mise à niveau",
         "backendEnforcement": "Le backend applique toujours le contrôle réel"
       }
     },
@@ -1234,7 +1234,7 @@
       "price": "Stripe TEST",
       "description": "Plan recommandé pour activer le module Tracker et fonctionner avec abonnement.",
       "higherPlanMessage": "Votre organisation dispose déjà d'un plan supérieur ou différent de Free.",
-      "reviewBillingMessage": "Consultez Billing pour le gérer.",
+      "reviewBillingMessage": "Consultez la facturation pour le gérer.",
       "features": {
         "upToTrackers": "Jusqu'à {{count}} trackers par organisation",
         "upToGeofences": "Jusqu'à {{count}} géorepérages",
