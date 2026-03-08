@@ -1087,55 +1087,65 @@
     }
   },
   "trackerGps": {
-    "debugCopyPaste": "Copiar/pegar (debug)",
-    "diag": {
-      "acc": "acc",
-      "lat": "lat",
-      "lng": "lng",
-      "membership": "membership",
-      "orgId": "org_id",
-      "sendUrl": "send_url",
-      "tokenIss": "token_iss"
+    "title": "Tracker GPS",
+    "lastSend": "Último envío",
+    "waitingCoords": "Esperando coordenadas…",
+    "debugCopyPaste": "Debug (copiar/pegar)",
+    "stateLabel": "Estado",
+    "onlyInvited": "Esta página es solo para trackers invitados.",
+    "goHome": "Ir al inicio",
+    "status": {
+      "initializing": "Iniciando tracker…",
+      "processingMagicLink": "Procesando Magic Link del Tracker…",
+      "sessionOkPreparing": "Sesión OK. Preparando tracker…",
+      "readingSession": "Leyendo sesión del tracker…",
+      "noSession": "No hay una sesión activa del tracker.",
+      "noGeolocation": "Este dispositivo no soporta geolocalización.",
+      "active": "Tracker activo",
+      "activating": "Activando tracker en la organización…",
+      "noPermission": "Tracker sin permiso / onboarding",
+      "gpsError": "Error de GPS"
     },
     "errors": {
-      "geolocationUnavailable": "Geolocation not available.",
-      "hashSession": "hash session error:",
-      "missingEnv": "Missing env vars: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.",
-      "noSupabaseClient": "Primary Supabase client not found.",
-      "notConfigured": "Tracker is not configured in this deployment.",
-      "openFromMagicLinkOnly": "Open this page only from your Tracker Magic Link.",
-      "sendNoValidToken": "send_position: no valid token in /tracker-gps",
-      "setSession": "setSession error:"
+      "notConfigured": "El tracker no está configurado en este deployment.",
+      "noSupabaseClient": "No se encontró el cliente principal de Supabase.",
+      "setSession": "Error en setSession:",
+      "hashSession": "Error de sesión por hash:",
+      "openFromMagicLinkOnly": "Abre esta página solo desde tu Magic Link de Tracker.",
+      "geolocationUnavailable": "Geolocalización no disponible."
     },
-    "goHome": "Ir al inicio",
-    "lastSend": "Último envío",
     "membership": {
-      "acceptOk": "accept-tracker-invite OK: {{text}}",
-      "acceptOkRole": "accept-tracker-invite OK. role={{role}}",
-      "alreadyExists": "Membership already exists: role={{role}}",
-      "checking": "Checking membership…",
-      "missingOrgId": "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>.",
-      "noAcceptUrl": "Could not build acceptUrl.",
-      "noValidTokenUser": "No valid token/user in /tracker-gps.",
-      "okSessionCache": "Membership OK (session cache).",
-      "runningAccept": "No membership. Running accept-tracker-invite…"
+      "missingOrgId": "Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps?org_id=<ORG_ID>.",
+      "checking": "Verificando membresía…",
+      "noValidTokenUser": "No hay token/usuario válido en /tracker-gps.",
+      "okSessionCache": "Membresía OK (cache de sesión).",
+      "membershipsSelectError": "Error en select de memberships:",
+      "alreadyExists": "La membresía ya existe: role={{role}}",
+      "runningAccept": "No existe membresía. Ejecutando accept-tracker-invite",
+      "acceptError": "Error de accept-tracker-invite:",
+      "membershipsRecheckError": "Error de revalidación de memberships:",
+      "acceptReturnedButNotCreated": "accept-tracker-invite devolvió OK pero la membresía no fue creada.",
+      "acceptOk": "accept-tracker-invite OK.",
+      "onboardingException": "Excepción en onboarding:"
     },
-    "onlyInvited": "Solo invitados",
-    "stateLabel": "Estado",
-    "status": {
-      "activating": "Activating tracker in the org…",
-      "active": "Tracker active",
-      "gpsError": "GPS error",
-      "initializing": "Starting tracker…",
-      "noGeolocation": "This device does not support geolocation.",
-      "noPermission": "Tracker without permission / onboarding",
-      "noSession": "No active tracker session.",
-      "processingMagicLink": "Processing Tracker Magic Link…",
-      "readingSession": "Reading tracker session…",
-      "sessionOkPreparing": "Session OK. Preparing tracker…"
+    "disclosure": {
+      "title": "Ubicación en segundo plano",
+      "body1": "App Geocercas recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
+      "body2": "Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión.",
+      "continue": "Continuar"
     },
-    "title": "Tracker GPS",
-    "waitingCoords": "Esperando coordenadas…"
+    "debugLabels": {
+      "send": "send",
+      "accept": "accept",
+      "orgId": "org_id",
+      "membership": "membership",
+      "tokenIss": "token_iss",
+      "tokenTtlSec": "token_ttl_sec",
+      "lastHttpStatus": "last_http_status",
+      "lat": "lat",
+      "lng": "lng",
+      "acc": "acc"
+    }
   },
   "pricing": {
     "common": {

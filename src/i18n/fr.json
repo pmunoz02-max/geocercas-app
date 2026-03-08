@@ -754,51 +754,61 @@
     }
   },
   "trackerGps": {
-    "title": "Traceur GPS",
+    "title": "Tracker GPS",
     "lastSend": "Dernier envoi",
     "waitingCoords": "En attente des coordonnées…",
-    "debugCopyPaste": "Débogage (copier/coller)",
-    "stateLabel": "Statut",
-    "onlyInvited": "Cette page est réservée aux traceurs invités.",
+    "debugCopyPaste": "Debug (copier/coller)",
+    "stateLabel": "État",
+    "onlyInvited": "Cette page est réservée aux trackers invités.",
     "goHome": "Aller à l’accueil",
     "status": {
-      "initializing": "Démarrage du traceur…",
-      "processingMagicLink": "Traitement du Magic Link du traceur…",
-      "sessionOkPreparing": "Session OK. Préparation du traceur…",
-      "readingSession": "Lecture de la session du traceur…",
-      "noSession": "Aucune session active du traceur.",
+      "initializing": "Démarrage du tracker…",
+      "processingMagicLink": "Traitement du Magic Link Tracker…",
+      "sessionOkPreparing": "Session OK. Préparation du tracker…",
+      "readingSession": "Lecture de la session du tracker…",
+      "noSession": "Aucune session tracker active.",
       "noGeolocation": "Cet appareil ne prend pas en charge la géolocalisation.",
-      "gpsError": "Erreur GPS",
-      "active": "Traceur actif",
-      "activating": "Activation du traceur dans l’organisation…",
-      "noPermission": "Traceur sans permission / onboarding"
+      "active": "Tracker actif",
+      "activating": "Activation du tracker dans l’organisation…",
+      "noPermission": "Tracker sans permission / onboarding",
+      "gpsError": "Erreur GPS"
     },
     "errors": {
-      "notConfigured": "Le traceur n’est pas configuré pour ce déploiement.",
+      "notConfigured": "Le tracker n’est pas configuré dans ce déploiement.",
       "noSupabaseClient": "Client Supabase principal introuvable.",
-      "missingEnv": "Variables d’environnement manquantes : VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.",
       "setSession": "Erreur setSession :",
-      "hashSession": "Erreur de session (hash) :",
-      "openFromMagicLinkOnly": "Ouvrez cette page uniquement depuis votre Magic Link de traceur.",
-      "geolocationUnavailable": "Géolocalisation indisponible.",
-      "sendNoValidToken": "send_position : aucun jeton valide dans /tracker-gps"
+      "hashSession": "Erreur de session hash :",
+      "openFromMagicLinkOnly": "Ouvrez cette page uniquement depuis votre Magic Link Tracker.",
+      "geolocationUnavailable": "Géolocalisation indisponible."
     },
     "membership": {
       "missingOrgId": "org_id manquant dans l’URL. Ouvrez cette page depuis le lien d’invitation : /tracker-gps?org_id=<ORG_ID>.",
-      "noAcceptUrl": "Impossible de construire acceptUrl.",
       "checking": "Vérification de l’adhésion…",
-      "noValidTokenUser": "Aucun jeton/utilisateur valide dans /tracker-gps.",
+      "noValidTokenUser": "Aucun token/utilisateur valide dans /tracker-gps.",
       "okSessionCache": "Adhésion OK (cache de session).",
-      "alreadyExists": "Adhésion déjà existante : rôle={{role}}",
-      "runningAccept": "Aucune adhésion. Exécution de accept-tracker-invite…",
-      "acceptOkRole": "accept-tracker-invite OK. rôle={{role}}",
-      "acceptOk": "accept-tracker-invite OK : {{text}}"
+      "membershipsSelectError": "Erreur de sélection memberships :",
+      "alreadyExists": "L’adhésion existe déjà : role={{role}}",
+      "runningAccept": "Aucune adhésion. Exécution de accept-tracker-invite",
+      "acceptError": "Erreur accept-tracker-invite :",
+      "membershipsRecheckError": "Erreur de revalidation memberships :",
+      "acceptReturnedButNotCreated": "accept-tracker-invite a renvoyé OK mais l’adhésion n’a pas été créée.",
+      "acceptOk": "accept-tracker-invite OK.",
+      "onboardingException": "Exception onboarding :"
     },
-    "diag": {
-      "sendUrl": "send_url",
+    "disclosure": {
+      "title": "Localisation en arrière-plan",
+      "body1": "App Geocercas collecte votre position même lorsque l’application est fermée ou que le téléphone est verrouillé afin d’enregistrer les positions et de valider l’entrée et la sortie des géofences pendant la journée de travail.",
+      "body2": "Ces informations sont utilisées uniquement à des fins opérationnelles de l’organisation et ne sont ni partagées avec des tiers ni utilisées à des fins publicitaires. Vous pouvez arrêter le suivi en révoquant l’autorisation de localisation ou en vous déconnectant.",
+      "continue": "Continuer"
+    },
+    "debugLabels": {
+      "send": "send",
+      "accept": "accept",
       "orgId": "org_id",
       "membership": "membership",
       "tokenIss": "token_iss",
+      "tokenTtlSec": "token_ttl_sec",
+      "lastHttpStatus": "last_http_status",
       "lat": "lat",
       "lng": "lng",
       "acc": "acc"

@@ -826,7 +826,7 @@
     }
   },
   "trackerGps": {
-    "title": "GPS Tracker",
+    "title": "Tracker GPS",
     "lastSend": "Last send",
     "waitingCoords": "Waiting for coordinates…",
     "debugCopyPaste": "Debug (copy/paste)",
@@ -840,37 +840,47 @@
       "readingSession": "Reading tracker session…",
       "noSession": "No active tracker session.",
       "noGeolocation": "This device does not support geolocation.",
-      "gpsError": "GPS error",
       "active": "Tracker active",
       "activating": "Activating tracker in the org…",
-      "noPermission": "Tracker without permission / onboarding"
+      "noPermission": "Tracker without permission / onboarding",
+      "gpsError": "GPS error"
     },
     "errors": {
       "notConfigured": "Tracker is not configured in this deployment.",
       "noSupabaseClient": "Primary Supabase client not found.",
-      "missingEnv": "Missing env vars: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY.",
       "setSession": "setSession error:",
       "hashSession": "hash session error:",
       "openFromMagicLinkOnly": "Open this page only from your Tracker Magic Link.",
-      "geolocationUnavailable": "Geolocation not available.",
-      "sendNoValidToken": "send_position: no valid token in /tracker-gps"
+      "geolocationUnavailable": "Geolocation not available."
     },
     "membership": {
       "missingOrgId": "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>.",
-      "noAcceptUrl": "Could not build acceptUrl.",
       "checking": "Checking membership…",
       "noValidTokenUser": "No valid token/user in /tracker-gps.",
       "okSessionCache": "Membership OK (session cache).",
+      "membershipsSelectError": "memberships select error:",
       "alreadyExists": "Membership already exists: role={{role}}",
-      "runningAccept": "No membership. Running accept-tracker-invite…",
-      "acceptOkRole": "accept-tracker-invite OK. role={{role}}",
-      "acceptOk": "accept-tracker-invite OK: {{text}}"
+      "runningAccept": "No membership. Running accept-tracker-invite",
+      "acceptError": "accept-tracker-invite error:",
+      "membershipsRecheckError": "memberships recheck error:",
+      "acceptReturnedButNotCreated": "accept-tracker-invite returned OK but membership was not created.",
+      "acceptOk": "accept-tracker-invite OK.",
+      "onboardingException": "onboarding exception:"
     },
-    "diag": {
-      "sendUrl": "send_url",
+    "disclosure": {
+      "title": "Background location",
+      "body1": "App Geocercas collects your location even when the app is closed or the phone is locked in order to record positions and validate geofence entry and exit during the workday.",
+      "body2": "This information is used only for the organization's operational purposes and is not shared with third parties or used for advertising. You can stop tracking by revoking location permission or signing out.",
+      "continue": "Continue"
+    },
+    "debugLabels": {
+      "send": "send",
+      "accept": "accept",
       "orgId": "org_id",
       "membership": "membership",
       "tokenIss": "token_iss",
+      "tokenTtlSec": "token_ttl_sec",
+      "lastHttpStatus": "last_http_status",
       "lat": "lat",
       "lng": "lng",
       "acc": "acc"

@@ -110,7 +110,6 @@ export default function TrackerGpsPage() {
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
 
-  // Universal: cada entrada al tracker exige disclosure
   const [disclosureAccepted, setDisclosureAccepted] = useState(false);
 
   const [debug, setDebug] = useState({
@@ -477,7 +476,9 @@ export default function TrackerGpsPage() {
 
         if (mErr) {
           setMembershipStatus("failed");
-          setMembershipDetail(`memberships select error: ${mErr.message}`);
+          setMembershipDetail(
+            `${tt("trackerGps.membership.membershipsSelectError", "memberships select error:")} ${mErr.message}`
+          );
           return;
         }
 
@@ -485,7 +486,9 @@ export default function TrackerGpsPage() {
         if (m && !m.revoked_at) {
           setMembershipStatus("ok");
           setMembershipDetail(
-            tt("trackerGps.membership.alreadyExists", `Membership already exists: role=${m.role}`)
+            tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
+              role: m.role,
+            })
           );
           try {
             sessionStorage.setItem(ssKey, "1");
@@ -501,7 +504,9 @@ export default function TrackerGpsPage() {
           await invokeAcceptTrackerInvite({ org_id: orgId });
         } catch (e) {
           setMembershipStatus("failed");
-          setMembershipDetail(`accept-tracker-invite error: ${String(e?.message || e)}`);
+          setMembershipDetail(
+            `${tt("trackerGps.membership.acceptError", "accept-tracker-invite error:")} ${String(e?.message || e)}`
+          );
           return;
         }
 
@@ -514,14 +519,21 @@ export default function TrackerGpsPage() {
 
         if (mErr2) {
           setMembershipStatus("failed");
-          setMembershipDetail(`memberships recheck error: ${mErr2.message}`);
+          setMembershipDetail(
+            `${tt("trackerGps.membership.membershipsRecheckError", "memberships recheck error:")} ${mErr2.message}`
+          );
           return;
         }
 
         const m2 = (mRows2 || [])[0];
         if (!m2 || m2.revoked_at) {
           setMembershipStatus("failed");
-          setMembershipDetail("accept-tracker-invite returned OK but membership was not created.");
+          setMembershipDetail(
+            tt(
+              "trackerGps.membership.acceptReturnedButNotCreated",
+              "accept-tracker-invite returned OK but membership was not created."
+            )
+          );
           return;
         }
 
@@ -533,7 +545,9 @@ export default function TrackerGpsPage() {
         } catch {}
       } catch (e) {
         setMembershipStatus("failed");
-        setMembershipDetail(`onboarding exception: ${String(e?.message || e)}`);
+        setMembershipDetail(
+          `${tt("trackerGps.membership.onboardingException", "onboarding exception:")} ${String(e?.message || e)}`
+        );
       } finally {
         onboardingLockRef.current = false;
       }
@@ -646,21 +660,21 @@ export default function TrackerGpsPage() {
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
         <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5">
           <h1 className="text-lg font-semibold text-center">
-            {tt("trackerGps.disclosure.title", "Ubicación en segundo plano")}
+            {tt("trackerGps.disclosure.title", "Background location")}
           </h1>
 
           <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-slate-200 space-y-4">
             <p>
               {tt(
                 "trackerGps.disclosure.body1",
-                "App Geocercas recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral."
+                "App Geocercas collects your location even when the app is closed or the phone is locked in order to record positions and validate geofence entry and exit during the workday."
               )}
             </p>
 
             <p>
               {tt(
                 "trackerGps.disclosure.body2",
-                "Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión."
+                "This information is used only for the organization's operational purposes and is not shared with third parties or used for advertising. You can stop tracking by revoking location permission or signing out."
               )}
             </p>
           </div>
@@ -674,7 +688,7 @@ export default function TrackerGpsPage() {
             }}
             className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-slate-950 font-semibold hover:bg-emerald-400 transition"
           >
-            {tt("trackerGps.disclosure.continue", "Continuar")}
+            {tt("trackerGps.disclosure.continue", "Continue")}
           </button>
         </div>
       </div>
@@ -696,41 +710,42 @@ export default function TrackerGpsPage() {
               </div>
 
               <div className="mt-2 text-[11px] text-slate-400 break-all">
-                send: fetch(anon)+x-user-jwt ({debug.send_fn})
+                {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt ({debug.send_fn})
               </div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">
-                accept: proxy ({debug.accept_fn})
+                {tt("trackerGps.debugLabels.accept", "accept")}: proxy ({debug.accept_fn})
               </div>
 
               <div className="mt-2 text-[11px] text-slate-400 break-all">
-                org_id: {orgId || "—"}
+                {tt("trackerGps.debugLabels.orgId", "org_id")}: {orgId || "—"}
               </div>
               <div className="mt-2 text-[11px] text-slate-400 break-all">
-                membership: {membershipStatus}
+                {tt("trackerGps.debugLabels.membership", "membership")}: {membershipStatus}
               </div>
 
               {tokenIss ? (
                 <div className="mt-2 text-[11px] text-slate-400 break-all">
-                  token_iss: {tokenIss}
+                  {tt("trackerGps.debugLabels.tokenIss", "token_iss")}: {tokenIss}
                 </div>
               ) : null}
 
               {debug.last_token_ttl_sec != null ? (
                 <div className="mt-2 text-[11px] text-slate-400 break-all">
-                  token_ttl_sec: {debug.last_token_ttl_sec}
+                  {tt("trackerGps.debugLabels.tokenTtlSec", "token_ttl_sec")}: {debug.last_token_ttl_sec}
                 </div>
               ) : null}
 
               {debug.last_http_status != null ? (
                 <div className="mt-2 text-[11px] text-slate-400 break-all">
-                  last_http_status: {debug.last_http_status}
+                  {tt("trackerGps.debugLabels.lastHttpStatus", "last_http_status")}: {debug.last_http_status}
                 </div>
               ) : null}
 
               {coords ? (
                 <div className="mt-2 text-xs text-slate-300">
-                  lat: {coords.lat?.toFixed?.(6)} | lng: {coords.lng?.toFixed?.(6)} | acc:{" "}
-                  {coords.accuracy ?? "—"}
+                  {tt("trackerGps.debugLabels.lat", "lat")}: {coords.lat?.toFixed?.(6)} |{" "}
+                  {tt("trackerGps.debugLabels.lng", "lng")}: {coords.lng?.toFixed?.(6)} |{" "}
+                  {tt("trackerGps.debugLabels.acc", "acc")}: {coords.accuracy ?? "—"}
                 </div>
               ) : (
                 <div className="mt-2 text-xs text-slate-400">
