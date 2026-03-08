@@ -398,7 +398,32 @@
     "pointsLabel": "Pts",
     "savedOk": "Geofence saved successfully.",
     "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
-    "titleNew": "Nueva geocerca"
+    "titleNew": "Nueva geocerca",
+    "manage": {
+      "noOrgTitle": "Geocercas",
+      "noOrgBody": "Selecciona una organización para gestionar geocercas.",
+      "selectOrgButton": "Seleccionar organización",
+      "headerTitle": "Geocercas · {{orgName}}",
+      "newNameLabel": "Nombre de nueva geocerca",
+      "show": "Mostrar",
+      "loading": "Cargando…",
+      "loadError": "No se pudieron cargar las geocercas."
+    },
+    "list": {
+      "loadError": "Error cargando geocercas",
+      "confirmDelete": "¿Eliminar esta geocerca?",
+      "deleteError": "Error eliminando geocerca",
+      "loading": "Cargando...",
+      "title": "Geocercas",
+      "empty": "No hay geocercas.",
+      "createOne": "Crea una",
+      "thName": "Nombre",
+      "thCreated": "Creada",
+      "thActions": "Acciones",
+      "view": "Ver",
+      "export": "Exportar GeoJSON",
+      "delete": "Eliminar"
+    }
   },
   "help": {
     "common": {

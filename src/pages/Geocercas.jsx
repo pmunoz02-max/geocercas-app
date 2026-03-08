@@ -35,7 +35,6 @@ export default function GeocercasPage() {
     const load = async () => {
       console.info(DBG, "load()", { orgId, user: user?.email, role });
 
-      // âœ… reset duro cada cambio de org
       setGeocercas([]);
       setSelectedGeocercaIdsUI([]);
       setSelectedGeocercaIdsApplied([]);
@@ -64,7 +63,7 @@ export default function GeocercasPage() {
         setGeocercas(safeRows);
       } catch (err) {
         console.error(DBG, "load error:", err);
-        if (!cancelled) alert("No se pudieron cargar las geocercas.");
+        if (!cancelled) alert(t("geocercas.manage.loadError", { defaultValue: "No se pudieron cargar las geocercas." }));
       } finally {
         if (!cancelled) setLoadingGeocercas(false);
       }
@@ -92,7 +91,7 @@ export default function GeocercasPage() {
         </h2>
         <p className="text-sm">
           {t("geocercas.manage.noOrgBody", {
-            defaultValue: "Selecciona una organizaciÃ³n para gestionar geocercas.",
+            defaultValue: "Selecciona una organización para gestionar geocercas.",
           })}
         </p>
         <button
@@ -100,7 +99,7 @@ export default function GeocercasPage() {
           className="rounded-lg bg-emerald-600 px-4 py-2 text-white"
         >
           {t("geocercas.manage.selectOrgButton", {
-            defaultValue: "Seleccionar organizaciÃ³n",
+            defaultValue: "Seleccionar organización",
           })}
         </button>
       </div>
@@ -118,7 +117,6 @@ export default function GeocercasPage() {
       ? geocercas
       : geocercas.filter((g) => selectedGeocercaIdsApplied.includes(String(g.id)));
 
-  // âœ… Si API devuelve vacÃ­o, el mapa debe recibir vacÃ­o SIEMPRE
   const geocercasForMapSafe = Array.isArray(geocercasForMap) ? geocercasForMap : [];
 
   return (
@@ -127,7 +125,7 @@ export default function GeocercasPage() {
         <h2 className="text-lg font-semibold">
           {t("geocercas.manage.headerTitle", {
             orgName: currentOrgName,
-            defaultValue: `Geocercas Â· ${currentOrgName}`,
+            defaultValue: `Geocercas · ${currentOrgName}`,
           })}
         </h2>
         <OrgSelector />
@@ -150,12 +148,14 @@ export default function GeocercasPage() {
           disabled={loadingGeocercas}
           type="button"
         >
-          {loadingGeocercas ? "Cargandoâ€¦" : "Mostrar"}
+          {loadingGeocercas
+            ? t("geocercas.manage.loading", { defaultValue: "Cargando…" })
+            : t("geocercas.manage.show", { defaultValue: "Mostrar" })}
         </button>
       </div>
 
       <div className="text-xs text-slate-500">
-        {DBG} orgId=<span className="font-mono">{orgId}</span> Â· items=<span className="font-mono">{String(geocercas.length)}</span>
+        {DBG} orgId=<span className="font-mono">{orgId}</span> · items=<span className="font-mono">{String(geocercas.length)}</span>
       </div>
 
       <GeoMap
@@ -172,4 +172,3 @@ export default function GeocercasPage() {
     </div>
   );
 }
-

@@ -258,7 +258,32 @@
     "errorNoGeojson": "Impossible de charger le GeoJSON de la géofence.",
     "deleteConfirm": "Supprimer les géofences sélectionnées ?",
     "deletedCount": "Supprimé : {{count}}",
-    "savedOk": "Geofence sauvegardé avec succès."
+    "savedOk": "Geofence sauvegardé avec succès.",
+    "manage": {
+      "noOrgTitle": "Géofences",
+      "noOrgBody": "Sélectionnez une organisation pour gérer les géofences.",
+      "selectOrgButton": "Sélectionner une organisation",
+      "headerTitle": "Géofences · {{orgName}}",
+      "newNameLabel": "Nom de la nouvelle géofence",
+      "show": "Afficher",
+      "loading": "Chargement…",
+      "loadError": "Impossible de charger les géofences."
+    },
+    "list": {
+      "loadError": "Erreur lors du chargement des géofences",
+      "confirmDelete": "Supprimer cette géofence ?",
+      "deleteError": "Erreur lors de la suppression de la géofence",
+      "loading": "Chargement...",
+      "title": "Géofences",
+      "empty": "Il n’y a pas de géofences.",
+      "createOne": "Créer une",
+      "thName": "Nom",
+      "thCreated": "Créée",
+      "thActions": "Actions",
+      "view": "Voir",
+      "export": "Exporter GeoJSON",
+      "delete": "Supprimer"
+    }
   },
   "personal": {
     "title": "Le personnel",

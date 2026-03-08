@@ -24,20 +24,19 @@ export default function GeocercasPage() {
               {t("geocercas.currentOrgLabel")}
             </span>{" "}
             {currentOrg?.name ||
-              t("geocercas.noOrgFallback", "â€” (no organization selected)")}
+              t("geocercas.noOrgFallback", "— (no organization selected)")}
           </p>
 
           <p>
             <span className="font-semibold">
               {t("geocercas.currentUserLabel")}
             </span>{" "}
-            <span className="font-mono">{user?.email || "â€”"}</span>
+            <span className="font-mono">{user?.email || "—"}</span>
           </p>
         </div>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2">
-        {/* Crear nueva geocerca */}
         <article className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 mb-1">
@@ -58,7 +57,6 @@ export default function GeocercasPage() {
           </div>
         </article>
 
-        {/* Placeholder de listado */}
         <article className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex flex-col justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 mb-1">
@@ -73,4 +71,3 @@ export default function GeocercasPage() {
     </div>
   );
 }
-

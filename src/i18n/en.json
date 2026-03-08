@@ -330,7 +330,32 @@
     "errorNoGeojson": "Could not load the geofence GeoJSON.",
     "deleteConfirm": "Delete the selected geofences?",
     "deletedCount": "Deleted: {{count}}",
-    "savedOk": "Geofence saved successfully."
+    "savedOk": "Geofence saved successfully.",
+    "manage": {
+      "noOrgTitle": "Geofences",
+      "noOrgBody": "Select an organization to manage geofences.",
+      "selectOrgButton": "Select organization",
+      "headerTitle": "Geofences · {{orgName}}",
+      "newNameLabel": "Name of the new geofence",
+      "show": "Show",
+      "loading": "Loading…",
+      "loadError": "The geofences could not be loaded."
+    },
+    "list": {
+      "loadError": "Error loading geofences",
+      "confirmDelete": "Delete this geofence?",
+      "deleteError": "Error deleting geofence",
+      "loading": "Loading...",
+      "title": "Geofences",
+      "empty": "There are no geofences.",
+      "createOne": "Create one",
+      "thName": "Name",
+      "thCreated": "Created",
+      "thActions": "Actions",
+      "view": "View",
+      "export": "Export GeoJSON",
+      "delete": "Delete"
+    }
   },
   "personal": {
     "title": "Personnel",

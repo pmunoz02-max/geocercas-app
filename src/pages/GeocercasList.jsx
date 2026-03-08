@@ -7,7 +7,10 @@ import { useTranslation } from "react-i18next";
 function downloadJSON(filename, data) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -28,14 +31,20 @@ export default function GeocercasList() {
     setLoading(false);
     if (error) return alert(t("geocercas.list.loadError", { defaultValue: "Error cargando geocercas" }));
     setItems(data || []);
-  }, [user?.id]);
+  }, [user?.id, t]);
 
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    load();
+  }, [load]);
 
   const handleDelete = async (id) => {
-    if (!confirm(t("geocercas.list.confirmDelete", { defaultValue: "Â¿Eliminar esta geocerca?" }))) return;
+    if (!confirm(t("geocercas.list.confirmDelete", { defaultValue: "¿Eliminar esta geocerca?" }))) return;
     const { error } = await supabase.from("geofences").delete().eq("id", id);
-    if (error) alert(t("geocercas.list.deleteError", { defaultValue: "Error eliminando geocerca" })); else setItems((p) => p.filter((x) => x.id !== id));
+    if (error) {
+      alert(t("geocercas.list.deleteError", { defaultValue: "Error eliminando geocerca" }));
+    } else {
+      setItems((prev) => prev.filter((x) => x.id !== id));
+    }
   };
 
   if (loading) return <div>{t("geocercas.list.loading", { defaultValue: "Cargando..." })}</div>;
@@ -44,7 +53,10 @@ export default function GeocercasList() {
     <div>
       <h2>{t("geocercas.list.title", { defaultValue: "Geocercas" })}</h2>
       {items.length === 0 ? (
-        <p>{t("geocercas.list.empty", { defaultValue: "No hay geocercas." })} <Link to="/nueva">{t("geocercas.list.createOne", { defaultValue: "Crea una" })}</Link>.</p>
+        <p>
+          {t("geocercas.list.empty", { defaultValue: "No hay geocercas." })}{" "}
+          <Link to="/nueva">{t("geocercas.list.createOne", { defaultValue: "Crea una" })}</Link>.
+        </p>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
