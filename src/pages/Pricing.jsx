@@ -1,6 +1,6 @@
-// src/pages/Pricing.jsx
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "@/lib/supabaseClient.js";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
@@ -11,10 +11,10 @@ function normalizePlanCode(value) {
   return String(value || "free").toLowerCase();
 }
 
-function formatLimit(value, fallback = "—") {
+function formatLimit(value, fallback = "—", unlimitedLabel = "Unlimited") {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
-  if (n >= 9999) return "Ilimitadas";
+  if (n >= 9999) return unlimitedLabel;
   return String(n);
 }
 
@@ -45,6 +45,7 @@ function PlanCard({
   cta,
   highlight = false,
   current = false,
+  currentBadgeLabel,
 }) {
   return (
     <div
@@ -65,7 +66,7 @@ function PlanCard({
         </div>
 
         {current ? (
-          <PlanBadge tone={highlight ? "amber" : "emerald"}>Plan actual</PlanBadge>
+          <PlanBadge tone={highlight ? "amber" : "emerald"}>{currentBadgeLabel}</PlanBadge>
         ) : null}
       </div>
 
@@ -95,22 +96,22 @@ function PlanCard({
   );
 }
 
-function ContactSalesButton() {
+function ContactSalesButton({ label }) {
   return (
     <a
       href="mailto:ventas@tugeocercas.com?subject=App%20Geocercas%20-%20Plan%20Enterprise"
       className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
     >
-      Contactar ventas
+      {label}
     </a>
   );
 }
 
-function FreePlanAction({ currentPlanCode }) {
+function FreePlanAction({ currentPlanCode, currentPlanLabel, billingLabel }) {
   if (currentPlanCode === "free") {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-        Ya estás usando el plan Free.
+        {currentPlanLabel}
       </div>
     );
   }
@@ -120,7 +121,7 @@ function FreePlanAction({ currentPlanCode }) {
       to="/billing"
       className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
     >
-      Ver estado en Billing
+      {billingLabel}
     </Link>
   );
 }
@@ -130,6 +131,9 @@ function ProPlanAction({
   currentOrgId,
   currentPlanCode,
   getAccessToken,
+  billingLabel,
+  higherPlanMessage,
+  reviewBillingMessage,
 }) {
   if (!authenticated || !currentOrgId) {
     return (
@@ -137,18 +141,13 @@ function ProPlanAction({
         to="/billing"
         className="inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
       >
-        Ir a Billing
+        {billingLabel}
       </Link>
     );
   }
 
   if (currentPlanCode === "free") {
-    return (
-      <UpgradeToProButton
-        orgId={currentOrgId}
-        getAccessToken={getAccessToken}
-      />
-    );
+    return <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />;
   }
 
   if (currentPlanCode === "pro") {
@@ -163,14 +162,15 @@ function ProPlanAction({
 
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-      Tu organización ya tiene un plan superior o distinto de Free.
-      Revisa Billing para administrarlo.
+      {higherPlanMessage}
+      <br />
+      {reviewBillingMessage}
       <div className="mt-3">
         <Link
           to="/billing"
           className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-800"
         >
-          Ir a Billing
+          {billingLabel}
         </Link>
       </div>
     </div>
@@ -178,6 +178,7 @@ function ProPlanAction({
 }
 
 export default function Pricing() {
+  const { t } = useTranslation();
   const { loading, ready, authenticated, currentOrgId } = useAuth();
   const {
     loading: entitlementsLoading,
@@ -196,35 +197,39 @@ export default function Pricing() {
 
   const freeFeatures = useMemo(
     () => [
-      "Ideal para empezar y validar el flujo base",
-      "Hasta 1 tracker",
-      "Geocercas con límite por plan",
-      "Acceso a Billing y futura ruta de upgrade",
-      "Backend sigue aplicando enforcement real",
+      t("pricing.free.features.validateFlow"),
+      t("pricing.free.features.upToTrackers", { count: 1 }),
+      t("pricing.free.features.geofenceLimits"),
+      t("pricing.free.features.billingAndUpgrade"),
+      t("pricing.free.features.backendEnforcement"),
     ],
-    []
+    [t]
   );
 
   const proFeatures = useMemo(
     () => [
-      `Hasta ${formatLimit(maxTrackers || 3, "3")} trackers por organización`,
-      `Hasta ${formatLimit(maxGeocercas || 9999, "Ilimitadas")} geocercas`,
-      "Módulo Tracker habilitado",
-      "Invitación de trackers habilitada",
-      "Suscripción autogestionable con Stripe",
+      t("pricing.pro.features.upToTrackers", {
+        count: formatLimit(maxTrackers || 3, "3", t("pricing.common.unlimited")),
+      }),
+      t("pricing.pro.features.upToGeofences", {
+        count: formatLimit(maxGeocercas || 9999, "—", t("pricing.common.unlimited")),
+      }),
+      t("pricing.pro.features.trackerEnabled"),
+      t("pricing.pro.features.invitesEnabled"),
+      t("pricing.pro.features.stripeSelfManaged"),
     ],
-    [maxTrackers, maxGeocercas]
+    [maxTrackers, maxGeocercas, t]
   );
 
   const enterpriseFeatures = useMemo(
     () => [
-      "Atención comercial y onboarding guiado",
-      "Límites y condiciones ajustables",
-      "Preparado para operación con múltiples equipos",
-      "Escalamiento comercial y acuerdos especiales",
-      "Contacto directo con ventas",
+      t("pricing.enterprise.features.salesOnboarding"),
+      t("pricing.enterprise.features.flexibleLimits"),
+      t("pricing.enterprise.features.multiTeamReady"),
+      t("pricing.enterprise.features.specialAgreements"),
+      t("pricing.enterprise.features.directSalesContact"),
     ],
-    []
+    [t]
   );
 
   if (loading || !ready) return null;
@@ -234,10 +239,11 @@ export default function Pricing() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-900">Planes y precios</h1>
+            <h1 className="text-3xl font-semibold text-slate-900">{t("pricing.page.title")}</h1>
             <p className="mt-2 max-w-3xl text-slate-600">
-              Esta pantalla trabaja en <b>PREVIEW</b> y reutiliza Stripe en modo <b>TEST</b>.
-              No afecta producción.
+              {t("pricing.page.previewNotice.prefix")} <b>PREVIEW</b>{" "}
+              {t("pricing.page.previewNotice.middle")} <b>TEST</b>.{" "}
+              {t("pricing.page.previewNotice.suffix")}
             </p>
           </div>
 
@@ -246,30 +252,40 @@ export default function Pricing() {
               to="/billing"
               className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
             >
-              Ir a Billing
+              {t("pricing.actions.goToBilling")}
             </Link>
           </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Plan detectado</div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              {t("pricing.summary.detectedPlan")}
+            </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {currentPlanCode.toUpperCase()}
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Máx. geocercas</div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              {t("pricing.summary.maxGeofences")}
+            </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
-              {entitlementsLoading ? "Cargando..." : formatLimit(maxGeocercas, "—")}
+              {entitlementsLoading
+                ? t("pricing.common.loading")
+                : formatLimit(maxGeocercas, "—", t("pricing.common.unlimited"))}
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Máx. trackers</div>
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              {t("pricing.summary.maxTrackers")}
+            </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
-              {entitlementsLoading ? "Cargando..." : formatLimit(maxTrackers, "—")}
+              {entitlementsLoading
+                ? t("pricing.common.loading")
+                : formatLimit(maxTrackers, "—", t("pricing.common.unlimited"))}
             </div>
           </div>
         </div>
@@ -283,22 +299,30 @@ export default function Pricing() {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <PlanCard
-          title="Free"
-          subtitle="Para comenzar"
-          price="$0"
-          description="Pensado para validar el uso inicial de la plataforma."
+          title={t("pricing.free.title")}
+          subtitle={t("pricing.free.subtitle")}
+          price={t("pricing.free.price")}
+          description={t("pricing.free.description")}
           current={currentPlanCode === "free"}
+          currentBadgeLabel={t("pricing.common.currentPlan")}
           features={freeFeatures}
-          cta={<FreePlanAction currentPlanCode={currentPlanCode} />}
+          cta={
+            <FreePlanAction
+              currentPlanCode={currentPlanCode}
+              currentPlanLabel={t("pricing.free.currentPlanMessage")}
+              billingLabel={t("pricing.actions.goToBilling")}
+            />
+          }
         />
 
         <PlanCard
-          title="Pro"
-          subtitle="Operación SaaS activa"
-          price="Stripe TEST"
-          description="Plan recomendado para habilitar el módulo Tracker y operar con suscripción."
+          title={t("pricing.pro.title")}
+          subtitle={t("pricing.pro.subtitle")}
+          price={t("pricing.pro.price")}
+          description={t("pricing.pro.description")}
           highlight
           current={currentPlanCode === "pro"}
+          currentBadgeLabel={t("pricing.common.currentPlan")}
           features={proFeatures}
           cta={
             <ProPlanAction
@@ -306,35 +330,31 @@ export default function Pricing() {
               currentOrgId={currentOrgId}
               currentPlanCode={currentPlanCode}
               getAccessToken={getAccessToken}
+              billingLabel={t("pricing.actions.goToBilling")}
+              higherPlanMessage={t("pricing.pro.higherPlanMessage")}
+              reviewBillingMessage={t("pricing.pro.reviewBillingMessage")}
             />
           }
         />
 
         <PlanCard
-          title="Enterprise"
-          subtitle="Venta asistida"
-          price="A medida"
-          description="Para organizaciones que requieren condiciones comerciales especiales."
+          title={t("pricing.enterprise.title")}
+          subtitle={t("pricing.enterprise.subtitle")}
+          price={t("pricing.enterprise.price")}
+          description={t("pricing.enterprise.description")}
           current={currentPlanCode === "enterprise"}
+          currentBadgeLabel={t("pricing.common.currentPlan")}
           features={enterpriseFeatures}
-          cta={<ContactSalesButton />}
+          cta={<ContactSalesButton label={t("pricing.actions.contactSales")} />}
         />
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Notas de esta fase</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{t("pricing.notes.title")}</h2>
         <div className="mt-3 space-y-2 text-sm text-slate-600">
-          <p>
-            El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan
-            y muestra las acciones comerciales disponibles.
-          </p>
-          <p>
-            El upgrade a Pro reutiliza el flujo existente de Stripe Checkout. La administración de
-            suscripción reutiliza Stripe Customer Portal.
-          </p>
-          <p>
-            Enterprise queda presentado como canal comercial, sin activar checkout automático.
-          </p>
+          <p>{t("pricing.notes.backendAuthority")}</p>
+          <p>{t("pricing.notes.proCheckout")}</p>
+          <p>{t("pricing.notes.enterpriseSales")}</p>
         </div>
       </div>
     </div>

@@ -65,6 +65,8 @@ export default function InvitarTracker() {
       auth?.currentOrgId ||
       auth?.org?.id ||
       auth?.org_id ||
+      auth?.currentOrg?.org_id ||
+      auth?.currentOrg?.id ||
       "";
     return String(id || "").trim();
   }, [auth]);
@@ -299,7 +301,7 @@ export default function InvitarTracker() {
           `${t("inviteTracker.errors.inviteErrorPrefix", {
             defaultValue: "Error invitando",
           })} (${upstreamStatus}): ${upstreamMsg}`
-        );
+          );
         return;
       }
 
@@ -327,7 +329,7 @@ export default function InvitarTracker() {
   }
 
   const selectPlaceholder = loadingPeople
-    ? t("common.loading", { defaultValue: "Cargando…" })
+    ? t("common.actions.loading", { defaultValue: "Cargando…" })
     : people.length === 0
       ? t("inviteTracker.empty.noMembers", { defaultValue: "Sin personal disponible" })
       : t("common.select", { defaultValue: "— Selecciona —" });
@@ -336,9 +338,13 @@ export default function InvitarTracker() {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">Invitar tracker</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+          </h1>
           <p className="mt-3 text-sm text-slate-600">
-            Validando plan de la organización...
+            {t("inviteTracker.plan.validating", {
+              defaultValue: "Validando plan de la organización...",
+            })}
           </p>
         </div>
       </div>
@@ -349,9 +355,13 @@ export default function InvitarTracker() {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">Invitar tracker</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+          </h1>
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            No se pudo validar el plan de la organización.
+            {t("inviteTracker.plan.validationError", {
+              defaultValue: "No se pudo validar el plan de la organización.",
+            })}
             <div className="mt-2 break-all font-mono text-xs">{entitlementsError}</div>
           </div>
         </div>
@@ -379,23 +389,31 @@ export default function InvitarTracker() {
 
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
             <div className="text-base font-semibold">
-              Esta función requiere PRO o superior.
+              {t("inviteTracker.plan.requiresProTitle", {
+                defaultValue: "Esta función requiere PRO o superior.",
+              })}
             </div>
             <div className="mt-2 text-sm">
-              Plan detectado: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+              {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}:{" "}
+              <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
             </div>
             <div className="mt-1 text-sm">
-              Org activa: <span className="font-mono">{who.org_id || "—"}</span>
+              {t("inviteTracker.diag.orgUsed", { defaultValue: "Org usada" })}:{" "}
+              <span className="font-mono">{who.org_id || "—"}</span>
             </div>
             <div className="mt-3 text-sm">
-              El plan FREE no permite invitar nuevos trackers a la organización.
+              {t("inviteTracker.plan.freeBlockedBody", {
+                defaultValue: "El plan FREE no permite invitar nuevos trackers a la organización.",
+              })}
             </div>
           </div>
 
           {orgId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
-                Actualiza esta organización para habilitar invitaciones de trackers.
+                {t("inviteTracker.plan.upgradePrompt", {
+                  defaultValue: "Actualiza esta organización para habilitar invitaciones de trackers.",
+                })}
               </div>
               <UpgradeToProButton
                 orgId={orgId}
@@ -436,7 +454,7 @@ export default function InvitarTracker() {
           </div>
           <div className="mt-1">
             <b>{t("inviteTracker.diag.membersLoaded", { defaultValue: "Personal cargado" })}:</b>{" "}
-            {loadingPeople ? t("common.loading", { defaultValue: "Cargando…" }) : String(people.length)}
+            {loadingPeople ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(people.length)}
           </div>
         </div>
 

@@ -921,9 +921,35 @@
       "buttonSending": "Sending invitation…",
       "buttonSend": "Send invitation"
     },
+    "diag": {
+      "orgUsed": "Organization used",
+      "user": "User",
+      "membersLoaded": "Members loaded"
+    },
+    "empty": {
+      "noMembers": "There are no active personnel members available to invite."
+    },
+    "ok": {
+      "generated": "Invitation generated successfully.",
+      "emailSent": "Invitation email sent successfully.",
+      "fallbackLink": "Email could not be sent. Use this link to share access manually.",
+      "magicLinkFallback": "Magic link generated as fallback."
+    },
+    "plan": {
+      "validating": "Validating organization plan…",
+      "validationError": "The organization plan could not be validated.",
+      "requiresProTitle": "PRO plan required",
+      "detectedPlan": "Detected plan",
+      "freeBlockedBody": "Tracker invitations are not available on the current FREE plan.",
+      "upgradePrompt": "Upgrade this organization to PRO to enable tracker invitations."
+    },
     "errors": {
       "emailRequired": "You must enter an email address.",
-      "emailInvalid": "Enter a valid email address."
+      "emailInvalid": "Enter a valid email address.",
+      "noOrg": "No active organization could be resolved for this user.",
+      "planBlocked": "The current organization plan does not allow tracker invitations.",
+      "notInOrg": "Your user is not linked to the active organization.",
+      "inviteErrorPrefix": "Error sending invitation"
     },
     "messages": {
       "serverProblem": "There was a problem contacting the invitation server.",

@@ -37,7 +37,7 @@ async function copyToClipboard(text) {
       await navigator.clipboard.writeText(text);
       return { ok: true, method: "clipboard" };
     }
-  } catch (e) {}
+  } catch {}
 
   try {
     const ta = document.createElement("textarea");
@@ -52,7 +52,7 @@ async function copyToClipboard(text) {
     const ok = document.execCommand("copy");
     document.body.removeChild(ta);
     return { ok, method: "execCommand" };
-  } catch (e) {
+  } catch {
     return { ok: false, method: "none" };
   }
 }
@@ -65,7 +65,7 @@ export default function InvitarAdmin() {
 
   // INVITE ADMIN/OWNER
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("owner"); // âœ… default: owner (nace con org propia)
+  const [role, setRole] = useState("owner");
   const [orgName, setOrgName] = useState("");
 
   const [sending, setSending] = useState(false);
@@ -83,8 +83,7 @@ export default function InvitarAdmin() {
   const [recoveryMsg, setRecoveryMsg] = useState(null); // { type, text }
   const [recoveryLink, setRecoveryLink] = useState("");
 
-  // âœ… Reuse existing i18n placeholder (fixes FR/ES issue centrally)
-  const emailPh = t?.("login.emailPlaceholder") || "tu@email.com";
+  const emailPh = t("login.emailPlaceholder", { defaultValue: "tu@email.com" });
 
   useEffect(() => {
     async function loadPeople() {
@@ -99,6 +98,7 @@ export default function InvitarAdmin() {
 
       if (!error) setPeopleList(data || []);
     }
+
     loadPeople();
   }, [currentOrg?.id]);
 
@@ -120,7 +120,9 @@ export default function InvitarAdmin() {
     if (!cleanEmail || !cleanEmail.includes("@")) {
       setMessage({
         type: "error",
-        text: t?.("inviteAdmin.errors.emailInvalid") || "Email invÃ¡lido",
+        text: t("inviteAdmin.errors.emailInvalid", {
+          defaultValue: "Email inválido.",
+        }),
       });
       return;
     }
@@ -128,7 +130,9 @@ export default function InvitarAdmin() {
     if (cleanRole === "admin" && !currentOrg?.id) {
       setMessage({
         type: "error",
-        text: t?.("inviteAdmin.errors.noOrg") || "No hay organizaciÃ³n activa (currentOrg).",
+        text: t("inviteAdmin.errors.noOrg", {
+          defaultValue: "No hay organización activa (currentOrg).",
+        }),
       });
       return;
     }
@@ -139,21 +143,32 @@ export default function InvitarAdmin() {
       const payload =
         cleanRole === "admin"
           ? { email: cleanEmail, role: "admin", org_id: currentOrg.id }
-          : { email: cleanEmail, role: "owner", org_name: String(orgName || "").trim() || cleanEmail };
+          : {
+              email: cleanEmail,
+              role: "owner",
+              org_name: String(orgName || "").trim() || cleanEmail,
+            };
 
       const resp = await callEdgeFunction("invite_admin", payload);
 
       if (!resp.ok || !resp.data) {
         setMessage({
           type: "error",
-          text: t?.("inviteAdmin.messages.serverProblem") || "Problema con el servidor. Intenta nuevamente.",
+          text: t("inviteAdmin.messages.serverProblem", {
+            defaultValue: "Problema con el servidor. Intenta nuevamente.",
+          }),
         });
         return;
       }
 
       if (resp.data?.ok !== true) {
-        const msg = resp.data?.message || "No se pudo generar la invitaciÃ³n.";
-        setMessage({ type: "error", text: `âŒ ${msg}` });
+        const msg =
+          resp.data?.message ||
+          t("inviteAdmin.messages.couldNotGenerate", {
+            defaultValue: "No se pudo generar la invitación.",
+          });
+
+        setMessage({ type: "error", text: `❌ ${msg}` });
         return;
       }
 
@@ -161,7 +176,9 @@ export default function InvitarAdmin() {
       if (!link) {
         setMessage({
           type: "error",
-          text: t?.("inviteAdmin.messages.noLink") || "Se generÃ³ respuesta pero no llegÃ³ action_link.",
+          text: t("inviteAdmin.messages.noLink", {
+            defaultValue: "Se generó respuesta pero no llegó action_link.",
+          }),
         });
         return;
       }
@@ -174,8 +191,17 @@ export default function InvitarAdmin() {
       setMessage({
         type: sent ? "success" : "warn",
         text: sent
-          ? `âœ… Email enviado a ${cleanEmail} con el Magic Link (${cleanRole.toUpperCase()}).`
-          : `âœ… Magic Link generado para ${cleanRole.toUpperCase()}: ${cleanEmail}. CÃ³pialo y envÃ­alo por tu canal.`,
+          ? t("inviteAdmin.messages.emailSent", {
+              defaultValue: "✅ Email enviado a {{email}} con el Magic Link ({{role}}).",
+              email: cleanEmail,
+              role: cleanRole.toUpperCase(),
+            })
+          : t("inviteAdmin.messages.magicGenerated", {
+              defaultValue:
+                "✅ Magic Link generado para {{role}}: {{email}}. Cópialo y envíalo por tu canal.",
+              email: cleanEmail,
+              role: cleanRole.toUpperCase(),
+            }),
       });
 
       setEmail("");
@@ -185,7 +211,9 @@ export default function InvitarAdmin() {
       console.error("[InvitarAdmin] unexpected:", err);
       setMessage({
         type: "error",
-        text: t?.("inviteAdmin.messages.unexpectedError") || "Error inesperado. Revisa consola/logs.",
+        text: t("inviteAdmin.messages.unexpectedError", {
+          defaultValue: "Error inesperado. Revisa consola/logs.",
+        }),
       });
     } finally {
       setSending(false);
@@ -196,20 +224,32 @@ export default function InvitarAdmin() {
     message?.type === "success"
       ? "text-emerald-700"
       : message?.type === "warn"
-      ? "text-amber-700"
-      : "text-red-600";
+        ? "text-amber-700"
+        : "text-red-600";
 
-  const roleLabel = role === "admin" ? "admin" : "owner";
+  const roleLabel =
+    role === "admin"
+      ? t("inviteAdmin.roles.admin", { defaultValue: "admin" })
+      : t("inviteAdmin.roles.owner", { defaultValue: "owner" });
 
   async function handleCopy(link) {
     if (!link) return;
+
     const r = await copyToClipboard(link);
     if (r.ok) {
-      setMessage({ type: "success", text: "âœ… Copiado al portapapeles." });
+      setMessage({
+        type: "success",
+        text: t("inviteAdmin.actions.copied", {
+          defaultValue: "✅ Copiado al portapapeles.",
+        }),
+      });
     } else {
       setMessage({
         type: "warn",
-        text: "âš ï¸ El navegador bloqueÃ³ el copiado automÃ¡tico. Selecciona el link (abajo) y copia manualmente (Ctrl+C).",
+        text: t("inviteAdmin.actions.copyBlocked", {
+          defaultValue:
+            "⚠️ El navegador bloqueó el copiado automático. Selecciona el link y copia manualmente (Ctrl+C).",
+        }),
       });
     }
   }
@@ -221,12 +261,22 @@ export default function InvitarAdmin() {
 
     const cleanEmail = String(recoveryEmail || "").trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes("@")) {
-      setRecoveryMsg({ type: "error", text: "Email invÃ¡lido." });
+      setRecoveryMsg({
+        type: "error",
+        text: t("inviteAdmin.recovery.errors.emailInvalid", {
+          defaultValue: "Email inválido.",
+        }),
+      });
       return;
     }
 
     if (!isAppRoot) {
-      setRecoveryMsg({ type: "error", text: "Solo App Root puede generar links de recuperaciÃ³n." });
+      setRecoveryMsg({
+        type: "error",
+        text: t("inviteAdmin.recovery.errors.onlyRoot", {
+          defaultValue: "Solo App Root puede generar links de recuperación.",
+        }),
+      });
       return;
     }
 
@@ -241,30 +291,59 @@ export default function InvitarAdmin() {
       });
 
       if (!resp.ok || !resp.data) {
-        setRecoveryMsg({ type: "error", text: "Problema con el servidor. Intenta nuevamente." });
+        setRecoveryMsg({
+          type: "error",
+          text: t("inviteAdmin.messages.serverProblem", {
+            defaultValue: "Problema con el servidor. Intenta nuevamente.",
+          }),
+        });
         return;
       }
 
       if (resp.data?.ok !== true) {
-        setRecoveryMsg({ type: "error", text: `âŒ ${resp.data?.message || "No se pudo generar el link."}` });
+        setRecoveryMsg({
+          type: "error",
+          text: `❌ ${
+            resp.data?.message ||
+            t("inviteAdmin.recovery.errors.couldNotGenerate", {
+              defaultValue: "No se pudo generar el link.",
+            })
+          }`,
+        });
         return;
       }
 
       const link = resp.data?.action_link || "";
       if (!link) {
-        setRecoveryMsg({ type: "error", text: "Respuesta sin action_link." });
+        setRecoveryMsg({
+          type: "error",
+          text: t("inviteAdmin.recovery.errors.noLink", {
+            defaultValue: "Respuesta sin action_link.",
+          }),
+        });
         return;
       }
 
       setRecoveryLink(link);
       setRecoveryMsg({
         type: "warn",
-        text: `âœ… Link de recuperaciÃ³n generado para ${cleanEmail}. CÃ³pialo y envÃ­alo por tu canal.`,
+        text: t("inviteAdmin.recovery.messages.generated", {
+          defaultValue:
+            "✅ Link de recuperación generado para {{email}}. Cópialo y envíalo por tu canal.",
+          email: cleanEmail,
+        }),
       });
       setRecoveryEmail("");
     } catch (e2) {
       console.error("[InvitarAdmin] recovery error:", e2);
-      setRecoveryMsg({ type: "error", text: e2?.message || "Error inesperado." });
+      setRecoveryMsg({
+        type: "error",
+        text:
+          e2?.message ||
+          t("inviteAdmin.messages.unexpectedError", {
+            defaultValue: "Error inesperado.",
+          }),
+      });
     } finally {
       setRecoveryBusy(false);
     }
@@ -274,16 +353,20 @@ export default function InvitarAdmin() {
     recoveryMsg?.type === "success"
       ? "text-emerald-700"
       : recoveryMsg?.type === "warn"
-      ? "text-amber-700"
-      : "text-red-600";
+        ? "text-amber-700"
+        : "text-red-600";
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-4">
-        <h1 className="text-2xl font-semibold">{t?.("inviteAdmin.title") || "Administrador SaaS"}</h1>
+        <h1 className="text-2xl font-semibold">
+          {t("inviteAdmin.title", { defaultValue: "Administrador SaaS" })}
+        </h1>
         <p className="text-sm text-slate-600 mt-1">
-          {t?.("inviteAdmin.subtitle") ||
-            "Invitaciones (Magic Link) y herramientas de soporte del SaaS (solo App Root)."}
+          {t("inviteAdmin.subtitle", {
+            defaultValue:
+              "Invitaciones (Magic Link) y herramientas de soporte del SaaS (solo App Root).",
+          })}
         </p>
       </div>
 
@@ -297,7 +380,7 @@ export default function InvitarAdmin() {
               : "px-3 py-2 rounded-lg bg-white border text-slate-800 text-sm"
           }
         >
-          Invitaciones
+          {t("inviteAdmin.tabs.invites", { defaultValue: "Invitaciones" })}
         </button>
 
         <button
@@ -309,7 +392,7 @@ export default function InvitarAdmin() {
               : "px-3 py-2 rounded-lg bg-white border text-slate-800 text-sm"
           }
         >
-          Reset password (manual)
+          {t("inviteAdmin.tabs.resetManual", { defaultValue: "Reset password (manual)" })}
         </button>
       </div>
 
@@ -318,21 +401,31 @@ export default function InvitarAdmin() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="md:col-span-1">
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {t?.("inviteAdmin.form.role") || "Rol"}
+                {t("inviteAdmin.form.role", { defaultValue: "Rol" })}
               </label>
               <select
                 className="w-full border rounded px-3 py-2 text-sm"
                 value={role}
                 onChange={(e) => setRole(e.target.value === "admin" ? "admin" : "owner")}
               >
-                <option value="owner">owner (nueva org)</option>
-                <option value="admin">admin (en org actual)</option>
+                <option value="owner">
+                  {t("inviteAdmin.form.roleOwnerNewOrg", {
+                    defaultValue: "owner (nueva org)",
+                  })}
+                </option>
+                <option value="admin">
+                  {t("inviteAdmin.form.roleAdminCurrentOrg", {
+                    defaultValue: "admin (en org actual)",
+                  })}
+                </option>
               </select>
             </div>
 
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {t?.("inviteAdmin.form.selectPerson") || "Seleccionar persona (opcional)"}
+                {t("inviteAdmin.form.selectPerson", {
+                  defaultValue: "Seleccionar persona (opcional)",
+                })}
               </label>
               <select
                 className="w-full border rounded px-3 py-2 text-sm"
@@ -342,12 +435,17 @@ export default function InvitarAdmin() {
               >
                 <option value="">
                   {currentOrg?.id
-                    ? t?.("inviteAdmin.form.selectPlaceholder") || "â€” Elegir de la organizaciÃ³n â€”"
-                    : t?.("inviteAdmin.form.noOrg") || "â€” No hay org activa â€”"}
+                    ? t("inviteAdmin.form.selectPlaceholder", {
+                        defaultValue: "— Elegir de la organización —",
+                      })
+                    : t("inviteAdmin.form.noOrg", {
+                        defaultValue: "— No hay org activa —",
+                      })}
                 </option>
+
                 {peopleList.map((p) => (
                   <option key={p.org_people_id} value={p.org_people_id}>
-                    {`${p.nombre || ""} ${p.apellido || ""}`} â€” {p.email}
+                    {`${p.nombre || ""} ${p.apellido || ""} — ${p.email}`}
                   </option>
                 ))}
               </select>
@@ -356,7 +454,7 @@ export default function InvitarAdmin() {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
-              {t?.("inviteAdmin.form.email") || "Email"}
+              {t("inviteAdmin.form.email", { defaultValue: "Email" })}
             </label>
             <input
               type="email"
@@ -369,7 +467,9 @@ export default function InvitarAdmin() {
             />
             {role === "admin" && !canInviteAdmin ? (
               <div className="text-xs text-red-600 mt-2">
-                {t?.("inviteAdmin.errors.noOrg") || "Para invitar ADMIN debe existir org activa."}
+                {t("inviteAdmin.errors.noOrgInviteAdmin", {
+                  defaultValue: "Para invitar ADMIN debe existir org activa.",
+                })}
               </div>
             ) : null}
           </div>
@@ -377,24 +477,35 @@ export default function InvitarAdmin() {
           {role === "owner" ? (
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {t?.("inviteAdmin.form.orgName") || "Nombre de la nueva organizaciÃ³n (opcional)"}
+                {t("inviteAdmin.form.orgName", {
+                  defaultValue: "Nombre de la nueva organización (opcional)",
+                })}
               </label>
               <input
                 type="text"
                 className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Mi nueva organizaciÃ³n"
+                placeholder={t("inviteAdmin.form.orgNamePlaceholder", {
+                  defaultValue: "Mi nueva organización",
+                })}
                 value={orgName}
                 onChange={(e) => setOrgName(e.target.value)}
                 autoComplete="organization"
               />
               <div className="text-[11px] text-slate-500 mt-2">
-                {t?.("inviteAdmin.form.orgNameHelp") || "Si lo dejas vacÃ­o, se usa el email por defecto."}
+                {t("inviteAdmin.form.orgNameHelp", {
+                  defaultValue: "Si lo dejas vacío, se usa el email por defecto.",
+                })}
               </div>
             </div>
           ) : (
             <div className="text-xs text-slate-600 bg-slate-50 border rounded p-3">
-              <span className="font-semibold">Org destino:</span>{" "}
-              {currentOrg?.name || currentOrg?.org_name || currentOrg?.id || "â€”"}
+              <span className="font-semibold">
+                {t("inviteAdmin.form.targetOrg", { defaultValue: "Org destino:" })}
+              </span>{" "}
+              {currentOrg?.name ||
+                currentOrg?.org_name ||
+                currentOrg?.id ||
+                t("common.emptyDash", { defaultValue: "—" })}
             </div>
           )}
 
@@ -403,15 +514,25 @@ export default function InvitarAdmin() {
             className="w-full bg-emerald-600 text-white rounded px-4 py-2 text-sm disabled:opacity-60"
           >
             {sending
-              ? t?.("inviteAdmin.form.buttonSending") || "Generando link..."
-              : t?.("inviteAdmin.form.buttonSend") || `Generar Magic Link (${roleLabel})`}
+              ? t("inviteAdmin.form.buttonSending", {
+                  defaultValue: "Generando link...",
+                })
+              : t("inviteAdmin.form.buttonSend", {
+                  defaultValue: "Generar Magic Link ({{role}})",
+                  role: roleLabel,
+                })}
           </button>
 
           {message && <div className={`text-sm ${msgClass}`}>{message.text}</div>}
 
           {actionLink ? (
             <div className="text-xs break-all bg-slate-50 border rounded p-3">
-              <div className="font-semibold mb-2">Magic Link ({roleLabel})</div>
+              <div className="font-semibold mb-2">
+                {t("inviteAdmin.labels.magicLink", {
+                  defaultValue: "Magic Link ({{role}})",
+                  role: roleLabel,
+                })}
+              </div>
 
               <div className="flex flex-wrap gap-2 mb-2">
                 <button
@@ -419,7 +540,7 @@ export default function InvitarAdmin() {
                   onClick={() => handleCopy(actionLink)}
                   className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
                 >
-                  {t?.("inviteAdmin.actions.copy") || "Copiar link"}
+                  {t("inviteAdmin.actions.copy", { defaultValue: "Copiar link" })}
                 </button>
 
                 <button
@@ -427,14 +548,16 @@ export default function InvitarAdmin() {
                   onClick={() => window.open(actionLink, "_blank", "noopener,noreferrer")}
                   className="bg-slate-700 text-white rounded px-3 py-2 text-xs"
                 >
-                  {t?.("inviteAdmin.actions.test") || "Probar link"}
+                  {t("inviteAdmin.actions.test", { defaultValue: "Probar link" })}
                 </button>
               </div>
 
               <div className="bg-white border rounded p-2 select-all">{actionLink}</div>
               <div className="text-[11px] text-slate-500 mt-2">
-                {t?.("inviteAdmin.hints.bestPractice") ||
-                  "Tip: si el copiado automÃ¡tico falla, selecciona el link y copia manualmente (Ctrl+C)."}
+                {t("inviteAdmin.hints.bestPractice", {
+                  defaultValue:
+                    "Tip: si el copiado automático falla, selecciona el link y copia manualmente (Ctrl+C).",
+                })}
               </div>
             </div>
           ) : null}
@@ -442,16 +565,40 @@ export default function InvitarAdmin() {
       ) : (
         <form onSubmit={handleGenerateRecovery} className="bg-white border rounded-xl p-5 space-y-4">
           <div className="text-sm text-slate-700">
-            <div className="font-semibold mb-1">Reset password (fallback universal)</div>
+            <div className="font-semibold mb-1">
+              {t("inviteAdmin.recovery.title", {
+                defaultValue: "Reset password (fallback universal)",
+              })}
+            </div>
             <div className="text-slate-600 text-xs">
-              Genera un <span className="font-semibold">Recovery Link</span> sin depender del correo. Copia y envÃ­a por tu canal.
-              El usuario abrirÃ¡ el link, pasarÃ¡ por <span className="font-mono">/auth/callback</span> y luego llegarÃ¡ a{" "}
+              {t("inviteAdmin.recovery.description.part1", {
+                defaultValue: "Genera un",
+              })}{" "}
+              <span className="font-semibold">
+                {t("inviteAdmin.recovery.description.linkLabel", {
+                  defaultValue: "Recovery Link",
+                })}
+              </span>{" "}
+              {t("inviteAdmin.recovery.description.part2", {
+                defaultValue: "sin depender del correo. Copia y envía por tu canal.",
+              })}{" "}
+              {t("inviteAdmin.recovery.description.part3", {
+                defaultValue: "El usuario abrirá el link, pasará por",
+              })}{" "}
+              <span className="font-mono">/auth/callback</span>{" "}
+              {t("inviteAdmin.recovery.description.part4", {
+                defaultValue: "y luego llegará a",
+              })}{" "}
               <span className="font-mono">/reset-password</span>.
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Email del usuario</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              {t("inviteAdmin.recovery.emailLabel", {
+                defaultValue: "Email del usuario",
+              })}
+            </label>
             <input
               type="email"
               className="w-full border rounded px-3 py-2 text-sm"
@@ -467,18 +614,32 @@ export default function InvitarAdmin() {
             disabled={recoveryBusy || !isAppRoot}
             className="w-full bg-slate-900 text-white rounded px-4 py-2 text-sm disabled:opacity-60"
           >
-            {recoveryBusy ? "Generando link..." : "Generar Recovery Link"}
+            {recoveryBusy
+              ? t("inviteAdmin.recovery.buttonGenerating", {
+                  defaultValue: "Generando link...",
+                })
+              : t("inviteAdmin.recovery.buttonGenerate", {
+                  defaultValue: "Generar Recovery Link",
+                })}
           </button>
 
           {!isAppRoot ? (
-            <div className="text-xs text-red-600">Solo App Root puede usar esta herramienta.</div>
+            <div className="text-xs text-red-600">
+              {t("inviteAdmin.recovery.onlyRootNotice", {
+                defaultValue: "Solo App Root puede usar esta herramienta.",
+              })}
+            </div>
           ) : null}
 
           {recoveryMsg ? <div className={`text-sm ${recoveryClass}`}>{recoveryMsg.text}</div> : null}
 
           {recoveryLink ? (
             <div className="text-xs break-all bg-slate-50 border rounded p-3">
-              <div className="font-semibold mb-2">Recovery Link</div>
+              <div className="font-semibold mb-2">
+                {t("inviteAdmin.recovery.linkLabel", {
+                  defaultValue: "Recovery Link",
+                })}
+              </div>
 
               <div className="flex flex-wrap gap-2 mb-2">
                 <button
@@ -487,13 +648,23 @@ export default function InvitarAdmin() {
                     const r = await copyToClipboard(recoveryLink);
                     setRecoveryMsg(
                       r.ok
-                        ? { type: "success", text: "âœ… Copiado al portapapeles." }
-                        : { type: "warn", text: "âš ï¸ Copia manualmente (Ctrl+C)." }
+                        ? {
+                            type: "success",
+                            text: t("inviteAdmin.actions.copied", {
+                              defaultValue: "✅ Copiado al portapapeles.",
+                            }),
+                          }
+                        : {
+                            type: "warn",
+                            text: t("inviteAdmin.recovery.copyManual", {
+                              defaultValue: "⚠️ Copia manualmente (Ctrl+C).",
+                            }),
+                          }
                     );
                   }}
                   className="bg-blue-600 text-white rounded px-3 py-2 text-xs"
                 >
-                  Copiar link
+                  {t("inviteAdmin.actions.copy", { defaultValue: "Copiar link" })}
                 </button>
 
                 <button
@@ -501,13 +672,16 @@ export default function InvitarAdmin() {
                   onClick={() => window.open(recoveryLink, "_blank", "noopener,noreferrer")}
                   className="bg-slate-700 text-white rounded px-3 py-2 text-xs"
                 >
-                  Probar link
+                  {t("inviteAdmin.actions.test", { defaultValue: "Probar link" })}
                 </button>
               </div>
 
               <div className="bg-white border rounded p-2 select-all">{recoveryLink}</div>
               <div className="text-[11px] text-slate-500 mt-2">
-                Tip: si el usuario no puede abrir el link, que pruebe en incÃ³gnito o en otro navegador.
+                {t("inviteAdmin.recovery.hintOpenIncognito", {
+                  defaultValue:
+                    "Tip: si el usuario no puede abrir el link, que pruebe en incógnito o en otro navegador.",
+                })}
               </div>
             </div>
           ) : null}
@@ -516,4 +690,3 @@ export default function InvitarAdmin() {
     </div>
   );
 }
-

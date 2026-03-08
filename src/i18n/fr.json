@@ -849,9 +849,35 @@
       "buttonSending": "Envoi d'une invitation...",
       "buttonSend": "Envoyer une invitation"
     },
+    "diag": {
+      "orgUsed": "Organisation utilisée",
+      "user": "Utilisateur",
+      "membersLoaded": "Membres chargés"
+    },
+    "empty": {
+      "noMembers": "Aucun membre du personnel actif n’est disponible pour être invité."
+    },
+    "ok": {
+      "generated": "Invitation générée avec succès.",
+      "emailSent": "Courriel d’invitation envoyé avec succès.",
+      "fallbackLink": "Le courriel n’a pas pu être envoyé. Utilisez ce lien pour partager l’accès manuellement.",
+      "magicLinkFallback": "Lien magique généré en secours."
+    },
+    "plan": {
+      "validating": "Validation du plan de l’organisation…",
+      "validationError": "Impossible de valider le plan de l’organisation.",
+      "requiresProTitle": "Plan PRO requis",
+      "detectedPlan": "Plan détecté",
+      "freeBlockedBody": "Les invitations de tracker ne sont pas disponibles avec le plan FREE actuel.",
+      "upgradePrompt": "Passez cette organisation à PRO pour activer les invitations de tracker."
+    },
     "errors": {
       "emailRequired": "Vous devez saisir une adresse électronique.",
-      "emailInvalid": "Veuillez saisir une adresse électronique valide."
+      "emailInvalid": "Veuillez saisir une adresse électronique valide.",
+      "noOrg": "Impossible de résoudre une organisation active pour cet utilisateur.",
+      "planBlocked": "Le plan actuel de l’organisation n’autorise pas les invitations de tracker.",
+      "notInOrg": "Votre utilisateur n’est pas lié à l’organisation active.",
+      "inviteErrorPrefix": "Erreur lors de l’envoi de l’invitation"
     },
     "messages": {
       "serverProblem": "Il y a eu un problème de contact avec le serveur d'invitation.",

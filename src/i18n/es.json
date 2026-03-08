@@ -688,7 +688,11 @@
     "emailPlaceholder": "tracker@ejemplo.com",
     "errors": {
       "emailInvalid": "Ingresa un correo electrónico válido.",
-      "emailRequired": "Debes ingresar un correo electrónico."
+      "emailRequired": "Debes ingresar un correo electrónico.",
+      "noOrg": "No se pudo resolver una organización activa para este usuario.",
+      "planBlocked": "El plan actual de la organización no permite invitaciones de tracker.",
+      "notInOrg": "Tu usuario no está vinculado a la organización activa.",
+      "inviteErrorPrefix": "Error al enviar la invitación"
     },
     "form": {
       "buttonSend": "Enviar invitación",
@@ -699,6 +703,28 @@
       "selectHelp": "Si seleccionas un personal, su correo se llenará automáticamente.",
       "selectLabel": "Selecciona personal vigente (opcional)",
       "selectPlaceholder": "-- Seleccionar personal --"
+    },
+    "diag": {
+      "orgUsed": "Organización usada",
+      "user": "Usuario",
+      "membersLoaded": "Miembros cargados"
+    },
+    "empty": {
+      "noMembers": "No hay personal activo disponible para invitar."
+    },
+    "ok": {
+      "generated": "Invitación generada correctamente.",
+      "emailSent": "Correo de invitación enviado correctamente.",
+      "fallbackLink": "No se pudo enviar el correo. Usa este enlace para compartir el acceso manualmente.",
+      "magicLinkFallback": "Link mágico generado como respaldo."
+    },
+    "plan": {
+      "validating": "Validando plan de la organización…",
+      "validationError": "No se pudo validar el plan de la organización.",
+      "requiresProTitle": "Plan PRO requerido",
+      "detectedPlan": "Plan detectado",
+      "freeBlockedBody": "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
+      "upgradePrompt": "Actualiza esta organización a PRO para habilitar invitaciones de tracker."
     },
     "messages": {
       "createdWithoutEmail": "Se creó el acceso del tracker sin enviar correo electrónico.",
