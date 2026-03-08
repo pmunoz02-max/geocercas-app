@@ -1,5 +1,4 @@
-﻿// src/components/geocercas/NuevaGeocerca.jsx
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -20,8 +19,8 @@ const DATA_SOURCE = null;
 const GEOJSON_URL = "/data/mapa_corto_214.geojson";
 const CSV_URL = "/data/mapa_corto_214.csv";
 
-/* ----------------------------- UI helpers ----------------------------- */
 function Banner({ banner, onClose }) {
+  const { t } = useTranslation();
   if (!banner) return null;
 
   const klass =
@@ -41,7 +40,7 @@ function Banner({ banner, onClose }) {
         onClick={onClose}
         type="button"
       >
-        OK
+        {t("common.actions.close", { defaultValue: "Close" })}
       </button>
     </div>
   );
@@ -63,7 +62,6 @@ function EntitlementCard({ title, value, tone = "default" }) {
   );
 }
 
-/* ----------------------------- Cursor live ----------------------------- */
 function CursorPosLive({ setCursorLatLng }) {
   useMapEvents({
     mousemove: (e) => setCursorLatLng(e.latlng),
@@ -72,7 +70,6 @@ function CursorPosLive({ setCursorLatLng }) {
   return null;
 }
 
-/* ----------------------------- GeoJSON utils ----------------------------- */
 function ensureFeatureCollection(input) {
   if (!input) return null;
   if (input.type === "FeatureCollection") return input;
@@ -204,7 +201,6 @@ function isPlanLimitError(err) {
   );
 }
 
-/* ----------------------------- Component ----------------------------- */
 export default function NuevaGeocerca() {
   const { t } = useTranslation();
   const { currentOrg } = useAuthSafe();
@@ -399,19 +395,19 @@ export default function NuevaGeocerca() {
 
   const planSummaryText = useMemo(() => {
     if (entitlementsLoading) {
-      return t("geocercas.plan.loading", { defaultValue: "Cargando plan..." });
+      return t("geocercas.plan.loading", { defaultValue: "Loading plan..." });
     }
 
     if (entitlementsError) {
-      return t("geocercas.plan.error", { defaultValue: "No se pudieron cargar los límites del plan." });
+      return t("geocercas.plan.error", { defaultValue: "The plan limits could not be loaded." });
     }
 
     if (!hasFiniteGeofenceLimit) {
-      return t("geocercas.plan.unlimited", { defaultValue: "Geocercas sin límite configurado." });
+      return t("geocercas.plan.unlimited", { defaultValue: "Geofences without a configured limit." });
     }
 
     return t("geocercas.plan.usage", {
-      defaultValue: "Uso actual: {{used}} / {{max}} geocercas",
+      defaultValue: "Current usage: {{used}} / {{max}} geofences",
       used: currentGeofenceCount,
       max: Number(maxGeocercas),
     });
@@ -422,7 +418,7 @@ export default function NuevaGeocerca() {
     if (!pairs.length) {
       showErr(
         t("geocercas.errorCoordsInvalid", {
-          defaultValue: "Coordenadas inválidas. Usa formato: lat,lng (una por línea).",
+          defaultValue: "Invalid coordinates. Use format: lat,lng (one per line).",
         })
       );
       return;
@@ -439,27 +435,27 @@ export default function NuevaGeocerca() {
 
     setCoordModalOpen(false);
     setCoordText("");
-    showOk(t("geocercas.coordsReady", { defaultValue: "Figura creada desde coordenadas." }));
+    showOk(t("geocercas.coordsReady", { defaultValue: "Shape created from coordinates." }));
   }, [coordText, clearCanvas, t, showErr, showOk, scheduleFitToGeo]);
 
   const handleSave = useCallback(async () => {
     try {
       const nm = String(geofenceName || "").trim();
       if (!nm) {
-        showErr(t("geocercas.errorNameRequired", { defaultValue: "Escribe un nombre para la geocerca." }));
+        showErr(t("geocercas.errorNameRequired", { defaultValue: "Please enter a name for the geofence." }));
         return;
       }
 
       const orgId = currentOrg?.id || null;
       if (!orgId) {
-        showErr(t("geocercas.manage.noOrgTitle", { defaultValue: "Org no disponible." }));
+        showErr(t("geocercas.manage.noOrgTitle", { defaultValue: "Org not available." }));
         return;
       }
 
       if (hasFiniteGeofenceLimit && !canCreateGeofence) {
         showWarn(
           t("geocercas.plan.limitReached", {
-            defaultValue: "Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
+            defaultValue: "You have reached the geofence limit of your current plan. Upgrade to PRO to continue.",
           })
         );
         return;
@@ -476,7 +472,7 @@ export default function NuevaGeocerca() {
         if (!layerToSave || typeof layerToSave.toGeoJSON !== "function") {
           showErr(
             t("geocercas.errorNoShape", {
-              defaultValue: "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
+              defaultValue: "Draw a geofence on the map or create one by coordinates before saving.",
             })
           );
           return;
@@ -517,19 +513,19 @@ export default function NuevaGeocerca() {
 
       await Promise.allSettled([refreshGeofenceList(), refreshEntitlements()]);
       setGeofenceName("");
-      showOk(t("geocercas.savedOk", { defaultValue: "Geocerca guardada correctamente." }));
+      showOk(t("geocercas.savedOk", { defaultValue: "Geofence saved successfully." }));
     } catch (e) {
       const isLimit = isPlanLimitError(e);
 
       if (isLimit) {
         showWarn(
           t("geocercas.plan.limitReached", {
-            defaultValue: "Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
+            defaultValue: "You have reached the geofence limit of your current plan. Upgrade to PRO to continue.",
           })
         );
       } else {
         showErr(
-          t("geocercas.errorSave", { defaultValue: "No se pudo guardar la geocerca. Intenta nuevamente." }),
+          t("geocercas.errorSave", { defaultValue: "Could not save the geofence. Please try again." }),
           e
         );
       }
@@ -555,12 +551,12 @@ export default function NuevaGeocerca() {
 
   const handleDeleteSelected = useCallback(async () => {
     if (!selectedNames || selectedNames.size === 0) {
-      showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+      showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
       return;
     }
 
     const confirmed = window.confirm(
-      t("geocercas.deleteConfirm", { defaultValue: "¿Eliminar las geocercas seleccionadas?" })
+      t("geocercas.deleteConfirm", { defaultValue: "Delete the selected geofences?" })
     );
     if (!confirmed) return;
 
@@ -584,9 +580,9 @@ export default function NuevaGeocerca() {
       clearCanvas();
       setDraftFeature(null);
 
-      showOk(t("geocercas.deletedCount", { count: names.length, defaultValue: `Eliminadas: ${names.length}` }));
+      showOk(t("geocercas.deletedCount", { count: names.length, defaultValue: `Deleted: ${names.length}` }));
     } catch (e) {
-      showErr(t("geocercas.deleteError", { defaultValue: "No se pudo eliminar. Intenta nuevamente." }), e);
+      showErr(t("geocercas.deleteError", { defaultValue: "Could not delete. Please try again." }), e);
     }
   }, [selectedNames, currentOrg?.id, refreshGeofenceList, refreshEntitlements, clearCanvas, t, showErr, showOk, geofenceList]);
 
@@ -603,7 +599,7 @@ export default function NuevaGeocerca() {
       if (namesToShow.length === 0) {
         const one = lastSelectedName || geofenceList?.[0]?.name || null;
         if (!one) {
-          showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Selecciona al menos una geocerca." }));
+          showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
           return;
         }
         namesToShow = [one];
@@ -623,7 +619,7 @@ export default function NuevaGeocerca() {
 
       const combined = combineFeatureCollections(geos);
       if (!combined) {
-        showErr(t("geocercas.errorNoGeojson", { defaultValue: "No se encontró el GeoJSON." }));
+        showErr(t("geocercas.errorNoGeojson", { defaultValue: "Could not load the geofence GeoJSON." }));
         return;
       }
 
@@ -635,10 +631,10 @@ export default function NuevaGeocerca() {
       setViewId((x) => x + 1);
 
       if (items.length > 1) {
-        showOk(t("geocercas.showManyOk", { defaultValue: `Mostrando ${items.length} geocercas.` }));
+        showOk(t("geocercas.showManyOk", { count: items.length, defaultValue: `Showing ${items.length} geofences.` }));
       }
     } catch (e) {
-      showErr(t("geocercas.errorLoad", { defaultValue: "No se pudo cargar la geocerca." }), e);
+      showErr(t("geocercas.errorLoad", { defaultValue: "Could not load the geofence." }), e);
     } finally {
       setShowLoading(false);
     }
@@ -742,30 +738,30 @@ export default function NuevaGeocerca() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <EntitlementCard
-            title={t("billing.planCurrent", { defaultValue: "Plan actual" })}
+            title={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
             value={normalizePlanLabel(planCode)}
             tone={planTone}
           />
 
           <EntitlementCard
-            title={t("geocercas.planUsageTitle", { defaultValue: "Geocercas" })}
+            title={t("geocercas.planUsageTitle", { defaultValue: "Geofences" })}
             value={
               entitlementsLoading
                 ? t("common.actions.loading", { defaultValue: "Loading..." })
                 : hasFiniteGeofenceLimit
                 ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
-                : t("geocercas.plan.unlimitedShort", { defaultValue: "Ilimitadas" })
+                : t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
             }
             tone={planTone}
           />
 
           <EntitlementCard
-            title={t("geocercas.planAvailableTitle", { defaultValue: "Disponibles" })}
+            title={t("geocercas.planAvailableTitle", { defaultValue: "Available" })}
             value={
               entitlementsLoading
                 ? t("common.actions.loading", { defaultValue: "Loading..." })
                 : geofenceSlotsLeft === null
-                ? t("geocercas.plan.unlimitedShort", { defaultValue: "Ilimitadas" })
+                ? t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
                 : String(geofenceSlotsLeft)
             }
             tone={geofenceLimitReached ? "warn" : "default"}
@@ -783,12 +779,12 @@ export default function NuevaGeocerca() {
             <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-950/30 p-3 space-y-3">
               <div className="text-sm font-semibold text-amber-200">
                 {t("geocercas.plan.limitReachedTitle", {
-                  defaultValue: "Has alcanzado el límite de geocercas de tu plan.",
+                  defaultValue: "You have reached the geofence limit of your plan.",
                 })}
               </div>
               <div className="text-xs text-amber-100">
                 {t("geocercas.plan.limitReachedBody", {
-                  defaultValue: "Para crear más geocercas, actualiza tu organización a PRO.",
+                  defaultValue: "To create more geofences, upgrade your organization to PRO.",
                 })}
               </div>
 
@@ -803,7 +799,7 @@ export default function NuevaGeocerca() {
           {!entitlementsLoading && !geofenceLimitReached && isFree ? (
             <div className="mt-2 text-xs text-slate-400">
               {t("geocercas.plan.freeHint", {
-                defaultValue: "Plan FREE activo. Cuando alcances el límite, podrás hacer upgrade a PRO desde aquí.",
+                defaultValue: "FREE plan active. When you reach the limit, you can upgrade to PRO from here.",
               })}
             </div>
           ) : null}
@@ -811,7 +807,7 @@ export default function NuevaGeocerca() {
           {!entitlementsLoading && (isStarter || isPro || isEnterprise || isElite || isElitePlus) ? (
             <div className="mt-2 text-xs text-slate-400">
               {t("geocercas.plan.activePaidHint", {
-                defaultValue: "Tu organización tiene un plan con mayor capacidad habilitada.",
+                defaultValue: "Your organization has a plan with higher capacity enabled.",
               })}
             </div>
           ) : null}
@@ -827,7 +823,7 @@ export default function NuevaGeocerca() {
           <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
             {geofenceList.length === 0 && (
               <div className="text-xs text-slate-400">
-                {t("geocercas.noGeofences", { defaultValue: "No geofences" })}
+                {t("geocercas.noGeofences", { defaultValue: "You don’t have any geofences yet." })}
               </div>
             )}
 
@@ -878,7 +874,7 @@ export default function NuevaGeocerca() {
               className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-200 md:px-3 md:py-1.5 md:text-xs"
               type="button"
             >
-              {t("geocercas.buttonClearCanvas", { defaultValue: "Clear canvas" })}
+              {t("geocercas.buttonClearCanvas", { defaultValue: "Clear map" })}
             </button>
           </div>
 
@@ -978,8 +974,8 @@ export default function NuevaGeocerca() {
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
               {cursorLatLng ? (
                 <>
-                  <span>Lat: {cursorLatLng.lat.toFixed(6)}</span>
-                  <span className="ml-2">Lng: {cursorLatLng.lng.toFixed(6)}</span>
+                  <span>{t("geocercas.lat", { defaultValue: "Lat" })}: {cursorLatLng.lat.toFixed(6)}</span>
+                  <span className="ml-2">{t("geocercas.lng", { defaultValue: "Lng" })}: {cursorLatLng.lng.toFixed(6)}</span>
                 </>
               ) : (
                 <span>{t("geocercas.cursorHint", { defaultValue: "Move the mouse over the map" })}</span>
@@ -987,7 +983,7 @@ export default function NuevaGeocerca() {
             </div>
 
             <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
-              Draft: {draftFeature ? "yes" : "no"} | Pts: {draftPointsCount}
+              {t("geocercas.draftLabel", { defaultValue: "Draft" })}: {draftFeature ? t("geocercas.draftYes", { defaultValue: "yes" }) : t("geocercas.draftNo", { defaultValue: "no" })} | {t("geocercas.pointsLabel", { defaultValue: "Pts" })}: {draftPointsCount}
             </div>
           </div>
         </div>
