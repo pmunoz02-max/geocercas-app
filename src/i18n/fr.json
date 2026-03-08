@@ -1274,5 +1274,74 @@
       "generateReport": "Erreur lors de la génération du rapport.",
       "exportNoData": "Il n’y a pas de données à exporter."
     }
+  },
+  "activityAssignments": {
+    "title": "Affectation d’activités",
+    "subtitle": "Définissez quelle activité chaque personne réalise dans une plage de dates. Une même personne ne peut pas avoir deux activités en même temps.",
+    "session": "Session",
+    "actions": {
+      "new": "+ Nouvelle affectation",
+      "refresh": "Actualiser",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "clear": "Effacer",
+      "newShort": "Nouvelle",
+      "saveChanges": "Enregistrer les modifications",
+      "createAssignment": "Créer l’affectation",
+      "saving": "Enregistrement..."
+    },
+    "filters": {
+      "trackerPerson": "Tracker / Personne",
+      "activity": "Activité",
+      "startFrom": "Début à partir de",
+      "endUntil": "Fin jusqu’à",
+      "allTrackers": "Tous",
+      "allActivities": "Toutes"
+    },
+    "table": {
+      "title": "Liste des affectations",
+      "loading": "Chargement...",
+      "person": "Personne",
+      "activity": "Activité",
+      "start": "Début",
+      "end": "Fin",
+      "actions": "Actions",
+      "empty": "Il n’y a aucune affectation pour les filtres actuels."
+    },
+    "form": {
+      "titleCreate": "Nouvelle affectation",
+      "titleEdit": "Modifier l’affectation",
+      "titleView": "Détails / nouvelle affectation",
+      "trackerPerson": "Personne / Tracker",
+      "activity": "Activité",
+      "startDate": "Date de début",
+      "endDateOptional": "Date de fin (optionnelle)",
+      "selectOption": "Sélectionner..."
+    },
+    "messages": {
+      "initialLoadError": "Erreur lors du chargement des données initiales",
+      "activitiesLoadError": "Impossible de charger les activités",
+      "trackersLoadError": "Impossible de charger les trackers",
+      "assignmentsLoadError": "Impossible de charger les affectations",
+      "requiredFields": "Le tracker, l’activité et la date de début sont obligatoires",
+      "assignedSuccessfully": "Activité affectée avec succès",
+      "updatedSuccessfully": "Affectation mise à jour avec succès",
+      "invalidFormMode": "Mode de formulaire invalide",
+      "constraintOverlap": "Impossible d’affecter cette activité : la personne a déjà une autre activité dans cette plage de dates.",
+      "saveError": "Erreur lors de l’enregistrement de l’affectation d’activité",
+      "deletedSuccessfully": "Affectation supprimée avec succès",
+      "deleteError": "Impossible de supprimer l’affectation d’activité"
+    },
+    "overlap": {
+      "selectedPerson": "sélectionnée",
+      "otherActivity": "une autre activité",
+      "noEndDate": "sans date de fin",
+      "message": "La personne {{person}} a déjà l’activité « {{activity}} » affectée entre {{start}} et {{end}}."
+    },
+    "confirmDelete": "Voulez-vous vraiment supprimer l’affectation de « {{activity}} » pour « {{tracker}} » ?",
+    "fallbacks": {
+      "activity": "activité",
+      "tracker": "tracker"
+    }
   }
 }

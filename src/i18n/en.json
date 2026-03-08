@@ -1274,5 +1274,74 @@
       "generateReport": "Error generating report.",
       "exportNoData": "There is no data to export."
     }
+  },
+  "activityAssignments": {
+    "title": "Activity assignments",
+    "subtitle": "Define which activity each person performs within a date range. The same person cannot have two activities at the same time.",
+    "session": "Session",
+    "actions": {
+      "new": "+ New assignment",
+      "refresh": "Refresh",
+      "edit": "Edit",
+      "delete": "Delete",
+      "clear": "Clear",
+      "newShort": "New",
+      "saveChanges": "Save changes",
+      "createAssignment": "Create assignment",
+      "saving": "Saving..."
+    },
+    "filters": {
+      "trackerPerson": "Tracker / Person",
+      "activity": "Activity",
+      "startFrom": "Start from",
+      "endUntil": "End until",
+      "allTrackers": "All",
+      "allActivities": "All"
+    },
+    "table": {
+      "title": "Assignments list",
+      "loading": "Loading...",
+      "person": "Person",
+      "activity": "Activity",
+      "start": "Start",
+      "end": "End",
+      "actions": "Actions",
+      "empty": "There are no assignments for the current filters."
+    },
+    "form": {
+      "titleCreate": "New assignment",
+      "titleEdit": "Edit assignment",
+      "titleView": "Details / new assignment",
+      "trackerPerson": "Person / Tracker",
+      "activity": "Activity",
+      "startDate": "Start date",
+      "endDateOptional": "End date (optional)",
+      "selectOption": "Select..."
+    },
+    "messages": {
+      "initialLoadError": "Error loading initial data",
+      "activitiesLoadError": "Activities could not be loaded",
+      "trackersLoadError": "Trackers could not be loaded",
+      "assignmentsLoadError": "Assignments could not be loaded",
+      "requiredFields": "Tracker, activity and start date are required",
+      "assignedSuccessfully": "Activity assigned successfully",
+      "updatedSuccessfully": "Assignment updated successfully",
+      "invalidFormMode": "Invalid form mode",
+      "constraintOverlap": "This activity cannot be assigned: the person already has another activity in that date range.",
+      "saveError": "Error saving the activity assignment",
+      "deletedSuccessfully": "Assignment deleted successfully",
+      "deleteError": "The activity assignment could not be deleted"
+    },
+    "overlap": {
+      "selectedPerson": "selected person",
+      "otherActivity": "another activity",
+      "noEndDate": "no end date",
+      "message": "The person {{person}} is already assigned to the activity \"{{activity}}\" between {{start}} and {{end}}."
+    },
+    "confirmDelete": "Are you sure you want to delete the assignment of \"{{activity}}\" for \"{{tracker}}\"?",
+    "fallbacks": {
+      "activity": "activity",
+      "tracker": "tracker"
+    }
   }
 }

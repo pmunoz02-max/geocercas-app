@@ -1277,5 +1277,74 @@
       "generateReport": "Error generando reporte.",
       "exportNoData": "No hay datos para exportar."
     }
+  },
+  "activityAssignments": {
+    "title": "Asignación de actividades",
+    "subtitle": "Define qué actividad realiza cada persona en un rango de fechas. La misma persona no puede tener dos actividades al mismo tiempo.",
+    "session": "Sesión",
+    "actions": {
+      "new": "+ Nueva asignación",
+      "refresh": "Refrescar",
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "clear": "Limpiar",
+      "newShort": "Nueva",
+      "saveChanges": "Guardar cambios",
+      "createAssignment": "Crear asignación",
+      "saving": "Guardando..."
+    },
+    "filters": {
+      "trackerPerson": "Tracker / Persona",
+      "activity": "Actividad",
+      "startFrom": "Inicio desde",
+      "endUntil": "Fin hasta",
+      "allTrackers": "Todos",
+      "allActivities": "Todas"
+    },
+    "table": {
+      "title": "Listado de asignaciones",
+      "loading": "Cargando...",
+      "person": "Persona",
+      "activity": "Actividad",
+      "start": "Inicio",
+      "end": "Fin",
+      "actions": "Acciones",
+      "empty": "No hay asignaciones para los filtros actuales."
+    },
+    "form": {
+      "titleCreate": "Nueva asignación",
+      "titleEdit": "Editar asignación",
+      "titleView": "Detalles / nueva asignación",
+      "trackerPerson": "Persona / Tracker",
+      "activity": "Actividad",
+      "startDate": "Fecha inicio",
+      "endDateOptional": "Fecha fin (opcional)",
+      "selectOption": "Seleccione..."
+    },
+    "messages": {
+      "initialLoadError": "Error al cargar datos iniciales",
+      "activitiesLoadError": "No se pudieron cargar las actividades",
+      "trackersLoadError": "No se pudieron cargar los trackers",
+      "assignmentsLoadError": "No se pudieron cargar las asignaciones",
+      "requiredFields": "Tracker, actividad y fecha de inicio son obligatorios",
+      "assignedSuccessfully": "Actividad asignada correctamente",
+      "updatedSuccessfully": "Asignación actualizada correctamente",
+      "invalidFormMode": "Modo de formulario inválido",
+      "constraintOverlap": "No se puede asignar esta actividad: la persona ya tiene otra actividad en ese rango de fechas.",
+      "saveError": "Error al guardar la asignación de actividad",
+      "deletedSuccessfully": "Asignación eliminada correctamente",
+      "deleteError": "No se pudo eliminar la asignación de actividad"
+    },
+    "overlap": {
+      "selectedPerson": "seleccionada",
+      "otherActivity": "otra actividad",
+      "noEndDate": "sin fecha de fin",
+      "message": "La persona {{person}} ya tiene asignada la actividad \"{{activity}}\" entre {{start}} y {{end}}."
+    },
+    "confirmDelete": "¿Seguro que deseas eliminar la asignación de \"{{activity}}\" para \"{{tracker}}\"?",
+    "fallbacks": {
+      "activity": "actividad",
+      "tracker": "tracker"
+    }
   }
 }

@@ -1,8 +1,9 @@
 ﻿// src/pages/ActivityAssignments.jsx
-// AsignaciÃ³n de actividades a trackers/personas
+// Asignación de actividades a trackers/personas
 // Evita que la misma persona tenga dos actividades al mismo tiempo.
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { listActivities } from "../lib/activitiesApi";
 import { listTrackers } from "../lib/trackersApi";
@@ -13,7 +14,7 @@ import {
   deleteActivityAssignment,
 } from "../lib/activityAssignmentsApi";
 
-// Form vacÃ­o
+// Form vacío
 const initialForm = {
   id: null,
   tracker_user_id: "",
@@ -34,6 +35,10 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
 }
 
 export default function ActivityAssignmentsPage() {
+  const { t } = useTranslation();
+  const tt = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { user } = useAuth() || {};
 
   const [activities, setActivities] = useState([]);
@@ -64,14 +69,10 @@ export default function ActivityAssignmentsPage() {
     try {
       setLoading(true);
       setErrorMsg("");
-      await Promise.all([
-        fetchActivities(),
-        fetchTrackers(),
-        fetchAssignments(),
-      ]);
+      await Promise.all([fetchActivities(), fetchTrackers(), fetchAssignments()]);
     } catch (err) {
       console.error("Error carga inicial ActivityAssignments:", err);
-      setErrorMsg(err.message || "Error al cargar datos iniciales");
+      setErrorMsg(err.message || tt("activityAssignments.messages.initialLoadError", "Error al cargar datos iniciales"));
     } finally {
       setLoading(false);
     }
@@ -83,7 +84,7 @@ export default function ActivityAssignmentsPage() {
       setActivities(data || []);
     } catch (err) {
       console.error("Error listActivities:", err);
-      setErrorMsg("No se pudieron cargar las actividades");
+      setErrorMsg(tt("activityAssignments.messages.activitiesLoadError", "No se pudieron cargar las actividades"));
     }
   }
 
@@ -93,7 +94,7 @@ export default function ActivityAssignmentsPage() {
       setTrackers(data || []);
     } catch (err) {
       console.error("Error listTrackers:", err);
-      setErrorMsg("No se pudieron cargar los trackers");
+      setErrorMsg(tt("activityAssignments.messages.trackersLoadError", "No se pudieron cargar los trackers"));
     }
   }
 
@@ -110,7 +111,7 @@ export default function ActivityAssignmentsPage() {
       setRows(data || []);
     } catch (err) {
       console.error("Error listActivityAssignments:", err);
-      setErrorMsg(err.message || "No se pudieron cargar las asignaciones");
+      setErrorMsg(err.message || tt("activityAssignments.messages.assignmentsLoadError", "No se pudieron cargar las asignaciones"));
     } finally {
       setLoading(false);
     }
@@ -118,20 +119,15 @@ export default function ActivityAssignmentsPage() {
 
   const trackersById = useMemo(() => {
     const m = new Map();
-    trackers.forEach((t) => m.set(t.id, t));
+    trackers.forEach((tracker) => m.set(tracker.id, tracker));
     return m;
   }, [trackers]);
 
   const activitiesById = useMemo(() => {
     const m = new Map();
-    activities.forEach((a) => m.set(a.id, a));
+    activities.forEach((activity) => m.set(activity.id, activity));
     return m;
   }, [activities]);
-
-  const selectedRow = useMemo(
-    () => rows.find((r) => r.id === selectedId) || null,
-    [rows, selectedId]
-  );
 
   function resetForm() {
     setForm(initialForm);
@@ -183,10 +179,10 @@ export default function ActivityAssignmentsPage() {
   function checkOverlapLocal({ tracker_user_id, start_date, end_date, id }) {
     if (!tracker_user_id || !start_date) return null;
 
-    const conflict = rows.find((r) => {
-      if (r.tracker_user_id !== tracker_user_id) return false;
-      if (id && r.id === id) return false; // ignoramos la misma fila en ediciÃ³n
-      return rangesOverlap(start_date, end_date, r.start_date, r.end_date);
+    const conflict = rows.find((row) => {
+      if (row.tracker_user_id !== tracker_user_id) return false;
+      if (id && row.id === id) return false; // ignoramos la misma fila en edición
+      return rangesOverlap(start_date, end_date, row.start_date, row.end_date);
     });
 
     return conflict || null;
@@ -201,24 +197,29 @@ export default function ActivityAssignmentsPage() {
     try {
       if (!form.tracker_user_id || !form.activity_id || !form.start_date) {
         setErrorMsg(
-          "Tracker, actividad y fecha de inicio son obligatorios"
+          tt(
+            "activityAssignments.messages.requiredFields",
+            "Tracker, actividad y fecha de inicio son obligatorios"
+          )
         );
         return;
       }
 
-      // ValidaciÃ³n local
+      // Validación local
       const overlap = checkOverlapLocal(form);
       if (overlap) {
-        const t = trackersById.get(overlap.tracker_user_id);
-        const a = activitiesById.get(overlap.activity_id);
+        const tracker = trackersById.get(overlap.tracker_user_id);
+        const activity = activitiesById.get(overlap.activity_id);
         setErrorMsg(
-          `La persona ${
-            t?.full_name || t?.email || "seleccionada"
-          } ya tiene asignada la actividad "${
-            a?.name || "otra actividad"
-          }" entre ${overlap.start_date} y ${
-            overlap.end_date || "sin fecha de fin"
-          }.`
+          tt("activityAssignments.overlap.message",
+            "La persona {{person}} ya tiene asignada la actividad \"{{activity}}\" entre {{start}} y {{end}}.",
+            {
+              person: tracker?.full_name || tracker?.email || tt("activityAssignments.overlap.selectedPerson", "seleccionada"),
+              activity: activity?.name || tt("activityAssignments.overlap.otherActivity", "otra actividad"),
+              start: overlap.start_date,
+              end: overlap.end_date || tt("activityAssignments.overlap.noEndDate", "sin fecha de fin"),
+            }
+          )
         );
         return;
       }
@@ -230,7 +231,7 @@ export default function ActivityAssignmentsPage() {
           start_date: form.start_date,
           end_date: form.end_date || null,
         });
-        setSuccessMsg("Actividad asignada correctamente");
+        setSuccessMsg(tt("activityAssignments.messages.assignedSuccessfully", "Actividad asignada correctamente"));
       } else if (mode === "edit" && form.id) {
         await updateActivityAssignment(form.id, {
           tracker_user_id: form.tracker_user_id,
@@ -238,9 +239,9 @@ export default function ActivityAssignmentsPage() {
           start_date: form.start_date,
           end_date: form.end_date || null,
         });
-        setSuccessMsg("AsignaciÃ³n actualizada correctamente");
+        setSuccessMsg(tt("activityAssignments.messages.updatedSuccessfully", "Asignación actualizada correctamente"));
       } else {
-        setErrorMsg("Modo de formulario invÃ¡lido");
+        setErrorMsg(tt("activityAssignments.messages.invalidFormMode", "Modo de formulario inválido"));
         return;
       }
 
@@ -253,12 +254,14 @@ export default function ActivityAssignmentsPage() {
       const msg = String(err.message || "");
       if (msg.includes("activity_assignments_no_overlap")) {
         setErrorMsg(
-          "No se puede asignar esta actividad: la persona ya tiene otra actividad en ese rango de fechas."
+          tt(
+            "activityAssignments.messages.constraintOverlap",
+            "No se puede asignar esta actividad: la persona ya tiene otra actividad en ese rango de fechas."
+          )
         );
       } else {
         setErrorMsg(
-          err.message ||
-            "Error al guardar la asignaciÃ³n de actividad"
+          err.message || tt("activityAssignments.messages.saveError", "Error al guardar la asignación de actividad")
         );
       }
       console.error("Error al guardar ActivityAssignment:", err);
@@ -268,17 +271,24 @@ export default function ActivityAssignmentsPage() {
   }
 
   async function handleDelete(row) {
-    const t = trackersById.get(row.tracker_user_id);
-    const a = activitiesById.get(row.activity_id);
+    const tracker = trackersById.get(row.tracker_user_id);
+    const activity = activitiesById.get(row.activity_id);
 
     const ok = window.confirm(
-      `Â¿Seguro que deseas eliminar la asignaciÃ³n de "${a?.name || "actividad"}" para "${t?.full_name || t?.email || "tracker"}"?`
+      tt(
+        "activityAssignments.confirmDelete",
+        "¿Seguro que deseas eliminar la asignación de \"{{activity}}\" para \"{{tracker}}\"?",
+        {
+          activity: activity?.name || tt("activityAssignments.fallbacks.activity", "actividad"),
+          tracker: tracker?.full_name || tracker?.email || tt("activityAssignments.fallbacks.tracker", "tracker"),
+        }
+      )
     );
     if (!ok) return;
 
     try {
       await deleteActivityAssignment(row.id);
-      setSuccessMsg("AsignaciÃ³n eliminada correctamente");
+      setSuccessMsg(tt("activityAssignments.messages.deletedSuccessfully", "Asignación eliminada correctamente"));
       if (selectedId === row.id) {
         resetForm();
       }
@@ -286,7 +296,7 @@ export default function ActivityAssignmentsPage() {
     } catch (err) {
       console.error("Error al eliminar ActivityAssignment:", err);
       setErrorMsg(
-        err.message || "No se pudo eliminar la asignaciÃ³n de actividad"
+        err.message || tt("activityAssignments.messages.deleteError", "No se pudo eliminar la asignación de actividad")
       );
     }
   }
@@ -295,14 +305,19 @@ export default function ActivityAssignmentsPage() {
     <div className="p-4 space-y-4">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold">AsignaciÃ³n de actividades</h1>
+          <h1 className="text-xl font-semibold">
+            {tt("activityAssignments.title", "Asignación de actividades")}
+          </h1>
           <p className="text-sm text-gray-600">
-            Define quÃ© actividad realiza cada persona en un rango de fechas.
-            La misma persona no puede tener dos actividades al mismo tiempo.
+            {tt(
+              "activityAssignments.subtitle",
+              "Define qué actividad realiza cada persona en un rango de fechas. La misma persona no puede tener dos actividades al mismo tiempo."
+            )}
           </p>
           {user && (
             <p className="text-xs text-gray-500 mt-1">
-              SesiÃ³n: <span className="font-mono">{user.email}</span>
+              {tt("activityAssignments.session", "Sesión")}:{" "}
+              <span className="font-mono">{user.email}</span>
             </p>
           )}
         </div>
@@ -313,14 +328,14 @@ export default function ActivityAssignmentsPage() {
             onClick={handleNueva}
             className="px-3 py-1 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
           >
-            + Nueva asignaciÃ³n
+            {tt("activityAssignments.actions.new", "+ Nueva asignación")}
           </button>
           <button
             type="button"
             onClick={() => fetchAssignments()}
             className="px-3 py-1 rounded border text-sm hover:bg-gray-100"
           >
-            Refrescar
+            {tt("activityAssignments.actions.refresh", "Refrescar")}
           </button>
         </div>
       </header>
@@ -345,17 +360,19 @@ export default function ActivityAssignmentsPage() {
         <div className="grid gap-3 md:grid-cols-4">
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-700">
-              Tracker / Persona
+              {tt("activityAssignments.filters.trackerPerson", "Tracker / Persona")}
             </label>
             <select
               value={trackerFilter}
               onChange={(e) => setTrackerFilter(e.target.value)}
               className="border rounded px-2 py-1 text-sm"
             >
-              <option value="">Todos</option>
-              {trackers.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.full_name || t.email} ({t.email})
+              <option value="">
+                {tt("activityAssignments.filters.allTrackers", "Todos")}
+              </option>
+              {trackers.map((tracker) => (
+                <option key={tracker.id} value={tracker.id}>
+                  {tracker.full_name || tracker.email} ({tracker.email})
                 </option>
               ))}
             </select>
@@ -363,17 +380,19 @@ export default function ActivityAssignmentsPage() {
 
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-700">
-              Actividad
+              {tt("activityAssignments.filters.activity", "Actividad")}
             </label>
             <select
               value={activityFilter}
               onChange={(e) => setActivityFilter(e.target.value)}
               className="border rounded px-2 py-1 text-sm"
             >
-              <option value="">Todas</option>
-              {activities.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
+              <option value="">
+                {tt("activityAssignments.filters.allActivities", "Todas")}
+              </option>
+              {activities.map((activity) => (
+                <option key={activity.id} value={activity.id}>
+                  {activity.name}
                 </option>
               ))}
             </select>
@@ -381,7 +400,7 @@ export default function ActivityAssignmentsPage() {
 
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-700">
-              Inicio desde
+              {tt("activityAssignments.filters.startFrom", "Inicio desde")}
             </label>
             <input
               type="date"
@@ -393,7 +412,7 @@ export default function ActivityAssignmentsPage() {
 
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-700">
-              Fin hasta
+              {tt("activityAssignments.filters.endUntil", "Fin hasta")}
             </label>
             <input
               type="date"
@@ -409,9 +428,13 @@ export default function ActivityAssignmentsPage() {
         {/* Tabla */}
         <section className="border rounded p-2">
           <div className="flex items-center justify-between px-1 mb-2">
-            <h2 className="font-medium text-sm">Listado de asignaciones</h2>
+            <h2 className="font-medium text-sm">
+              {tt("activityAssignments.table.title", "Listado de asignaciones")}
+            </h2>
             {loading && (
-              <span className="text-xs text-gray-500">Cargando...</span>
+              <span className="text-xs text-gray-500">
+                {tt("activityAssignments.table.loading", "Cargando...")}
+              </span>
             )}
           </div>
 
@@ -419,11 +442,21 @@ export default function ActivityAssignmentsPage() {
             <table className="min-w-full text-xs md:text-sm border-collapse">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="border px-2 py-1 text-left">Persona</th>
-                  <th className="border px-2 py-1 text-left">Actividad</th>
-                  <th className="border px-2 py-1 text-left">Inicio</th>
-                  <th className="border px-2 py-1 text-left">Fin</th>
-                  <th className="border px-2 py-1 text-center">Acciones</th>
+                  <th className="border px-2 py-1 text-left">
+                    {tt("activityAssignments.table.person", "Persona")}
+                  </th>
+                  <th className="border px-2 py-1 text-left">
+                    {tt("activityAssignments.table.activity", "Actividad")}
+                  </th>
+                  <th className="border px-2 py-1 text-left">
+                    {tt("activityAssignments.table.start", "Inicio")}
+                  </th>
+                  <th className="border px-2 py-1 text-left">
+                    {tt("activityAssignments.table.end", "Fin")}
+                  </th>
+                  <th className="border px-2 py-1 text-center">
+                    {tt("activityAssignments.table.actions", "Acciones")}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -433,14 +466,14 @@ export default function ActivityAssignmentsPage() {
                       colSpan={5}
                       className="border px-2 py-3 text-center text-gray-500"
                     >
-                      No hay asignaciones para los filtros actuales.
+                      {tt("activityAssignments.table.empty", "No hay asignaciones para los filtros actuales.")}
                     </td>
                   </tr>
                 )}
 
                 {rows.map((row) => {
-                  const t = trackersById.get(row.tracker_user_id);
-                  const a = activitiesById.get(row.activity_id);
+                  const tracker = trackersById.get(row.tracker_user_id);
+                  const activity = activitiesById.get(row.activity_id);
                   return (
                     <tr
                       key={row.id}
@@ -451,11 +484,11 @@ export default function ActivityAssignmentsPage() {
                       onClick={() => handleSelectRow(row)}
                     >
                       <td className="border px-2 py-1">
-                        {t?.full_name || t?.email || row.tracker_user_id}
-                        {t?.email ? ` (${t.email})` : ""}
+                        {tracker?.full_name || tracker?.email || row.tracker_user_id}
+                        {tracker?.email ? ` (${tracker.email})` : ""}
                       </td>
                       <td className="border px-2 py-1">
-                        {a?.name || row.activity_id}
+                        {activity?.name || row.activity_id}
                       </td>
                       <td className="border px-2 py-1">
                         {row.start_date || "-"}
@@ -473,14 +506,14 @@ export default function ActivityAssignmentsPage() {
                             className="px-2 py-0.5 text-xs rounded border hover:bg-gray-100"
                             onClick={() => handleSelectRow(row)}
                           >
-                            Editar
+                            {tt("activityAssignments.actions.edit", "Editar")}
                           </button>
                           <button
                             type="button"
                             className="px-2 py-0.5 text-xs rounded bg-red-600 text-white hover:bg-red-700"
                             onClick={() => handleDelete(row)}
                           >
-                            Eliminar
+                            {tt("activityAssignments.actions.delete", "Eliminar")}
                           </button>
                         </div>
                       </td>
@@ -497,24 +530,24 @@ export default function ActivityAssignmentsPage() {
           <div className="flex items-center justify-between">
             <h2 className="font-medium text-sm">
               {mode === "create"
-                ? "Nueva asignaciÃ³n"
+                ? tt("activityAssignments.form.titleCreate", "Nueva asignación")
                 : mode === "edit"
-                ? "Editar asignaciÃ³n"
-                : "Detalles / nueva asignaciÃ³n"}
+                ? tt("activityAssignments.form.titleEdit", "Editar asignación")
+                : tt("activityAssignments.form.titleView", "Detalles / nueva asignación")}
             </h2>
             <button
               type="button"
               className="text-xs text-gray-600 hover:underline"
               onClick={resetForm}
             >
-              Limpiar
+              {tt("activityAssignments.actions.clear", "Limpiar")}
             </button>
           </div>
 
           <form className="space-y-3" onSubmit={handleSubmitForm}>
             <div className="flex flex-col">
               <label className="text-xs font-medium text-gray-700">
-                Persona / Tracker
+                {tt("activityAssignments.form.trackerPerson", "Persona / Tracker")}
               </label>
               <select
                 name="tracker_user_id"
@@ -523,10 +556,12 @@ export default function ActivityAssignmentsPage() {
                 className="border rounded px-2 py-1 text-sm"
                 required
               >
-                <option value="">Seleccione...</option>
-                {trackers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.full_name || t.email} ({t.email})
+                <option value="">
+                  {tt("activityAssignments.form.selectOption", "Seleccione...")}
+                </option>
+                {trackers.map((tracker) => (
+                  <option key={tracker.id} value={tracker.id}>
+                    {tracker.full_name || tracker.email} ({tracker.email})
                   </option>
                 ))}
               </select>
@@ -534,7 +569,7 @@ export default function ActivityAssignmentsPage() {
 
             <div className="flex flex-col">
               <label className="text-xs font-medium text-gray-700">
-                Actividad
+                {tt("activityAssignments.form.activity", "Actividad")}
               </label>
               <select
                 name="activity_id"
@@ -543,10 +578,12 @@ export default function ActivityAssignmentsPage() {
                 className="border rounded px-2 py-1 text-sm"
                 required
               >
-                <option value="">Seleccione...</option>
-                {activities.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
+                <option value="">
+                  {tt("activityAssignments.form.selectOption", "Seleccione...")}
+                </option>
+                {activities.map((activity) => (
+                  <option key={activity.id} value={activity.id}>
+                    {activity.name}
                   </option>
                 ))}
               </select>
@@ -555,7 +592,7 @@ export default function ActivityAssignmentsPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="flex flex-col">
                 <label className="text-xs font-medium text-gray-700">
-                  Fecha inicio
+                  {tt("activityAssignments.form.startDate", "Fecha inicio")}
                 </label>
                 <input
                   type="date"
@@ -569,7 +606,7 @@ export default function ActivityAssignmentsPage() {
 
               <div className="flex flex-col">
                 <label className="text-xs font-medium text-gray-700">
-                  Fecha fin (opcional)
+                  {tt("activityAssignments.form.endDateOptional", "Fecha fin (opcional)")}
                 </label>
                 <input
                   type="date"
@@ -588,7 +625,7 @@ export default function ActivityAssignmentsPage() {
                   className="px-3 py-1 rounded border text-sm hover:bg-gray-100"
                   onClick={handleNueva}
                 >
-                  Nueva
+                  {tt("activityAssignments.actions.newShort", "Nueva")}
                 </button>
               )}
               <button
@@ -597,10 +634,10 @@ export default function ActivityAssignmentsPage() {
                 className="px-3 py-1 rounded bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60"
               >
                 {loadingForm
-                  ? "Guardando..."
+                  ? tt("activityAssignments.actions.saving", "Guardando...")
                   : mode === "edit"
-                  ? "Guardar cambios"
-                  : "Crear asignaciÃ³n"}
+                  ? tt("activityAssignments.actions.saveChanges", "Guardar cambios")
+                  : tt("activityAssignments.actions.createAssignment", "Crear asignación")}
               </button>
             </div>
           </form>
@@ -609,4 +646,3 @@ export default function ActivityAssignmentsPage() {
     </div>
   );
 }
-
