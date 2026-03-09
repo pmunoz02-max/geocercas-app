@@ -1,12 +1,6 @@
-// src/pages/UpdatePassword.jsx
-// UPDATE-PASSWORD-UNIVERSAL-V3
-// Soporta 2 entradas:
-// A) Implicit recovery (legacy): /reset-password#access_token=...&refresh_token=...&type=recovery
-// B) token_hash (moderno):       /reset-password?token_hash=...&type=recovery   (verifyOtp)
-// Objetivo: garantizar sesión antes de supabase.auth.updateUser({ password })
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 
 function safeNextPath(next) {
@@ -28,20 +22,22 @@ function parseHashParams(hash) {
 
 function isStrongEnough(pw) {
   const s = String(pw || "");
-  // mantenemos mínimo 6 como tenías, pero mejor si es 8+ con letras/números
   return s.length >= 6;
 }
 
 export default function UpdatePassword() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t } = useTranslation();
+
+  const tt = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
 
   const rpNext = useMemo(() => {
     const sp = new URLSearchParams(location.search || "");
     return safeNextPath(sp.get("rp_next") || sp.get("next") || "/inicio");
   }, [location.search]);
 
-  // token_hash flow (moderno)
   const token_hash = useMemo(() => {
     const sp = new URLSearchParams(location.search || "");
     return sp.get("token_hash") || "";
@@ -58,7 +54,7 @@ export default function UpdatePassword() {
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [msg, setMsg] = useState(null); // { type, text }
+  const [msg, setMsg] = useState(null);
 
   const inputClass =
     "w-full rounded-xl border px-3 py-2 outline-none focus:ring " +
@@ -73,7 +69,6 @@ export default function UpdatePassword() {
       setMsg(null);
 
       try {
-        // 0) Si ya hay sesión, listo
         const {
           data: { session: s0 },
         } = await supabase.auth.getSession();
@@ -83,12 +78,14 @@ export default function UpdatePassword() {
           return;
         }
 
-        // 1) Caso A: hash implicit recovery (legacy)
         const h = parseHashParams(window.location.hash || "");
         if (h.error) {
           setMsg({
             type: "error",
-            text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+            text: tt(
+              "resetPassword.invalidOrExpired",
+              "The recovery link is invalid or expired. Request a new one."
+            ),
           });
           return;
         }
@@ -104,13 +101,14 @@ export default function UpdatePassword() {
           if (error) {
             setMsg({
               type: "error",
-              text:
-                "No se pudo iniciar sesión de recuperación. Genera un link nuevo e inténtalo en incógnito.",
+              text: tt(
+                "resetPassword.unexpected",
+                "An error occurred while preparing the password reset."
+              ),
             });
             return;
           }
 
-          // limpia hash (opcional)
           try {
             window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
           } catch {}
@@ -119,7 +117,6 @@ export default function UpdatePassword() {
           return;
         }
 
-        // 2) Caso B: token_hash (moderno)
         if (token_hash) {
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash,
@@ -131,7 +128,10 @@ export default function UpdatePassword() {
           if (error || !data?.session?.user?.id) {
             setMsg({
               type: "error",
-              text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+              text: tt(
+                "resetPassword.invalidOrExpired",
+                "The recovery link is invalid or expired. Request a new one."
+              ),
             });
             return;
           }
@@ -140,14 +140,19 @@ export default function UpdatePassword() {
           return;
         }
 
-        // 3) Nada que procesar
         setMsg({
           type: "error",
-          text: "No hay sesión de recuperación. Solicita un nuevo link de recuperación.",
+          text: tt(
+            "resetPassword.noSession",
+            "There is no valid session to reset the password. Request a new one."
+          ),
         });
       } catch (e) {
         if (cancelled) return;
-        setMsg({ type: "error", text: e?.message || "Error inesperado." });
+        setMsg({
+          type: "error",
+          text: e?.message || tt("resetPassword.unexpected", "An error occurred while preparing the password reset."),
+        });
       } finally {
         if (!cancelled) setChecking(false);
       }
@@ -157,25 +162,31 @@ export default function UpdatePassword() {
     return () => {
       cancelled = true;
     };
-  }, [token_hash, type_q]);
+  }, [token_hash, type_q, t]);
 
   async function handleUpdate(e) {
     e.preventDefault();
     setMsg(null);
 
     if (!isStrongEnough(password)) {
-      setMsg({ type: "error", text: "La contraseña debe tener al menos 6 caracteres." });
+      setMsg({
+        type: "error",
+        text: tt("resetPassword.passwordMin", "Password must be at least 8 characters."),
+      });
       return;
     }
+
     if (password !== password2) {
-      setMsg({ type: "error", text: "Las contraseñas no coinciden." });
+      setMsg({
+        type: "error",
+        text: tt("resetPassword.passwordMismatch", "Passwords do not match."),
+      });
       return;
     }
 
     try {
       setSubmitting(true);
 
-      // asegura sesión antes de updateUser
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -183,8 +194,10 @@ export default function UpdatePassword() {
       if (!session?.user?.id) {
         setMsg({
           type: "error",
-          text:
-            "No hay sesión activa para cambiar la contraseña. Abre el link de recuperación nuevamente o genera uno nuevo.",
+          text: tt(
+            "resetPassword.noSession",
+            "There is no valid session to reset the password. Request a new one."
+          ),
         });
         return;
       }
@@ -192,13 +205,21 @@ export default function UpdatePassword() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 
-      setMsg({ type: "success", text: "✅ Contraseña actualizada. Entrando..." });
+      setMsg({
+        type: "success",
+        text: tt(
+          "resetPassword.success",
+          "Password updated successfully. You can now log in."
+        ),
+      });
 
-      // Por seguridad, cerramos sesión recovery y volvemos a login o next
       await supabase.auth.signOut().catch(() => {});
       setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e2) {
-      setMsg({ type: "error", text: e2?.message || "No se pudo actualizar la contraseña" });
+      setMsg({
+        type: "error",
+        text: e2?.message || tt("resetPassword.updateFailed", "Could not update the password. Try again."),
+      });
     } finally {
       setSubmitting(false);
     }
@@ -214,11 +235,13 @@ export default function UpdatePassword() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 bg-slate-50">
       <div className="w-full max-w-md rounded-2xl border bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-gray-900">Actualizar contraseña</h2>
+        <h2 className="text-xl font-semibold text-gray-900">
+          {tt("resetPassword.title", "Reset password")}
+        </h2>
 
         {checking ? (
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            Verificando link…
+            {tt("resetPassword.loading", "Preparing recovery link…")}
           </div>
         ) : msg ? (
           <div className={`mt-4 rounded-xl border p-3 text-sm ${boxClass}`}>{msg.text}</div>
@@ -231,13 +254,15 @@ export default function UpdatePassword() {
               className="w-full rounded-xl border px-4 py-2 text-gray-900 bg-white"
               onClick={() => navigate("/login", { replace: true })}
             >
-              Volver a Login
+              {tt("resetPassword.backToLogin", "Back to login")}
             </button>
           </div>
         ) : (
           <form onSubmit={handleUpdate} className="mt-6 space-y-4">
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-900">Nueva contraseña</label>
+              <label className="block text-sm font-medium text-gray-900">
+                {tt("resetPassword.newPassword", "New password")}
+              </label>
               <input
                 className={inputClass}
                 type="password"
@@ -245,13 +270,15 @@ export default function UpdatePassword() {
                 onChange={(e) => setPassword(e.target.value)}
                 minLength={6}
                 required
-                placeholder="••••••••"
+                placeholder={tt("resetPassword.newPasswordPlaceholder", "Minimum 8 characters")}
                 autoComplete="new-password"
               />
             </div>
 
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-900">Confirmar contraseña</label>
+              <label className="block text-sm font-medium text-gray-900">
+                {tt("resetPassword.confirmPassword", "Confirm password")}
+              </label>
               <input
                 className={inputClass}
                 type="password"
@@ -259,7 +286,7 @@ export default function UpdatePassword() {
                 onChange={(e) => setPassword2(e.target.value)}
                 minLength={6}
                 required
-                placeholder="••••••••"
+                placeholder={tt("resetPassword.confirmPlaceholder", "Repeat")}
                 autoComplete="new-password"
               />
             </div>
@@ -271,7 +298,9 @@ export default function UpdatePassword() {
               disabled={submitting}
               className="w-full rounded-xl bg-black px-4 py-2 text-white disabled:opacity-60"
             >
-              {submitting ? "Actualizando…" : "Guardar"}
+              {submitting
+                ? tt("resetPassword.saving", "Saving…")
+                : tt("resetPassword.saveButton", "Save new password")}
             </button>
 
             <button
@@ -279,7 +308,7 @@ export default function UpdatePassword() {
               className="w-full rounded-xl border px-4 py-2 text-gray-900 bg-white"
               onClick={() => navigate("/login", { replace: true })}
             >
-              Volver a Login
+              {tt("resetPassword.backToLogin", "Back to login")}
             </button>
           </form>
         )}
