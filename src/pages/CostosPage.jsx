@@ -51,14 +51,14 @@ function formatDateTime(value) {
  * Normaliza las fechas de filtro (inputs type="date") a un rango de
  * timestamptz ISO listo para enviar a Supabase.
  *
- * - fromDateStr â†’ YYYY-MM-DD â†’ fromIso = ese dÃ­a a las 00:00:00
- * - toDateStr   â†’ YYYY-MM-DD â†’ toIsoExclusive = dÃ­a siguiente a las 00:00:00
+ * - fromDateStr → YYYY-MM-DD → fromIso = ese día a las 00:00:00
+ * - toDateStr   → YYYY-MM-DD → toIsoExclusive = día siguiente a las 00:00:00
  *
  * El rango se aplica como:
  *   start_time >= fromIso
  *   start_time  < toIsoExclusive
  *
- * De esta forma se incluye TODO el dÃ­a "Hasta" completo.
+ * De esta forma se incluye TODO el día "Hasta" completo.
  */
 function buildDateRange(fromDateStr, toDateStr) {
   let fromIso = null;
@@ -74,7 +74,7 @@ function buildDateRange(fromDateStr, toDateStr) {
   if (toDateStr) {
     const d = new Date(toDateStr + "T00:00:00");
     if (!Number.isNaN(d.getTime())) {
-      d.setDate(d.getDate() + 1); // dÃ­a siguiente a las 00:00
+      d.setDate(d.getDate() + 1);
       toIsoExclusive = d.toISOString();
     }
   }
@@ -85,13 +85,9 @@ function buildDateRange(fromDateStr, toDateStr) {
 const CostosPage = () => {
   const { currentOrg, role: authRole } = useAuth();
   const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
 
-  /**
-   * âœ… FIX PERMANENTE
-   * La fuente canÃ³nica del rol es AuthContext (lo mismo que el header).
-   * useModuleAccess queda como "fallback" por compatibilidad,
-   * pero nunca debe bloquear a un owner/admin si AuthContext ya lo sabe.
-   */
   const {
     role: moduleRole,
     canView: moduleCanView,
@@ -104,29 +100,25 @@ const CostosPage = () => {
       ? true
       : Boolean(moduleCanView);
 
-  // Filtros
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
   const [selectedActividadId, setSelectedActividadId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
 
-  // Datos para combos
   const [personas, setPersonas] = useState([]);
   const [actividades, setActividades] = useState([]);
   const [geocercas, setGeocercas] = useState([]);
 
-  // Filas detalladas del reporte
   const [rows, setRows] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [loadingFilters, setLoadingFilters] = useState(false);
   const [error, setError] = useState("");
 
-  // EXPORTAR CSV
   const handleExportCSV = () => {
     if (!rows || rows.length === 0) {
-      alert(t("reportes.exportNoData"));
+      window.alert(t("reportes.exportNoData"));
       return;
     }
 
@@ -173,7 +165,6 @@ const CostosPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Cargar combos bÃ¡sicos (personas, actividades, geocercas)
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
 
@@ -182,7 +173,6 @@ const CostosPage = () => {
       setError("");
 
       try {
-        // Personas
         const { data: personasData, error: personasErr } = await supabase
           .from("personal")
           .select("id, nombre, email")
@@ -192,7 +182,6 @@ const CostosPage = () => {
 
         if (personasErr) throw personasErr;
 
-        // Actividades
         const { data: actData, error: actErr } = await supabase
           .from("activities")
           .select("id, name")
@@ -202,7 +191,6 @@ const CostosPage = () => {
 
         if (actErr) throw actErr;
 
-        // Geocercas
         const { data: geoData, error: geoErr } = await supabase
           .from("geocercas")
           .select("id, nombre")
@@ -225,7 +213,6 @@ const CostosPage = () => {
     loadFilters();
   }, [currentOrg?.id, canView, t]);
 
-  // Cargar reporte principal
   const fetchReport = async () => {
     if (!currentOrg?.id || !canView) return;
 
@@ -233,7 +220,6 @@ const CostosPage = () => {
     setError("");
 
     try {
-      // ValidaciÃ³n sencilla de rango
       if (fromDate && toDate && fromDate > toDate) {
         setRows([]);
         setError(t("reportes.errorRangeInvalid"));
@@ -263,7 +249,6 @@ const CostosPage = () => {
         )
         .eq("org_id", currentOrg.id);
 
-      // Rango de fechas normalizado sobre start_time
       const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
 
       if (fromIso) {
@@ -273,7 +258,6 @@ const CostosPage = () => {
         query = query.lt("start_time", toIsoExclusive);
       }
 
-      // Aplicar filtros de persona / actividad / geocerca
       if (selectedPersonaId && selectedPersonaId !== emptyOption.value) {
         query = query.eq("personal_id", selectedPersonaId);
       }
@@ -289,7 +273,7 @@ const CostosPage = () => {
       if (dataErr) {
         if (status === 404) {
           console.warn(
-            "[CostosPage] La vista v_costos_detalle no existe aÃºn en Supabase."
+            "[CostosPage] La vista v_costos_detalle no existe aún en Supabase."
           );
           setRows([]);
           setError(t("reportes.errorViewMissing"));
@@ -307,14 +291,12 @@ const CostosPage = () => {
     }
   };
 
-  // Carga inicial automÃ¡tica
   useEffect(() => {
     if (!currentOrg?.id || !canView) return;
     fetchReport();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentOrg?.id, canView]);
 
-  // === RESÃšMENES NUMÃ‰RICOS ===
   const resumenMoneda = useMemo(() => summarizeByCurrency(rows || []), [rows]);
 
   const totalGlobal = useMemo(() => {
@@ -329,8 +311,6 @@ const CostosPage = () => {
     return { totalCost, totalHours };
   }, [rows]);
 
-  // Si el hook aÃºn estÃ¡ resolviendo el rol (fallback), mostramos un estado de carga
-  // OJO: si AuthContext ya trae role owner/admin, NO esperamos este loading.
   const shouldShowLoadingPermissions =
     Boolean(loadingAccess) && !authRole && !moduleRole;
 
@@ -339,20 +319,20 @@ const CostosPage = () => {
       <div className="p-4">
         <h1 className="text-xl font-semibold mb-2">{t("reportes.title")}</h1>
         <p className="text-sm text-gray-600">
-          {t("reportes.loadingPermissions") || "Cargando permisosâ€¦"}
+          {t("reportes.loadingPermissions") || "Loading permissions…"}
         </p>
       </div>
     );
   }
 
-  // Sin permisos (una vez que ya sabemos el rol efectivo)
   if (!canView) {
     return (
       <div className="p-4">
         <h1 className="text-xl font-semibold mb-2">{t("reportes.title")}</h1>
         <p className="text-sm text-gray-600">{t("reportes.noAccessBody")}</p>
         <p className="mt-2 text-xs text-gray-400">
-          (Rol actual: {effectiveRole || "sin rol"})
+          ({tr("reportes.currentRole", "Current role")}:{" "}
+          {effectiveRole || tr("reportes.noRole", "no role")})
         </p>
       </div>
     );
@@ -360,7 +340,6 @@ const CostosPage = () => {
 
   return (
     <div className="p-4 space-y-4">
-      {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("reportes.title")}</h1>
@@ -373,13 +352,11 @@ const CostosPage = () => {
         )}
       </div>
 
-      {/* Filtros */}
       <div className="bg-white rounded-xl shadow p-4 space-y-3">
         <h2 className="text-sm font-semibold text-gray-700 mb-1">
           {t("reportes.filtersTitle")}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          {/* Fecha desde */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
               {t("reportes.filtersFrom")}
@@ -392,7 +369,6 @@ const CostosPage = () => {
             />
           </div>
 
-          {/* Fecha hasta */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
               {t("reportes.filtersTo")}
@@ -405,7 +381,6 @@ const CostosPage = () => {
             />
           </div>
 
-          {/* Persona */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
               {t("reportes.filtersPerson")}
@@ -425,7 +400,6 @@ const CostosPage = () => {
             </select>
           </div>
 
-          {/* Actividad */}
           <div className="flex flex-col">
             <label className="text-xs font-medium text-gray-600 mb-1">
               {t("reportes.filtersActivity")}
@@ -445,7 +419,6 @@ const CostosPage = () => {
             </select>
           </div>
 
-          {/* Geocerca */}
           <div className="flex flex-col md:col-span-2">
             <label className="text-xs font-medium text-gray-600 mb-1">
               {t("reportes.filtersGeofence")}
@@ -501,7 +474,6 @@ const CostosPage = () => {
         )}
       </div>
 
-      {/* Tarjetas resumen generales */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="bg-white rounded-xl shadow p-3 flex flex-col">
           <span className="text-xs text-gray-500 uppercase tracking-wide">
@@ -538,7 +510,6 @@ const CostosPage = () => {
         </div>
       </div>
 
-      {/* Tabla detallada + botÃ³n exportar */}
       <div className="bg-white rounded-xl shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">
@@ -654,4 +625,3 @@ const CostosPage = () => {
 };
 
 export default CostosPage;
-
