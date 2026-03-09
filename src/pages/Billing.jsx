@@ -1,6 +1,7 @@
 // src/pages/Billing.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton.jsx";
@@ -28,19 +29,23 @@ function labelPlan(planCode) {
   return v.toUpperCase();
 }
 
-function labelStatus(planStatus) {
+function labelStatus(planStatus, t) {
   const v = String(planStatus || "free").toLowerCase();
 
-  if (v === "trialing") return "Trial";
-  if (v === "active") return "Activo";
-  if (v === "past_due") return "Pago pendiente";
-  if (v === "canceled") return "Cancelado";
-  if (v === "free") return "Free";
+  if (v === "trialing") return t("billing.status.trialing", { defaultValue: "Trial" });
+  if (v === "active") return t("billing.status.active", { defaultValue: "Active" });
+  if (v === "past_due") return t("billing.status.pastDue", { defaultValue: "Past due" });
+  if (v === "canceled") return t("billing.status.canceled", { defaultValue: "Canceled" });
+  if (v === "free") return t("billing.status.free", { defaultValue: "Free" });
 
   return v;
 }
 
 export default function Billing() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { loading, ready, authenticated, user, currentOrgId } = useAuth();
 
   const [billing, setBilling] = useState(null);
@@ -97,7 +102,10 @@ export default function Billing() {
       } catch (err) {
         if (!cancelled) {
           setBilling(null);
-          setBillingError(err?.message || "No se pudo cargar el estado del plan.");
+          setBillingError(
+            err?.message ||
+              tr("billing.errors.loadPlanStatus", "Could not load the plan status.")
+          );
         }
       } finally {
         if (!cancelled) {
@@ -142,9 +150,11 @@ export default function Billing() {
     return (
       <div className="max-w-3xl mx-auto px-6 py-10">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-          <h1 className="text-xl font-semibold text-slate-900">Billing</h1>
+          <h1 className="text-xl font-semibold text-slate-900">
+            {tr("billing.title", "Billing")}
+          </h1>
           <p className="mt-2 text-slate-600">
-            Inicia sesión para administrar tu plan.
+            {tr("billing.authRequired", "Sign in to manage your plan.")}
           </p>
         </div>
       </div>
@@ -156,9 +166,13 @@ export default function Billing() {
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Billing</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">
+              {tr("billing.title", "Billing")}
+            </h1>
             <p className="mt-2 text-slate-600">
-              Monetización en <b>PREVIEW</b> (Stripe TEST). No afecta producción.
+              {tr("billing.previewNotice.prefix", "Monetization in")} <b>PREVIEW</b>{" "}
+              {tr("billing.previewNotice.middle", "(Stripe TEST).")}{" "}
+              {tr("billing.previewNotice.suffix", "It does not affect production.")}
             </p>
           </div>
 
@@ -167,27 +181,31 @@ export default function Billing() {
               to="/pricing"
               className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
             >
-              Ver planes
+              {tr("billing.actions.viewPlans", "View plans")}
             </Link>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
           <div>
-            <b>Email:</b> {user.email}
+            <b>{tr("billing.labels.email", "Email")}:</b> {user.email}
           </div>
           <div>
-            <b>Org ID:</b>{" "}
+            <b>{tr("billing.labels.orgId", "Org ID")}:</b>{" "}
             <span className="font-mono break-all">{currentOrgId || "—"}</span>
           </div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-slate-900">Estado del plan</h2>
+        <h2 className="text-lg font-semibold text-slate-900">
+          {tr("billing.planState.title", "Plan status")}
+        </h2>
 
         {billingLoading ? (
-          <p className="mt-3 text-sm text-slate-600">Cargando estado del plan...</p>
+          <p className="mt-3 text-sm text-slate-600">
+            {tr("billing.states.loadingPlanStatus", "Loading plan status...")}
+          </p>
         ) : billingError ? (
           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             {billingError}
@@ -197,7 +215,7 @@ export default function Billing() {
             <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Plan actual
+                  {tr("billing.cards.currentPlan", "Current plan")}
                 </div>
                 <div className="mt-1 text-lg font-semibold text-slate-900">
                   {labelPlan(effectivePlanCode)}
@@ -206,16 +224,16 @@ export default function Billing() {
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Estado
+                  {tr("billing.cards.status", "Status")}
                 </div>
                 <div className="mt-1 text-lg font-semibold text-slate-900">
-                  {labelStatus(effectivePlanStatus)}
+                  {labelStatus(effectivePlanStatus, t)}
                 </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Trial hasta
+                  {tr("billing.cards.trialUntil", "Trial until")}
                 </div>
                 <div className="mt-1 text-base font-medium text-slate-900">
                   {formatDate(billing?.trial_ends_at)}
@@ -224,7 +242,7 @@ export default function Billing() {
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs uppercase tracking-wide text-slate-500">
-                  Período actual hasta
+                  {tr("billing.cards.currentPeriodUntil", "Current period until")}
                 </div>
                 <div className="mt-1 text-base font-medium text-slate-900">
                   {formatDate(billing?.current_period_end)}
@@ -235,10 +253,13 @@ export default function Billing() {
             {shouldShowManageButton ? (
               <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-sm font-semibold text-slate-900">
-                  Gestión de suscripción
+                  {tr("billing.subscriptionManagement.title", "Subscription management")}
                 </div>
                 <p className="mt-1 text-sm text-slate-600">
-                  Abre Stripe Customer Portal para actualizar tarjeta, cancelar o revisar tu suscripción.
+                  {tr(
+                    "billing.subscriptionManagement.description",
+                    "Open Stripe Customer Portal to update your card, cancel, or review your subscription."
+                  )}
                 </p>
 
                 <div className="mt-4">
@@ -255,7 +276,10 @@ export default function Billing() {
 
         {!billingLoading && !billingError && billing?.cancel_at_period_end ? (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            Tu suscripción está configurada para cancelarse al final del período actual.
+            {tr(
+              "billing.messages.cancelAtPeriodEnd",
+              "Your subscription is set to cancel at the end of the current period."
+            )}
           </div>
         ) : null}
       </div>
@@ -269,24 +293,33 @@ export default function Billing() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-sm font-semibold text-slate-900">
-              ¿Quieres comparar antes de subir de plan?
+              {tr(
+                "billing.compareBeforeUpgrade.title",
+                "Do you want to compare before upgrading?"
+              )}
             </div>
             <p className="mt-1 text-sm text-slate-600">
-              Revisa la página de planes para comparar Free, Pro y Enterprise.
+              {tr(
+                "billing.compareBeforeUpgrade.description",
+                "Review the plans page to compare Free, Pro, and Enterprise."
+              )}
             </p>
             <div className="mt-4">
               <Link
                 to="/pricing"
                 className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
               >
-                Ver planes
+                {tr("billing.actions.viewPlans", "View plans")}
               </Link>
             </div>
           </div>
         </div>
       ) : (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-sm text-emerald-800">
-          Ya existe un plan activo para esta organización. No se muestra el botón de upgrade.
+          {tr(
+            "billing.messages.activePlanExists",
+            "There is already an active plan for this organization. The upgrade button is not shown."
+          )}
         </div>
       )}
     </div>
