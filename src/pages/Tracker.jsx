@@ -1,5 +1,6 @@
 ﻿// src/pages/Tracker.jsx
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 
@@ -12,6 +13,10 @@ import {
 const MIN_INTERVAL_SEC = 5 * 60; // 5 minutos
 
 export default function Tracker() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { user } = useAuth();
 
   const [isReady, setIsReady] = useState(false);
@@ -20,7 +25,9 @@ export default function Tracker() {
     typeof navigator !== "undefined" ? navigator.onLine : true
   );
   const [intervalSec, setIntervalSec] = useState(MIN_INTERVAL_SEC);
-  const [statusMessage, setStatusMessage] = useState("Preparando tracker...");
+  const [statusMessage, setStatusMessage] = useState(
+    tr("tracker.messages.preparing", "Preparing tracker...")
+  );
   const [queueInfo, setQueueInfo] = useState({
     pending: 0,
     lastSentAt: null,
@@ -30,9 +37,6 @@ export default function Tracker() {
   const flushTimerRef = useRef(null);
   const lastFlushTsRef = useRef(0);
 
-  // ==============================
-  // Stats simples de la cola
-  // ==============================
   async function updateQueueInfo() {
     try {
       const stats = await getQueueStats();
@@ -45,9 +49,6 @@ export default function Tracker() {
     }
   }
 
-  // ==============================
-  // Llamada directa a Edge Function send_position
-  // ==============================
   async function sendPositionEdge(payload) {
     try {
       const { data, error } = await supabase.functions.invoke("send_position", {
@@ -58,38 +59,50 @@ export default function Tracker() {
         console.error("[send_position] error invoke:", error);
         return {
           ok: false,
-          error: error.message || "Error llamando a send_position",
+          error:
+            error.message ||
+            tr("tracker.errors.callSendPosition", "Error calling send_position"),
         };
       }
 
-      return data; // { ok, stored, reason, min_interval_ms, ... }
+      return data;
     } catch (err) {
       console.error("[send_position] exception:", err);
       return {
         ok: false,
-        error: err?.message || "Error de red al llamar a send_position",
+        error:
+          err?.message ||
+          tr("tracker.errors.networkSendPosition", "Network error calling send_position"),
       };
     }
   }
 
-  // ==============================
-  // Enviar cola usando flushQueueCore
-  // ==============================
   async function flushQueue(reason = "auto") {
     try {
       if (!isOnline) {
         setStatusMessage(
-          `Sin conexiÃ³n. Cola pendiente: ${queueInfo.pending} (motivo: ${reason})`
+          tr(
+            "tracker.messages.offlineQueuePending",
+            "No connection. Pending queue: {{count}} (reason: {{reason}})",
+            {
+              count: queueInfo.pending,
+              reason,
+            }
+          )
         );
         return;
       }
 
-      setStatusMessage(`Enviando cola (${reason})...`);
+      setStatusMessage(
+        tr("tracker.messages.sendingQueue", "Sending queue ({{reason}})...", {
+          reason,
+        })
+      );
 
       await flushQueueCore(async (item) => {
         const res = await sendPositionEdge(item);
         if (!res.ok) {
-          throw new Error(res.error || "Error en send_position");
+          throw new Error(res.error || tr("tracker.errors.sendPosition", "Error in send_position"));
         }
         return res;
       });
@@ -98,17 +111,21 @@ export default function Tracker() {
       await updateQueueInfo();
 
       setStatusMessage(
-        `Cola enviada. Pendientes: ${queueInfo.pending ?? 0}`
+        tr("tracker.messages.queueSent", "Queue sent. Pending: {{count}}", {
+          count: queueInfo.pending ?? 0,
+        })
       );
     } catch (err) {
       console.error("Error enviando cola:", err);
-      setStatusMessage("Error al enviar cola. Se reintentarÃ¡ automÃ¡ticamente.");
+      setStatusMessage(
+        tr(
+          "tracker.errors.flushQueue",
+          "Error sending queue. It will retry automatically."
+        )
+      );
     }
   }
 
-  // ==============================
-  // Cargar intervalo configurado
-  // ==============================
   async function loadTrackerInterval() {
     try {
       if (!user) return;
@@ -136,25 +153,29 @@ export default function Tracker() {
 
       setIntervalSec(baseIntervalSec);
       setStatusMessage(
-        `Tracker listo. Intervalo: ${Math.round(baseIntervalSec / 60)} min`
+        tr("tracker.messages.readyWithInterval", "Tracker ready. Interval: {{minutes}} min", {
+          minutes: Math.round(baseIntervalSec / 60),
+        })
       );
     } catch (err) {
       console.error("Error leyendo intervalo:", err);
       setIntervalSec(MIN_INTERVAL_SEC);
       setStatusMessage(
-        "No se pudo leer configuraciÃ³n. Usando 5 min por defecto."
+        tr(
+          "tracker.messages.defaultInterval",
+          "Could not read configuration. Using default 5 min."
+        )
       );
     } finally {
       setIsReady(true);
     }
   }
 
-  // ==============================
-  // GeolocalizaciÃ³n
-  // ==============================
   function startWatch() {
     if (!("geolocation" in navigator)) {
-      setStatusMessage("GeolocalizaciÃ³n no soportada.");
+      setStatusMessage(
+        tr("tracker.errors.geolocationUnsupported", "Geolocation is not supported.")
+      );
       return;
     }
 
@@ -172,14 +193,23 @@ export default function Tracker() {
           await updateQueueInfo();
 
           setStatusMessage(
-            `PosiciÃ³n encolada: ${payload.lat.toFixed(
-              6
-            )}, ${payload.lng.toFixed(6)}`
+            tr(
+              "tracker.messages.positionQueued",
+              "Queued position: {{lat}}, {{lng}}",
+              {
+                lat: payload.lat.toFixed(6),
+                lng: payload.lng.toFixed(6),
+              }
+            )
           );
         },
         (err) => {
           console.error("Error GPS:", err);
-          setStatusMessage(`Error GPS: ${err.message}`);
+          setStatusMessage(
+            tr("tracker.errors.gps", "GPS error: {{message}}", {
+              message: err.message,
+            })
+          );
         },
         {
           enableHighAccuracy: true,
@@ -191,7 +221,9 @@ export default function Tracker() {
       watchIdRef.current = id;
     } catch (err) {
       console.error("Error iniciando watchPosition:", err);
-      setStatusMessage("No se pudo iniciar la geolocalizaciÃ³n.");
+      setStatusMessage(
+        tr("tracker.errors.startGeolocation", "Could not start geolocation.")
+      );
     }
   }
 
@@ -206,27 +238,22 @@ export default function Tracker() {
     watchIdRef.current = null;
   }
 
-  // ==============================
-  // Efectos
-  // ==============================
-
-  // Cargar intervalo desde BD
   useEffect(() => {
     loadTrackerInterval();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Activar tracking automÃ¡tico cuando estÃ¡ listo
   useEffect(() => {
     if (!isReady) return;
     if (!user) {
-      setStatusMessage("No hay usuario autenticado.");
+      setStatusMessage(
+        tr("tracker.errors.noAuthenticatedUser", "There is no authenticated user.")
+      );
       return;
     }
     setIsTracking(true);
-  }, [isReady, user]);
+  }, [isReady, user, t]);
 
-  // Cuando tracking estÃ¡ activo: GPS + timer de flush
   useEffect(() => {
     if (!isTracking) {
       stopWatch();
@@ -249,7 +276,6 @@ export default function Tracker() {
       }
     }, ms / 2);
 
-    // Primer intento suave al arrancar
     flushQueue("start");
 
     return () => {
@@ -262,17 +288,20 @@ export default function Tracker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTracking, intervalSec]);
 
-  // Eventos online/offline
   useEffect(() => {
     function handleOnline() {
       setIsOnline(true);
-      setStatusMessage("ConexiÃ³n restaurada. Enviando cola...");
+      setStatusMessage(
+        tr("tracker.messages.connectionRestored", "Connection restored. Sending queue...")
+      );
       flushQueue("online");
     }
 
     function handleOffline() {
       setIsOnline(false);
-      setStatusMessage("Sin conexiÃ³n. Encolando posiciones...");
+      setStatusMessage(
+        tr("tracker.messages.offlineQueueing", "No connection. Queueing positions...")
+      );
     }
 
     window.addEventListener("online", handleOnline);
@@ -283,23 +312,26 @@ export default function Tracker() {
       window.removeEventListener("offline", handleOffline);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [t]);
 
-  // ==============================
-  // Render
-  // ==============================
-  const onlineLabel = isOnline ? "Online" : "Offline";
+  const onlineLabel = isOnline
+    ? tr("tracker.labels.online", "Online")
+    : tr("tracker.labels.offline", "Offline");
+
   const onlineBadgeClass = isOnline
     ? "bg-green-100 text-green-800"
     : "bg-red-100 text-red-800";
 
   return (
     <div className="max-w-xl mx-auto p-4">
-      <h1 className="text-xl font-semibold mb-3">Tracker</h1>
+      <h1 className="text-xl font-semibold mb-3">
+        {tr("tracker.title", "Tracker")}
+      </h1>
 
       {user && (
         <p className="text-sm text-gray-600 mb-2">
-          Usuario: <span className="font-mono">{user.email}</span>
+          {tr("tracker.labels.user", "User")}:{" "}
+          <span className="font-mono">{user.email}</span>
         </p>
       )}
 
@@ -311,7 +343,9 @@ export default function Tracker() {
             {onlineLabel}
           </span>
           <span className="text-xs text-gray-500">
-            Intervalo: {Math.round(intervalSec / 60)} min (mÃ­n. 5 min)
+            {tr("tracker.labels.interval", "Interval")}: {Math.round(intervalSec / 60)}{" "}
+            {tr("tracker.labels.minutes", "min")} (
+            {tr("tracker.labels.minimum", "min. 5 min")})
           </span>
         </div>
 
@@ -319,22 +353,25 @@ export default function Tracker() {
 
         <div className="text-xs text-gray-500 space-y-1">
           <p>
-            <strong>En cola:</strong> {queueInfo.pending ?? 0} posiciones
+            <strong>{tr("tracker.labels.inQueue", "In queue")}:</strong>{" "}
+            {queueInfo.pending ?? 0} {tr("tracker.labels.positions", "positions")}
           </p>
+
           {queueInfo.lastSentAt && (
             <p>
-              <strong>Ãšltimo envÃ­o:</strong>{" "}
+              <strong>{tr("tracker.labels.lastSent", "Last sent")}:</strong>{" "}
               {new Date(queueInfo.lastSentAt).toLocaleString()}
             </p>
           )}
+
           <p className="mt-2">
-            Tracking automÃ¡tico. Las posiciones se envÃ­an al servidor cuando hay
-            seÃ±al. El backend solo guarda los puntos que caen dentro de tus
-            geocercas asignadas.
+            {tr(
+              "tracker.description",
+              "Automatic tracking. Positions are sent to the server when there is signal. The backend only stores points that fall inside your assigned geofences."
+            )}
           </p>
         </div>
       </div>
     </div>
   );
 }
-
