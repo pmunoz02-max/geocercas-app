@@ -34,7 +34,8 @@ export default function Reports() {
   const { t } = useTranslation();
   const { ready, authenticated, currentOrg } = useAuth();
 
-  const tr = (key, fallback, options = {}) => t(key, { defaultValue: fallback, ...options });
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
 
   const [errorMsg, setErrorMsg] = useState("");
   const [loadingFilters, setLoadingFilters] = useState(false);
@@ -117,7 +118,9 @@ export default function Reports() {
       });
     } catch (e) {
       console.error("[Reports] loadFilters:", e);
-      setErrorMsg(e?.message || tr("reports.errors.loadFilters", "Error loading filters."));
+      setErrorMsg(
+        e?.message || tr("reports.errors.loadFilters", "Error loading filters.")
+      );
       setFilters({ geocercas: [], personas: [], activities: [], asignaciones: [] });
     } finally {
       setLoadingFilters(false);
@@ -131,11 +134,21 @@ export default function Reports() {
 
     try {
       if (!canRun) {
-        setErrorMsg(tr("reports.errors.noActiveOrgOrSession", "There is no active organization or the session is not ready."));
+        setErrorMsg(
+          tr(
+            "reports.errors.noActiveOrgOrSession",
+            "There is no active organization or the session is not ready."
+          )
+        );
         return;
       }
       if (start && end && start > end) {
-        setErrorMsg(tr("reports.errors.invalidDateRange", 'The "From" date cannot be later than the "To" date.'));
+        setErrorMsg(
+          tr(
+            "reports.errors.invalidDateRange",
+            'The "From" date cannot be later than the "To" date.'
+          )
+        );
         return;
       }
 
@@ -156,7 +169,9 @@ export default function Reports() {
       setRows(Array.isArray(json?.data) ? json.data : []);
     } catch (e) {
       console.error("[Reports] loadReport:", e);
-      setErrorMsg(e?.message || tr("reports.errors.generateReport", "Error generating report."));
+      setErrorMsg(
+        e?.message || tr("reports.errors.generateReport", "Error generating report.")
+      );
     } finally {
       setLoadingReport(false);
     }
@@ -218,10 +233,14 @@ export default function Reports() {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-gray-900">{tr("reports.title", "Reports")}</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {tr("reports.title", "Reports")}
+        </h1>
         <p className="text-xs text-gray-600">
-          {tr("reports.labels.currentOrg", "Current org")}: {" "}
-          <span className="font-medium text-gray-900">{currentOrg?.name || currentOrg?.id}</span>
+          {tr("reports.labels.currentOrg", "Current org")}:{" "}
+          <span className="font-medium text-gray-900">
+            {currentOrg?.name || currentOrg?.id}
+          </span>
         </p>
       </div>
 
@@ -236,10 +255,15 @@ export default function Reports() {
           <div className="border-b border-gray-100 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">{tr("reports.sections.filters", "Filters")}</h2>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {tr("reports.sections.filters", "Filters")}
+                </h2>
                 <p className="text-xs text-gray-600">
-                  {tr("reports.help.filters", "Select ranges and lists. Then press")} {" "}
-                  <span className="font-medium text-gray-900">{tr("reports.actions.generate", "Generate")}</span>.
+                  {tr("reports.help.filters", "Select ranges and lists. Then press")}{" "}
+                  <span className="font-medium text-gray-900">
+                    {tr("reports.actions.generate", "Generate")}
+                  </span>
+                  .
                 </p>
               </div>
 
@@ -250,14 +274,19 @@ export default function Reports() {
                   className={buttonSecondary}
                   title={tr("reports.actions.reloadLists", "Reload lists")}
                 >
-                  {loadingFilters ? tr("reports.states.loading", "Loading…") : tr("reports.actions.reloadFilters", "Reload filters")}
+                  {loadingFilters
+                    ? tr("reports.states.loading", "Loading…")
+                    : tr("reports.actions.reloadFilters", "Reload filters")}
                 </button>
 
                 <button
                   onClick={clearSelections}
                   disabled={filtersDisabled}
                   className={buttonSecondary}
-                  title={tr("reports.actions.clearSelectionsTitle", "Clear selections (does not clear dates)")}
+                  title={tr(
+                    "reports.actions.clearSelectionsTitle",
+                    "Clear selections (does not clear dates)"
+                  )}
                 >
                   {tr("reports.actions.clearSelections", "Clear selections")}
                 </button>
@@ -268,7 +297,9 @@ export default function Reports() {
           <div className="p-4 space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
               <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-gray-900">{tr("reports.labels.from", "From")}</label>
+                <label className="block text-sm font-medium text-gray-900">
+                  {tr("reports.labels.from", "From")}
+                </label>
                 <input
                   type="date"
                   value={start}
@@ -279,7 +310,9 @@ export default function Reports() {
               </div>
 
               <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-gray-900">{tr("reports.labels.to", "To")}</label>
+                <label className="block text-sm font-medium text-gray-900">
+                  {tr("reports.labels.to", "To")}
+                </label>
                 <input
                   type="date"
                   value={end}
@@ -290,21 +323,33 @@ export default function Reports() {
               </div>
 
               <div className="md:col-span-6 flex flex-wrap gap-2 md:justify-end">
-                <button onClick={loadReport} disabled={loadingReport} className={buttonPrimary}>
-                  {loadingReport ? tr("reports.states.generating", "Generating…") : tr("reports.actions.generate", "Generate")}
+                <button
+                  onClick={loadReport}
+                  disabled={loadingReport}
+                  className={buttonPrimary}
+                >
+                  {loadingReport
+                    ? tr("reports.states.generating", "Generating…")
+                    : tr("reports.actions.generate", "Generate")}
                 </button>
 
-                <button onClick={handleExport} disabled={!rows.length} className={buttonSecondary}>
+                <button
+                  onClick={handleExport}
+                  disabled={!rows.length}
+                  className={buttonSecondary}
+                >
                   {tr("reports.actions.exportCsv", "Export CSV")}
                 </button>
               </div>
 
               <div className="md:col-span-12">
                 <div className="text-xs text-gray-600">
-                  <span className="font-medium text-gray-900">{tr("reports.labels.tip", "Tip")}:</span> {" "}
-                  {tr("reports.help.multiSelectIntro", "In multi-select lists use")} {" "}
-                  <span className="font-medium text-gray-900">Ctrl</span> (Windows) / {" "}
-                  <span className="font-medium text-gray-900">Command</span> (Mac) {" "}
+                  <span className="font-medium text-gray-900">
+                    {tr("reports.labels.tip", "Tip")}:
+                  </span>{" "}
+                  {tr("reports.help.multiSelectIntro", "In multi-select lists use")}{" "}
+                  <span className="font-medium text-gray-900">Ctrl</span> (Windows) /{" "}
+                  <span className="font-medium text-gray-900">Command</span> (Mac){" "}
                   {tr("reports.help.multiSelectOutro", "to select multiple items.")}
                 </div>
               </div>
@@ -313,7 +358,10 @@ export default function Reports() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-900">
-                  {tr("reports.filters.geofences", "Geofences")} <span className="text-xs font-normal text-gray-600">({tr("reports.labels.multi", "multi")})</span>
+                  {tr("reports.filters.geofences", "Geofences")}{" "}
+                  <span className="text-xs font-normal text-gray-600">
+                    ({tr("reports.labels.multi", "multi")})
+                  </span>
                 </label>
                 <select
                   multiple
@@ -332,7 +380,10 @@ export default function Reports() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-900">
-                  {tr("reports.filters.people", "People")} <span className="text-xs font-normal text-gray-600">({tr("reports.labels.multi", "multi")})</span>
+                  {tr("reports.filters.people", "People")}{" "}
+                  <span className="text-xs font-normal text-gray-600">
+                    ({tr("reports.labels.multi", "multi")})
+                  </span>
                 </label>
                 <select
                   multiple
@@ -342,7 +393,10 @@ export default function Reports() {
                   disabled={loadingFilters}
                 >
                   {filters.personas.map((p) => {
-                    const label = `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.email || p.id;
+                    const label =
+                      `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
+                      p.email ||
+                      p.id;
                     return (
                       <option key={p.id} value={p.id}>
                         {label}
@@ -354,7 +408,10 @@ export default function Reports() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-900">
-                  {tr("reports.filters.activities", "Activities")} <span className="text-xs font-normal text-gray-600">({tr("reports.labels.multi", "multi")})</span>
+                  {tr("reports.filters.activities", "Activities")}{" "}
+                  <span className="text-xs font-normal text-gray-600">
+                    ({tr("reports.labels.multi", "multi")})
+                  </span>
                 </label>
                 <select
                   multiple
@@ -374,7 +431,10 @@ export default function Reports() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-900">
-                  {tr("reports.filters.assignments", "Assignments")} <span className="text-xs font-normal text-gray-600">({tr("reports.labels.multi", "multi")})</span>
+                  {tr("reports.filters.assignments", "Assignments")}{" "}
+                  <span className="text-xs font-normal text-gray-600">
+                    ({tr("reports.labels.multi", "multi")})
+                  </span>
                 </label>
                 <select
                   multiple
@@ -385,14 +445,18 @@ export default function Reports() {
                 >
                   {filters.asignaciones.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {(a.status || a.estado || tr("reports.labels.assignment", "assignment"))} — {String(a.id).slice(0, 8)}
+                      {(a.status || a.estado || tr("reports.labels.assignment", "assignment"))} —{" "}
+                      {String(a.id).slice(0, 8)}
                     </option>
                   ))}
                 </select>
                 <p className="mt-1 text-[11px] text-gray-600">
-                  {tr("reports.help.assignmentsNoteIntro", "Note: if your assignments do not have")} {" "}
-                  <span className="font-medium">personal_id</span>, {" "}
-                  {tr("reports.help.assignmentsNoteOutro", "the match against attendance marks may come back empty.")}
+                  {tr("reports.help.assignmentsNoteIntro", "Note: if your assignments do not have")}{" "}
+                  <span className="font-medium">personal_id</span>,{" "}
+                  {tr(
+                    "reports.help.assignmentsNoteOutro",
+                    "the match against attendance marks may come back empty."
+                  )}
                 </p>
               </div>
             </div>
@@ -402,45 +466,83 @@ export default function Reports() {
         <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">{tr("reports.sections.results", "Results")}</h2>
+              <h2 className="text-sm font-semibold text-gray-900">
+                {tr("reports.sections.results", "Results")}
+              </h2>
               <p className="text-xs text-gray-600">
                 {loadingReport
                   ? tr("reports.states.generatingReport", "Generating report…")
                   : rows.length
-                    ? tr("reports.states.rowsCount", "Rows: {{count}}", { count: rows.length })
-                    : tr("reports.states.noDataYet", "There is no data yet. Adjust filters and generate.")}
+                  ? tr("reports.states.rowsCount", "Rows: {{count}}", { count: rows.length })
+                  : tr(
+                      "reports.states.noDataYet",
+                      "There is no data yet. Adjust filters and generate."
+                    )}
               </p>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             {loadingReport ? (
-              <p className="p-4 text-sm text-gray-700">{tr("reports.states.loading", "Loading…")}</p>
+              <p className="p-4 text-sm text-gray-700">
+                {tr("reports.states.loading", "Loading…")}
+              </p>
             ) : rows.length === 0 ? (
-              <p className="p-4 text-sm text-gray-700">{tr("reports.states.noDataWithFilters", "There is no data with the selected filters.")}</p>
+              <p className="p-4 text-sm text-gray-700">
+                {tr(
+                  "reports.states.noDataWithFilters",
+                  "There is no data with the selected filters."
+                )}
+              </p>
             ) : (
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-gray-900">
                   <tr className="border-b border-gray-200">
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.day", "Day")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.person", "Person")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.email", "Email")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.geofence", "Geofence")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.activity", "Activity")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.assignment", "Assignment")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.entry", "Entry")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.exit", "Exit")}</th>
-                    <th className="p-2 text-center font-semibold">{tr("reports.table.marks", "Marks")}</th>
-                    <th className="p-2 text-center font-semibold">{tr("reports.table.inside", "Inside")}</th>
-                    <th className="p-2 text-center font-semibold">{tr("reports.table.distanceM", "Dist (m)")}</th>
-                    <th className="p-2 text-left font-semibold">{tr("reports.table.rate", "Rate")}</th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.day", "Day")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.person", "Person")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.email", "Email")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.geofence", "Geofence")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.activity", "Activity")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.assignment", "Assignment")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.entry", "Entry")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.exit", "Exit")}
+                    </th>
+                    <th className="p-2 text-center font-semibold">
+                      {tr("reports.table.marks", "Marks")}
+                    </th>
+                    <th className="p-2 text-center font-semibold">
+                      {tr("reports.table.inside", "Inside")}
+                    </th>
+                    <th className="p-2 text-center font-semibold">
+                      {tr("reports.table.distanceM", "Dist (m)")}
+                    </th>
+                    <th className="p-2 text-left font-semibold">
+                      {tr("reports.table.rate", "Rate")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r, i) => (
                     <tr
                       key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
-                      className={`border-t border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? "bg-white" : "bg-gray-50/40"}`}
+                      className={`border-t border-gray-100 hover:bg-gray-50 ${
+                        i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                      }`}
                     >
                       <td className="p-2 text-gray-900">{r.work_day || "—"}</td>
                       <td className="p-2 text-gray-900">{r.personal_nombre || "—"}</td>
@@ -457,7 +559,9 @@ export default function Reports() {
                       <td className="p-2 text-center text-gray-900">{r.total_marks ?? "—"}</td>
                       <td className="p-2 text-center text-gray-900">{r.inside_count ?? "—"}</td>
                       <td className="p-2 text-center text-gray-900">{r.avg_distance_m ?? "—"}</td>
-                      <td className="p-2 text-gray-900">{r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}</td>
+                      <td className="p-2 text-gray-900">
+                        {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
