@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -7,26 +8,29 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { supabase } from "../supabaseClient";
 
 /* ====================== UTILIDADES ====================== */
-const fmt = (latlngs) =>
-  latlngs.map((p) => `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`).join("\n");
+const fmt = (latlngs) => latlngs.map((p) => `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`).join("\n");
 
 const parseTextarea = (raw) => {
   const lines = raw.split(/\r?\n|;/).map((s) => s.trim()).filter(Boolean);
   if (!lines.length) return [];
+
   return lines.map((line, i) => {
     const [lat, lng] = line.split(",").map((v) => parseFloat(v.trim()));
-    if (isNaN(lat) || isNaN(lng)) throw new Error(`Línea ${i + 1} inválida: "${line}"`);
+    if (isNaN(lat) || isNaN(lng)) {
+      throw new Error(`Line ${i + 1} is invalid: \"${line}\"`);
+    }
     return { lat, lng };
   });
 };
 
 const ensureClosedRing = (latlngs) => {
-  const ring = latlngs.map(({ lat, lng }) => [lng, lat]); // [lng,lat]
-  if (ring.length < 3) throw new Error("Se requieren al menos 3 vértices.");
+  const ring = latlngs.map(({ lat, lng }) => [lng, lat]);
+  if (ring.length < 3) throw new Error("At least 3 vertices are required.");
+
   const [fLng, fLat] = ring[0];
   const [lLng, lLat] = ring[ring.length - 1];
   if (fLng !== lLng || fLat !== lLat) ring.push([fLng, fLat]);
-  if (ring.length < 4) throw new Error("Se requieren 3 vértices distintos.");
+  if (ring.length < 4) throw new Error("3 distinct vertices are required.");
   return ring;
 };
 
@@ -35,12 +39,13 @@ const toEWKT = (ring) =>
 
 /* ====================== PÁGINA ====================== */
 export default function GeofenceForm() {
+  const { t } = useTranslation();
+  const tt = useCallback((key, fallback, options = {}) => t(key, { defaultValue: fallback, ...options }), [t]);
+
   const [nombre, setNombre] = useState("");
   const [textoCoords, setTextoCoords] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [hover, setHover] = useState({ lat: null, lng: null });
-
-  // vértices seleccionados (último polígono clicado/dibujado/editado)
   const [selectedVertices, setSelectedVertices] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -48,29 +53,30 @@ export default function GeofenceForm() {
     try {
       setGuardando(true);
 
-      const pts =
-        textoCoords.trim()
-          ? parseTextarea(textoCoords)
-          : selectedVertices.length
+      const pts = textoCoords.trim()
+        ? parseTextarea(textoCoords)
+        : selectedVertices.length
           ? selectedVertices
           : [];
 
-      if (pts.length < 3) throw new Error("Se requieren al menos 3 puntos.");
+      if (pts.length < 3) {
+        throw new Error(tt("geofenceForm.errors.minPoints", "At least 3 points are required."));
+      }
 
       const ewkt = toEWKT(ensureClosedRing(pts));
       const { error } = await supabase
         .from("geocercas")
-        .insert([{ nombre: nombre || "Sin nombre", geom: ewkt }]);
+        .insert([{ nombre: nombre || tt("geofenceForm.fallbacks.unnamed", "Unnamed"), geom: ewkt }]);
 
       if (error) throw error;
 
-      alert("✅ Geocerca guardada.");
+      window.alert(tt("geofenceForm.messages.saved", "Geofence saved successfully."));
       setNombre("");
       setTextoCoords("");
       setSelectedVertices([]);
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      alert("Error: " + err.message);
+      window.alert(`${tt("geofenceForm.messages.errorPrefix", "Error")}: ${err.message}`);
       console.error(err);
     } finally {
       setGuardando(false);
@@ -79,34 +85,24 @@ export default function GeofenceForm() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-      {/* Panel izquierdo */}
       <div className="p-3 sm:p-4 border rounded-md">
-        <h2 className="font-bold !text-base sm:!text-lg mb-2">Nueva Geocerca</h2>
+        <h2 className="font-bold !text-base sm:!text-lg mb-2">
+          {tt("geofenceForm.title", "New geofence")}
+        </h2>
 
-        <label className="!text-xs sm:!text-sm">Nombre</label>
+        <label className="!text-xs sm:!text-sm">{tt("geofenceForm.fields.name", "Name")}</label>
         <input
-          className="
-            w-full border rounded
-            !px-3 !py-2 !text-xs
-            sm:!px-2 sm:!py-1 sm:!text-sm
-            mb-3
-          "
+          className="w-full border rounded !px-3 !py-2 !text-xs sm:!px-2 sm:!py-1 sm:!text-sm mb-3"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          placeholder="Ej: Lote 1"
+          placeholder={tt("geofenceForm.fields.namePlaceholder", "E.g. Field 1")}
         />
 
         <label className="!text-xs sm:!text-sm">
-          Coordenadas (<code>lat,lng</code> por línea)
+          {tt("geofenceForm.fields.coordinates", "Coordinates")} (<code>lat,lng</code> {tt("geofenceForm.fields.onePerLine", "per line")})
         </label>
         <textarea
-          className="
-            w-full border rounded
-            !px-3 !py-2 !text-xs
-            sm:!px-2 sm:!py-1 sm:!text-sm
-            h-32 sm:h-40
-            mb-2
-          "
+          className="w-full border rounded !px-3 !py-2 !text-xs sm:!px-2 sm:!py-1 sm:!text-sm h-32 sm:h-40 mb-2"
           value={textoCoords}
           onChange={(e) => setTextoCoords(e.target.value)}
           placeholder="-0.1807, -78.4678"
@@ -115,31 +111,29 @@ export default function GeofenceForm() {
         <button
           onClick={handleGuardar}
           disabled={guardando}
-          className="
-            bg-blue-600 text-white rounded w-full
-            !px-3 !py-2 !text-xs
-            sm:!px-3 sm:!py-2 sm:!text-sm
-            disabled:opacity-60
-          "
+          className="bg-blue-600 text-white rounded w-full !px-3 !py-2 !text-xs sm:!px-3 sm:!py-2 sm:!text-sm disabled:opacity-60"
         >
-          {guardando ? "Guardando..." : "Guardar Geocerca"}
+          {guardando
+            ? tt("geofenceForm.actions.saving", "Saving...")
+            : tt("geofenceForm.actions.save", "Save geofence")}
         </button>
 
         <p className="!text-[11px] sm:!text-xs text-gray-500 mt-2">
-          Dibuja/selecciona en el mapa; si el cuadro está vacío, se usará ese polígono.
+          {tt(
+            "geofenceForm.hints.mapSelection",
+            "Draw or select on the map; if the box is empty, that polygon will be used."
+          )}
         </p>
       </div>
 
-      {/* Mapa */}
       <div className="md:col-span-2 border rounded-md overflow-hidden relative h-[58svh] md:h-[520px]">
-        {/* HUD Lat/Lng */}
         <div className="absolute z-[1000] right-2 bottom-2 bg-white/90 border rounded px-2 py-1 !text-[11px] sm:!text-xs font-mono shadow">
           {hover.lat != null ? (
             <>
-              Lat: {hover.lat.toFixed(6)} · Lng: {hover.lng.toFixed(6)}
+              {tt("geofenceForm.map.lat", "Lat")}: {hover.lat.toFixed(6)} · {tt("geofenceForm.map.lng", "Lng")}: {hover.lng.toFixed(6)}
             </>
           ) : (
-            <>Mueve el puntero sobre el mapa…</>
+            <>{tt("geofenceForm.map.movePointer", "Move the pointer over the map…")}</>
           )}
         </div>
 
@@ -157,9 +151,10 @@ export default function GeofenceForm() {
             setHover={setHover}
             onVerticesChange={(latlngs) => {
               setSelectedVertices(latlngs);
-              setTextoCoords(fmt(latlngs)); // sincroniza textarea
+              setTextoCoords(fmt(latlngs));
             }}
             refreshKey={refreshKey}
+            tt={tt}
           />
         </MapContainer>
       </div>
@@ -168,14 +163,11 @@ export default function GeofenceForm() {
 }
 
 /* ====================== CONTROLADOR DEL MAPA ====================== */
-function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
+function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
   const map = useMap();
-  const groupRef = useRef(null); // siempre metemos capas aquí
+  const groupRef = useRef(null);
 
-  const polyStyle = useMemo(
-    () => ({ color: "#1e40af", weight: 2, fillOpacity: 0.2 }),
-    []
-  );
+  const polyStyle = useMemo(() => ({ color: "#1e40af", weight: 2, fillOpacity: 0.2 }), []);
 
   const upsertLayerEvents = (layer) => {
     layer.pm?.enable({ allowSelfIntersection: false });
@@ -186,7 +178,7 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
     });
   };
 
-  const loadGeofences = async () => {
+  const loadGeofences = useCallback(async () => {
     if (!groupRef.current) groupRef.current = L.featureGroup().addTo(map);
     groupRef.current.clearLayers();
 
@@ -196,16 +188,16 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
       return;
     }
 
-    data.forEach((row) => {
+    (data || []).forEach((row) => {
       const gj = JSON.parse(row.geojson);
       const coords = gj.coordinates[0].map(([lng, lat]) => [lat, lng]);
       const layer = L.polygon(coords, polyStyle);
       layer.options._geocercaId = row.id;
       layer.addTo(groupRef.current);
-      layer.bindTooltip(row.nombre);
+      layer.bindTooltip(row.nombre || tt("geofenceForm.fallbacks.unnamed", "Unnamed"));
       upsertLayerEvents(layer);
     });
-  };
+  }, [map, onVerticesChange, polyStyle, tt]);
 
   useEffect(() => {
     map.pm.addControls({
@@ -241,9 +233,10 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
         const ewkt = toEWKT(ensureClosedRing(latlngs));
         const { data, error } = await supabase
           .from("geocercas")
-          .insert([{ nombre: "Sin nombre", geom: ewkt }])
+          .insert([{ nombre: tt("geofenceForm.fallbacks.unnamed", "Unnamed"), geom: ewkt }])
           .select("id")
           .single();
+
         if (error) throw error;
 
         layer.options._geocercaId = data.id;
@@ -252,9 +245,9 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
         upsertLayerEvents(layer);
 
         onVerticesChange?.(latlngs);
-        alert("✅ Geocerca creada.");
+        window.alert(tt("geofenceForm.messages.created", "Geofence created successfully."));
       } catch (err) {
-        alert("Error al crear: " + err.message);
+        window.alert(`${tt("geofenceForm.messages.createError", "Error creating geofence")}: ${err.message}`);
         try {
           map.removeLayer(layer);
         } catch {}
@@ -277,9 +270,9 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
           if (error) throw error;
           onVerticesChange?.(u.latlngs);
         }
-        alert("✅ Geocerca(s) actualizada(s).");
+        window.alert(tt("geofenceForm.messages.updated", "Geofence(s) updated successfully."));
       } catch (err) {
-        alert("Error al actualizar: " + err.message);
+        window.alert(`${tt("geofenceForm.messages.updateError", "Error updating geofence")}: ${err.message}`);
         console.error(err);
       }
     };
@@ -294,9 +287,9 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
       try {
         const { error } = await supabase.from("geocercas").delete().in("id", ids);
         if (error) throw error;
-        alert("🗑️ Geocerca(s) eliminada(s).");
+        window.alert(tt("geofenceForm.messages.deleted", "Geofence(s) deleted successfully."));
       } catch (err) {
-        alert("Error al borrar: " + err.message);
+        window.alert(`${tt("geofenceForm.messages.deleteError", "Error deleting geofence")}: ${err.message}`);
         console.error(err);
       }
     };
@@ -316,13 +309,11 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey }) {
         map.pm.removeControls();
       } catch {}
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  }, [loadGeofences, map, onVerticesChange, setHover, tt]);
 
   useEffect(() => {
     loadGeofences();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [loadGeofences, refreshKey]);
 
   return null;
 }
