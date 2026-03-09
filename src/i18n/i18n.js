@@ -10,13 +10,10 @@ import fr from "./fr.json";
  * i18n BLINDADO – App Geocercas
  *
  * Prioridad de idioma:
- * 1) ?lang=es|en|fr        (NO-JS friendly, TWA/WebView)
+ * 1) ?lang=es|en|fr
  * 2) localStorage.app_lang
  * 3) navigator.language
  * 4) fallback: es
- *
- * FIX UNIVERSAL:
- * - Si cambia ?lang= en la URL en SPA (sin recarga), i18n se sincroniza igual.
  */
 
 const SUPPORTED = ["es", "en", "fr"];
@@ -38,6 +35,7 @@ function readUrlLang() {
 
 function readStoredLang() {
   try {
+    if (typeof localStorage === "undefined") return null;
     const v = (localStorage.getItem("app_lang") || "").toLowerCase().slice(0, 2);
     return SUPPORTED.includes(v) ? v : null;
   } catch {
@@ -47,6 +45,7 @@ function readStoredLang() {
 
 function readNavigatorLang() {
   try {
+    if (typeof navigator === "undefined") return null;
     const v = (navigator.language || "").toLowerCase().slice(0, 2);
     return SUPPORTED.includes(v) ? v : null;
   } catch {
@@ -64,7 +63,9 @@ function setHtmlLang(code) {
 
 function persistLang(code) {
   try {
-    localStorage.setItem("app_lang", code);
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem("app_lang", code);
+    }
   } catch {}
 }
 
@@ -72,7 +73,12 @@ function persistLang(code) {
    Resolución inicial
 ========================= */
 
-const initialLang = readUrlLang() || readStoredLang() || readNavigatorLang() || "es";
+const initialLang =
+  readUrlLang() ||
+  readStoredLang() ||
+  readNavigatorLang() ||
+  "es";
+
 persistLang(initialLang);
 setHtmlLang(initialLang);
 
@@ -84,14 +90,26 @@ i18n.use(initReactI18next).init({
   resources: {
     es: { translation: es },
     en: { translation: en },
-    fr: { translation: fr }
+    fr: { translation: fr },
   },
+
   lng: initialLang,
   fallbackLng: "es",
-  interpolation: { escapeValue: false },
-  react: { useSuspense: false },
+
+  supportedLngs: SUPPORTED,
+  load: "languageOnly",
+  nonExplicitSupportedLngs: true,
+
+  interpolation: {
+    escapeValue: false,
+  },
+
+  react: {
+    useSuspense: false,
+  },
+
   returnEmptyString: false,
-  returnNull: false
+  returnNull: false,
 });
 
 /* =========================
@@ -119,29 +137,29 @@ function syncFromUrl() {
 // Al cargar
 syncFromUrl();
 
-// Back/forward
+// Back / forward
 try {
   if (typeof window !== "undefined") {
     window.addEventListener("popstate", syncFromUrl);
   }
-} catch {}
+} catch {
+  // ignore
+}
 
-// Hook pushState/replaceState (React Router)
+// Hook pushState / replaceState
 try {
   if (typeof window !== "undefined" && window.history) {
-    const _pushState = window.history.pushState;
-    const _replaceState = window.history.replaceState;
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
 
-    window.history.pushState = function () {
-      // eslint-disable-next-line prefer-rest-params
-      const ret = _pushState.apply(window.history, arguments);
+    window.history.pushState = function (...args) {
+      const ret = originalPushState.apply(window.history, args);
       syncFromUrl();
       return ret;
     };
 
-    window.history.replaceState = function () {
-      // eslint-disable-next-line prefer-rest-params
-      const ret = _replaceState.apply(window.history, arguments);
+    window.history.replaceState = function (...args) {
+      const ret = originalReplaceState.apply(window.history, args);
       syncFromUrl();
       return ret;
     };
@@ -157,6 +175,7 @@ try {
 i18n.on("languageChanged", (lng) => {
   const code = String(lng || "es").toLowerCase().slice(0, 2);
   if (!SUPPORTED.includes(code)) return;
+
   persistLang(code);
   setHtmlLang(code);
 });
