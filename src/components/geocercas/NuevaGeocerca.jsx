@@ -25,15 +25,15 @@ function Banner({ banner, onClose }) {
 
   const klass =
     banner.type === "error"
-      ? "bg-red-900/60 border-red-500/50 text-red-100"
+      ? "bg-red-950/90 border-red-500/50 text-red-100"
       : banner.type === "ok"
-      ? "bg-emerald-900/60 border-emerald-500/50 text-emerald-100"
+      ? "bg-emerald-950/90 border-emerald-500/50 text-emerald-100"
       : banner.type === "warn"
-      ? "bg-amber-900/60 border-amber-500/50 text-amber-100"
-      : "bg-slate-900/60 border-slate-500/50 text-slate-100";
+      ? "bg-amber-950/90 border-amber-500/50 text-amber-100"
+      : "bg-slate-950/90 border-slate-500/50 text-slate-100";
 
   return (
-    <div className={`rounded-xl border px-3 py-2 text-sm flex items-start justify-between gap-3 ${klass}`}>
+    <div className={`rounded-xl border px-3 py-2 text-sm flex items-start justify-between gap-3 shadow-xl backdrop-blur ${klass}`}>
       <div className="leading-snug">{banner.text}</div>
       <button
         className="px-2 py-1 rounded-md bg-black/20 hover:bg-black/30 text-xs font-semibold"
@@ -46,18 +46,18 @@ function Banner({ banner, onClose }) {
   );
 }
 
-function EntitlementCard({ title, value, tone = "default" }) {
+function StatBadge({ label, value, tone = "default" }) {
   const toneClass =
     tone === "accent"
-      ? "border-emerald-500/40 bg-emerald-950/30"
+      ? "border-emerald-400/40 bg-emerald-950/80 text-emerald-50"
       : tone === "warn"
-      ? "border-amber-500/40 bg-amber-950/30"
-      : "border-slate-700 bg-slate-950/40";
+      ? "border-amber-400/40 bg-amber-950/80 text-amber-50"
+      : "border-slate-300/20 bg-slate-950/80 text-slate-50";
 
   return (
-    <div className={`rounded-xl border p-3 ${toneClass}`}>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400">{title}</div>
-      <div className="mt-1 text-base font-semibold text-slate-100">{value}</div>
+    <div className={`min-w-[120px] rounded-2xl border px-3 py-2 shadow-lg backdrop-blur-md ${toneClass}`}>
+      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-300/80">{label}</div>
+      <div className="mt-1 text-sm sm:text-base font-semibold">{value}</div>
     </div>
   );
 }
@@ -101,9 +101,7 @@ function centroidFeatureFromGeojson(fc) {
     const c = bounds.getCenter();
     return {
       type: "FeatureCollection",
-      features: [
-        { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [c.lng, c.lat] } },
-      ],
+      features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [c.lng, c.lat] } }],
     };
   } catch {
     return null;
@@ -247,6 +245,8 @@ export default function NuevaGeocerca() {
   const [datasetError, setDatasetError] = useState("");
 
   const [showLoading, setShowLoading] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -685,314 +685,383 @@ export default function NuevaGeocerca() {
   }, [clearCanvas]);
 
   return (
-    <div className="flex flex-col gap-2 sm:gap-3 h-[calc(100svh-140px)] lg:h-[calc(100vh-140px)]">
-      <Banner banner={banner} onClose={() => setBanner(null)} />
+    <div className="relative h-[calc(100svh-110px)] min-h-[620px] overflow-hidden rounded-2xl border border-slate-800 bg-slate-950">
+      <div className="absolute inset-0 z-0">
+        <MapContainer
+          center={[-0.2, -78.5]}
+          zoom={8}
+          scrollWheelZoom={true}
+          style={{ height: "100%", width: "100%" }}
+          whenCreated={(map) => (mapRef.current = map)}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
 
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-          <div className="space-y-0.5">
-            <h1 className="text-xl sm:text-2xl font-semibold text-slate-100">
-              {t("geocercas.titleNew", { defaultValue: "New geofence" })}
-            </h1>
-            <p className="hidden md:block text-xs text-slate-300">
-              {t("geocercas.subtitleNew", {
-                defaultValue: "Draw a geofence on the map and assign it to your personnel or activities.",
-              })}
-            </p>
-          </div>
+          {dataset && <GeoJSON data={dataset} {...pointStyle} />}
+          <CursorPosLive setCursorLatLng={setCursorLatLng} />
 
-          <div className="grid grid-cols-2 gap-2 md:flex md:items-center md:gap-2">
-            <input
-              type="text"
-              className="col-span-2 rounded-lg bg-slate-900 border border-emerald-400/60 text-white font-semibold px-3 py-2 text-xs md:col-span-1 md:px-4 md:py-2.5 md:text-sm"
-              placeholder={t("geocercas.placeholderName", { defaultValue: "Geofence name" })}
-              value={geofenceName}
-              onChange={(e) => setGeofenceName(e.target.value)}
-            />
+          <Pane name="draftPane" style={{ zIndex: 650 }}>
+            {draftFeature && (
+              <GeoJSON
+                key={`draft-${draftId}`}
+                data={draftFeature}
+                style={() => ({ color: "#22c55e", weight: 3, fillColor: "#22c55e", fillOpacity: 0.35 })}
+              />
+            )}
+          </Pane>
 
-            <button
-              onClick={() => {
-                setCoordText("");
-                setCoordModalOpen(true);
+          <Pane name="viewPane" style={{ zIndex: 640 }}>
+            {viewFeature && (
+              <>
+                <GeoJSON
+                  key={`view-${viewId}`}
+                  data={viewFeature}
+                  style={() => ({ color: "#38bdf8", weight: 3, fillColor: "#38bdf8", fillOpacity: 0.15 })}
+                />
+                {viewCentroid && (
+                  <GeoJSON
+                    key={`view-marker-${viewId}`}
+                    data={viewCentroid}
+                    pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                  />
+                )}
+              </>
+            )}
+          </Pane>
+
+          <FeatureGroup ref={featureGroupRef}>
+            <GeomanControls
+              options={{
+                position: "topright",
+                drawMarker: false,
+                drawCircleMarker: false,
+                drawPolyline: false,
+                drawText: false,
+                drawRectangle: true,
+                drawPolygon: true,
+                drawCircle: true,
+                editMode: true,
+                dragMode: true,
+                removalMode: true,
               }}
-              className="rounded-lg font-semibold bg-slate-800 text-slate-50 border border-slate-600 px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap"
-              type="button"
-            >
-              {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
-            </button>
+              globalOptions={{ continueDrawing: false, editable: true }}
+              onCreate={(e) => {
+                selectedLayerRef.current = e.layer;
+                lastCreatedLayerRef.current = e.layer;
+                setDraftFeature(null);
+                setViewFeature(null);
+                setViewCentroid(null);
+              }}
+              onEdit={(e) => {
+                if (e?.layer) {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                }
+              }}
+              onUpdate={(e) => {
+                if (e?.layer) {
+                  selectedLayerRef.current = e.layer;
+                  lastCreatedLayerRef.current = e.layer;
+                }
+              }}
+            />
+          </FeatureGroup>
+        </MapContainer>
+      </div>
+
+      <div className="pointer-events-none absolute inset-0 z-[500] bg-gradient-to-b from-slate-950/25 via-transparent to-slate-950/20" />
+
+      <div className="pointer-events-none absolute top-3 left-1/2 z-[1200] w-[min(920px,calc(100%-24px))] -translate-x-1/2">
+        <Banner banner={banner} onClose={() => setBanner(null)} />
+      </div>
+
+      <div className="absolute top-3 left-3 z-[1100] w-[calc(100%-24px)] sm:w-[380px] max-w-[92vw]">
+        <div className="rounded-2xl border border-white/15 bg-slate-950/82 text-slate-50 shadow-2xl backdrop-blur-md">
+          <div className="flex items-start justify-between gap-3 p-3 sm:p-4">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-semibold leading-tight">
+                {t("geocercas.titleNew", { defaultValue: "New geofence" })}
+              </h1>
+              <p className="mt-1 text-[11px] sm:text-xs text-slate-300">
+                {t("geocercas.subtitleNew", {
+                  defaultValue: "Draw a geofence on the map and save it to your organization.",
+                })}
+              </p>
+            </div>
 
             <button
-              onClick={handleSave}
-              disabled={entitlementsLoading || !canCreateGeofence}
-              className={`rounded-lg font-semibold px-3 py-2 text-xs md:px-4 md:py-2.5 md:text-sm whitespace-nowrap ${
-                entitlementsLoading || !canCreateGeofence
-                  ? "bg-slate-600 text-slate-300 cursor-not-allowed"
-                  : "bg-emerald-600 text-white"
-              }`}
               type="button"
+              onClick={() => setPanelCollapsed((v) => !v)}
+              className="pointer-events-auto rounded-lg border border-slate-700 bg-slate-900/90 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800"
             >
-              {t("geocercas.buttonSave", { defaultValue: "Save geofence" })}
+              {panelCollapsed
+                ? t("common.actions.show", { defaultValue: "Show" })
+                : t("common.actions.hide", { defaultValue: "Hide" })}
             </button>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <EntitlementCard
-            title={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
-            value={normalizePlanLabel(planCode)}
-            tone={planTone}
-          />
+          {!panelCollapsed && (
+            <div className="space-y-3 border-t border-white/10 px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  className="pointer-events-auto w-full rounded-xl border border-emerald-400/60 bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                  placeholder={t("geocercas.placeholderName", { defaultValue: "Geofence name" })}
+                  value={geofenceName}
+                  onChange={(e) => setGeofenceName(e.target.value)}
+                />
 
-          <EntitlementCard
-            title={t("geocercas.planUsageTitle", { defaultValue: "Geofences" })}
-            value={
-              entitlementsLoading
-                ? t("common.actions.loading", { defaultValue: "Loading..." })
-                : hasFiniteGeofenceLimit
-                ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
-                : t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
-            }
-            tone={planTone}
-          />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    onClick={() => {
+                      setCoordText("");
+                      setCoordModalOpen(true);
+                    }}
+                    className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 hover:bg-slate-700"
+                    type="button"
+                  >
+                    {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
+                  </button>
 
-          <EntitlementCard
-            title={t("geocercas.planAvailableTitle", { defaultValue: "Available" })}
-            value={
-              entitlementsLoading
-                ? t("common.actions.loading", { defaultValue: "Loading..." })
-                : geofenceSlotsLeft === null
-                ? t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
-                : String(geofenceSlotsLeft)
-            }
-            tone={geofenceLimitReached ? "warn" : "default"}
-          />
-        </div>
-
-        <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-3">
-          <p className="text-xs text-slate-300">{planSummaryText}</p>
-
-          {entitlementsError ? (
-            <p className="mt-2 text-xs text-red-300">{entitlementsError}</p>
-          ) : null}
-
-          {!entitlementsLoading && geofenceLimitReached ? (
-            <div className="mt-3 rounded-lg border border-amber-500/40 bg-amber-950/30 p-3 space-y-3">
-              <div className="text-sm font-semibold text-amber-200">
-                {t("geocercas.plan.limitReachedTitle", {
-                  defaultValue: "You have reached the geofence limit of your plan.",
-                })}
-              </div>
-              <div className="text-xs text-amber-100">
-                {t("geocercas.plan.limitReachedBody", {
-                  defaultValue: "To create more geofences, upgrade your organization to PRO.",
-                })}
+                  <button
+                    onClick={handleSave}
+                    disabled={entitlementsLoading || !canCreateGeofence}
+                    className={`pointer-events-auto rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                      entitlementsLoading || !canCreateGeofence
+                        ? "cursor-not-allowed bg-slate-700 text-slate-300"
+                        : "bg-emerald-600 text-white hover:bg-emerald-500"
+                    }`}
+                    type="button"
+                  >
+                    {t("geocercas.buttonSave", { defaultValue: "Save geofence" })}
+                  </button>
+                </div>
               </div>
 
-              {currentOrg?.id ? (
-                <div className="pt-1">
-                  <UpgradeToProButton orgId={currentOrg.id} getAccessToken={getAccessToken} />
+              <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                  {t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="text-sm font-semibold">{normalizePlanLabel(planCode)}</span>
+                  {geofenceLimitReached ? (
+                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+                      {t("geocercas.plan.limitReachedShort", { defaultValue: "Limit reached" })}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-xs text-slate-300">{planSummaryText}</p>
+
+                {entitlementsError ? (
+                  <p className="mt-2 text-xs text-red-300">{entitlementsError}</p>
+                ) : null}
+
+                {!entitlementsLoading && geofenceLimitReached ? (
+                  <div className="mt-3 space-y-3 rounded-xl border border-amber-500/30 bg-amber-950/30 p-3">
+                    <div className="text-sm font-semibold text-amber-200">
+                      {t("geocercas.plan.limitReachedTitle", {
+                        defaultValue: "You have reached the geofence limit of your plan.",
+                      })}
+                    </div>
+                    <div className="text-xs text-amber-100">
+                      {t("geocercas.plan.limitReachedBody", {
+                        defaultValue: "To create more geofences, upgrade your organization to PRO.",
+                      })}
+                    </div>
+
+                    {currentOrg?.id ? (
+                      <div className="pt-1">
+                        <UpgradeToProButton orgId={currentOrg.id} getAccessToken={getAccessToken} />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {!entitlementsLoading && !geofenceLimitReached && isFree ? (
+                  <div className="mt-2 text-xs text-slate-400">
+                    {t("geocercas.plan.freeHint", {
+                      defaultValue: "FREE plan active. When you reach the limit, you can upgrade to PRO from here.",
+                    })}
+                  </div>
+                ) : null}
+
+                {!entitlementsLoading && (isStarter || isPro || isEnterprise || isElite || isElitePlus) ? (
+                  <div className="mt-2 text-xs text-slate-400">
+                    {t("geocercas.plan.activePaidHint", {
+                      defaultValue: "Your organization has a plan with higher capacity enabled.",
+                    })}
+                  </div>
+                ) : null}
+              </div>
+
+              {loadingDataset ? (
+                <div className="text-[11px] text-slate-400">
+                  {t("geocercas.loadingDataset", { defaultValue: "Loading dataset..." })}
                 </div>
               ) : null}
-            </div>
-          ) : null}
 
-          {!entitlementsLoading && !geofenceLimitReached && isFree ? (
-            <div className="mt-2 text-xs text-slate-400">
-              {t("geocercas.plan.freeHint", {
-                defaultValue: "FREE plan active. When you reach the limit, you can upgrade to PRO from here.",
-              })}
+              {datasetError ? <div className="text-[11px] text-red-300">{datasetError}</div> : null}
             </div>
-          ) : null}
-
-          {!entitlementsLoading && (isStarter || isPro || isEnterprise || isElite || isElitePlus) ? (
-            <div className="mt-2 text-xs text-slate-400">
-              {t("geocercas.plan.activePaidHint", {
-                defaultValue: "Your organization has a plan with higher capacity enabled.",
-              })}
-            </div>
-          ) : null}
+          )}
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-3 lg:grid lg:grid-cols-4">
-        <div className="bg-slate-900/80 rounded-xl border border-slate-700/80 p-3 flex flex-col min-h-0 max-h-[42svh] md:max-h-[32svh] lg:max-h-none">
-          <h2 className="text-sm font-semibold text-slate-100 mb-2">
-            {t("geocercas.panelTitle", { defaultValue: "Geofences" })}
-          </h2>
+      <div className="absolute right-3 top-3 z-[1100] flex max-w-[calc(100%-24px)] flex-wrap justify-end gap-2 pl-[120px] sm:pl-[0] md:top-20">
+        <StatBadge
+          label={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
+          value={normalizePlanLabel(planCode)}
+          tone={planTone}
+        />
+        <StatBadge
+          label={t("geocercas.planUsageTitle", { defaultValue: "Geofences" })}
+          value={
+            entitlementsLoading
+              ? t("common.actions.loading", { defaultValue: "Loading..." })
+              : hasFiniteGeofenceLimit
+              ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
+              : t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
+          }
+          tone={planTone}
+        />
+        <StatBadge
+          label={t("geocercas.planAvailableTitle", { defaultValue: "Available" })}
+          value={
+            entitlementsLoading
+              ? t("common.actions.loading", { defaultValue: "Loading..." })
+              : geofenceSlotsLeft === null
+              ? t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
+              : String(geofenceSlotsLeft)
+          }
+          tone={geofenceLimitReached ? "warn" : "default"}
+        />
+      </div>
 
-          <div className="flex-1 min-h-0 overflow-auto space-y-1 pr-1">
-            {geofenceList.length === 0 && (
-              <div className="text-xs text-slate-400">
-                {t("geocercas.noGeofences", { defaultValue: "You don’t have any geofences yet." })}
-              </div>
-            )}
-
-            {geofenceList.map((g) => (
-              <label
-                key={`api-${g.id || ""}-${g.name}`}
-                className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-800 md:px-2 md:py-1.5"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedNames.has(g.name)}
-                  onChange={() => {
-                    setSelectedNames((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(g.name)) next.delete(g.name);
-                      else next.add(g.name);
-                      return next;
-                    });
-                    setLastSelectedName(g.name);
-                  }}
-                />
-                <span className="text-[11px] md:text-xs text-slate-100">{g.name}</span>
-              </label>
-            ))}
-          </div>
-
-          <div className="mt-2 grid grid-cols-3 gap-2 md:mt-3 md:flex md:flex-col md:gap-2">
-            <button
-              onClick={handleShowSelected}
-              className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-sky-600 text-white md:px-3 md:py-1.5 md:text-xs"
-              type="button"
-            >
-              {showLoading
-                ? t("common.actions.loading", { defaultValue: "Loading..." })
-                : t("geocercas.buttonShowOnMap", { defaultValue: "Show on map" })}
-            </button>
-
-            <button
-              onClick={handleDeleteSelected}
-              className="w-full px-2 py-1.5 rounded-md text-[11px] font-semibold bg-red-600 text-white md:px-3 md:py-1.5 md:text-xs"
-              type="button"
-            >
-              {t("geocercas.buttonDeleteSelected", { defaultValue: "Delete selected" })}
-            </button>
-
-            <button
-              onClick={handleClearMap}
-              className="w-full px-2 py-1.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-200 md:px-3 md:py-1.5 md:text-xs"
-              type="button"
-            >
-              {t("geocercas.buttonClearCanvas", { defaultValue: "Clear map" })}
-            </button>
-          </div>
-
-          {loadingDataset && (
-            <div className="mt-2 md:mt-3 text-[11px] text-slate-400">
-              {t("geocercas.loadingDataset", { defaultValue: "Loading dataset..." })}
-            </div>
+      <div className="hidden md:block absolute right-3 bottom-24 z-[1100] space-y-2">
+        <div className="rounded-xl bg-slate-950/82 px-3 py-2 text-[11px] text-slate-50 shadow-lg backdrop-blur-md">
+          {cursorLatLng ? (
+            <>
+              <span>
+                {t("geocercas.lat", { defaultValue: "Lat" })}: {cursorLatLng.lat.toFixed(6)}
+              </span>
+              <span className="ml-2">
+                {t("geocercas.lng", { defaultValue: "Lng" })}: {cursorLatLng.lng.toFixed(6)}
+              </span>
+            </>
+          ) : (
+            <span>{t("geocercas.cursorHint", { defaultValue: "Move the mouse over the map" })}</span>
           )}
-          {datasetError && <div className="mt-2 md:mt-3 text-[11px] text-red-300">{datasetError}</div>}
         </div>
 
-        <div className="lg:col-span-3 bg-slate-900/80 rounded-xl overflow-hidden border border-slate-700/80 relative flex-1 min-h-[50svh] md:min-h-[62svh] lg:min-h-0">
-          <MapContainer
-            center={[-0.2, -78.5]}
-            zoom={8}
-            scrollWheelZoom={true}
-            style={{ height: "100%", width: "100%" }}
-            whenCreated={(map) => (mapRef.current = map)}
-          >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
+        <div className="rounded-xl bg-slate-950/82 px-3 py-2 text-[11px] text-slate-50 shadow-lg backdrop-blur-md">
+          {t("geocercas.draftLabel", { defaultValue: "Draft" })}:{" "}
+          {draftFeature ? t("geocercas.draftYes", { defaultValue: "yes" }) : t("geocercas.draftNo", { defaultValue: "no" })}{" "}
+          | {t("geocercas.pointsLabel", { defaultValue: "Pts" })}: {draftPointsCount}
+        </div>
+      </div>
 
-            {dataset && <GeoJSON data={dataset} {...pointStyle} />}
-            <CursorPosLive setCursorLatLng={setCursorLatLng} />
-
-            <Pane name="draftPane" style={{ zIndex: 650 }}>
-              {draftFeature && (
-                <GeoJSON
-                  key={`draft-${draftId}`}
-                  data={draftFeature}
-                  style={() => ({ color: "#22c55e", weight: 3, fillColor: "#22c55e", fillOpacity: 0.35 })}
-                />
-              )}
-            </Pane>
-
-            <Pane name="viewPane" style={{ zIndex: 640 }}>
-              {viewFeature && (
-                <>
-                  <GeoJSON
-                    key={`view-${viewId}`}
-                    data={viewFeature}
-                    style={() => ({ color: "#38bdf8", weight: 3, fillColor: "#38bdf8", fillOpacity: 0.15 })}
-                  />
-                  {viewCentroid && (
-                    <GeoJSON
-                      key={`view-marker-${viewId}`}
-                      data={viewCentroid}
-                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
-                    />
-                  )}
-                </>
-              )}
-            </Pane>
-
-            <FeatureGroup ref={featureGroupRef}>
-              <GeomanControls
-                options={{
-                  position: "topleft",
-                  drawMarker: false,
-                  drawCircleMarker: false,
-                  drawPolyline: false,
-                  drawText: false,
-                  drawRectangle: true,
-                  drawPolygon: true,
-                  drawCircle: true,
-                  editMode: true,
-                  dragMode: true,
-                  removalMode: true,
-                }}
-                globalOptions={{ continueDrawing: false, editable: true }}
-                onCreate={(e) => {
-                  selectedLayerRef.current = e.layer;
-                  lastCreatedLayerRef.current = e.layer;
-                  setDraftFeature(null);
-                  setViewFeature(null);
-                  setViewCentroid(null);
-                }}
-                onEdit={(e) => {
-                  if (e?.layer) {
-                    selectedLayerRef.current = e.layer;
-                    lastCreatedLayerRef.current = e.layer;
-                  }
-                }}
-                onUpdate={(e) => {
-                  if (e?.layer) {
-                    selectedLayerRef.current = e.layer;
-                    lastCreatedLayerRef.current = e.layer;
-                  }
-                }}
-              />
-            </FeatureGroup>
-          </MapContainer>
-
-          <div className="hidden md:block absolute right-3 top-3 z-[9999] space-y-2">
-            <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
-              {cursorLatLng ? (
-                <>
-                  <span>{t("geocercas.lat", { defaultValue: "Lat" })}: {cursorLatLng.lat.toFixed(6)}</span>
-                  <span className="ml-2">{t("geocercas.lng", { defaultValue: "Lng" })}: {cursorLatLng.lng.toFixed(6)}</span>
-                </>
-              ) : (
-                <span>{t("geocercas.cursorHint", { defaultValue: "Move the mouse over the map" })}</span>
-              )}
+      <div
+        className={`absolute inset-x-0 bottom-0 z-[1100] transition-transform duration-300 ${
+          drawerOpen ? "translate-y-0" : "translate-y-[calc(100%-56px)]"
+        }`}
+      >
+        <div className="mx-0 rounded-t-3xl border-t border-white/10 bg-slate-950/90 shadow-2xl backdrop-blur-md">
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-slate-100">
+                {t("geocercas.panelTitle", { defaultValue: "Geofences" })}
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                {t("geocercas.drawerHint", {
+                  defaultValue: "Select, show or delete geofences without taking the map off screen.",
+                })}
+              </p>
             </div>
 
-            <div className="px-3 py-1.5 rounded-md bg-black/70 text-[11px] text-slate-50 font-mono pointer-events-none">
-              {t("geocercas.draftLabel", { defaultValue: "Draft" })}: {draftFeature ? t("geocercas.draftYes", { defaultValue: "yes" }) : t("geocercas.draftNo", { defaultValue: "no" })} | {t("geocercas.pointsLabel", { defaultValue: "Pts" })}: {draftPointsCount}
+            <button
+              type="button"
+              onClick={() => setDrawerOpen((v) => !v)}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+            >
+              {drawerOpen
+                ? t("common.actions.hide", { defaultValue: "Hide" })
+                : t("common.actions.show", { defaultValue: "Show" })}
+            </button>
+          </div>
+
+          <div className="border-t border-white/10 px-4 py-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <button
+                onClick={handleShowSelected}
+                className="rounded-xl bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-sky-500"
+                type="button"
+              >
+                {showLoading
+                  ? t("common.actions.loading", { defaultValue: "Loading..." })
+                  : t("geocercas.buttonShowOnMap", { defaultValue: "Show on map" })}
+              </button>
+
+              <button
+                onClick={handleDeleteSelected}
+                className="rounded-xl bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-500"
+                type="button"
+              >
+                {t("geocercas.buttonDeleteSelected", { defaultValue: "Delete selected" })}
+              </button>
+
+              <button
+                onClick={handleClearMap}
+                className="rounded-xl bg-slate-800 px-3 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700"
+                type="button"
+              >
+                {t("geocercas.buttonClearCanvas", { defaultValue: "Clear map" })}
+              </button>
+            </div>
+
+            <div className="mt-3 max-h-[24svh] overflow-auto pr-1 sm:max-h-[26svh]">
+              {geofenceList.length === 0 ? (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-3 text-sm text-slate-400">
+                  {t("geocercas.noGeofences", { defaultValue: "You don’t have any geofences yet." })}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {geofenceList.map((g) => (
+                    <label
+                      key={`api-${g.id || ""}-${g.name}`}
+                      className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
+                        selectedNames.has(g.name)
+                          ? "border-sky-500/50 bg-sky-950/30"
+                          : "border-slate-800 bg-slate-900/70 hover:bg-slate-800/80"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedNames.has(g.name)}
+                        onChange={() => {
+                          setSelectedNames((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(g.name)) next.delete(g.name);
+                            else next.add(g.name);
+                            return next;
+                          });
+                          setLastSelectedName(g.name);
+                        }}
+                      />
+                      <span className="min-w-0 truncate text-sm text-slate-100">{g.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {coordModalOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10000]">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-4 w-full max-w-md space-y-3 z-[10001]">
-            <h2 className="text-sm font-semibold text-slate-100 mb-1">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+          <div className="z-[10001] w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-4 shadow-2xl">
+            <h2 className="mb-1 text-sm font-semibold text-slate-100">
               {t("geocercas.modalTitle", { defaultValue: "Draw by coordinates" })}
             </h2>
 
@@ -1008,16 +1077,16 @@ export default function NuevaGeocerca() {
 
             <textarea
               rows={6}
-              className="w-full rounded-md bg-slate-950 border border-slate-700 text-xs text-slate-100 px-2 py-1.5"
+              className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100"
               value={coordText}
               onChange={(e) => setCoordText(e.target.value)}
               placeholder={`-0.180653, -78.467838\n-0.181200, -78.466500\n-0.182000, -78.468200`}
             />
 
-            <div className="flex justify-end gap-2 mt-2">
+            <div className="mt-3 flex justify-end gap-2">
               <button
                 onClick={() => setCoordModalOpen(false)}
-                className="px-3 py-1.5 rounded-md text-xs font-medium bg-slate-800 text-slate-200"
+                className="rounded-lg bg-slate-800 px-3 py-2 text-xs font-medium text-slate-200"
                 type="button"
               >
                 {t("common.actions.cancel", { defaultValue: "Cancel" })}
@@ -1025,7 +1094,7 @@ export default function NuevaGeocerca() {
 
               <button
                 onClick={handleDrawFromCoords}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-emerald-600 text-white"
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white"
                 type="button"
               >
                 {t("geocercas.modalDraw", { defaultValue: "Draw" })}
