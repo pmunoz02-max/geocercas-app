@@ -10,6 +10,7 @@ import TopTabs from "../components/TopTabs.jsx";
  * - La pantalla hub/listado queda en /geocercas (sin tab)
  * - Billing / Pricing visibles solo para perfiles de gestión
  * - Tracker debe quedar junto a "Invitar tracker"
+ * - Pricing y Billing al extremo derecho
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -42,10 +43,10 @@ function buildTabs({ role, isAppRoot }) {
 
   if (isAdmin) {
     tabs.push(
-      { path: "/pricing", labelKey: "app.tabs.pricing" },
-      { path: "/billing", labelKey: "app.tabs.billing" },
       { path: "/tracker", labelKey: "app.tabs.tracker" },
-      { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" }
+      { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
+      { path: "/pricing", labelKey: "app.tabs.pricing" },
+      { path: "/billing", labelKey: "app.tabs.billing" }
     );
   } else {
     tabs.push({ path: "/tracker", labelKey: "app.tabs.tracker" });
