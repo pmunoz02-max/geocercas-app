@@ -97,7 +97,7 @@ export default function TrackerGpsPage() {
     })();
   }, [i18n, lang]);
 
-  const [status, setStatus] = useState("Starting tracker…");
+  const [status, setStatus] = useState("");
   const [coords, setCoords] = useState(null);
   const [lastSend, setLastSend] = useState(null);
   const [lastError, setLastError] = useState(null);
