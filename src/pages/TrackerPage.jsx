@@ -1,4 +1,6 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿// src/pages/TrackerPage.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 import Tracker from "./Tracker.jsx";
@@ -17,6 +19,10 @@ function normalizePlanLabel(planCode) {
 }
 
 export default function TrackerPage() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { user, currentOrg, setCurrentOrg } = useAuth();
   const {
     loading: entitlementsLoading,
@@ -90,7 +96,10 @@ export default function TrackerPage() {
         if (!orgId) {
           if (!cancelado) {
             setError(
-              "Tu usuario no tiene ninguna organización activa asignada. Contacta al administrador."
+              tr(
+                "trackerPage.errors.noActiveOrgAssigned",
+                "Your user does not have any active organization assigned. Contact the administrator."
+              )
             );
           }
           return;
@@ -108,7 +117,7 @@ export default function TrackerPage() {
 
         const orgObj = {
           id: orgData?.id || orgId,
-          name: orgData?.name || "(sin nombre)",
+          name: orgData?.name || tr("trackerPage.labels.noName", "(unnamed)"),
           code: orgData?.slug || null,
           role: role || "tracker",
         };
@@ -126,7 +135,10 @@ export default function TrackerPage() {
         if (!cancelado) {
           console.error("[TrackerPage] error resolviendo organización:", e);
           setError(
-            "No se pudo determinar tu organización. Contacta al administrador."
+            tr(
+              "trackerPage.errors.resolveOrg",
+              "Could not determine your organization. Contact the administrator."
+            )
           );
         }
       } finally {
@@ -141,9 +153,9 @@ export default function TrackerPage() {
     return () => {
       cancelado = true;
     };
-  }, [user, currentOrg, setCurrentOrg]);
+  }, [user, currentOrg, setCurrentOrg, t]);
 
-  const orgName = currentOrg?.name || "tu organización";
+  const orgName = currentOrg?.name || tr("trackerPage.labels.yourOrg", "your organization");
   const currentOrgId = currentOrg?.id || null;
 
   const trackerBlockedByPlan = useMemo(() => {
@@ -153,10 +165,14 @@ export default function TrackerPage() {
   if (!user) {
     return (
       <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Acceso al tracker</h1>
+        <h1 className="text-2xl font-semibold mb-2">
+          {tr("trackerPage.auth.title", "Tracker access")}
+        </h1>
         <p className="text-gray-600 text-sm">
-          No se encontró una sesión activa. Abre el enlace de Magic Link que
-          recibiste en tu correo para comenzar a enviar tu ubicación.
+          {tr(
+            "trackerPage.auth.description",
+            "No active session was found. Open the Magic Link you received by email to start sending your location."
+          )}
         </p>
       </div>
     );
@@ -165,10 +181,14 @@ export default function TrackerPage() {
   if (resolviendoOrg) {
     return (
       <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Preparando tracker…</h1>
+        <h1 className="text-2xl font-semibold mb-2">
+          {tr("trackerPage.states.preparingTitle", "Preparing tracker…")}
+        </h1>
         <p className="text-gray-600 text-sm">
-          Estamos verificando tu organización y preparando el envío de tu
-          ubicación. Por favor, espera un momento.
+          {tr(
+            "trackerPage.states.preparingBody",
+            "We are verifying your organization and preparing the sending of your location. Please wait a moment."
+          )}
         </p>
       </div>
     );
@@ -177,9 +197,14 @@ export default function TrackerPage() {
   if (entitlementsLoading) {
     return (
       <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Validando plan…</h1>
+        <h1 className="text-2xl font-semibold mb-2">
+          {tr("trackerPage.states.validatingPlanTitle", "Validating plan…")}
+        </h1>
         <p className="text-gray-600 text-sm">
-          Estamos verificando si tu organización tiene habilitado el módulo Tracker.
+          {tr(
+            "trackerPage.states.validatingPlanBody",
+            "We are verifying whether your organization has the Tracker module enabled."
+          )}
         </p>
       </div>
     );
@@ -188,9 +213,14 @@ export default function TrackerPage() {
   if (entitlementsError) {
     return (
       <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-3">Tracker</h1>
+        <h1 className="text-2xl font-semibold mb-3">
+          {tr("trackerPage.title", "Tracker")}
+        </h1>
         <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded px-4 py-3 text-sm">
-          No se pudo validar el plan de la organización. Intenta nuevamente.
+          {tr(
+            "trackerPage.errors.planValidation",
+            "Could not validate the organization's plan. Please try again."
+          )}
           <div className="mt-2 font-mono text-xs break-all">{entitlementsError}</div>
         </div>
       </div>
@@ -200,27 +230,40 @@ export default function TrackerPage() {
   if (trackerBlockedByPlan) {
     return (
       <div className="p-6 max-w-2xl mx-auto space-y-4">
-        <h1 className="text-2xl font-semibold">Tracker</h1>
+        <h1 className="text-2xl font-semibold">
+          {tr("trackerPage.title", "Tracker")}
+        </h1>
 
         <div className="border border-amber-300 bg-amber-50 text-amber-900 rounded-xl px-4 py-4">
           <div className="text-base font-semibold">
-            El módulo Tracker no está disponible en el plan actual.
+            {tr(
+              "trackerPage.planBlocked.title",
+              "The Tracker module is not available on the current plan."
+            )}
           </div>
           <div className="mt-2 text-sm">
-            Organización: <span className="font-semibold">{orgName}</span>
+            {tr("trackerPage.planBlocked.organization", "Organization")}:{" "}
+            <span className="font-semibold">{orgName}</span>
           </div>
           <div className="mt-1 text-sm">
-            Plan detectado: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+            {tr("trackerPage.planBlocked.detectedPlan", "Detected plan")}:{" "}
+            <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
           </div>
           <div className="mt-3 text-sm">
-            Para enviar y gestionar posiciones en tiempo real, actualiza esta organización a PRO o superior.
+            {tr(
+              "trackerPage.planBlocked.description",
+              "To send and manage real-time positions, upgrade this organization to PRO or higher."
+            )}
           </div>
         </div>
 
         {currentOrgId ? (
           <div className="border rounded-xl p-4 bg-white">
             <div className="text-sm text-gray-700 mb-3">
-              Haz upgrade para habilitar Tracker en esta organización.
+              {tr(
+                "trackerPage.planBlocked.upgradePrompt",
+                "Upgrade to enable Tracker for this organization."
+              )}
             </div>
             <UpgradeToProButton
               orgId={currentOrgId}
@@ -230,8 +273,10 @@ export default function TrackerPage() {
         ) : null}
 
         <div className="border border-slate-200 bg-slate-50 text-slate-700 rounded-xl px-4 py-3 text-sm">
-          El backend sigue siendo la autoridad. Este bloqueo es visual y de experiencia
-          de usuario para reflejar el plan activo de la organización.
+          {tr(
+            "trackerPage.planBlocked.backendAuthority",
+            "The backend remains the authority. This block is visual and part of the user experience to reflect the organization's active plan."
+          )}
         </div>
       </div>
     );
@@ -239,7 +284,9 @@ export default function TrackerPage() {
 
   return (
     <div className="p-6 max-w-xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-3">Tracker activo</h1>
+      <h1 className="text-2xl font-semibold mb-3">
+        {tr("trackerPage.active.title", "Active tracker")}
+      </h1>
 
       {error ? (
         <div className="border border-red-300 bg-red-50 text-red-800 rounded px-4 py-2 text-sm mb-4">
@@ -247,9 +294,15 @@ export default function TrackerPage() {
         </div>
       ) : (
         <div className="border border-emerald-300 bg-emerald-50 text-emerald-800 rounded px-4 py-3 text-sm mb-4">
-          Usted está enviando su posición a la organización{" "}
+          {tr(
+            "trackerPage.active.descriptionPrefix",
+            "You are sending your position to the organization"
+          )}{" "}
           <span className="font-semibold">{orgName}</span>{" "}
-          a la que usted pertenece.
+          {tr(
+            "trackerPage.active.descriptionSuffix",
+            "to which you belong."
+          )}
         </div>
       )}
 
