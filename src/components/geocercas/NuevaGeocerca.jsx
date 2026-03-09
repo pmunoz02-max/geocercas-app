@@ -36,7 +36,7 @@ function Banner({ banner, onClose }) {
     <div className={`rounded-xl border px-3 py-2 text-sm flex items-start justify-between gap-3 shadow-xl backdrop-blur ${klass}`}>
       <div className="leading-snug">{banner.text}</div>
       <button
-        className="px-2 py-1 rounded-md bg-black/20 hover:bg-black/30 text-xs font-semibold"
+        className="pointer-events-auto px-2 py-1 rounded-md bg-black/20 hover:bg-black/30 text-xs font-semibold"
         onClick={onClose}
         type="button"
       >
@@ -247,6 +247,7 @@ export default function NuevaGeocerca() {
   const [showLoading, setShowLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [statsVisible, setStatsVisible] = useState(true);
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -908,34 +909,48 @@ export default function NuevaGeocerca() {
         </div>
       </div>
 
-      <div className="absolute left-1/2 top-16 sm:top-20 z-[1100] flex w-[min(760px,calc(100%-24px))] -translate-x-1/2 flex-wrap justify-center gap-2 px-2">
-        <StatBadge
-          label={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
-          value={normalizePlanLabel(planCode)}
-          tone={planTone}
-        />
-        <StatBadge
-          label={t("geocercas.planUsageTitle", { defaultValue: "Geofences" })}
-          value={
-            entitlementsLoading
-              ? t("common.actions.loading", { defaultValue: "Loading..." })
-              : hasFiniteGeofenceLimit
-              ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
-              : t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
-          }
-          tone={planTone}
-        />
-        <StatBadge
-          label={t("geocercas.planAvailableTitle", { defaultValue: "Available" })}
-          value={
-            entitlementsLoading
-              ? t("common.actions.loading", { defaultValue: "Loading..." })
-              : geofenceSlotsLeft === null
-              ? t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
-              : String(geofenceSlotsLeft)
-          }
-          tone={geofenceLimitReached ? "warn" : "default"}
-        />
+      <div className="absolute left-1/2 top-16 sm:top-20 z-[1100] -translate-x-1/2 flex flex-col items-center gap-2">
+        <button
+          onClick={() => setStatsVisible((v) => !v)}
+          className="pointer-events-auto px-3 py-1 rounded-lg bg-slate-900/80 border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 backdrop-blur-md shadow"
+          type="button"
+        >
+          {statsVisible
+            ? t("common.actions.hide", { defaultValue: "Hide" })
+            : t("common.actions.show", { defaultValue: "Show" })}
+        </button>
+
+        {statsVisible && (
+          <div className="flex w-[min(760px,calc(100%-24px))] flex-wrap justify-center gap-2 px-2">
+            <StatBadge
+              label={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
+              value={normalizePlanLabel(planCode)}
+              tone={planTone}
+            />
+            <StatBadge
+              label={t("geocercas.planUsageTitle", { defaultValue: "Geofences" })}
+              value={
+                entitlementsLoading
+                  ? t("common.actions.loading", { defaultValue: "Loading..." })
+                  : hasFiniteGeofenceLimit
+                  ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
+                  : t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
+              }
+              tone={planTone}
+            />
+            <StatBadge
+              label={t("geocercas.planAvailableTitle", { defaultValue: "Available" })}
+              value={
+                entitlementsLoading
+                  ? t("common.actions.loading", { defaultValue: "Loading..." })
+                  : geofenceSlotsLeft === null
+                  ? t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
+                  : String(geofenceSlotsLeft)
+              }
+              tone={geofenceLimitReached ? "warn" : "default"}
+            />
+          </div>
+        )}
       </div>
 
       <div className="hidden md:block absolute right-3 bottom-24 z-[1100] space-y-2">
