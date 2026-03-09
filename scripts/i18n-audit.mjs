@@ -1,295 +1,277 @@
-#!/usr/bin/env node
-/* eslint-disable no-console */
+// scripts/i18n-audit.mjs
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 
 const ROOT = process.cwd();
-const SRC_DIR = path.join(ROOT, "src");
+const I18N_DIR = path.join(ROOT, "src", "i18n");
 
-const LOCALES = {
-  es: path.join(SRC_DIR, "i18n", "es.json"),
-  en: path.join(SRC_DIR, "i18n", "en.json"),
-  fr: path.join(SRC_DIR, "i18n", "fr.json")
-};
+const FILES = [
+  { code: "es", file: "es.json" },
+  { code: "en", file: "en.json" },
+  { code: "fr", file: "fr.json" },
+];
 
-const BASE = (process.env.BASE || "es").toLowerCase();
-const OUT_DIR = path.join(SRC_DIR, "i18n", "_audit");
-
-function readJson(p) {
-  const raw = fs.readFileSync(p, "utf8");
+function readJson(absPath) {
+  const raw = fs.readFileSync(absPath, "utf8");
   return JSON.parse(raw);
 }
 
-function writeJson(p, obj) {
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(obj, null, 2) + "\n", "utf8");
-}
-
-function isObject(v) {
-  return v && typeof v === "object" && !Array.isArray(v);
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 function flattenKeys(obj, prefix = "") {
-  const out = [];
-  if (!isObject(obj)) return out;
+  const out = new Map();
 
-  for (const k of Object.keys(obj)) {
-    const v = obj[k];
-    const keyPath = prefix ? `${prefix}.${k}` : k;
-
-    if (isObject(v)) out.push(...flattenKeys(v, keyPath));
-    else out.push(keyPath);
-  }
-  return out;
-}
-
-function diffKeys(baseKeys, otherKeys) {
-  const base = new Set(baseKeys);
-  const other = new Set(otherKeys);
-
-  const missingInOther = [...base].filter((k) => !other.has(k)).sort();
-  const extraInOther = [...other].filter((k) => !base.has(k)).sort();
-
-  return { missingInOther, extraInOther };
-}
-
-function getByPath(obj, dotted) {
-  const parts = dotted.split(".");
-  let cur = obj;
-  for (const p of parts) {
-    if (!isObject(cur) && !Array.isArray(cur)) return undefined;
-    cur = cur?.[p];
-    if (typeof cur === "undefined") return undefined;
-  }
-  return cur;
-}
-
-function setByPath(obj, dotted, value) {
-  const parts = dotted.split(".");
-  let cur = obj;
-  for (let i = 0; i < parts.length; i++) {
-    const p = parts[i];
-    const isLast = i === parts.length - 1;
-    if (isLast) {
-      cur[p] = value;
-      return;
-    }
-    if (!isObject(cur[p])) cur[p] = {};
-    cur = cur[p];
-  }
-}
-
-function buildMissingSkeleton(baseObj, missingKeys) {
-  const out = {};
-  for (const k of missingKeys) {
-    const v = getByPath(baseObj, k);
-    setByPath(out, k, v);
-  }
-  return out;
-}
-
-function walkFiles(dir, exts, out = []) {
-  if (!fs.existsSync(dir)) return out;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "build") continue;
-      walkFiles(p, exts, out);
-    } else {
-      if (exts.includes(path.extname(entry.name))) out.push(p);
-    }
-  }
-  return out;
-}
-
-function scanHardcodes() {
-  const exts = [".js", ".jsx", ".ts", ".tsx"];
-  const files = walkFiles(SRC_DIR, exts);
-
-  const needles = [
-    "Iniciar sesión",
-    "Login",
-    "Cerrar sesión",
-    "Sin organización",
-    "Sin email",
-    "ROOT",
-    "SIN ROL",
-    "Salir",
-    "Inicio",
-    "Geocerca",
-    "Personal",
-    "Actividades",
-    "Asignaciones",
-    "Reportes",
-    "Tracker",
-    "Advanced options",
-    "Opciones avanzadas",
-    "Go to",
-    "Ir a"
-  ];
-
-  const findings = [];
-  for (const f of files) {
-    const txt = fs.readFileSync(f, "utf8");
-
-    for (const n of needles) {
-      if (txt.includes(n)) findings.push({ file: f, type: "needle", match: n });
-    }
-
-    const jsxTextRegex = />\s*([A-Za-zÁÉÍÓÚÜÑáéíóúüñ][^<>{}\n]{2,160})\s*</g;
-    let m;
-    while ((m = jsxTextRegex.exec(txt))) {
-      const s = String(m[1] || "").trim();
-      if (!s) continue;
-      if (s.includes("t(")) continue;
-      if (/^[\d\W_]+$/.test(s)) continue;
-      if (s.length < 3) continue;
-
-      findings.push({ file: f, type: "jsxText", match: s.slice(0, 160) });
-      if (findings.length > 1200) break;
-    }
-  }
-  return findings;
-}
-
-function scanUntranslated({ baseObj, otherObj, baseLng, otherLng }) {
-  const baseKeys = flattenKeys(baseObj).sort();
-  const issues = [];
-
-  const frenchChars = /[àâçéèêëîïôùûüÿœæ]/i;
-  const spanishChars = /[¿¡ñáéíóúü]/i;
-
-  const englishHints = [
-    "go to",
-    "log in",
-    "logout",
-    "dashboard",
-    "loading",
-    "create",
-    "delete",
-    "save",
-    "help center",
-    "privacy",
-    "support",
-    "view",
-    "enter"
-  ];
-
-  for (const k of baseKeys) {
-    const b = getByPath(baseObj, k);
-    const o = getByPath(otherObj, k);
-
-    if (typeof o === "undefined") continue;
-    if (typeof o !== "string") continue;
-
-    const val = o.trim();
-    const baseVal = typeof b === "string" ? b.trim() : "";
-
-    if (baseVal && val === baseVal) {
-      issues.push({ key: k, type: "same_as_base", base: baseLng, other: otherLng, sample: val.slice(0, 160) });
-      continue;
-    }
-
-    if (otherLng === "fr") {
-      const low = val.toLowerCase();
-      const looksEnglish = englishHints.some((h) => low.includes(h));
-      const hasFR = frenchChars.test(val);
-      const hasES = spanishChars.test(val);
-
-      if (looksEnglish && !hasFR) {
-        issues.push({ key: k, type: "looks_english", base: baseLng, other: otherLng, sample: val.slice(0, 160) });
-      } else if (hasES && !hasFR) {
-        issues.push({ key: k, type: "looks_spanish", base: baseLng, other: otherLng, sample: val.slice(0, 160) });
+  if (Array.isArray(obj)) {
+    obj.forEach((item, idx) => {
+      const key = prefix ? `${prefix}[${idx}]` : `[${idx}]`;
+      if (isPlainObject(item) || Array.isArray(item)) {
+        for (const [k, v] of flattenKeys(item, key)) out.set(k, v);
+      } else {
+        out.set(key, item);
       }
+    });
+    return out;
+  }
+
+  if (!isPlainObject(obj)) {
+    if (prefix) out.set(prefix, obj);
+    return out;
+  }
+
+  for (const [k, v] of Object.entries(obj)) {
+    const next = prefix ? `${prefix}.${k}` : k;
+    if (isPlainObject(v) || Array.isArray(v)) {
+      for (const [kk, vv] of flattenKeys(v, next)) out.set(kk, vv);
+    } else {
+      out.set(next, v);
     }
   }
 
-  return issues;
+  return out;
 }
 
-function ensureLocalesExist() {
-  for (const [lng, p] of Object.entries(LOCALES)) {
-    if (!fs.existsSync(p)) {
-      console.error(`❌ No existe: ${p}`);
-      process.exit(1);
+function getAllStructuralKeys(obj, prefix = "", out = new Set()) {
+  if (Array.isArray(obj)) {
+    obj.forEach((item, idx) => {
+      const key = prefix ? `${prefix}[${idx}]` : `[${idx}]`;
+      out.add(key);
+      getAllStructuralKeys(item, key, out);
+    });
+    return out;
+  }
+
+  if (!isPlainObject(obj)) {
+    if (prefix) out.add(prefix);
+    return out;
+  }
+
+  for (const [k, v] of Object.entries(obj)) {
+    const next = prefix ? `${prefix}.${k}` : k;
+    out.add(next);
+    getAllStructuralKeys(v, next, out);
+  }
+
+  return out;
+}
+
+function setDiff(a, b) {
+  return [...a].filter((x) => !b.has(x)).sort();
+}
+
+function intersectAll(sets) {
+  if (!sets.length) return new Set();
+  const [first, ...rest] = sets;
+  return new Set([...first].filter((x) => rest.every((s) => s.has(x))));
+}
+
+function unionAll(sets) {
+  const out = new Set();
+  for (const s of sets) {
+    for (const x of s) out.add(x);
+  }
+  return out;
+}
+
+function countPlaceholders(str) {
+  if (typeof str !== "string") return [];
+  const matches = str.match(/\{\{[^}]+\}\}/g);
+  return matches ? matches.sort() : [];
+}
+
+function comparePlaceholders(baseMap, otherMap) {
+  const mismatches = [];
+
+  for (const [key, baseVal] of baseMap.entries()) {
+    const otherVal = otherMap.get(key);
+    if (typeof baseVal !== "string" || typeof otherVal !== "string") continue;
+
+    const a = countPlaceholders(baseVal).join("|");
+    const b = countPlaceholders(otherVal).join("|");
+
+    if (a !== b) {
+      mismatches.push({
+        key,
+        base: countPlaceholders(baseVal),
+        other: countPlaceholders(otherVal),
+      });
     }
-    console.log(`✅ Locale ${lng}: ${path.relative(ROOT, p)}`);
+  }
+
+  return mismatches;
+}
+
+function printSection(title) {
+  console.log(`\n=== ${title} ===`);
+}
+
+function printList(title, items, limit = 200) {
+  console.log(`\n${title}: ${items.length}`);
+  items.slice(0, limit).forEach((x) => console.log(`- ${x}`));
+  if (items.length > limit) {
+    console.log(`... +${items.length - limit} more`);
   }
 }
 
 function main() {
-  ensureLocalesExist();
+  const loaded = [];
+  const errors = [];
 
-  if (!LOCALES[BASE]) {
-    console.error(`❌ BASE inválido: ${BASE}. Opciones: ${Object.keys(LOCALES).join(", ")}`);
+  for (const { code, file } of FILES) {
+    const abs = path.join(I18N_DIR, file);
+
+    if (!fs.existsSync(abs)) {
+      errors.push(`${file} not found`);
+      continue;
+    }
+
+    try {
+      const json = readJson(abs);
+      loaded.push({
+        code,
+        file,
+        abs,
+        json,
+        flat: flattenKeys(json),
+        structural: getAllStructuralKeys(json),
+      });
+    } catch (err) {
+      errors.push(`${file} invalid JSON: ${err.message}`);
+    }
+  }
+
+  if (errors.length) {
+    printSection("FATAL");
+    errors.forEach((e) => console.error(`- ${e}`));
     process.exit(1);
   }
 
-  const data = {
-    es: readJson(LOCALES.es),
-    en: readJson(LOCALES.en),
-    fr: readJson(LOCALES.fr)
+  printSection("FILES");
+  loaded.forEach((x) => {
+    console.log(
+      `- ${x.file} | flat keys: ${x.flat.size} | structural keys: ${x.structural.size}`
+    );
+  });
+
+  const structuralSets = loaded.map((x) => x.structural);
+  const allStructural = unionAll(structuralSets);
+  const commonStructural = intersectAll(structuralSets);
+
+  printSection("SUMMARY");
+  console.log(`- Common structural keys in all languages: ${commonStructural.size}`);
+  console.log(`- Union structural keys across languages: ${allStructural.size}`);
+
+  for (const lang of loaded) {
+    const missing = setDiff(allStructural, lang.structural);
+    const extra = setDiff(lang.structural, commonStructural);
+
+    printList(`Missing in ${lang.code}`, missing);
+    printList(`Extra/non-common in ${lang.code}`, extra);
+  }
+
+  const base = loaded.find((x) => x.code === "es") || loaded[0];
+
+  for (const lang of loaded) {
+    if (lang.code === base.code) continue;
+
+    const missingFlat = setDiff(new Set(base.flat.keys()), new Set(lang.flat.keys()));
+    const extraFlat = setDiff(new Set(lang.flat.keys()), new Set(base.flat.keys()));
+
+    printSection(`COMPARE ${base.code.toUpperCase()} -> ${lang.code.toUpperCase()}`);
+    printList(`Missing leaf keys in ${lang.code}`, missingFlat);
+    printList(`Extra leaf keys in ${lang.code}`, extraFlat);
+
+    const placeholderMismatches = comparePlaceholders(base.flat, lang.flat);
+    console.log(`\nPlaceholder mismatches (${lang.code}): ${placeholderMismatches.length}`);
+    placeholderMismatches.slice(0, 200).forEach((m) => {
+      console.log(`- ${m.key}`);
+      console.log(`  base : ${JSON.stringify(m.base)}`);
+      console.log(`  other: ${JSON.stringify(m.other)}`);
+    });
+    if (placeholderMismatches.length > 200) {
+      console.log(`... +${placeholderMismatches.length - 200} more`);
+    }
+  }
+
+  const report = {
+    generated_at: new Date().toISOString(),
+    files: loaded.map((x) => ({
+      code: x.code,
+      file: x.file,
+      flat_keys: x.flat.size,
+      structural_keys: x.structural.size,
+    })),
+    common_structural_keys: commonStructural.size,
+    union_structural_keys: allStructural.size,
+    per_language: Object.fromEntries(
+      loaded.map((lang) => [
+        lang.code,
+        {
+          missing_structural: setDiff(allStructural, lang.structural),
+          extra_non_common_structural: setDiff(lang.structural, commonStructural),
+        },
+      ])
+    ),
+    leaf_compare_from_es: Object.fromEntries(
+      loaded
+        .filter((x) => x.code !== base.code)
+        .map((lang) => [
+          lang.code,
+          {
+            missing_leaf: setDiff(new Set(base.flat.keys()), new Set(lang.flat.keys())),
+            extra_leaf: setDiff(new Set(lang.flat.keys()), new Set(base.flat.keys())),
+            placeholder_mismatches: comparePlaceholders(base.flat, lang.flat),
+          },
+        ])
+    ),
   };
 
-  const keys = {
-    es: flattenKeys(data.es),
-    en: flattenKeys(data.en),
-    fr: flattenKeys(data.fr)
-  };
+  const outDir = path.join(ROOT, "tmp");
+  if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
-  console.log(`\n=== i18n AUDIT: Missing/Extra keys (base: ${BASE.toUpperCase()}) ===`);
+  const outPath = path.join(outDir, "i18n-audit-report.json");
+  fs.writeFileSync(outPath, JSON.stringify(report, null, 2), "utf8");
 
-  const baseKeys = keys[BASE];
-  const baseObj = data[BASE];
+  printSection("REPORT");
+  console.log(`- JSON report written to: ${outPath}`);
 
-  for (const lng of Object.keys(LOCALES)) {
-    if (lng === BASE) continue;
+  const hasProblems =
+    loaded.some((lang) => setDiff(allStructural, lang.structural).length > 0) ||
+    loaded.some((lang) => setDiff(lang.structural, commonStructural).length > 0) ||
+    loaded
+      .filter((x) => x.code !== base.code)
+      .some((lang) => comparePlaceholders(base.flat, lang.flat).length > 0);
 
-    const d = diffKeys(baseKeys, keys[lng]);
-
-    console.log(`\n[${lng.toUpperCase()}] Missing in ${lng.toUpperCase()}: ${d.missingInOther.length}`);
-    console.log(d.missingInOther.slice(0, 140).join("\n") || "(none)");
-    if (d.missingInOther.length > 140) console.log("...");
-
-    console.log(`\n[${lng.toUpperCase()}] Extra in ${lng.toUpperCase()}: ${d.extraInOther.length}`);
-    console.log(d.extraInOther.slice(0, 140).join("\n") || "(none)");
-    if (d.extraInOther.length > 140) console.log("...");
-
-    const missingSkeleton = buildMissingSkeleton(baseObj, d.missingInOther);
-    const outMissingPath = path.join(OUT_DIR, `${lng}.missing.from_${BASE}.json`);
-    writeJson(outMissingPath, missingSkeleton);
-    console.log(`\n✅ Wrote missing skeleton: ${path.relative(ROOT, outMissingPath)}`);
-
-    const untranslated = scanUntranslated({ baseObj, otherObj: data[lng], baseLng: BASE, otherLng: lng });
-    const outUntranslatedPath = path.join(OUT_DIR, `${lng}.untranslated.from_${BASE}.json`);
-    writeJson(outUntranslatedPath, untranslated);
-    console.log(`✅ Wrote untranslated report: ${path.relative(ROOT, outUntranslatedPath)}`);
-    console.log(`   Untranslated candidates: ${untranslated.length}`);
+  if (hasProblems) {
+    printSection("RESULT");
+    console.log("- Differences found. Review report before deploy.");
+    process.exit(2);
   }
 
-  console.log("\n=== i18n AUDIT: Possible hardcoded UI strings in src/ ===");
-  const hard = scanHardcodes();
-  const byFile = new Map();
-  for (const it of hard) {
-    const arr = byFile.get(it.file) || [];
-    arr.push(it);
-    byFile.set(it.file, arr);
-  }
-
-  const files = [...byFile.keys()].sort();
-  console.log(`Found in ${files.length} files.\n`);
-
-  for (const f of files.slice(0, 60)) {
-    console.log(`--- ${path.relative(ROOT, f)} ---`);
-    const arr = byFile.get(f) || [];
-    for (const it of arr.slice(0, 16)) console.log(`  [${it.type}] ${it.match}`);
-    if (arr.length > 16) console.log("  ...");
-    console.log("");
-  }
-
-  if (files.length > 60) console.log("(Output truncated)");
-  console.log("\n✅ Done.\n");
-  console.log(`📌 Outputs: ${path.relative(ROOT, OUT_DIR)}`);
+  printSection("RESULT");
+  console.log("- OK. Languages are structurally aligned.");
 }
 
 main();

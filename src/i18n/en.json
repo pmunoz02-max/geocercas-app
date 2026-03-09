@@ -25,6 +25,9 @@
       "no": "No",
       "loading": "Loading..."
     },
+    "createOrganization": "Create organization",
+    "orgNamePlaceholder": "Organization name (e.g. Farm A)",
+    "refreshContext": "Refresh context",
     "select": "— Select —",
     "sending": "Sending..."
   },

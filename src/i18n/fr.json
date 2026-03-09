@@ -25,6 +25,9 @@
       "no": "Non",
       "loading": "Chargement…"
     },
+    "createOrganization": "Créer une organisation",
+    "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
+    "refreshContext": "Actualiser le contexte",
     "select": "— Sélectionner —",
     "sending": "Envoi..."
   },
