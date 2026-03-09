@@ -1,5 +1,6 @@
 // src/pages/Admin.jsx
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 // Si NO usas alias "@", cambia la siguiente línea a: import { ... } from "../services/admin";
 import {
   createOrganization,
@@ -10,6 +11,10 @@ import {
 } from "@/services/admin";
 
 export default function Admin() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const [orgs, setOrgs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [orgName, setOrgName] = useState("");
@@ -28,7 +33,7 @@ export default function Admin() {
       setMe(profile);
       setOrgs(organizations);
     } catch (e) {
-      const msg = (e && e.message) ? e.message : String(e);
+      const msg = e && e.message ? e.message : String(e);
       setError(msg);
     } finally {
       setLoading(false);
@@ -48,7 +53,7 @@ export default function Admin() {
       setOrgName("");
       setOrgs((prev) => [org, ...prev]);
     } catch (e) {
-      const msg = (e && e.message) ? e.message : String(e);
+      const msg = e && e.message ? e.message : String(e);
       setError(msg);
     }
   }
@@ -60,16 +65,18 @@ export default function Admin() {
       if (!inviteEmail.trim()) return;
       await sendMagicLink(inviteEmail.trim());
       setInviteEmail("");
-      alert("Enlace enviado.");
+      window.alert(tr("admin.messages.magicLinkSent", "Link sent."));
     } catch (e) {
-      const msg = (e && e.message) ? e.message : String(e);
+      const msg = e && e.message ? e.message : String(e);
       setError(msg);
     }
   }
 
   return (
     <div className="mx-auto max-w-3xl p-4">
-      <h1 className="text-2xl font-semibold mb-4">Admin</h1>
+      <h1 className="text-2xl font-semibold mb-4">
+        {tr("admin.title", "Admin")}
+      </h1>
 
       {error && (
         <div className="mb-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
@@ -78,51 +85,81 @@ export default function Admin() {
       )}
 
       <section className="mb-6 rounded-lg border p-4">
-        <h2 className="mb-3 text-lg font-medium">Mi perfil</h2>
+        <h2 className="mb-3 text-lg font-medium">
+          {tr("admin.profile.title", "My profile")}
+        </h2>
+
         {me ? (
           <div className="text-sm">
-            <div><b>ID:</b> {me.id}</div>
-            <div><b>Email:</b> {me.email ?? "—"}</div>
-            <div><b>Nombre:</b> {me.full_name ?? "—"}</div>
-            <div><b>Rol:</b> {me.role_id ?? "—"}</div>
-            <div><b>Org:</b> {me.org_id ?? "—"}</div>
+            <div>
+              <b>{tr("admin.profile.id", "ID")}:</b> {me.id}
+            </div>
+            <div>
+              <b>{tr("admin.profile.email", "Email")}:</b> {me.email ?? "—"}
+            </div>
+            <div>
+              <b>{tr("admin.profile.name", "Name")}:</b> {me.full_name ?? "—"}
+            </div>
+            <div>
+              <b>{tr("admin.profile.role", "Role")}:</b> {me.role_id ?? "—"}
+            </div>
+            <div>
+              <b>{tr("admin.profile.org", "Org")}:</b> {me.org_id ?? "—"}
+            </div>
           </div>
         ) : (
-          <div className="text-sm text-gray-500">Sin datos de perfil.</div>
+          <div className="text-sm text-gray-500">
+            {tr("admin.profile.empty", "No profile data.")}
+          </div>
         )}
       </section>
 
       <section className="mb-6 rounded-lg border p-4">
-        <h2 className="mb-3 text-lg font-medium">Crear Organización</h2>
+        <h2 className="mb-3 text-lg font-medium">
+          {tr("admin.createOrg.title", "Create organization")}
+        </h2>
+
         <form onSubmit={onCreateOrg} className="flex gap-2">
           <input
             type="text"
             value={orgName}
             onChange={(e) => setOrgName(e.target.value)}
-            placeholder="Nombre de la organización"
+            placeholder={tr(
+              "admin.createOrg.namePlaceholder",
+              "Organization name"
+            )}
             className="w-full rounded border px-3 py-2"
           />
           <button
             type="submit"
             className="rounded bg-black px-4 py-2 text-white"
           >
-            Crear
+            {tr("admin.createOrg.submit", "Create")}
           </button>
         </form>
       </section>
 
       <section className="mb-6 rounded-lg border p-4">
-        <h2 className="mb-3 text-lg font-medium">Mis Organizaciones</h2>
+        <h2 className="mb-3 text-lg font-medium">
+          {tr("admin.orgs.title", "My organizations")}
+        </h2>
+
         {loading ? (
-          <div className="text-sm text-gray-500">Cargando…</div>
+          <div className="text-sm text-gray-500">
+            {tr("admin.states.loading", "Loading…")}
+          </div>
         ) : orgs.length === 0 ? (
-          <div className="text-sm text-gray-500">No hay organizaciones.</div>
+          <div className="text-sm text-gray-500">
+            {tr("admin.orgs.empty", "There are no organizations.")}
+          </div>
         ) : (
           <ul className="space-y-2">
             {orgs.map((o) => (
               <li key={o.id} className="rounded border p-3">
                 <div className="font-medium">{o.name}</div>
-                <div className="text-xs text-gray-600">ID: {o.id}</div>
+                <div className="text-xs text-gray-600">
+                  {tr("admin.orgs.idLabel", "ID")}: {o.id}
+                </div>
               </li>
             ))}
           </ul>
@@ -130,21 +167,35 @@ export default function Admin() {
       </section>
 
       <section className="mb-6 rounded-lg border p-4">
-        <h2 className="mb-3 text-lg font-medium">Invitar Tracker (Magic Link)</h2>
+        <h2 className="mb-3 text-lg font-medium">
+          {tr("admin.inviteTracker.title", "Invite tracker (Magic Link)")}
+        </h2>
+
         <form onSubmit={onSendMagicLink} className="flex gap-2">
           <input
             type="email"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
-            placeholder="tracker@correo.com"
+            placeholder={tr(
+              "admin.inviteTracker.emailPlaceholder",
+              "tracker@email.com"
+            )}
             className="w-full rounded border px-3 py-2"
           />
-          <button type="submit" className="rounded bg-black px-4 py-2 text-white">
-            Enviar
+          <button
+            type="submit"
+            className="rounded bg-black px-4 py-2 text-white"
+          >
+            {tr("admin.inviteTracker.submit", "Send")}
           </button>
         </form>
+
         <p className="mt-2 text-xs text-gray-500">
-          Este botón usa la Edge Function <code>send-magic-link</code>.
+          {tr(
+            "admin.inviteTracker.helpPrefix",
+            "This button uses the Edge Function"
+          )}{" "}
+          <code>send-magic-link</code>.
         </p>
       </section>
     </div>
