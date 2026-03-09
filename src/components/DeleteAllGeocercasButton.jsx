@@ -1,30 +1,51 @@
 // src/components/DeleteAllGeocercasButton.jsx
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { useGeocercas } from "../hooks/useGeocercas";
 
 export default function DeleteAllGeocercasButton() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { geocercas, removeAllByState, refetch, resetLocalCache } = useGeocercas();
 
   const handleDeleteAll = async () => {
     if (!geocercas?.length) {
-      alert("No hay geocercas para borrar.");
+      window.alert(
+        tr("deleteAllGeofences.messages.empty", "There are no geofences to delete.")
+      );
       return;
     }
-    const ok = window.confirm(`Se eliminarán ${geocercas.length} geocercas. ¿Continuar?`);
+
+    const ok = window.confirm(
+      tr(
+        "deleteAllGeofences.confirm",
+        "{{count}} geofences will be deleted. Continue?",
+        { count: geocercas.length }
+      )
+    );
     if (!ok) return;
 
     try {
-      await removeAllByState();  // ← RPC delete_all_geocercas_for_user
+      await removeAllByState();
       resetLocalCache();
       await refetch();
-      alert("Geocercas eliminadas.");
+      window.alert(
+        tr("deleteAllGeofences.messages.success", "Geofences deleted.")
+      );
     } catch (e) {
-      alert(`No se pudo borrar: ${e.message || e}`);
+      window.alert(
+        tr("deleteAllGeofences.errors.delete", "Could not delete: {{message}}", {
+          message: e?.message || String(e),
+        })
+      );
     }
   };
 
   return (
     <button
+      type="button"
       onClick={handleDeleteAll}
       style={{
         padding: "8px 12px",
@@ -35,9 +56,12 @@ export default function DeleteAllGeocercasButton() {
         color: "#ef4444",
         fontWeight: 700,
       }}
-      title="Borrar todas las geocercas (servidor)"
+      title={tr(
+        "deleteAllGeofences.title",
+        "Delete all geofences (server)"
+      )}
     >
-      🗑️ BORRAR GEOCERCAS
+      {tr("deleteAllGeofences.button", "🗑️ DELETE GEOFENCES")}
     </button>
   );
 }
