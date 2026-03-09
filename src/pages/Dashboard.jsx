@@ -1,6 +1,7 @@
 ﻿// src/pages/Dashboard.jsx
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import WelcomeBanner from "../components/WelcomeBanner";
 import { useAuth } from "@/context/auth.js";
 
@@ -15,6 +16,10 @@ function roleRank(r) {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { authReady, orgsReady, currentOrg, bestRole, currentRole, trackerDomain } = useAuth();
 
   const effectiveRole = useMemo(() => {
@@ -27,20 +32,23 @@ export default function Dashboard() {
   const isAdmin = effectiveRole === "admin" || effectiveRole === "owner";
   const isTracker = trackerDomain || effectiveRole === "tracker";
 
-  // âœ… Loading correcto del contexto
   if (!authReady || !orgsReady) {
     return (
       <div className="min-h-screen bg-white">
         <div className="max-w-6xl mx-auto px-4 py-6">
           <section className="rounded-xl border p-6">
-            <p className="text-sm text-gray-600">Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦</p>
+            <p className="text-sm text-gray-600">
+              {tr(
+                "dashboard.states.loadingContext",
+                "Loading your session and current organization…"
+              )}
+            </p>
           </section>
         </div>
       </div>
     );
   }
 
-  // Tracker-only domain: no exige org
   if (isTracker && !currentOrg) {
     return (
       <div className="min-h-screen bg-white">
@@ -48,13 +56,21 @@ export default function Dashboard() {
           <WelcomeBanner />
           <main className="mt-6">
             <section className="rounded-xl border p-6 mb-6">
-              <h2 className="text-lg font-semibold mb-2">Acciones del tracker</h2>
+              <h2 className="text-lg font-semibold mb-2">
+                {tr("dashboard.trackerActions.title", "Tracker actions")}
+              </h2>
               <div className="flex flex-wrap gap-3">
-                <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/tracker/enviar-ubicacion">
-                  Enviar ubicaciÃ³n
+                <Link
+                  className="text-sm border rounded px-3 py-2 hover:bg-gray-50"
+                  to="/tracker/enviar-ubicacion"
+                >
+                  {tr("dashboard.trackerActions.sendLocation", "Send location")}
                 </Link>
-                <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/tracker/historial">
-                  Ver historial
+                <Link
+                  className="text-sm border rounded px-3 py-2 hover:bg-gray-50"
+                  to="/tracker/historial"
+                >
+                  {tr("dashboard.trackerActions.viewHistory", "View history")}
                 </Link>
               </div>
             </section>
@@ -64,7 +80,6 @@ export default function Dashboard() {
     );
   }
 
-  // Panel normal: aquÃ­ sÃ­ exigimos org (caso real)
   if (!currentOrg) {
     return (
       <div className="min-h-screen bg-white">
@@ -72,9 +87,14 @@ export default function Dashboard() {
           <WelcomeBanner />
           <main className="mt-6">
             <section className="rounded-xl border border-red-200 bg-red-50 p-6">
-              <h2 className="text-lg font-semibold mb-2 text-red-700">No hay organizaciÃ³n activa</h2>
+              <h2 className="text-lg font-semibold mb-2 text-red-700">
+                {tr("dashboard.errors.noActiveOrgTitle", "There is no active organization")}
+              </h2>
               <p className="text-sm text-red-700">
-                Tu usuario no tiene una organizaciÃ³n asignada. Contacta al administrador o vuelve a iniciar sesiÃ³n.
+                {tr(
+                  "dashboard.errors.noActiveOrgBody",
+                  "Your user does not have an assigned organization. Contact the administrator or sign in again."
+                )}
               </p>
             </section>
           </main>
@@ -89,10 +109,13 @@ export default function Dashboard() {
         <WelcomeBanner />
 
         <div className="mt-2 text-xs text-gray-500">
-          OrganizaciÃ³n actual: <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
+          {tr("dashboard.currentOrg", "Current organization")}:{" "}
+          <span className="font-medium">{currentOrg?.name || currentOrg?.id}</span>
           {effectiveRole ? (
             <>
-              {" "}Â· Rol: <span className="font-medium">{effectiveRole.toUpperCase()}</span>
+              {" "}
+              · {tr("dashboard.currentRole", "Role")}:{" "}
+              <span className="font-medium">{effectiveRole.toUpperCase()}</span>
             </>
           ) : null}
         </div>
@@ -100,35 +123,48 @@ export default function Dashboard() {
 
       <main className="max-w-6xl mx-auto px-4 pb-10">
         <section className="rounded-xl border p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-2">Acceso general</h2>
+          <h2 className="text-lg font-semibold mb-2">
+            {tr("dashboard.generalAccess.title", "General access")}
+          </h2>
           <p className="text-sm text-gray-600">
-            Bienvenido al panel principal. AquÃ­ tienes accesos rÃ¡pidos y diagnÃ³stico.
+            {tr(
+              "dashboard.generalAccess.description",
+              "Welcome to the main dashboard. Here you have quick access and diagnostics."
+            )}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/whoami">
-              DiagnÃ³stico (WhoAmI)
+              {tr("dashboard.generalAccess.whoami", "Diagnostics (WhoAmI)")}
             </Link>
             <Link className="text-sm border rounded px-3 py-2 hover:bg-gray-50" to="/mapa">
-              Ir al Mapa
+              {tr("dashboard.generalAccess.goToMap", "Go to map")}
             </Link>
           </div>
         </section>
 
         {isAdmin && (
           <section className="rounded-xl border p-6 mb-6">
-            <h2 className="text-lg font-semibold mb-2">Herramientas de administrador</h2>
+            <h2 className="text-lg font-semibold mb-2">
+              {tr("dashboard.adminTools.title", "Administrator tools")}
+            </h2>
             <ul className="list-disc pl-5 text-sm leading-6">
               <li>
-                GestiÃ³n de usuarios y roles &nbsp;
-                <Link className="underline" to="/admin/usuarios">Abrir</Link>
+                {tr("dashboard.adminTools.usersAndRoles", "User and role management")}{" "}
+                <Link className="underline" to="/admin/usuarios">
+                  {tr("dashboard.actions.open", "Open")}
+                </Link>
               </li>
               <li>
-                PolÃ­ticas y auditorÃ­a &nbsp;
-                <Link className="underline" to="/admin/politicas">Abrir</Link>
+                {tr("dashboard.adminTools.policiesAndAudit", "Policies and audit")}{" "}
+                <Link className="underline" to="/admin/politicas">
+                  {tr("dashboard.actions.open", "Open")}
+                </Link>
               </li>
               <li>
-                Reportes y descargas &nbsp;
-                <Link className="underline" to="/admin/reportes">Abrir</Link>
+                {tr("dashboard.adminTools.reportsAndDownloads", "Reports and downloads")}{" "}
+                <Link className="underline" to="/admin/reportes">
+                  {tr("dashboard.actions.open", "Open")}
+                </Link>
               </li>
             </ul>
           </section>
@@ -136,10 +172,21 @@ export default function Dashboard() {
 
         {!isAdmin && (
           <section className="rounded-xl border p-6">
-            <h2 className="text-lg font-semibold mb-2">Tu acceso</h2>
+            <h2 className="text-lg font-semibold mb-2">
+              {tr("dashboard.yourAccess.title", "Your access")}
+            </h2>
             <p className="text-sm text-gray-600">
-              Tu rol actual es <span className="font-medium">{effectiveRole ? effectiveRole.toUpperCase() : "SIN ROL"}</span>.
-              Si necesitas acceso a mÃ³dulos adicionales, contacta al administrador de tu organizaciÃ³n.
+              {tr("dashboard.yourAccess.descriptionPrefix", "Your current role is")}{" "}
+              <span className="font-medium">
+                {effectiveRole
+                  ? effectiveRole.toUpperCase()
+                  : tr("dashboard.yourAccess.noRole", "NO ROLE")}
+              </span>
+              .{" "}
+              {tr(
+                "dashboard.yourAccess.descriptionSuffix",
+                "If you need access to additional modules, contact your organization administrator."
+              )}
             </p>
           </section>
         )}
@@ -147,4 +194,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
