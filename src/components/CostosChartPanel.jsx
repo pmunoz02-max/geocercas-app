@@ -1,5 +1,6 @@
 // src/components/CostosChartPanel.jsx
 import React, { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 export default function CostosChartPanel({
   chartEntries,
@@ -9,7 +10,10 @@ export default function CostosChartPanel({
   onChangeChartGrouping,
   onChangeChartType,
 }) {
-  // Cálculo de datos para pastel (solo presentación)
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const pieData = useMemo(() => {
     if (!chartEntries.length) return { total: 0, segments: [] };
 
@@ -54,35 +58,60 @@ export default function CostosChartPanel({
 
   const hasData = chartEntries.length > 0 && maxChartValue > 0;
 
+  const groupingLabel =
+    chartGrouping === "actividad"
+      ? tr("costsChartPanel.grouping.activityPlural", "activities")
+      : chartGrouping === "persona"
+      ? tr("costsChartPanel.grouping.personPlural", "people")
+      : tr("costsChartPanel.grouping.geofencePlural", "geofences");
+
   return (
     <div className="bg-white shadow-sm rounded-lg border border-gray-100 p-4 mb-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
         <h2 className="text-sm font-semibold text-gray-700">
-          Visualización gráfica de costos
+          {tr("costsChartPanel.title", "Cost chart visualization")}
         </h2>
+
         <div className="flex flex-wrap gap-2 text-xs">
           <div className="flex items-center gap-1">
-            <span className="text-gray-500">Agrupar por:</span>
+            <span className="text-gray-500">
+              {tr("costsChartPanel.labels.groupBy", "Group by:")}
+            </span>
             <select
               className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
               value={chartGrouping}
               onChange={(e) => onChangeChartGrouping(e.target.value)}
             >
-              <option value="actividad">Actividad</option>
-              <option value="persona">Persona</option>
-              <option value="geocerca">Geocerca</option>
+              <option value="actividad">
+                {tr("costsChartPanel.grouping.activity", "Activity")}
+              </option>
+              <option value="persona">
+                {tr("costsChartPanel.grouping.person", "Person")}
+              </option>
+              <option value="geocerca">
+                {tr("costsChartPanel.grouping.geofence", "Geofence")}
+              </option>
             </select>
           </div>
+
           <div className="flex items-center gap-1">
-            <span className="text-gray-500">Tipo:</span>
+            <span className="text-gray-500">
+              {tr("costsChartPanel.labels.type", "Type:")}
+            </span>
             <select
               className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
               value={chartType}
               onChange={(e) => onChangeChartType(e.target.value)}
             >
-              <option value="bar">Barras</option>
-              <option value="line">Líneas</option>
-              <option value="pie">Pastel</option>
+              <option value="bar">
+                {tr("costsChartPanel.types.bar", "Bars")}
+              </option>
+              <option value="line">
+                {tr("costsChartPanel.types.line", "Lines")}
+              </option>
+              <option value="pie">
+                {tr("costsChartPanel.types.pie", "Pie")}
+              </option>
             </select>
           </div>
         </div>
@@ -90,12 +119,13 @@ export default function CostosChartPanel({
 
       {!hasData ? (
         <p className="text-xs text-gray-500">
-          No hay datos suficientes para generar el gráfico con los filtros
-          actuales.
+          {tr(
+            "costsChartPanel.states.noData",
+            "There is not enough data to generate the chart with the current filters."
+          )}
         </p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Gráfico principal */}
           <div className="lg:col-span-2">
             {chartType === "bar" && (
               <div className="relative h-56 px-2">
@@ -231,7 +261,7 @@ export default function CostosChartPanel({
                 >
                   <div className="absolute inset-6 bg-white rounded-full flex items-center justify-center">
                     <div className="text-[11px] text-center text-gray-600">
-                      Total{" "}
+                      {tr("costsChartPanel.pie.total", "Total")}{" "}
                       <span className="block text-sm font-semibold text-gray-900">
                         {pieData.total.toLocaleString(undefined, {
                           minimumFractionDigits: 2,
@@ -245,15 +275,10 @@ export default function CostosChartPanel({
             )}
           </div>
 
-          {/* Ranking / leyenda derecha */}
           <div className="border-l border-gray-100 pl-4">
             <p className="text-xs font-semibold text-gray-600 mb-2">
-              Top {Math.min(chartEntries.length, 6)}{" "}
-              {chartGrouping === "actividad"
-                ? "actividades"
-                : chartGrouping === "persona"
-                ? "personas"
-                : "geocercas"}
+              {tr("costsChartPanel.ranking.top", "Top")}{" "}
+              {Math.min(chartEntries.length, 6)} {groupingLabel}
             </p>
 
             {chartType === "pie" && pieData.segments.length > 0 && (
