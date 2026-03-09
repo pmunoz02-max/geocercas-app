@@ -329,36 +329,59 @@ export default function NuevaGeocerca() {
   }, []);
 
   const scheduleFitToGeo = useCallback((geo) => {
-    const map = mapRef.current;
-    if (!map || !geo) return;
+  const map = mapRef.current;
+  if (!map || !geo) return;
 
-    const run = () => {
-      try {
-        const fc = ensureFeatureCollection(geo);
-        if (!fc) return;
-        const bounds = L.geoJSON(fc).getBounds();
-        if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [40, 40] });
-      } catch {}
-    };
-
+  const run = () => {
     try {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          try {
-            map.invalidateSize?.();
-          } catch {}
-          run();
+      const fc = ensureFeatureCollection(geo);
+      if (!fc) return;
+
+      const layer = L.geoJSON(fc);
+      const bounds = layer.getBounds();
+
+      if (!bounds?.isValid?.()) return;
+
+      const samePoint =
+        bounds.getSouthWest().lat === bounds.getNorthEast().lat &&
+        bounds.getSouthWest().lng === bounds.getNorthEast().lng;
+
+      try {
+        map.invalidateSize?.();
+      } catch {}
+
+      if (samePoint) {
+        map.setView(bounds.getCenter(), Math.max(map.getZoom(), 16), {
+          animate: true,
         });
-      });
-    } catch {
-      setTimeout(() => {
-        try {
-          map.invalidateSize?.();
-        } catch {}
-        run();
-      }, 0);
+      } else {
+        map.fitBounds(bounds, {
+          padding: [60, 60],
+          maxZoom: 17,
+          animate: true,
+        });
+      }
+    } catch (err) {
+      try {
+        console.error("[NuevaGeocerca] zoom error", err);
+      } catch {}
     }
-  }, []);
+  };
+
+  try {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        run();
+        setTimeout(run, 120);
+      });
+    });
+  } catch {
+    setTimeout(() => {
+      run();
+      setTimeout(run, 120);
+    }, 0);
+  }
+}, []);
 
   useEffect(() => {
     if (!viewFeature) return;
@@ -588,73 +611,86 @@ export default function NuevaGeocerca() {
   }, [selectedNames, currentOrg?.id, refreshGeofenceList, refreshEntitlements, clearCanvas, t, showErr, showOk, geofenceList]);
 
   const handleShowSelected = useCallback(async () => {
-    setShowLoading(true);
-    try {
-      const orgId = currentOrg?.id || null;
+  setShowLoading(true);
+  try {
+    const orgId = currentOrg?.id || null;
 
-      const selected = Array.from(selectedNames || [])
-        .map((x) => String(x || "").trim())
-        .filter(Boolean);
+    const selected = Array.from(selectedNames || [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
 
-      let namesToShow = selected;
-      if (namesToShow.length === 0) {
-        const one = lastSelectedName || geofenceList?.[0]?.name || null;
-        if (!one) {
-          showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
-          return;
-        }
-        namesToShow = [one];
-      }
-
-      const items = namesToShow.map((nm) => geofenceList.find((g) => String(g.name) === nm)).filter(Boolean);
-      if (!items.length) return;
-
-      const geos = [];
-      for (const item of items) {
-        if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
-        const row = await getGeofence({ id: item.id, orgId });
-
-        const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
-        if (geo) geos.push(geo);
-      }
-
-      const combined = combineFeatureCollections(geos);
-      if (!combined) {
-        showErr(t("geocercas.errorNoGeojson", { defaultValue: "Could not load the geofence GeoJSON." }));
+    let namesToShow = selected;
+    if (namesToShow.length === 0) {
+      const one = lastSelectedName || geofenceList?.[0]?.name || null;
+      if (!one) {
+        showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
         return;
       }
-
-      clearCanvas();
-      setDraftFeature(null);
-
-      setViewFeature(combined);
-      setViewCentroid(centroidFeatureFromGeojson(combined));
-      setViewId((x) => x + 1);
-
-      scheduleFitToGeo(combined);
-
-      if (items.length > 1) {
-        showOk(t("geocercas.showManyOk", { count: items.length, defaultValue: `Showing ${items.length} geofences.` }));
-      } else {
-        showOk(t("geocercas.showOneOk", { defaultValue: "Showing selected geofence on map." }));
-      }
-    } catch (e) {
-      showErr(t("geocercas.errorLoad", { defaultValue: "Could not load the geofence." }), e);
-    } finally {
-      setShowLoading(false);
+      namesToShow = [one];
     }
-  }, [
-    selectedNames,
-    lastSelectedName,
-    geofenceList,
-    currentOrg?.id,
-    t,
-    showErr,
-    showOk,
-    clearCanvas,
-    scheduleFitToGeo,
-  ]);
 
+    const items = namesToShow
+      .map((nm) => geofenceList.find((g) => String(g.name) === nm))
+      .filter(Boolean);
+
+    if (!items.length) return;
+
+    const geos = [];
+    for (const item of items) {
+      if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
+
+      const row = await getGeofence({ id: item.id, orgId });
+      const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
+
+      if (geo) geos.push(geo);
+    }
+
+    const combined = combineFeatureCollections(geos);
+    if (!combined) {
+      showErr(t("geocercas.errorNoGeojson", { defaultValue: "Could not load the geofence GeoJSON." }));
+      return;
+    }
+
+    clearCanvas();
+    setDraftFeature(null);
+
+    setViewFeature(combined);
+    setViewCentroid(centroidFeatureFromGeojson(combined));
+    setViewId((x) => x + 1);
+
+    // zoom directo e inmediato
+    scheduleFitToGeo(combined);
+
+    if (items.length > 1) {
+      showOk(
+        t("geocercas.showManyOk", {
+          count: items.length,
+          defaultValue: `Showing ${items.length} geofences.`,
+        })
+      );
+    } else {
+      showOk(
+        t("geocercas.showOneOk", {
+          defaultValue: "Showing selected geofence on map.",
+        })
+      );
+    }
+  } catch (e) {
+    showErr(t("geocercas.errorLoad", { defaultValue: "Could not load the geofence." }), e);
+  } finally {
+    setShowLoading(false);
+  }
+}, [
+  selectedNames,
+  lastSelectedName,
+  geofenceList,
+  currentOrg?.id,
+  t,
+  showErr,
+  showOk,
+  clearCanvas,
+  scheduleFitToGeo,
+]);
   const pointStyle = useMemo(
     () => ({
       pointToLayer: (_feature, latlng) =>
