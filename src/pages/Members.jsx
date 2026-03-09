@@ -1,45 +1,60 @@
 // src/pages/Members.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { listMembers, listMyOrganizations, setMemberRole } from "@/services/orgs";
 import { supabase } from "../supabaseClient";
 
 const ROLE_OPTIONS = ["owner", "admin", "tracker", "viewer"];
 
 export default function Members() {
+  const { t } = useTranslation();
+
+  const tt = (key, fallback, options = {}) => {
+    try {
+      const value = t(key, { defaultValue: fallback, ...options });
+      if (typeof value !== "string") return fallback;
+      const normalized = value.trim();
+      if (!normalized || normalized === key) return fallback;
+      return value;
+    } catch {
+      return fallback;
+    }
+  };
+
   const { orgId } = useParams();
-  const [org, setOrg] = useState(null);           // la membresía del usuario actual en esta org
+  const [org, setOrg] = useState(null);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [changing, setChanging] = useState(null); // user_id en proceso
+  const [changing, setChanging] = useState(null);
 
   const myRole = useMemo(() => org?.role ?? "viewer", [org]);
-
   const canManage = myRole === "owner" || myRole === "admin";
 
   const load = async () => {
     setLoading(true);
     try {
-      // Cargar mi membresía para saber mi rol
       const mine = await listMyOrganizations();
       const current = (mine || []).find((m) => m.org_id === orgId) || null;
       setOrg(current);
 
-      // Cargar lista de miembros
       const rows = await listMembers(orgId);
-      // Normalizar: vendrá con join a profiles (puede venir null si no hay perfil)
       const normalized = (rows || []).map((r) => ({
         user_id: r.user_id,
         org_id: r.org_id,
         role: r.role,
         created_at: r.created_at,
-        full_name: r.profiles?.full_name || "(sin nombre)",
+        full_name: r.profiles?.full_name || tt("members.fallbacks.noName", "(no name)"),
         avatar_url: r.profiles?.avatar_url || null,
       }));
       setMembers(normalized);
     } catch (err) {
       console.error(err);
-      alert("Error cargando miembros: " + err.message);
+      alert(
+        tt("members.messages.loadError", "Error loading members: {{message}}", {
+          message: err?.message || String(err),
+        })
+      );
     } finally {
       setLoading(false);
     }
@@ -56,7 +71,11 @@ export default function Members() {
       await load();
     } catch (err) {
       console.error(err);
-      alert("No se pudo cambiar el rol: " + err.message);
+      alert(
+        tt("members.messages.updateRoleError", "Could not change role: {{message}}", {
+          message: err?.message || String(err),
+        })
+      );
     } finally {
       setChanging(null);
     }
@@ -72,39 +91,44 @@ export default function Members() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link to="/orgs" className="px-3 py-2 rounded-xl shadow border hover:bg-gray-50">
-            ← Mis Organizaciones
+            ← {tt("members.actions.backToOrganizations", "My organizations")}
           </Link>
-          <h1 className="text-2xl font-bold">Miembros</h1>
+          <h1 className="text-2xl font-bold">{tt("members.title", "Members")}</h1>
         </div>
         <button
           onClick={onLogout}
           className="px-3 py-2 rounded-xl shadow border hover:bg-gray-50"
         >
-          Cerrar sesión
+          {tt("members.actions.logout", "Log out")}
         </button>
       </div>
 
       {org ? (
         <div className="text-sm text-gray-700">
-          Organización: <span className="font-semibold">{org.org_name}</span> · Tu rol:{" "}
+          {tt("members.labels.organization", "Organization")}:{" "}
+          <span className="font-semibold">{org.org_name}</span> ·{" "}
+          {tt("members.labels.yourRole", "Your role")}:{" "}
           <span className="font-semibold">{org.role}</span>
         </div>
       ) : (
         <div className="text-sm text-red-600">
-          No perteneces a esta organización o no tienes permisos.
+          {tt(
+            "members.messages.noAccess",
+            "You do not belong to this organization or you do not have permission."
+          )}
         </div>
       )}
 
       {loading ? (
-        <div className="p-4">Cargando…</div>
+        <div className="p-4">{tt("members.states.loading", "Loading…")}</div>
       ) : (
         <div className="border rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left p-3">Usuario</th>
-                <th className="text-left p-3">Rol</th>
-                <th className="text-left p-3">Acciones</th>
+                <th className="text-left p-3">{tt("members.table.user", "User")}</th>
+                <th className="text-left p-3">{tt("members.table.role", "Role")}</th>
+                <th className="text-left p-3">{tt("members.table.actions", "Actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -115,7 +139,7 @@ export default function Members() {
                       {m.avatar_url ? (
                         <img
                           src={m.avatar_url}
-                          alt="avatar"
+                          alt={tt("members.labels.avatar", "avatar")}
                           className="w-8 h-8 rounded-full object-cover"
                         />
                       ) : (
@@ -145,7 +169,9 @@ export default function Members() {
                         ))}
                       </select>
                     ) : (
-                      <span className="text-gray-400">Sin permisos</span>
+                      <span className="text-gray-400">
+                        {tt("members.states.noPermissions", "No permissions")}
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -153,7 +179,7 @@ export default function Members() {
               {members.length === 0 && (
                 <tr>
                   <td className="p-4 text-center text-gray-600" colSpan={3}>
-                    No hay miembros registrados.
+                    {tt("members.states.empty", "There are no registered members.")}
                   </td>
                 </tr>
               )}
@@ -163,8 +189,13 @@ export default function Members() {
       )}
 
       <div className="text-xs text-gray-500">
-        * Cambiar roles requiere ser <span className="font-semibold">owner</span> o{" "}
-        <span className="font-semibold">admin</span>. Los permisos de escritura están protegidos por RLS.
+        * {tt("members.notes.roleChangeRulePrefix", "Changing roles requires being")}{" "}
+        <span className="font-semibold">owner</span> {tt("members.notes.or", "or")}{" "}
+        <span className="font-semibold">admin</span>.{" "}
+        {tt(
+          "members.notes.rlsProtected",
+          "Write permissions are protected by RLS."
+        )}
       </div>
     </div>
   );
