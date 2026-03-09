@@ -24,10 +24,8 @@ function localDateTimeToISO(localDateTime) {
   return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
 }
 
-// Importante: valores internos siguen siendo "activa/inactiva" (compat backend).
 const ESTADOS = ["todos", "activa", "inactiva"];
 
-// ✅ Clases UI (alto contraste)
 const inputBase =
   "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
   "placeholder:text-gray-400 shadow-sm " +
@@ -51,7 +49,6 @@ async function fetchJsonSafe(url) {
     payload = null;
   }
 
-  // Soportar tanto {ok:true,data:...} como arrays planos
   if (!res.ok || payload?.ok === false) {
     const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
     return { payload, error: { message: msg, status: res.status } };
@@ -125,6 +122,9 @@ function normalizeGeofenceRow(g) {
 
 export default function AsignacionesPage() {
   const { t } = useTranslation();
+  const tt = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const { ready, currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
 
@@ -136,7 +136,6 @@ export default function AsignacionesPage() {
 
   const [estadoFilter, setEstadoFilter] = useState("todos");
 
-  // FORM
   const [selectedPersonalId, setSelectedPersonalId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
@@ -146,26 +145,21 @@ export default function AsignacionesPage() {
   const [status, setStatus] = useState("activa");
   const [editingId, setEditingId] = useState(null);
 
-  // CATALOGOS
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
 
-  // UI
   const [showForm, setShowForm] = useState(true);
 
   async function loadCatalogsCanonical() {
-    // Personas
     const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
     const personalRaw = extractArray(rP.payload);
     const personalNorm = personalRaw.map(normalizePersonRow).filter((p) => p.id);
 
-    // Geocercas (desde geofences)
     const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
     const geofencesRaw = extractArray(rG.payload);
     const geofencesNorm = geofencesRaw.map(normalizeGeofenceRow).filter((g) => g.id);
 
-    // Setear aunque una falle (evita “no se puede seleccionar”)
     setPersonalOptions(personalNorm);
     setGeocercaOptions(geofencesNorm);
   }
@@ -174,26 +168,25 @@ export default function AsignacionesPage() {
     setLoading(true);
     setError(null);
 
-    // 1) Siempre cargar catálogos canónicos (esto NO depende del bundle)
     try {
       await loadCatalogsCanonical();
     } catch (e) {
       console.error("[AsignacionesPage] canonical catalogs crash:", e);
-      // No bloqueamos la página por catálogos
       setPersonalOptions([]);
       setGeocercaOptions([]);
     }
 
-    // 2) Cargar bundle (listado + activities si existen)
     const { data, error: bundleError } = await getAsignacionesBundle();
 
     if (bundleError) {
       console.error("[AsignacionesPage] bundle error:", bundleError);
-      setAsignaciones([]); // listado vacío pero el form debe seguir usable
-      setActivityOptions([]); // si quieres, luego lo conectamos a /api/activities
+      setAsignaciones([]);
+      setActivityOptions([]);
       setError(
         bundleError.message ||
-          t("asignaciones.messages.loadError", { defaultValue: "Error loading assignments." })
+          t("asignaciones.messages.loadError", {
+            defaultValue: "Error loading assignments.",
+          })
       );
       setLoading(false);
       return;
@@ -205,7 +198,6 @@ export default function AsignacionesPage() {
 
     setAsignaciones(rows);
 
-    // Activities: mantenemos lo que venga del bundle
     const activitiesRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
     setActivityOptions(activitiesRaw);
 
@@ -248,33 +240,36 @@ export default function AsignacionesPage() {
     setSuccessMessage(null);
 
     if (!orgId) {
-      setError(t("asignaciones.messages.noOrg", { defaultValue: "No active organization." }));
+      setError(tt("asignaciones.messages.noOrg", "No active organization."));
       return;
     }
 
     if (!selectedPersonalId || !selectedGeocercaId) {
       setError(
-        t("asignaciones.messages.selectPersonAndFence", {
-          defaultValue: "You must select a person and a geofence.",
-        })
+        tt(
+          "asignaciones.messages.selectPersonAndFence",
+          "You must select a person and a geofence."
+        )
       );
       return;
     }
 
     if (!selectedActivityId) {
       setError(
-        t("asignaciones.error.missingActivity", {
-          defaultValue: "You must select an activity.",
-        })
+        tt(
+          "asignaciones.error.missingActivity",
+          "You must select an activity."
+        )
       );
       return;
     }
 
     if (!startTime || !endTime) {
       setError(
-        t("asignaciones.messages.selectDates", {
-          defaultValue: "You must enter start and end date/time.",
-        })
+        tt(
+          "asignaciones.messages.selectDates",
+          "You must enter start and end date/time."
+        )
       );
       return;
     }
@@ -282,17 +277,18 @@ export default function AsignacionesPage() {
     const freqMin = Number(frecuenciaEnvioMin) || 0;
     if (freqMin < 5) {
       setError(
-        t("asignaciones.messages.frequencyTooLow", {
-          defaultValue: "The minimum allowed frequency is 5 minutes.",
-        })
+        tt(
+          "asignaciones.messages.frequencyTooLow",
+          "The minimum allowed frequency is 5 minutes."
+        )
       );
       return;
     }
 
     const payload = {
       personal_id: selectedPersonalId,
-      geofence_id: selectedGeocercaId, // ✅ canónico
-      geocerca_id: null, // ✅ legacy trace nullable (evita FK vieja)
+      geofence_id: selectedGeocercaId,
+      geocerca_id: null,
       activity_id: selectedActivityId,
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
@@ -308,15 +304,21 @@ export default function AsignacionesPage() {
       console.error("[AsignacionesPage] save error:", resp.error);
       setError(
         resp.error.message ||
-          t("asignaciones.messages.saveGenericError", { defaultValue: "Error saving assignment." })
+          tt(
+            "asignaciones.messages.saveGenericError",
+            "Error saving assignment."
+          )
       );
       return;
     }
 
     setSuccessMessage(
       editingId
-        ? t("asignaciones.banner.updated", { defaultValue: "Assignment updated." })
-        : t("asignaciones.banner.created", { defaultValue: "Assignment created successfully." })
+        ? tt("asignaciones.banner.updated", "Assignment updated.")
+        : tt(
+            "asignaciones.banner.created",
+            "Assignment created successfully."
+          )
     );
 
     resetForm();
@@ -327,7 +329,7 @@ export default function AsignacionesPage() {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
         <div className={`${cardBase} px-4 py-3 text-sm text-gray-700`}>
-          {t("asignaciones.messages.loadingData", { defaultValue: "Loading assignment data…" })}
+          {tt("asignaciones.messages.loadingData", "Loading assignment data…")}
         </div>
       </div>
     );
@@ -337,40 +339,50 @@ export default function AsignacionesPage() {
     return (
       <div className="p-4 md:p-6 max-w-3xl mx-auto">
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {t("asignaciones.messages.noOrg", { defaultValue: "No active organization." })}
+          {tt("asignaciones.messages.noOrg", "No active organization.")}
         </div>
       </div>
     );
   }
 
   const labelForEstado = (v) => {
-    if (v === "todos") return t("asignaciones.filters.status.todos", { defaultValue: "All" });
-    if (v === "activa") return t("asignaciones.filters.status.activo", { defaultValue: "Active" });
-    if (v === "inactiva") return t("asignaciones.filters.status.inactivo", { defaultValue: "Inactive" });
+    if (v === "todos") {
+      return tt("asignaciones.filters.status.todos", "All");
+    }
+    if (v === "activa") {
+      return tt("asignaciones.filters.status.activo", "Active");
+    }
+    if (v === "inactiva") {
+      return tt("asignaciones.filters.status.inactivo", "Inactive");
+    }
     return v;
   };
 
   return (
     <div className="w-full px-3 md:px-6 py-4">
-      {/* HEADER */}
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {t("asignaciones.title", { defaultValue: "Asignaciones" })}
+            {tt("asignaciones.title", "Assignments")}
           </h1>
           <p className="text-xs text-gray-600 mt-1">
-            {t("asignaciones.currentOrgLabel", { defaultValue: "Current organization" })}:{" "}
-            <span className="font-medium text-gray-900">{currentOrg?.name || "—"}</span>
+            {tt("asignaciones.currentOrgLabel", "Current organization")}:{" "}
+            <span className="font-medium text-gray-900">
+              {currentOrg?.name || "—"}
+            </span>
           </p>
         </div>
 
-        {/* FILTRO + TOGGLE FORM */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <label className="font-medium text-sm text-gray-900">
-              {t("asignaciones.filters.statusLabel", { defaultValue: "Estado" })}
+              {tt("asignaciones.filters.statusLabel", "Status")}
             </label>
-            <select className={selectBase} value={estadoFilter} onChange={(e) => setEstadoFilter(e.target.value)}>
+            <select
+              className={selectBase}
+              value={estadoFilter}
+              onChange={(e) => setEstadoFilter(e.target.value)}
+            >
               {ESTADOS.map((v) => (
                 <option key={v} value={v}>
                   {labelForEstado(v)}
@@ -385,30 +397,32 @@ export default function AsignacionesPage() {
             className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
           >
             {showForm
-              ? t("asignaciones.ui.hideForm", { defaultValue: "Ocultar formulario" })
-              : t("asignaciones.ui.showForm", { defaultValue: "Mostrar formulario" })}
+              ? tt("asignaciones.ui.hideForm", "Hide form")
+              : tt("asignaciones.ui.showForm", "Show form")}
           </button>
         </div>
       </div>
 
-      {/* LAYOUT DASHBOARD */}
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
-        {/* FORM PANEL */}
         {showForm && (
           <div className={`${cardBase} p-4`}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-base font-semibold text-gray-900">
                 {editingId
-                  ? t("asignaciones.form.editTitle", { defaultValue: "Editar asignación" })
-                  : t("asignaciones.form.newTitle", { defaultValue: "Nueva asignación" })}
+                  ? tt("asignaciones.form.editTitle", "Edit assignment")
+                  : tt("asignaciones.form.newTitle", "New assignment")}
               </h2>
-              {loading && <span className="text-xs text-gray-500">Loading…</span>}
+              {loading && (
+                <span className="text-xs text-gray-500">
+                  {tt("common.loading", "Loading…")}
+                </span>
+              )}
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {t("asignaciones.form.personLabel", { defaultValue: "Persona" })}
+                  {tt("asignaciones.form.personLabel", "Person")}
                 </label>
                 <select
                   className={selectBase}
@@ -417,7 +431,10 @@ export default function AsignacionesPage() {
                   required
                 >
                   <option value="">
-                    {t("asignaciones.form.personPlaceholder", { defaultValue: "Selecciona una persona" })}
+                    {tt(
+                      "asignaciones.form.personPlaceholder",
+                      "Select a person"
+                    )}
                   </option>
                   {personalOptions.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -429,7 +446,7 @@ export default function AsignacionesPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {t("asignaciones.form.geofenceLabel", { defaultValue: "Geocerca" })}
+                  {tt("asignaciones.form.geofenceLabel", "Geofence")}
                 </label>
                 <select
                   className={selectBase}
@@ -438,7 +455,10 @@ export default function AsignacionesPage() {
                   required
                 >
                   <option value="">
-                    {t("asignaciones.form.geofencePlaceholder", { defaultValue: "Selecciona una geocerca" })}
+                    {tt(
+                      "asignaciones.form.geofencePlaceholder",
+                      "Select a geofence"
+                    )}
                   </option>
                   {geocercaOptions.map((g) => (
                     <option key={g.id} value={g.id}>
@@ -450,7 +470,7 @@ export default function AsignacionesPage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {t("asignaciones.form.activityLabel", { defaultValue: "Actividad" })}
+                  {tt("asignaciones.form.activityLabel", "Activity")}
                 </label>
                 <select
                   className={selectBase}
@@ -460,7 +480,10 @@ export default function AsignacionesPage() {
                   disabled={activityOptions.length === 0}
                 >
                   <option value="">
-                    {t("asignaciones.form.activityPlaceholder", { defaultValue: "Selecciona una actividad" })}
+                    {tt(
+                      "asignaciones.form.activityPlaceholder",
+                      "Select an activity"
+                    )}
                   </option>
                   {activityOptions.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -473,7 +496,7 @@ export default function AsignacionesPage() {
               <div className="grid grid-cols-1 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {t("asignaciones.form.startLabel", { defaultValue: "Fecha/hora inicio" })}
+                    {tt("asignaciones.form.startLabel", "Start date/time")}
                   </label>
                   <input
                     type="datetime-local"
@@ -486,7 +509,7 @@ export default function AsignacionesPage() {
 
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {t("asignaciones.form.endLabel", { defaultValue: "Fecha/hora fin" })}
+                    {tt("asignaciones.form.endLabel", "End date/time")}
                   </label>
                   <input
                     type="datetime-local"
@@ -501,17 +524,25 @@ export default function AsignacionesPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {t("asignaciones.form.statusLabel", { defaultValue: "Estado" })}
+                    {tt("asignaciones.form.statusLabel", "Status")}
                   </label>
-                  <select className={selectBase} value={status} onChange={(e) => setStatus(e.target.value)}>
-                    <option value="activa">{t("asignaciones.form.statusActive", { defaultValue: "Activa" })}</option>
-                    <option value="inactiva">{t("asignaciones.form.statusInactive", { defaultValue: "Inactiva" })}</option>
+                  <select
+                    className={selectBase}
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                  >
+                    <option value="activa">
+                      {tt("asignaciones.form.statusActive", "Active")}
+                    </option>
+                    <option value="inactiva">
+                      {tt("asignaciones.form.statusInactive", "Inactive")}
+                    </option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {t("asignaciones.form.frequencyLabel", { defaultValue: "Frecuencia (min)" })}
+                    {tt("asignaciones.form.frequencyLabel", "Frequency (min)")}
                   </label>
                   <input
                     type="number"
@@ -521,12 +552,14 @@ export default function AsignacionesPage() {
                     onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
                   />
                   <p className="mt-1 text-[11px] text-gray-500">
-                    {t("asignaciones.form.frequencyHint", { defaultValue: "Mínimo: 5 minutos." })}
+                    {tt(
+                      "asignaciones.form.frequencyHint",
+                      "Minimum: 5 minutes."
+                    )}
                   </p>
                 </div>
               </div>
 
-              {/* BOTONES */}
               <div className="flex items-center justify-end gap-2 pt-2">
                 {editingId && (
                   <button
@@ -534,7 +567,7 @@ export default function AsignacionesPage() {
                     onClick={resetForm}
                     className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
                   >
-                    {t("asignaciones.form.cancelEditButton", { defaultValue: "Cancelar" })}
+                    {tt("asignaciones.form.cancelEditButton", "Cancel")}
                   </button>
                 )}
 
@@ -549,32 +582,43 @@ export default function AsignacionesPage() {
                   }
                 >
                   {editingId
-                    ? t("asignaciones.form.updateButton", { defaultValue: "Actualizar" })
-                    : t("asignaciones.form.saveButton", { defaultValue: "Guardar" })}
+                    ? tt("asignaciones.form.updateButton", "Update")
+                    : tt("asignaciones.form.saveButton", "Save")}
                 </button>
               </div>
 
-              {/* MENSAJES */}
               <div className="pt-1">
-                {successMessage && <p className="text-green-700 text-sm font-semibold">{successMessage}</p>}
-                {error && <p className="text-red-700 text-sm font-semibold">{error}</p>}
+                {successMessage && (
+                  <p className="text-green-700 text-sm font-semibold">
+                    {successMessage}
+                  </p>
+                )}
+                {error && (
+                  <p className="text-red-700 text-sm font-semibold">
+                    {error}
+                  </p>
+                )}
               </div>
             </form>
           </div>
         )}
 
-        {/* LISTADO PANEL (GRANDE + SCROLL) */}
         <div className={`${cardBase} overflow-hidden`}>
           <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
             <h2 className="text-base font-semibold text-gray-900">
-              {t("asignaciones.list.title", { defaultValue: "Listado de asignaciones" })}
+              {tt("asignaciones.list.title", "Assignment list")}
             </h2>
             <span className="text-xs text-gray-500">
-              {loading ? "Loading…" : `${filteredAsignaciones.length} items`}
+              {loading
+                ? tt("common.loading", "Loading…")
+                : `${filteredAsignaciones.length} ${tt("common.items", "items")}`}
             </span>
           </div>
 
-          <div className="px-2 pb-2 overflow-auto" style={{ maxHeight: "calc(100vh - 220px)" }}>
+          <div
+            className="px-2 pb-2 overflow-auto"
+            style={{ maxHeight: "calc(100vh - 220px)" }}
+          >
             <AsignacionesTable
               asignaciones={filteredAsignaciones}
               loading={loading}
@@ -584,14 +628,13 @@ export default function AsignacionesPage() {
               onEdit={(a) => {
                 setEditingId(a.id);
                 setSelectedPersonalId(a.personal_id || "");
-
-                // ✅ canónico: geofence_id, fallback legacy: geocerca_id
                 setSelectedGeocercaId(a.geofence_id || a.geocerca_id || "");
-
                 setSelectedActivityId(a.activity_id || "");
                 setStartTime(a.start_time?.slice(0, 16) || "");
                 setEndTime(a.end_time?.slice(0, 16) || "");
-                setFrecuenciaEnvioMin(Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60)));
+                setFrecuenciaEnvioMin(
+                  Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
+                );
                 setStatus(a.status || "activa");
                 setError(null);
                 setSuccessMessage(null);
@@ -599,21 +642,25 @@ export default function AsignacionesPage() {
               }}
               onDelete={async (id) => {
                 const ok = window.confirm(
-                  t("asignaciones.messages.confirmDelete", {
-                    defaultValue: "Are you sure you want to delete this assignment?",
-                  })
+                  tt(
+                    "asignaciones.messages.confirmDelete",
+                    "Are you sure you want to delete this assignment?"
+                  )
                 );
                 if (!ok) return;
 
                 const resp = await deleteAsignacion(id);
                 if (resp.error) {
                   setError(
-                    t("asignaciones.messages.deleteError", {
-                      defaultValue: "Could not delete the assignment.",
-                    })
+                    tt(
+                      "asignaciones.messages.deleteError",
+                      "Could not delete the assignment."
+                    )
                   );
                 } else {
-                  setSuccessMessage(t("asignaciones.banner.deleted", { defaultValue: "Assignment deleted." }));
+                  setSuccessMessage(
+                    tt("asignaciones.banner.deleted", "Assignment deleted.")
+                  );
                   loadAll();
                 }
               }}
