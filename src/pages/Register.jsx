@@ -1,109 +1,139 @@
-// src/pages/Register.jsx
-import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
-import { useAuth } from '../App';
+import React, { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../App";
 
 export default function Register() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [form, setForm] = useState({ email: '', password: '', name: '' });
+  const { t } = useTranslation();
+
+  const [form, setForm] = useState({ email: "", password: "", name: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [infoMsg, setInfoMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
 
-  if (user) {
-    navigate('/', { replace: true });
-  }
+  const tt = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
 
-  const onChange = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  useEffect(() => {
+    if (user) {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate]);
+
+  const onChange = (e) => {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    setErrorMsg('');
-    setInfoMsg('');
+    setErrorMsg("");
+    setInfoMsg("");
 
-    const { email, password, name } = form;
+    try {
+      const email = form.email.trim();
+      const password = form.password;
+      const name = form.name.trim();
 
-    // Crea usuario con email/contraseña
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: name || '' },
-        emailRedirectTo: window.location.origin, // opcional
-      },
-    });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name || "" },
+          emailRedirectTo: window.location.origin,
+        },
+      });
 
-    setSubmitting(false);
+      if (error) {
+        setErrorMsg(
+          error.message ||
+            tt("register.errors.signUpFailed", "Could not complete registration.")
+        );
+        return;
+      }
 
-    if (error) {
-      setErrorMsg(error.message || 'No se pudo registrar');
-      return;
+      if (data?.user && !data?.session) {
+        setInfoMsg(
+          tt(
+            "register.messages.checkEmail",
+            "Registration completed. Check your email to confirm the account."
+          )
+        );
+        return;
+      }
+
+      navigate("/", { replace: true });
+    } catch (err) {
+      setErrorMsg(
+        err?.message ||
+          tt("register.errors.unexpected", "Unexpected error while creating the account.")
+      );
+    } finally {
+      setSubmitting(false);
     }
-
-    // Si tu proyecto pide confirmación por email, informa al usuario.
-    if (data?.user && !data.session) {
-      setInfoMsg('Registro exitoso. Revisa tu correo para confirmar la cuenta.');
-      return;
-    }
-
-    // Si la sesión viene creada inmediatamente (según tu configuración), entra directo.
-    navigate('/', { replace: true });
   };
 
   return (
-    <div style={{ maxWidth: 480, margin: '40px auto' }}>
-      <h2>Crear cuenta</h2>
-      <form onSubmit={handleRegister} style={{ display: 'grid', gap: 12 }}>
+    <div style={{ maxWidth: 480, margin: "40px auto" }}>
+      <h2>{tt("register.title", "Create account")}</h2>
+
+      <form onSubmit={handleRegister} style={{ display: "grid", gap: 12 }}>
         <label>
-          Nombre (opcional)
+          {tt("register.nameLabel", "Name (optional)")}
           <input
             type="text"
             name="name"
             value={form.name}
             onChange={onChange}
-            placeholder="Tu nombre"
-            style={{ width: '100%', padding: 8 }}
+            placeholder={tt("register.namePlaceholder", "Your name")}
+            style={{ width: "100%", padding: 8 }}
           />
         </label>
+
         <label>
-          Email
+          {tt("register.emailLabel", "Email")}
           <input
             type="email"
             name="email"
             value={form.email}
             onChange={onChange}
-            placeholder="tu@correo.com"
+            placeholder={tt("register.emailPlaceholder", "you@email.com")}
             required
-            style={{ width: '100%', padding: 8 }}
+            style={{ width: "100%", padding: 8 }}
           />
         </label>
+
         <label>
-          Contraseña
+          {tt("register.passwordLabel", "Password")}
           <input
             type="password"
             name="password"
             value={form.password}
             onChange={onChange}
-            placeholder="Mínimo 6 caracteres"
+            placeholder={tt("register.passwordPlaceholder", "Minimum 6 characters")}
             required
             minLength={6}
-            style={{ width: '100%', padding: 8 }}
+            style={{ width: "100%", padding: 8 }}
           />
         </label>
 
-        {errorMsg && <div style={{ color: 'crimson', fontSize: 14 }}>{errorMsg}</div>}
-        {infoMsg && <div style={{ color: 'seagreen', fontSize: 14 }}>{infoMsg}</div>}
+        {errorMsg && <div style={{ color: "crimson", fontSize: 14 }}>{errorMsg}</div>}
+        {infoMsg && <div style={{ color: "seagreen", fontSize: 14 }}>{infoMsg}</div>}
 
         <button type="submit" disabled={submitting} style={{ padding: 10 }}>
-          {submitting ? 'Creando…' : 'Crear cuenta'}
+          {submitting
+            ? tt("register.submitting", "Creating…")
+            : tt("register.submit", "Create account")}
         </button>
       </form>
 
       <div style={{ marginTop: 12, fontSize: 14 }}>
-        ¿Ya tienes cuenta? <Link to="/login">Ingresar</Link>
+        {tt("register.haveAccount", "Already have an account?")}{" "}
+        <Link to="/login">{tt("register.loginLink", "Sign in")}</Link>
       </div>
     </div>
   );
