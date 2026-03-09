@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-03-09T17:02:39.532Z",
+  "files": [
+    {
+      "code": "es",
+      "file": "es.json",
+      "flat_keys": 1081,
+      "structural_keys": 1238
+    },
+    {
+      "code": "en",
+      "file": "en.json",
+      "flat_keys": 1081,
+      "structural_keys": 1238
+    },
+    {
+      "code": "fr",
+      "file": "fr.json",
+      "flat_keys": 1081,
+      "structural_keys": 1238
+    }
+  ],
+  "common_structural_keys": 1238,
+  "union_structural_keys": 1238,
+  "per_language": {
+    "es": {
+      "missing_structural": [],
+      "extra_non_common_structural": []
+    },
+    "en": {
+      "missing_structural": [],
+      "extra_non_common_structural": []
+    },
+    "fr": {
+      "missing_structural": [],
+      "extra_non_common_structural": []
+    }
+  },
+  "leaf_compare_from_es": {
+    "en": {
+      "missing_leaf": [],
+      "extra_leaf": [],
+      "placeholder_mismatches": []
+    },
+    "fr": {
+      "missing_leaf": [],
+      "extra_leaf": [],
+      "placeholder_mismatches": []
+    }
+  }
+}

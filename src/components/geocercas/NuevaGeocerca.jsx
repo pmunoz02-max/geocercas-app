@@ -631,15 +631,29 @@ export default function NuevaGeocerca() {
       setViewCentroid(centroidFeatureFromGeojson(combined));
       setViewId((x) => x + 1);
 
+      scheduleFitToGeo(combined);
+
       if (items.length > 1) {
         showOk(t("geocercas.showManyOk", { count: items.length, defaultValue: `Showing ${items.length} geofences.` }));
+      } else {
+        showOk(t("geocercas.showOneOk", { defaultValue: "Showing selected geofence on map." }));
       }
     } catch (e) {
       showErr(t("geocercas.errorLoad", { defaultValue: "Could not load the geofence." }), e);
     } finally {
       setShowLoading(false);
     }
-  }, [selectedNames, lastSelectedName, geofenceList, currentOrg?.id, t, showErr, showOk, clearCanvas]);
+  }, [
+    selectedNames,
+    lastSelectedName,
+    geofenceList,
+    currentOrg?.id,
+    t,
+    showErr,
+    showOk,
+    clearCanvas,
+    scheduleFitToGeo,
+  ]);
 
   const pointStyle = useMemo(
     () => ({
