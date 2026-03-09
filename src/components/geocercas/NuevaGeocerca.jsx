@@ -908,7 +908,7 @@ export default function NuevaGeocerca() {
         </div>
       </div>
 
-      <div className="absolute right-3 top-3 z-[1100] flex max-w-[calc(100%-24px)] flex-wrap justify-end gap-2 pl-[120px] sm:pl-[0] md:top-20">
+      <div className="absolute left-1/2 top-16 sm:top-20 z-[1100] flex w-[min(760px,calc(100%-24px))] -translate-x-1/2 flex-wrap justify-center gap-2 px-2">
         <StatBadge
           label={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
           value={normalizePlanLabel(planCode)}
