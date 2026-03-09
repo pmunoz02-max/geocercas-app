@@ -75,7 +75,10 @@ function ensureFeatureCollection(input) {
   if (input.type === "FeatureCollection") return input;
   if (input.type === "Feature") return { type: "FeatureCollection", features: [input] };
   if (input.type && input.coordinates) {
-    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: input }] };
+    return {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: input }],
+    };
   }
   return null;
 }
@@ -328,60 +331,70 @@ export default function NuevaGeocerca() {
     })();
   }, []);
 
-  const scheduleFitToGeo = useCallback((geo) => {
-  const map = mapRef.current;
-  if (!map || !geo) return;
+  const fitGeoNow = useCallback((geo) => {
+    const map = mapRef.current;
+    if (!map || !geo) return false;
 
-  const run = () => {
     try {
       const fc = ensureFeatureCollection(geo);
-      if (!fc) return;
+      if (!fc) return false;
 
       const layer = L.geoJSON(fc);
       const bounds = layer.getBounds();
-
-      if (!bounds?.isValid?.()) return;
-
-      const samePoint =
-        bounds.getSouthWest().lat === bounds.getNorthEast().lat &&
-        bounds.getSouthWest().lng === bounds.getNorthEast().lng;
+      if (!bounds?.isValid?.()) return false;
 
       try {
-        map.invalidateSize?.();
+        map.invalidateSize?.(true);
       } catch {}
 
+      const southWest = bounds.getSouthWest();
+      const northEast = bounds.getNorthEast();
+      const samePoint =
+        southWest.lat === northEast.lat && southWest.lng === northEast.lng;
+
       if (samePoint) {
-        map.setView(bounds.getCenter(), Math.max(map.getZoom(), 16), {
-          animate: true,
-        });
+        map.setView(bounds.getCenter(), 17, { animate: true });
       } else {
         map.fitBounds(bounds, {
-          padding: [60, 60],
+          padding: [80, 80],
           maxZoom: 17,
           animate: true,
         });
       }
+
+      return true;
     } catch (err) {
       try {
-        console.error("[NuevaGeocerca] zoom error", err);
+        console.error("[NuevaGeocerca] fitGeoNow error", err);
       } catch {}
+      return false;
     }
-  };
+  }, []);
 
-  try {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+  const scheduleFitToGeo = useCallback(
+    (geo) => {
+      if (!geo) return;
+
+      const run = () => {
+        fitGeoNow(geo);
+      };
+
+      try {
+        requestAnimationFrame(() => {
+          run();
+          setTimeout(run, 80);
+          setTimeout(run, 220);
+          setTimeout(run, 450);
+        });
+      } catch {
         run();
-        setTimeout(run, 120);
-      });
-    });
-  } catch {
-    setTimeout(() => {
-      run();
-      setTimeout(run, 120);
-    }, 0);
-  }
-}, []);
+        setTimeout(run, 80);
+        setTimeout(run, 220);
+        setTimeout(run, 450);
+      }
+    },
+    [fitGeoNow]
+  );
 
   useEffect(() => {
     if (!viewFeature) return;
@@ -538,6 +551,8 @@ export default function NuevaGeocerca() {
       await Promise.allSettled([refreshGeofenceList(), refreshEntitlements()]);
       setGeofenceName("");
       showOk(t("geocercas.savedOk", { defaultValue: "Geofence saved successfully." }));
+
+      scheduleFitToGeo(fc);
     } catch (e) {
       const isLimit = isPlanLimitError(e);
 
@@ -571,6 +586,7 @@ export default function NuevaGeocerca() {
     clearCanvas,
     hasFiniteGeofenceLimit,
     canCreateGeofence,
+    scheduleFitToGeo,
   ]);
 
   const handleDeleteSelected = useCallback(async () => {
@@ -611,86 +627,92 @@ export default function NuevaGeocerca() {
   }, [selectedNames, currentOrg?.id, refreshGeofenceList, refreshEntitlements, clearCanvas, t, showErr, showOk, geofenceList]);
 
   const handleShowSelected = useCallback(async () => {
-  setShowLoading(true);
-  try {
-    const orgId = currentOrg?.id || null;
+    setShowLoading(true);
+    try {
+      const orgId = currentOrg?.id || null;
 
-    const selected = Array.from(selectedNames || [])
-      .map((x) => String(x || "").trim())
-      .filter(Boolean);
+      const selected = Array.from(selectedNames || [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean);
 
-    let namesToShow = selected;
-    if (namesToShow.length === 0) {
-      const one = lastSelectedName || geofenceList?.[0]?.name || null;
-      if (!one) {
-        showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
+      let namesToShow = selected;
+      if (namesToShow.length === 0) {
+        const one = lastSelectedName || geofenceList?.[0]?.name || null;
+        if (!one) {
+          showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
+          return;
+        }
+        namesToShow = [one];
+      }
+
+      const items = namesToShow
+        .map((nm) => geofenceList.find((g) => String(g.name) === nm))
+        .filter(Boolean);
+
+      if (!items.length) return;
+
+      const geos = [];
+      for (const item of items) {
+        if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
+
+        const row = await getGeofence({ id: item.id, orgId });
+        const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
+
+        if (geo) geos.push(geo);
+      }
+
+      const combined = combineFeatureCollections(geos);
+      if (!combined) {
+        showErr(t("geocercas.errorNoGeojson", { defaultValue: "Could not load the geofence GeoJSON." }));
         return;
       }
-      namesToShow = [one];
+
+      clearCanvas();
+      setDraftFeature(null);
+
+      setViewFeature(combined);
+      setViewCentroid(centroidFeatureFromGeojson(combined));
+      setViewId((x) => x + 1);
+
+      const zoomed = fitGeoNow(combined);
+      if (!zoomed) {
+        scheduleFitToGeo(combined);
+      } else {
+        setTimeout(() => scheduleFitToGeo(combined), 120);
+      }
+
+      if (items.length > 1) {
+        showOk(
+          t("geocercas.showManyOk", {
+            count: items.length,
+            defaultValue: `Showing ${items.length} geofences.`,
+          })
+        );
+      } else {
+        showOk(
+          t("geocercas.showOneOk", {
+            defaultValue: "Showing selected geofence on map.",
+          })
+        );
+      }
+    } catch (e) {
+      showErr(t("geocercas.errorLoad", { defaultValue: "Could not load the geofence." }), e);
+    } finally {
+      setShowLoading(false);
     }
+  }, [
+    selectedNames,
+    lastSelectedName,
+    geofenceList,
+    currentOrg?.id,
+    t,
+    showErr,
+    showOk,
+    clearCanvas,
+    fitGeoNow,
+    scheduleFitToGeo,
+  ]);
 
-    const items = namesToShow
-      .map((nm) => geofenceList.find((g) => String(g.name) === nm))
-      .filter(Boolean);
-
-    if (!items.length) return;
-
-    const geos = [];
-    for (const item of items) {
-      if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
-
-      const row = await getGeofence({ id: item.id, orgId });
-      const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
-
-      if (geo) geos.push(geo);
-    }
-
-    const combined = combineFeatureCollections(geos);
-    if (!combined) {
-      showErr(t("geocercas.errorNoGeojson", { defaultValue: "Could not load the geofence GeoJSON." }));
-      return;
-    }
-
-    clearCanvas();
-    setDraftFeature(null);
-
-    setViewFeature(combined);
-    setViewCentroid(centroidFeatureFromGeojson(combined));
-    setViewId((x) => x + 1);
-
-    // zoom directo e inmediato
-    scheduleFitToGeo(combined);
-
-    if (items.length > 1) {
-      showOk(
-        t("geocercas.showManyOk", {
-          count: items.length,
-          defaultValue: `Showing ${items.length} geofences.`,
-        })
-      );
-    } else {
-      showOk(
-        t("geocercas.showOneOk", {
-          defaultValue: "Showing selected geofence on map.",
-        })
-      );
-    }
-  } catch (e) {
-    showErr(t("geocercas.errorLoad", { defaultValue: "Could not load the geofence." }), e);
-  } finally {
-    setShowLoading(false);
-  }
-}, [
-  selectedNames,
-  lastSelectedName,
-  geofenceList,
-  currentOrg?.id,
-  t,
-  showErr,
-  showOk,
-  clearCanvas,
-  scheduleFitToGeo,
-]);
   const pointStyle = useMemo(
     () => ({
       pointToLayer: (_feature, latlng) =>
@@ -743,7 +765,12 @@ export default function NuevaGeocerca() {
           zoom={8}
           scrollWheelZoom={true}
           style={{ height: "100%", width: "100%" }}
-          whenCreated={(map) => (mapRef.current = map)}
+          whenReady={(e) => {
+            mapRef.current = e.target;
+            try {
+              e.target.invalidateSize?.();
+            } catch {}
+          }}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
