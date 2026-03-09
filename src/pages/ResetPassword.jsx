@@ -5,6 +5,7 @@
 // B) Legacy token_hash: /reset-password?token_hash=...&type=recovery  (verifyOtp)
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
@@ -25,6 +26,10 @@ function parseHashParams(hash) {
 }
 
 export default function ResetPassword() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -55,19 +60,20 @@ export default function ResetPassword() {
       setMsg(null);
 
       try {
-        // 1) Caso A: hash implicit recovery
         const h = parseHashParams(window.location.hash || "");
         if (h.error) {
           setMsg({
             type: "error",
-            text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+            text: tr(
+              "resetPassword.errors.invalidOrExpiredLink",
+              "The recovery link is invalid or expired. Generate a new one."
+            ),
           });
           setReady(false);
           return;
         }
 
         if (h.access_token && (h.type === "recovery" || h.type === "magiclink")) {
-          // Creamos sesión en memoria para permitir updateUser
           const { error } = await supabase.auth.setSession({
             access_token: h.access_token,
             refresh_token: h.refresh_token || "",
@@ -78,13 +84,15 @@ export default function ResetPassword() {
           if (error) {
             setMsg({
               type: "error",
-              text: "No se pudo iniciar sesión de recuperación. Genera un link nuevo e inténtalo en incógnito.",
+              text: tr(
+                "resetPassword.errors.couldNotStartRecoverySession",
+                "Could not start the recovery session. Generate a new link and try again in incognito mode."
+              ),
             });
             setReady(false);
             return;
           }
 
-          // limpiamos hash (opcional) para no dejar tokens visibles
           try {
             window.history.replaceState({}, document.title, window.location.pathname);
           } catch {}
@@ -93,7 +101,6 @@ export default function ResetPassword() {
           return;
         }
 
-        // 2) Caso B: legacy token_hash
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -116,7 +123,10 @@ export default function ResetPassword() {
           if (error || !data?.session?.user?.id) {
             setMsg({
               type: "error",
-              text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+              text: tr(
+                "resetPassword.errors.invalidOrExpiredLink",
+                "The recovery link is invalid or expired. Generate a new one."
+              ),
             });
             setReady(false);
             return;
@@ -128,12 +138,18 @@ export default function ResetPassword() {
 
         setMsg({
           type: "error",
-          text: "No hay sesión de recuperación. Solicita un nuevo link de recuperación.",
+          text: tr(
+            "resetPassword.errors.noRecoverySession",
+            "There is no recovery session. Request a new recovery link."
+          ),
         });
         setReady(false);
       } catch (e) {
         if (cancelled) return;
-        setMsg({ type: "error", text: e?.message || "Error inesperado." });
+        setMsg({
+          type: "error",
+          text: e?.message || tr("resetPassword.errors.unexpected", "Unexpected error."),
+        });
         setReady(false);
       } finally {
         if (!cancelled) setChecking(false);
@@ -144,7 +160,7 @@ export default function ResetPassword() {
     return () => {
       cancelled = true;
     };
-  }, [token_hash, type_q]);
+  }, [token_hash, type_q, t]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -153,7 +169,10 @@ export default function ResetPassword() {
     if (!canSubmit) {
       setMsg({
         type: "warn",
-        text: "Revisa tu contraseña: mínimo 8 caracteres, incluye letras y números, y ambas entradas deben coincidir.",
+        text: tr(
+          "resetPassword.errors.passwordRequirements",
+          "Check your password: minimum 8 characters, includes letters and numbers, and both entries must match."
+        ),
       });
       return;
     }
@@ -168,7 +187,10 @@ export default function ResetPassword() {
       if (!session?.user?.id) {
         setMsg({
           type: "error",
-          text: "No hay sesión activa para cambiar la contraseña. Abre el link de recuperación nuevamente o genera uno nuevo.",
+          text: tr(
+            "resetPassword.errors.noActiveSessionForPasswordChange",
+            "There is no active session to change the password. Open the recovery link again or generate a new one."
+          ),
         });
         return;
       }
@@ -176,16 +198,28 @@ export default function ResetPassword() {
       const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
-        setMsg({ type: "error", text: error.message || "No se pudo actualizar." });
+        setMsg({
+          type: "error",
+          text: error.message || tr("resetPassword.errors.updateFailed", "Could not update."),
+        });
         return;
       }
 
-      setMsg({ type: "success", text: "✅ Contraseña actualizada. Ya puedes iniciar sesión." });
+      setMsg({
+        type: "success",
+        text: tr(
+          "resetPassword.messages.updated",
+          "✅ Password updated. You can now sign in."
+        ),
+      });
 
       await supabase.auth.signOut().catch(() => {});
       setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e2) {
-      setMsg({ type: "error", text: e2?.message || "Error inesperado." });
+      setMsg({
+        type: "error",
+        text: e2?.message || tr("resetPassword.errors.unexpected", "Unexpected error."),
+      });
     } finally {
       setBusy(false);
     }
@@ -201,13 +235,20 @@ export default function ResetPassword() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl p-6">
-        <h1 className="text-xl font-semibold mb-2">Recrear contraseña</h1>
+        <h1 className="text-xl font-semibold mb-2">
+          {tr("resetPassword.title", "Reset password")}
+        </h1>
         <p className="text-sm text-slate-600 mb-4">
-          Ingresa una nueva contraseña para tu cuenta.
+          {tr(
+            "resetPassword.description",
+            "Enter a new password for your account."
+          )}
         </p>
 
         {checking ? (
-          <div className="text-sm text-slate-600">Verificando link…</div>
+          <div className="text-sm text-slate-600">
+            {tr("resetPassword.states.verifyingLink", "Verifying link…")}
+          </div>
         ) : !ready ? (
           <div className="space-y-3">
             {msg ? <div className={`text-sm ${msgClass}`}>{msg.text}</div> : null}
@@ -215,34 +256,40 @@ export default function ResetPassword() {
               className="w-full bg-slate-900 text-white rounded-lg px-4 py-2 text-sm"
               onClick={() => navigate("/login", { replace: true })}
             >
-              Ir a Login
+              {tr("resetPassword.actions.goToLogin", "Go to Login")}
             </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nueva contraseña
+                {tr("resetPassword.newPasswordLabel", "New password")}
               </label>
               <input
                 type="password"
                 className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mín. 8 caracteres, letras y números"
+                placeholder={tr(
+                  "resetPassword.newPasswordPlaceholder",
+                  "Min. 8 characters, letters and numbers"
+                )}
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Repetir contraseña
+                {tr("resetPassword.repeatPasswordLabel", "Repeat password")}
               </label>
               <input
                 type="password"
                 className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={password2}
                 onChange={(e) => setPassword2(e.target.value)}
-                placeholder="Repite la contraseña"
+                placeholder={tr(
+                  "resetPassword.repeatPasswordPlaceholder",
+                  "Repeat the password"
+                )}
               />
             </div>
 
@@ -252,11 +299,16 @@ export default function ResetPassword() {
               disabled={busy}
               className="w-full bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-60"
             >
-              {busy ? "Guardando…" : "Guardar nueva contraseña"}
+              {busy
+                ? tr("resetPassword.actions.saving", "Saving…")
+                : tr("resetPassword.actions.saveNewPassword", "Save new password")}
             </button>
 
             <div className="text-[11px] text-slate-500">
-              Tip: si falla, genera un link nuevo y ábrelo en incógnito.
+              {tr(
+                "resetPassword.tip",
+                "Tip: if it fails, generate a new link and open it in incognito mode."
+              )}
             </div>
           </form>
         )}

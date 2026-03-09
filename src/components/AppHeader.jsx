@@ -32,23 +32,26 @@ export default function AppHeader() {
     try {
       await supabase.auth.signOut();
     } catch (err) {
-      console.error("[AppHeader] Error al cerrar sesiÃ³n:", err);
+      console.error("[AppHeader] Error signing out:", err);
     } finally {
-      // AuthContext al recibir session=null ya limpia orgs, etc.
       navigate("/", { replace: true });
     }
   };
 
-  // TraducciÃ³n bÃ¡sica de roles (fallback al valor original si no matchea)
   let roleLabel = rawRole;
-  if (rawRole === "owner") roleLabel = t("app.header.roleOwner", { defaultValue: "Propietario" });
-  if (rawRole === "admin") roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrador" });
-  if (rawRole === "tracker") roleLabel = t("app.header.roleTracker", { defaultValue: "Tracker" });
+  if (rawRole === "owner") {
+    roleLabel = t("app.header.roleOwner", { defaultValue: "Owner" });
+  }
+  if (rawRole === "admin") {
+    roleLabel = t("app.header.roleAdmin", { defaultValue: "Administrator" });
+  }
+  if (rawRole === "tracker") {
+    roleLabel = t("app.header.roleTracker", { defaultValue: "Tracker" });
+  }
 
   return (
     <header className="w-full border-b border-slate-200 bg-white">
       <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Branding */}
         <Link to={isLogged ? "/inicio" : "/"} className="flex items-center gap-2">
           <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold">
             AG
@@ -58,19 +61,20 @@ export default function AppHeader() {
               {safeText(t("landing.brandName", { defaultValue: "App Geocercas" }))}
             </span>
             <span className="text-[11px] text-slate-500">
-              {safeText(t("landing.brandTagline", { defaultValue: "Control de personal por geocercas" }))}
+              {safeText(
+                t("landing.brandTagline", {
+                  defaultValue: "Personnel control by geofences",
+                })
+              )}
             </span>
           </div>
         </Link>
 
-        {/* Zona derecha: idioma + info de usuario + acciones */}
         <div className="flex items-center gap-3 text-xs">
-          {/* Selector de idioma SIEMPRE visible */}
           <LanguageSwitcher />
 
           {isLogged ? (
             <>
-              {/* Email + rol */}
               <div className="hidden sm:flex flex-col items-end">
                 {email && <span className="font-medium text-slate-700">{email}</span>}
                 {rawRole && (
@@ -80,38 +84,33 @@ export default function AppHeader() {
                 )}
               </div>
 
-              {/* BotÃ³n Administrador solo para owner */}
               {rawRole === "owner" && (
                 <Link
                   to="/admins"
                   className="px-3 py-1.5 rounded-md text-xs font-semibold bg-amber-500 text-white hover:bg-amber-400"
                 >
-                  {safeText(t("app.tabs.admins", { defaultValue: "Administrador" }))}
+                  {safeText(t("app.tabs.admins", { defaultValue: "Administrator" }))}
                 </Link>
               )}
 
-              {/* BotÃ³n Salir */}
               <button
                 type="button"
                 onClick={handleLogout}
                 className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
               >
-                {safeText(t("app.header.logout", { defaultValue: "Salir" }))}
+                {safeText(t("app.header.logout", { defaultValue: "Sign out" }))}
               </button>
             </>
           ) : (
-            <>
-              <Link
-                to="/login"
-                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
-              >
-                {safeText(t("app.header.login", { defaultValue: "Entrar" }))}
-              </Link>
-            </>
+            <Link
+              to="/login"
+              className="px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
+            >
+              {safeText(t("app.header.login", { defaultValue: "Sign in" }))}
+            </Link>
           )}
         </div>
       </div>
     </header>
   );
 }
-
