@@ -9,6 +9,7 @@ import TopTabs from "../components/TopTabs.jsx";
  * - Tab "Geocerca" abre el MAPA (ruta /geocerca)
  * - La pantalla hub/listado queda en /geocercas (sin tab)
  * - Billing / Pricing visibles solo para perfiles de gestión
+ * - Tracker debe quedar junto a "Invitar tracker"
  */
 
 function buildTabs({ role, isAppRoot }) {
@@ -37,15 +38,17 @@ function buildTabs({ role, isAppRoot }) {
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
     { path: "/dashboard", labelKey: "app.tabs.dashboard" },
-    { path: "/tracker", labelKey: "app.tabs.tracker" },
   ];
 
   if (isAdmin) {
     tabs.push(
       { path: "/pricing", labelKey: "app.tabs.pricing" },
       { path: "/billing", labelKey: "app.tabs.billing" },
+      { path: "/tracker", labelKey: "app.tabs.tracker" },
       { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" }
     );
+  } else {
+    tabs.push({ path: "/tracker", labelKey: "app.tabs.tracker" });
   }
 
   if (isAppRoot) {
