@@ -76,6 +76,7 @@ function parseMaybeJson(input) {
   return null;
 }
 
+// GeoJSON is [lng,lat] => Leaflet [lat,lng]
 function toLatLngStrict(coord) {
   if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
   const lng = Number(coord[0]);
@@ -145,11 +146,9 @@ function isProbablyZeroZeroBounds(b) {
 
 function MapDiagnostics({ setDiag }) {
   const map = useMap();
-
   useEffect(() => {
     if (!map) return;
     const container = map.getContainer();
-
     const updateSize = () => {
       const r = container?.getBoundingClientRect?.();
       setDiag((d) => ({
@@ -160,14 +159,12 @@ function MapDiagnostics({ setDiag }) {
         zoom: map.getZoom?.() ?? null,
       }));
     };
-
     const doInvalidate = () => {
       try {
         map.invalidateSize();
       } catch {}
       updateSize();
     };
-
     doInvalidate();
     const t1 = setTimeout(doInvalidate, 0);
     const t2 = setTimeout(doInvalidate, 250);
@@ -249,6 +246,7 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   return null;
 }
 
+// choose available geometry in preferred order
 function pickGeometry(row) {
   return row?.geojson ?? row?.geom ?? row?.polygon ?? row?.geometry ?? null;
 }
@@ -297,6 +295,9 @@ function buildGeofenceLayerItems(geofenceRows) {
   return { items, skipped };
 }
 
+/** =========================
+ * MultiSelect Geofences UI
+ * ========================= */
 function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -1271,9 +1272,7 @@ export default function TrackerDashboard() {
                   scrollWheelZoom
                   whenCreated={(map) => {
                     mapRef.current = map;
-                    try {
-                      map.invalidateSize();
-                    } catch {}
+                    try { map.invalidateSize(); } catch {}
                   }}
                 >
                   <MapDiagnostics setDiag={setDiag} />
