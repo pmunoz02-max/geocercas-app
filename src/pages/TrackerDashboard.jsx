@@ -246,7 +246,6 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   return null;
 }
 
-// choose available geometry in preferred order
 function pickGeometry(row) {
   return row?.geojson ?? row?.geom ?? row?.polygon ?? row?.geometry ?? null;
 }
@@ -295,9 +294,6 @@ function buildGeofenceLayerItems(geofenceRows) {
   return { items, skipped };
 }
 
-/** =========================
- * MultiSelect Geofences UI
- * ========================= */
 function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -830,22 +826,24 @@ export default function TrackerDashboard() {
           return await q;
         };
 
-        let tableUsed = "tracker_positions";
-        let res = await queryTable("tracker_positions");
+        // HISTORIAL PRIMERO
+        let tableUsed = "positions";
+        let res = await queryTable("positions");
 
+        // FALLBACK SOLO SI NO HAY HISTORIAL
         const shouldFallback =
           !!res.error ||
           (Array.isArray(res.data) && res.data.length === 0);
 
         if (shouldFallback) {
-          const res2 = await queryTable("positions");
+          const res2 = await queryTable("tracker_positions");
           if (!res2.error) {
-            tableUsed = "positions";
+            tableUsed = "tracker_positions";
             res = res2;
           } else {
             const e1 = res.error?.message || String(res.error || "");
             const e2 = res2.error?.message || String(res2.error || "");
-            res = { data: null, error: new Error(`tracker_positions: ${e1}; positions: ${e2}`) };
+            res = { data: null, error: new Error(`positions: ${e1}; tracker_positions: ${e2}`) };
             tableUsed = "positions";
           }
         }
