@@ -1,12 +1,27 @@
-// supabase/functions/stripe-create-portal-session/index.ts
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@16.10.0?target=deno";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") || "";
-const SB_URL = Deno.env.get("SB_URL") || "";
-const SB_ANON = Deno.env.get("SB_ANON") || "";
-const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE") || "";
-const APP_URL = Deno.env.get("APP_URL") || "https://preview.tugeocercas.com";
+const SB_URL =
+  Deno.env.get("SB_URL") ||
+  Deno.env.get("SUPABASE_URL") ||
+  "";
+
+const SB_ANON =
+  Deno.env.get("SB_ANON") ||
+  Deno.env.get("SB_ANON_KEY") ||
+  Deno.env.get("SUPABASE_ANON_KEY") ||
+  "";
+
+const SB_SERVICE_ROLE =
+  Deno.env.get("SB_SERVICE_ROLE") ||
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+  "";
+
+const APP_URL =
+  Deno.env.get("APP_URL") ||
+  Deno.env.get("APP_BASE_URL") ||
+  "https://preview.tugeocercas.com";
 
 function corsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "*";
@@ -125,15 +140,15 @@ Deno.serve(async (req) => {
 
     const { data: billing, error: billingError } = await admin
       .from("org_billing")
-      .select(
-        `
+      .select(`
         org_id,
         plan_code,
         plan_status,
         stripe_customer_id,
-        stripe_subscription_id
-      `
-      )
+        stripe_subscription_id,
+        over_limit,
+        over_limit_reason
+      `)
       .eq("org_id", orgId)
       .maybeSingle();
 
@@ -203,6 +218,8 @@ Deno.serve(async (req) => {
       org_id: orgId,
       plan_code: billing.plan_code,
       plan_status: billing.plan_status,
+      over_limit: billing.over_limit,
+      over_limit_reason: billing.over_limit_reason,
       return_url: returnUrl,
     });
   } catch (err) {
