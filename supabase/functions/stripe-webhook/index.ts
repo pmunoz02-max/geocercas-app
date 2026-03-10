@@ -1,4 +1,6 @@
-﻿import Stripe from "npm:stripe@16.2.0";
+﻿// C:\dev\geocercas-app-starter\geocercas-app\supabase\functions\stripe-webhook\index.ts
+
+import Stripe from "npm:stripe@16.2.0";
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
@@ -134,6 +136,28 @@ function pickSubscriptionIdFromInvoice(inv: any): string | null {
   );
 }
 
+function needsSubscriptionHydration(args: {
+  org_id: string | null;
+  user_id: string | null;
+  user_email: string | null;
+  plan_code: string | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  stripe_price_id: string | null;
+  status: string | null;
+}) {
+  return (
+    !args.org_id ||
+    !args.user_id ||
+    !args.user_email ||
+    !args.plan_code ||
+    !args.stripe_customer_id ||
+    !args.stripe_subscription_id ||
+    !args.stripe_price_id ||
+    !args.status
+  );
+}
+
 type ApplyRpcInput = {
   p_event_id: string;
   p_event_type: string;
@@ -180,6 +204,12 @@ async function callRpc<T = unknown>(
 
 async function callApplyRpc(payload: ApplyRpcInput) {
   return await callRpc("apply_stripe_subscription_to_org_billing", payload);
+}
+
+async function callAutoDowngradeRpc(orgId: string) {
+  return await callRpc("apply_auto_downgrade_from_billing", {
+    p_org_id: orgId,
+  });
 }
 
 Deno.serve(async (req) => {
@@ -290,7 +320,10 @@ Deno.serve(async (req) => {
     if (type === "checkout.session.completed") {
       stripe_customer_id = asString(obj?.customer);
       stripe_subscription_id = asString(obj?.subscription);
-      user_email = user_email ?? asString(obj?.customer_details?.email) ?? asString(obj?.customer_email);
+      user_email =
+        user_email ??
+        asString(obj?.customer_details?.email) ??
+        asString(obj?.customer_email);
 
       if (stripe_subscription_id) {
         await hydrateFromSubscription(stripe_subscription_id);
@@ -313,28 +346,54 @@ Deno.serve(async (req) => {
       current_period_end_epoch =
         obj?.current_period_end !== undefined ? asNumberOrNull(obj.current_period_end) : null;
 
-      if (!org_id && stripe_subscription_id) {
+      if (
+        stripe_subscription_id &&
+        needsSubscriptionHydration({
+          org_id,
+          user_id,
+          user_email,
+          plan_code,
+          stripe_customer_id,
+          stripe_subscription_id,
+          stripe_price_id,
+          status,
+        })
+      ) {
         await hydrateFromSubscription(stripe_subscription_id);
       }
     } else if (type === "invoice.paid" || type === "invoice.payment_failed") {
       stripe_customer_id = asString(obj?.customer);
       stripe_subscription_id = pickSubscriptionIdFromInvoice(obj);
-      user_email = user_email ?? asString(obj?.customer_email) ?? asString(obj?.receipt_email);
+      user_email =
+        user_email ??
+        asString(obj?.customer_email) ??
+        asString(obj?.receipt_email);
 
-      if (!org_id) {
-        const invoiceId = asString(obj?.id);
-        if (invoiceId) {
-          const invFull = await stripe.invoices.retrieve(invoiceId, {
-            expand: ["lines.data", "parent.subscription_details"],
-          });
-          org_id = pickOrgIdFromAny(invFull);
-          user_id = user_id ?? pickUserIdFromAny(invFull);
-          user_email = user_email ?? pickEmailFromAny(invFull);
-          plan_code = plan_code ?? pickPlanFromAny(invFull);
-        }
+      const invoiceId = asString(obj?.id);
+      if (invoiceId) {
+        const invFull = await stripe.invoices.retrieve(invoiceId, {
+          expand: ["lines.data", "parent.subscription_details"],
+        });
+
+        org_id = org_id ?? pickOrgIdFromAny(invFull);
+        user_id = user_id ?? pickUserIdFromAny(invFull);
+        user_email = user_email ?? pickEmailFromAny(invFull);
+        plan_code = plan_code ?? pickPlanFromAny(invFull);
       }
 
-      if (stripe_subscription_id) {
+      if (
+        stripe_subscription_id &&
+        needsSubscriptionHydration({
+          org_id,
+          user_id,
+          user_email,
+          plan_code,
+          stripe_customer_id,
+          stripe_subscription_id,
+          stripe_price_id,
+          status,
+        })
+      ) {
         await hydrateFromSubscription(stripe_subscription_id);
       }
     }
@@ -394,9 +453,7 @@ Deno.serve(async (req) => {
       p_status: status,
     });
 
-    const overLimit = await callRpc("refresh_org_limit_status", {
-      p_org_id: org_id,
-    });
+    const autoDowngrade = await callAutoDowngradeRpc(org_id);
 
     return json(200, {
       received: true,
@@ -413,7 +470,7 @@ Deno.serve(async (req) => {
       p_trial_end,
       p_canceled_at,
       cancel_at_period_end,
-      over_limit: overLimit,
+      auto_downgrade: autoDowngrade,
     });
   } catch (e) {
     return json(500, {
