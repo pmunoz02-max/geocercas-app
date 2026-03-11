@@ -325,7 +325,13 @@ export default function InvitarTracker() {
         if (cancelled) return;
 
         const safeRows = (Array.isArray(rows) ? rows : []).filter((r) => !r?.is_deleted);
-        setAssignments(safeRows);
+          setAssignments(safeRows);
+
+         if (safeRows.length === 1) {
+          setSelectedAssignmentId(String(safeRows[0].id));
+      } else {
+          setSelectedAssignmentId("");
+        }
 
         const geofenceIds = Array.from(
           new Set(
