@@ -2,12 +2,11 @@
 // DEFINITIVO (preview): renderer estable basado en IDs + catálogos canónicos.
 // - NO depende de shapes embebidos en /api/asignaciones
 // - Tolerante a legacy (geocerca_id nullable, múltiples campos de persona/actividad)
-// - Acción "Invitar tracker" con assignment_id contextual
+// - Sin botón "Invitar tracker" en tabla
 
 /* eslint-disable react/prop-types */
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 
 // Helper para formatear fechas en HORA LOCAL del navegador
 function formatDateTimeLocal(value) {
@@ -237,7 +236,6 @@ export default function AsignacionesTable({
                 const inicio = formatDateTimeLocal(row.start_time);
                 const fin = formatDateTimeLocal(row.end_time);
                 const estado = row.status || row.estado;
-                const inviteHref = `/invitar-tracker?assignment_id=${encodeURIComponent(row.id)}`;
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
@@ -285,19 +283,7 @@ export default function AsignacionesTable({
                     </td>
 
                     <td className="px-4 py-3 whitespace-nowrap text-right align-top">
-                      <div className="inline-flex flex-wrap justify-end gap-2">
-                        <Link
-                          to={inviteHref}
-                          className="px-3 py-1.5 text-xs font-semibold rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                          title={t("asignaciones.actions.inviteTracker", {
-                            defaultValue: "Invite tracker",
-                          })}
-                        >
-                          {t("asignaciones.actions.inviteTracker", {
-                            defaultValue: "Invite tracker",
-                          })}
-                        </Link>
-
+                      <div className="inline-flex gap-2">
                         {onEdit ? (
                           <button
                             type="button"

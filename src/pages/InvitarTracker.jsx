@@ -15,11 +15,6 @@ function isTruthy(v) {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
-function isUuid(v) {
-  const s = String(v || "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
 function pickPersonalLabel(row) {
   const nombre = String(row?.nombre || "").trim();
   const apellido = String(row?.apellido || "").trim();
@@ -42,6 +37,60 @@ function normalizePlanLabel(planCode) {
   return v ? v.toUpperCase() : "—";
 }
 
+function formatDateTimeLocal(value) {
+  if (!value) return "—";
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(value);
+  }
+}
+
+function resolveGeofenceName(assignment, geofenceMap) {
+  const id = String(
+    assignment?.geocerca_id ||
+      assignment?.geofence_id ||
+      ""
+  ).trim();
+
+  if (!id) return "—";
+
+  const row = geofenceMap.get(id);
+  return (
+    String(
+      row?.nombre ||
+        row?.name ||
+        row?.label ||
+        row?.id ||
+        ""
+    ).trim() || id
+  );
+}
+
+function resolveActivityName(assignment, activityMap) {
+  const id = String(assignment?.activity_id || "").trim();
+  if (!id) return "—";
+
+  const row = activityMap.get(id);
+  return (
+    String(
+      row?.name ||
+        row?.nombre ||
+        row?.label ||
+        row?.id ||
+        ""
+    ).trim() || id
+  );
+}
+
 export default function InvitarTracker() {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -56,10 +105,16 @@ export default function InvitarTracker() {
 
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
 
   const [people, setPeople] = useState([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [emailInput, setEmailInput] = useState("");
+  const [assignments, setAssignments] = useState([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
+
+  const [geofenceMap, setGeofenceMap] = useState(new Map());
+  const [activityMap, setActivityMap] = useState(new Map());
 
   const [okMsg, setOkMsg] = useState(null);
   const [errMsg, setErrMsg] = useState(null);
@@ -98,16 +153,6 @@ export default function InvitarTracker() {
     return "es";
   }, [i18n]);
 
-  const assignmentId = useMemo(() => {
-    try {
-      const qp = new URLSearchParams(window.location.search);
-      const raw = String(qp.get("assignment_id") || "").trim();
-      return isUuid(raw) ? raw : "";
-    } catch {
-      return "";
-    }
-  }, []);
-
   const allowedEmails = useMemo(() => {
     const set = new Set();
     for (const r of people) {
@@ -120,6 +165,43 @@ export default function InvitarTracker() {
   const inviteBlockedByPlan = useMemo(() => {
     return !entitlementsLoading && isFree;
   }, [entitlementsLoading, isFree]);
+
+  const selectedPerson = useMemo(() => {
+    const key = normalizeEmail(selectedKey);
+    if (!key) return null;
+    return people.find((p) => normalizeEmail(p?.email) === key) || null;
+  }, [people, selectedKey]);
+
+  const selectedAssignment = useMemo(() => {
+    const id = String(selectedAssignmentId || "").trim();
+    if (!id) return null;
+    return assignments.find((a) => String(a.id) === id) || null;
+  }, [assignments, selectedAssignmentId]);
+
+  const assignmentPreview = useMemo(() => {
+    if (!selectedAssignment) return null;
+
+    return {
+      geofenceName: resolveGeofenceName(selectedAssignment, geofenceMap),
+      activityName: resolveActivityName(selectedAssignment, activityMap),
+      startLabel: formatDateTimeLocal(selectedAssignment.start_time),
+      endLabel: formatDateTimeLocal(selectedAssignment.end_time),
+    };
+  }, [selectedAssignment, geofenceMap, activityMap]);
+
+  const assignmentOptions = useMemo(() => {
+    return assignments.map((a) => {
+      const geofenceName = resolveGeofenceName(a, geofenceMap);
+      const activityName = resolveActivityName(a, activityMap);
+      const startLabel = formatDateTimeLocal(a.start_time);
+      const endLabel = formatDateTimeLocal(a.end_time);
+
+      return {
+        id: a.id,
+        label: `${geofenceName} — ${activityName} — ${startLabel} → ${endLabel}`,
+      };
+    });
+  }, [assignments, geofenceMap, activityMap]);
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -203,11 +285,108 @@ export default function InvitarTracker() {
     setEmailInput(selectedKey);
   }, [selectedKey]);
 
-  const selectedPerson = useMemo(() => {
-    const key = normalizeEmail(selectedKey);
-    if (!key) return null;
-    return people.find((p) => normalizeEmail(p?.email) === key) || null;
-  }, [people, selectedKey]);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAssignmentsForPerson() {
+      setAssignments([]);
+      setSelectedAssignmentId("");
+      setGeofenceMap(new Map());
+      setActivityMap(new Map());
+
+      if (!orgId || !selectedPerson?.id) return;
+
+      setLoadingAssignments(true);
+      setErrMsg(null);
+
+      try {
+        const { data: rows, error } = await supabase
+          .from("asignaciones")
+          .select(`
+            id,
+            org_id,
+            personal_id,
+            geofence_id,
+            geocerca_id,
+            activity_id,
+            start_time,
+            end_time,
+            status,
+            estado,
+            is_deleted
+          `)
+          .eq("org_id", orgId)
+          .eq("personal_id", selectedPerson.id)
+          .or("status.eq.activa,estado.eq.activa")
+          .order("start_time", { ascending: false })
+          .limit(100);
+
+        if (error) throw error;
+        if (cancelled) return;
+
+        const safeRows = (Array.isArray(rows) ? rows : []).filter((r) => !r?.is_deleted);
+        setAssignments(safeRows);
+
+        const geofenceIds = Array.from(
+          new Set(
+            safeRows
+              .map((r) => String(r?.geocerca_id || r?.geofence_id || "").trim())
+              .filter(Boolean)
+          )
+        );
+
+        const activityIds = Array.from(
+          new Set(
+            safeRows
+              .map((r) => String(r?.activity_id || "").trim())
+              .filter(Boolean)
+          )
+        );
+
+        if (geofenceIds.length > 0) {
+          const { data: geofences, error: geErr } = await supabase
+            .from("geocercas")
+            .select("id, org_id, name, nombre")
+            .eq("org_id", orgId)
+            .in("id", geofenceIds);
+
+          if (geErr) throw geErr;
+          if (!cancelled) {
+            const map = new Map();
+            (geofences || []).forEach((g) => map.set(String(g.id), g));
+            setGeofenceMap(map);
+          }
+        }
+
+        if (activityIds.length > 0) {
+          const { data: acts, error: actErr } = await supabase
+            .from("activities")
+            .select("id, org_id, name")
+            .eq("org_id", orgId)
+            .in("id", activityIds);
+
+          if (actErr) throw actErr;
+          if (!cancelled) {
+            const map = new Map();
+            (acts || []).forEach((a) => map.set(String(a.id), a));
+            setActivityMap(map);
+          }
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setAssignments([]);
+        setSelectedAssignmentId("");
+        setErrMsg(String(e?.message || e));
+      } finally {
+        if (!cancelled) setLoadingAssignments(false);
+      }
+    }
+
+    loadAssignmentsForPerson();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, selectedPerson]);
 
   async function onSendInvite(e) {
     e.preventDefault();
@@ -252,6 +431,15 @@ export default function InvitarTracker() {
       return;
     }
 
+    if (!selectedAssignmentId) {
+      setErrMsg(
+        t("inviteTracker.errors.noAssignment", {
+          defaultValue: "Debes seleccionar una asignación activa.",
+        })
+      );
+      return;
+    }
+
     try {
       setBusy(true);
 
@@ -283,7 +471,7 @@ export default function InvitarTracker() {
           lang,
           name,
           caller_jwt,
-          assignment_id: assignmentId || null,
+          assignment_id: selectedAssignmentId,
         }),
       });
 
@@ -337,7 +525,12 @@ export default function InvitarTracker() {
         msg += ` ${t("inviteTracker.ok.fallbackLink", { defaultValue: "Copia el enlace manualmente." })}`;
       }
 
-      setOkMsg({ msg, actionLink, diag: body?._proxy || body?.diag || null, details });
+      setOkMsg({
+        msg,
+        actionLink,
+        diag: body?._proxy || body?.diag || null,
+        details,
+      });
     } catch (e2) {
       setErrMsg(String(e2?.message || e2));
     } finally {
@@ -350,6 +543,14 @@ export default function InvitarTracker() {
     : people.length === 0
       ? t("inviteTracker.empty.noMembers", { defaultValue: "Sin personal disponible" })
       : t("common.select", { defaultValue: "— Selecciona —" });
+
+  const assignmentPlaceholder = loadingAssignments
+    ? t("common.actions.loading", { defaultValue: "Cargando…" })
+    : !selectedPerson
+      ? t("inviteTracker.assignment.selectPersonFirst", { defaultValue: "Primero selecciona una persona" })
+      : assignments.length === 0
+        ? t("inviteTracker.assignment.noAssignments", { defaultValue: "Sin asignaciones activas" })
+        : t("inviteTracker.assignment.select", { defaultValue: "— Selecciona una asignación —" });
 
   if (entitlementsLoading) {
     return (
@@ -474,7 +675,8 @@ export default function InvitarTracker() {
             {loadingPeople ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(people.length)}
           </div>
           <div className="mt-1">
-            <b>Assignment ID:</b> {assignmentId || "—"}
+            <b>{t("inviteTracker.assignment.loaded", { defaultValue: "Asignaciones cargadas" })}:</b>{" "}
+            {loadingAssignments ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(assignments.length)}
           </div>
         </div>
 
@@ -490,10 +692,12 @@ export default function InvitarTracker() {
 
             {okMsg.details ? (
               <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-xs text-slate-800">
-                <div className="font-semibold mb-2">Detalle enviado en el email</div>
-                <div><b>Ventana asignada:</b> {okMsg.details?.timeWindow || "—"}</div>
-                <div><b>Geocerca asignada:</b> {okMsg.details?.geofenceName || "—"}</div>
-                <div><b>Tarea asignada:</b> {okMsg.details?.taskName || "—"}</div>
+                <div className="font-semibold mb-2">
+                  {t("inviteTracker.assignment.sentDetail", { defaultValue: "Detalle enviado en el email" })}
+                </div>
+                <div><b>{t("inviteTracker.assignment.window", { defaultValue: "Ventana asignada" })}:</b> {okMsg.details?.timeWindow || "—"}</div>
+                <div><b>{t("inviteTracker.assignment.geofence", { defaultValue: "Geocerca asignada" })}:</b> {okMsg.details?.geofenceName || "—"}</div>
+                <div><b>{t("inviteTracker.assignment.task", { defaultValue: "Tarea asignada" })}:</b> {okMsg.details?.taskName || "—"}</div>
               </div>
             ) : null}
 
@@ -523,6 +727,7 @@ export default function InvitarTracker() {
                 const v = normalizeEmail(e.target.value);
                 setSelectedKey(v);
                 setEmailInput(v);
+                setSelectedAssignmentId("");
                 setOkMsg(null);
                 setErrMsg(null);
               }}
@@ -568,12 +773,56 @@ export default function InvitarTracker() {
             />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-900">
+              {t("inviteTracker.assignment.label", { defaultValue: "Asignación activa" })}
+            </label>
+
+            <select
+              className="mt-1 w-full rounded-xl border px-3 py-2 bg-white text-gray-900"
+              value={selectedAssignmentId}
+              onChange={(e) => {
+                setSelectedAssignmentId(e.target.value);
+                setOkMsg(null);
+                setErrMsg(null);
+              }}
+              disabled={loadingAssignments || !selectedPerson || assignmentOptions.length === 0}
+            >
+              <option value="">{assignmentPlaceholder}</option>
+              {assignmentOptions.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {assignmentPreview ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
+              <div className="font-semibold mb-2">
+                {t("inviteTracker.assignment.previewTitle", { defaultValue: "Detalle que se enviará" })}
+              </div>
+              <div>
+                <b>{t("inviteTracker.assignment.window", { defaultValue: "Ventana asignada" })}:</b>{" "}
+                {assignmentPreview.startLabel} → {assignmentPreview.endLabel}
+              </div>
+              <div className="mt-1">
+                <b>{t("inviteTracker.assignment.geofence", { defaultValue: "Geocerca asignada" })}:</b>{" "}
+                {assignmentPreview.geofenceName}
+              </div>
+              <div className="mt-1">
+                <b>{t("inviteTracker.assignment.task", { defaultValue: "Tarea asignada" })}:</b>{" "}
+                {assignmentPreview.activityName}
+              </div>
+            </div>
+          ) : null}
+
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId}
+            disabled={busy || loadingPeople || !orgId || !selectedAssignmentId}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId
+              busy || loadingPeople || !orgId || !selectedAssignmentId
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}
