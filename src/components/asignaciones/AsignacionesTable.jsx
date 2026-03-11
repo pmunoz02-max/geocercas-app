@@ -2,10 +2,12 @@
 // DEFINITIVO (preview): renderer estable basado en IDs + catálogos canónicos.
 // - NO depende de shapes embebidos en /api/asignaciones
 // - Tolerante a legacy (geocerca_id nullable, múltiples campos de persona/actividad)
+// - Acción "Invitar tracker" con assignment_id contextual
 
 /* eslint-disable react/prop-types */
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 
 // Helper para formatear fechas en HORA LOCAL del navegador
 function formatDateTimeLocal(value) {
@@ -102,7 +104,6 @@ export default function AsignacionesTable({
 }) {
   const { t } = useTranslation();
 
-  // Maps canónicos por ID (no dependemos del bundle)
   const peopleById = useMemo(() => {
     const m = new Map();
     (Array.isArray(people) ? people : []).forEach((p) => {
@@ -134,7 +135,6 @@ export default function AsignacionesTable({
     const id = str(pickPersonId(row)).trim();
     const fromCatalog = id ? peopleById.get(id) : null;
 
-    // fallback legacy: campos planos o embebidos
     const personaNombre = row?.personal?.nombre || row?.personal_nombre || row?.person_name || "";
     const personaApellido = row?.personal?.apellido || row?.personal_apellido || row?.person_lastname || "";
     const personaEmail = row?.personal?.email || row?.personal_email || row?.person_email || "";
@@ -234,15 +234,13 @@ export default function AsignacionesTable({
                 const activityLabel = resolveActivityLabel(row);
 
                 const freqMin = row.frecuencia_envio_sec ? Math.round(row.frecuencia_envio_sec / 60) : "";
-
                 const inicio = formatDateTimeLocal(row.start_time);
                 const fin = formatDateTimeLocal(row.end_time);
-
                 const estado = row.status || row.estado;
+                const inviteHref = `/invitar-tracker?assignment_id=${encodeURIComponent(row.id)}`;
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
-                    {/* Persona */}
                     <td className="px-4 py-3 whitespace-nowrap align-top">
                       <div className="flex flex-col">
                         <span className="font-semibold text-gray-900">{person?.label || "—"}</span>
@@ -252,32 +250,26 @@ export default function AsignacionesTable({
                       </div>
                     </td>
 
-                    {/* Geocerca */}
                     <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 align-top">
                       {geofenceLabel || "—"}
                     </td>
 
-                    {/* Actividad */}
                     <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 align-top">
                       {activityLabel || "—"}
                     </td>
 
-                    {/* Inicio */}
                     <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 align-top">
                       {inicio || "—"}
                     </td>
 
-                    {/* Fin */}
                     <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 align-top">
                       {fin || "—"}
                     </td>
 
-                    {/* Frecuencia */}
                     <td className="px-4 py-3 whitespace-nowrap text-center font-semibold text-gray-900 align-top">
                       {freqMin || "—"}
                     </td>
 
-                    {/* Estado */}
                     <td className="px-4 py-3 whitespace-nowrap align-top">
                       <span
                         className={
@@ -292,9 +284,20 @@ export default function AsignacionesTable({
                       </span>
                     </td>
 
-                    {/* Acciones */}
                     <td className="px-4 py-3 whitespace-nowrap text-right align-top">
-                      <div className="inline-flex gap-2">
+                      <div className="inline-flex flex-wrap justify-end gap-2">
+                        <Link
+                          to={inviteHref}
+                          className="px-3 py-1.5 text-xs font-semibold rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                          title={t("asignaciones.actions.inviteTracker", {
+                            defaultValue: "Invite tracker",
+                          })}
+                        >
+                          {t("asignaciones.actions.inviteTracker", {
+                            defaultValue: "Invite tracker",
+                          })}
+                        </Link>
+
                         {onEdit ? (
                           <button
                             type="button"
