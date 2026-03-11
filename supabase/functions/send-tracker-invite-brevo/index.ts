@@ -347,7 +347,7 @@ async function getAssignmentEmailDetails(sbAdmin: any, params: {
     };
   }
 
-  const geofenceId = firstNonEmpty(asg.geofence_id, asg.geocerca_id);
+  const geofenceId = firstNonEmpty(asg.geocerca_id, asg.geofence_id);
   let geofenceName = "";
   let taskName = "";
 
