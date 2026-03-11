@@ -1,11 +1,10 @@
 // api/invite-tracker.js
 // App Geocercas (PREVIEW) — Invite Tracker Proxy
-// FIX: Supabase Functions gateway requires Authorization header.
-// Build: invite-proxy-v17_AUTH_HEADER_FIX_20260223
+// BUILD: invite-proxy-v18_ASSIGNMENT_DETAILS_20260311
 
 import crypto from "crypto";
 
-const BUILD_TAG = "invite-proxy-v17_AUTH_HEADER_FIX_20260223";
+const BUILD_TAG = "invite-proxy-v18_ASSIGNMENT_DETAILS_20260311";
 
 function safeHost(url) {
   try {
@@ -30,7 +29,6 @@ function isUuid(v) {
 
 export default async function handler(req, res) {
   try {
-    // CORS (por si hay WebView / cross origin)
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
@@ -47,7 +45,6 @@ export default async function handler(req, res) {
       process.env.VITE_SUPABASE_ANON_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-    // Reusa tu secreto de proxy actual (si lo tienes) o uno dedicado
     const proxySecret =
       process.env.INVITE_PROXY_SECRET ||
       process.env.TRACKER_PROXY_SECRET ||
@@ -82,9 +79,12 @@ export default async function handler(req, res) {
 
     const body = req.body || {};
     const org_id = toStr(body.org_id).trim();
-    const invite_id = toStr(body.invite_id).trim(); // opcional (si tu flujo lo usa)
+    const invite_id = toStr(body.invite_id).trim();
     const email = toStr(body.email).trim().toLowerCase();
     const lang = toStr(body.lang || "es").trim();
+    const name = toStr(body.name).trim();
+    const role = toStr(body.role || "tracker").trim().toLowerCase();
+    const assignment_id = toStr(body.assignment_id).trim();
 
     const caller_jwt = toStr(body.caller_jwt).trim();
     if (!caller_jwt) {
@@ -94,11 +94,15 @@ export default async function handler(req, res) {
     if (!isUuid(org_id)) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid org_id" });
     }
+
     if (!email || !email.includes("@")) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid email" });
     }
 
-    // Firma simple para trazabilidad (opcional, pero permanente)
+    if (assignment_id && !isUuid(assignment_id)) {
+      return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid assignment_id" });
+    }
+
     const ts = String(Date.now());
     const sig = hmacHex(proxySecret, `${ts}\n${org_id}\n${email}`);
 
@@ -111,24 +115,27 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-
-        // ✅ CRÍTICO: requerido por gateway de Supabase Functions
         apikey: String(anonKey),
         Authorization: `Bearer ${anonKey}`,
-
-        // tu auth de app
         "x-user-jwt": caller_jwt,
-
-        // trazabilidad
         "x-edge-ts": ts,
         "x-edge-sig": sig,
         "x-app-lang": lang,
       },
-      body: JSON.stringify({ org_id, invite_id, email, lang }),
+      body: JSON.stringify({
+        org_id,
+        invite_id,
+        email,
+        lang,
+        name,
+        role,
+        assignment_id,
+      }),
     });
 
     const ms = Date.now() - started;
     const text = await upstream.text();
+
     let json = null;
     try {
       json = text ? JSON.parse(text) : null;
@@ -147,6 +154,7 @@ export default async function handler(req, res) {
         lang,
         ts,
         sig: sig ? `${sig.slice(0, 4)}***${sig.slice(-4)}` : null,
+        assignment_id: assignment_id || null,
       },
     });
   } catch (e) {

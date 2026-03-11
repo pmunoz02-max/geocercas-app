@@ -15,6 +15,11 @@ function isTruthy(v) {
   return v === true || v === "true" || v === 1 || v === "1";
 }
 
+function isUuid(v) {
+  const s = String(v || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
 function pickPersonalLabel(row) {
   const nombre = String(row?.nombre || "").trim();
   const apellido = String(row?.apellido || "").trim();
@@ -92,6 +97,16 @@ export default function InvitarTracker() {
     if (l.startsWith("fr")) return "fr";
     return "es";
   }, [i18n]);
+
+  const assignmentId = useMemo(() => {
+    try {
+      const qp = new URLSearchParams(window.location.search);
+      const raw = String(qp.get("assignment_id") || "").trim();
+      return isUuid(raw) ? raw : "";
+    } catch {
+      return "";
+    }
+  }, []);
 
   const allowedEmails = useMemo(() => {
     const set = new Set();
@@ -268,6 +283,7 @@ export default function InvitarTracker() {
           lang,
           name,
           caller_jwt,
+          assignment_id: assignmentId || null,
         }),
       });
 
@@ -301,12 +317,13 @@ export default function InvitarTracker() {
           `${t("inviteTracker.errors.inviteErrorPrefix", {
             defaultValue: "Error invitando",
           })} (${upstreamStatus}): ${upstreamMsg}`
-          );
+        );
         return;
       }
 
       const actionLink = body?.action_link || "";
       const emailSent = body?.email_sent;
+      const details = body?.assignment_details || null;
 
       let msg = t("inviteTracker.ok.generated", {
         defaultValue: "Invitación generada para {{email}}.",
@@ -320,7 +337,7 @@ export default function InvitarTracker() {
         msg += ` ${t("inviteTracker.ok.fallbackLink", { defaultValue: "Copia el enlace manualmente." })}`;
       }
 
-      setOkMsg({ msg, actionLink, diag: body?._proxy || body?.diag || null });
+      setOkMsg({ msg, actionLink, diag: body?._proxy || body?.diag || null, details });
     } catch (e2) {
       setErrMsg(String(e2?.message || e2));
     } finally {
@@ -456,6 +473,9 @@ export default function InvitarTracker() {
             <b>{t("inviteTracker.diag.membersLoaded", { defaultValue: "Personal cargado" })}:</b>{" "}
             {loadingPeople ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(people.length)}
           </div>
+          <div className="mt-1">
+            <b>Assignment ID:</b> {assignmentId || "—"}
+          </div>
         </div>
 
         {errMsg && (
@@ -467,6 +487,16 @@ export default function InvitarTracker() {
         {okMsg && (
           <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
             <div>{okMsg.msg}</div>
+
+            {okMsg.details ? (
+              <div className="mt-3 rounded-lg border border-green-200 bg-white p-3 text-xs text-slate-800">
+                <div className="font-semibold mb-2">Detalle enviado en el email</div>
+                <div><b>Ventana asignada:</b> {okMsg.details?.timeWindow || "—"}</div>
+                <div><b>Geocerca asignada:</b> {okMsg.details?.geofenceName || "—"}</div>
+                <div><b>Tarea asignada:</b> {okMsg.details?.taskName || "—"}</div>
+              </div>
+            ) : null}
+
             {okMsg.actionLink ? (
               <div className="mt-2 text-xs text-slate-700">
                 <div className="font-semibold">

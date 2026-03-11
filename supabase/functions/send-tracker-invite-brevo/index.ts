@@ -1,11 +1,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-v27_DELIVERY_STATE_RATE_LIMIT_20260223";
-
-// Anti-spam / cooldown: evita enviar correos repetidos en ráfaga.
-// (El owner aún puede copiar el action_link manual si lo necesita.)
-const SEND_COOLDOWN_SECONDS = 180; // 3 minutos
+const BUILD_TAG = "send-tracker-invite-brevo-v28_ASSIGNMENT_DETAILS_20260311";
+const SEND_COOLDOWN_SECONDS = 180;
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -45,7 +42,6 @@ function normRole(role: unknown) {
   return String(role ?? "").trim().toLowerCase();
 }
 
-// ---------- i18n ----------
 const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
 
 function sanitizeLang(v: unknown) {
@@ -57,7 +53,7 @@ function sanitizeLang(v: unknown) {
 function pickLangFromAcceptLanguage(h: string | null) {
   const s = String(h || "").toLowerCase();
   if (!s) return "";
-  const first = s.split(",")[0].trim(); // "fr-ca"
+  const first = s.split(",")[0].trim();
   return first.slice(0, 2);
 }
 
@@ -71,6 +67,11 @@ type EmailCopy = {
   copyLink: string;
   footer1: string;
   footer2: string;
+  assignedWindowLabel: string;
+  assignedGeofenceLabel: string;
+  assignedTaskLabel: string;
+  valueNotSpecified: string;
+  detailsTitle: string;
 };
 
 function defaultEmailCopy(lang: string): EmailCopy {
@@ -87,6 +88,11 @@ function defaultEmailCopy(lang: string): EmailCopy {
         "You received this email because an App Geofences administrator invited you to access the GPS Tracker.",
       footer2:
         "If you weren't expecting this invitation, you can ignore this message or reply to report it.",
+      assignedWindowLabel: "Assigned time window",
+      assignedGeofenceLabel: "Assigned geofence",
+      assignedTaskLabel: "Assigned task",
+      valueNotSpecified: "Not specified",
+      detailsTitle: "Assignment details",
     };
   }
   if (lang === "fr") {
@@ -102,6 +108,11 @@ function defaultEmailCopy(lang: string): EmailCopy {
         "Vous recevez cet e-mail car un administrateur App Geocercas vous a invité à accéder au GPS Tracker.",
       footer2:
         "Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce message ou répondre pour le signaler.",
+      assignedWindowLabel: "Fenêtre horaire assignée",
+      assignedGeofenceLabel: "Géorepère assigné",
+      assignedTaskLabel: "Tâche assignée",
+      valueNotSpecified: "Non spécifié",
+      detailsTitle: "Détails de l’assignation",
     };
   }
   return {
@@ -116,17 +127,20 @@ function defaultEmailCopy(lang: string): EmailCopy {
       "Recibiste este correo porque un administrador de App Geocercas te invitó a acceder al Tracker GPS.",
     footer2:
       "Si no esperabas esta invitación, puedes ignorar este mensaje o responder a este correo para reportarlo.",
+    assignedWindowLabel: "Ventana asignada",
+    assignedGeofenceLabel: "Geocerca asignada",
+    assignedTaskLabel: "Tarea asignada",
+    valueNotSpecified: "No especificada",
+    detailsTitle: "Detalle de la asignación",
   };
 }
 
-// ✅ CANÓNICO: callback existente + preserva idioma
 function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string) {
   const base = appPreviewUrl.replace(/\/$/, "");
   const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang)}`;
   return `${base}/auth/callback?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(next)}`;
 }
 
-// escape simple para HTML
 function escHtml(s: string) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -147,7 +161,6 @@ function extractBrevoMessageId(raw: string): string {
   const parsed = safeJsonParse(raw);
   const mid = parsed.ok ? (parsed.json?.messageId ?? "") : "";
   if (mid) return String(mid);
-  // fallback regex
   const m = String(raw || "").match(/\"messageId\"\s*:\s*\"([^\"]+)\"/i);
   return m?.[1] ? String(m[1]) : "";
 }
@@ -194,9 +207,6 @@ async function brevoSendEmail(opts: {
   return text;
 }
 
-/**
- * ✅ Validación robusta del JWT del usuario usando /auth/v1/user
- */
 async function authUserIdFromJwt(params: { supabaseUrl: string; anonKey: string; jwt: string }) {
   const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
   const r = await fetch(url, {
@@ -263,6 +273,126 @@ async function deactivateOtherActives(sbAdmin: any, org_id: string, email_norm: 
   if (error) throw error;
 }
 
+function firstNonEmpty(...vals: unknown[]) {
+  for (const v of vals) {
+    const s = String(v ?? "").trim();
+    if (s) return s;
+  }
+  return "";
+}
+
+function formatDateTimeForLang(iso: string | null | undefined, lang: string) {
+  if (!iso) return "";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+
+  try {
+    const locale =
+      lang === "en" ? "en-US" :
+      lang === "fr" ? "fr-FR" :
+      "es-EC";
+
+    return new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "America/Guayaquil",
+    }).format(new Date(ms));
+  } catch {
+    return iso;
+  }
+}
+
+function formatTimeWindow(startIso: string | null | undefined, endIso: string | null | undefined, fallback: string) {
+  const a = formatDateTimeForLang(startIso, "es");
+  const b = formatDateTimeForLang(endIso, "es");
+  if (a && b) return `${a} → ${b}`;
+  if (a) return a;
+  if (b) return b;
+  return fallback;
+}
+
+async function getAssignmentEmailDetails(sbAdmin: any, params: {
+  assignmentId: string;
+  orgId: string;
+  fallbackLabel: string;
+}) {
+  const { data: asg, error: asgErr } = await sbAdmin
+    .from("asignaciones")
+    .select(`
+      id,
+      org_id,
+      geofence_id,
+      geocerca_id,
+      activity_id,
+      start_time,
+      end_time,
+      start_date,
+      end_date
+    `)
+    .eq("id", params.assignmentId)
+    .eq("org_id", params.orgId)
+    .maybeSingle();
+
+  if (asgErr) throw asgErr;
+  if (!asg) {
+    return {
+      found: false,
+      timeWindow: params.fallbackLabel,
+      geofenceName: params.fallbackLabel,
+      taskName: params.fallbackLabel,
+    };
+  }
+
+  const geofenceId = firstNonEmpty(asg.geofence_id, asg.geocerca_id);
+  let geofenceName = "";
+  let taskName = "";
+
+  if (geofenceId && isUuid(geofenceId)) {
+    const { data: geo, error: geoErr } = await sbAdmin
+      .from("geocercas")
+      .select("id, org_id, name, nombre")
+      .eq("id", geofenceId)
+      .eq("org_id", params.orgId)
+      .maybeSingle();
+
+    if (geoErr) throw geoErr;
+    geofenceName = firstNonEmpty(geo?.name, geo?.nombre);
+  }
+
+if (asg.activity_id && isUuid(asg.activity_id)) {
+  const { data: act, error: actErr } = await sbAdmin
+    .from("activities")
+    .select("id, tenant_id, org_id, name")
+    .eq("id", asg.activity_id)
+    .eq("org_id", params.orgId)
+    .maybeSingle();
+
+  if (actErr) throw actErr;
+  taskName = firstNonEmpty(act?.name);
+}
+
+  const startIso =
+    firstNonEmpty(asg.start_time) ||
+    (asg.start_date ? `${String(asg.start_date)}T00:00:00-05:00` : "");
+
+  const endIso =
+    firstNonEmpty(asg.end_time) ||
+    (asg.end_date ? `${String(asg.end_date)}T23:59:59-05:00` : "");
+
+  const timeWindow = formatTimeWindow(startIso || null, endIso || null, params.fallbackLabel);
+
+  return {
+    found: true,
+    timeWindow: timeWindow || params.fallbackLabel,
+    geofenceName: geofenceName || params.fallbackLabel,
+    taskName: taskName || params.fallbackLabel,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") {
@@ -283,7 +413,6 @@ serve(async (req) => {
 
     const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com").replace(/\/$/, "");
 
-    // Logs seguros (sin secretos)
     console.log("[invite] start", { build: BUILD_TAG, ms0: Date.now() - t0 });
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -293,7 +422,6 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: "Missing SUPABASE_ANON_KEY", build_tag: BUILD_TAG });
     }
 
-    // ✅ x-user-jwt
     const userJwt = (req.headers.get("x-user-jwt") || "").trim();
     if (!userJwt) return jsonResponse(401, { ok: false, error: "Missing x-user-jwt", build_tag: BUILD_TAG });
     if (!looksLikeJwt(userJwt)) return jsonResponse(401, { ok: false, error: "Invalid x-user-jwt format", build_tag: BUILD_TAG });
@@ -302,7 +430,6 @@ serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ✅ validar caller
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
       return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status, build_tag: BUILD_TAG });
@@ -313,8 +440,8 @@ serve(async (req) => {
     const org_id = String(body?.org_id || "").trim();
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
+    const assignment_id = String(body?.assignment_id || "").trim();
 
-    // idioma (prioridad body -> x-app-lang -> accept-language)
     let lang = "es";
     const bodyLangRaw = body?.lang;
     const headerLangRaw = req.headers.get("x-app-lang");
@@ -329,10 +456,20 @@ serve(async (req) => {
 
     if (!isUuid(org_id)) return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
     if (!email || !email.includes("@")) return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
+    if (assignment_id && !isUuid(assignment_id)) {
+      return jsonResponse(400, { ok: false, error: "Invalid assignment_id", build_tag: BUILD_TAG });
+    }
 
-    console.log("[invite] input", { org_id, email, lang, callerUserId, hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL });
+    console.log("[invite] input", {
+      org_id,
+      email,
+      lang,
+      callerUserId,
+      assignment_id: assignment_id || null,
+      hasBrevoKey: !!BREVO_API_KEY,
+      hasSender: !!BREVO_SENDER_EMAIL,
+    });
 
-    // ✅ owner check
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
       .select("role, revoked_at")
@@ -352,7 +489,28 @@ serve(async (req) => {
         ok: false,
         error: "Not allowed (must be owner of org)",
         build_tag: BUILD_TAG,
-        diag: { callerUserId, org_id, role_raw: ownerRow?.role ?? null, role_norm: roleNorm || null, revoked_at: ownerRow?.revoked_at ?? null },
+        diag: {
+          callerUserId,
+          org_id,
+          role_raw: ownerRow?.role ?? null,
+          role_norm: roleNorm || null,
+          revoked_at: ownerRow?.revoked_at ?? null,
+        },
+      });
+    }
+
+    let assignmentDetails = {
+      found: false,
+      timeWindow: copy.valueNotSpecified,
+      geofenceName: copy.valueNotSpecified,
+      taskName: copy.valueNotSpecified,
+    };
+
+    if (assignment_id) {
+      assignmentDetails = await getAssignmentEmailDetails(sbAdmin, {
+        assignmentId: assignment_id,
+        orgId: org_id,
+        fallbackLabel: copy.valueNotSpecified,
       });
     }
 
@@ -362,7 +520,6 @@ serve(async (req) => {
     const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang);
     console.log("[invite] redirect", { redirectTo });
 
-    // upsert invite
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
     let openInvite: any | null = null;
@@ -418,12 +575,10 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: "Failed upserting invite", detail: "No invite id returned", build_tag: BUILD_TAG });
     }
 
-    // cooldown check (si ya enviamos hace poco, evitamos re-enviar email)
     const sentSecondsAgo = secondsSince(openInvite?.brevo_sent_at);
     const cooldownRemaining = Math.max(0, Math.ceil(SEND_COOLDOWN_SECONDS - sentSecondsAgo));
     const withinCooldown = Number.isFinite(sentSecondsAgo) && sentSecondsAgo < SEND_COOLDOWN_SECONDS;
 
-    // generateLink
     const { data: linkData, error: linkErr } = await sbAdmin.auth.admin.generateLink({
       type: "magiclink",
       email,
@@ -436,7 +591,6 @@ serve(async (req) => {
 
     const actionLink = String(linkData.properties.action_link);
 
-    // Si estamos dentro del cooldown, NO enviamos por Brevo. Devolvemos el link para uso manual.
     if (withinCooldown) {
       console.log("[invite] cooldown", { secondsAgo: Math.round(sentSecondsAgo), remaining: cooldownRemaining, inviteId: trackerInviteId });
       try {
@@ -445,7 +599,7 @@ serve(async (req) => {
           brevo_last_event_at: nowIso,
         });
       } catch (e) {
-        console.log("[invite] cooldown state update failed", { msg: String(e?.message || e) });
+        console.log("[invite] cooldown state update failed", { msg: String((e as any)?.message || e) });
       }
       return jsonResponse(200, {
         ok: true,
@@ -454,15 +608,16 @@ serve(async (req) => {
         lang,
         org_id,
         email,
+        assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
         redirect_to: redirectTo,
         action_link: actionLink,
         delivery_hint: "Email delivery may take a few minutes depending on the provider. Recent invite was already sent.",
         cooldown_seconds: cooldownRemaining,
+        assignment_details: assignmentDetails,
       });
     }
 
-    // Si falta Brevo env, NO rompemos flujo: devolvemos link manual + warning
     if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
       console.log("[invite] brevo disabled (missing env)", { hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL });
       try {
@@ -472,7 +627,7 @@ serve(async (req) => {
           brevo_last_error: "BREVO_DISABLED_MISSING_ENV",
         });
       } catch (e) {
-        console.log("[invite] brevo disabled state update failed", { msg: String(e?.message || e) });
+        console.log("[invite] brevo disabled state update failed", { msg: String((e as any)?.message || e) });
       }
       return jsonResponse(200, {
         ok: true,
@@ -481,15 +636,16 @@ serve(async (req) => {
         lang,
         org_id,
         email,
+        assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
         redirect_to: redirectTo,
         action_link: actionLink,
         warning: "BREVO_DISABLED_MISSING_ENV",
+        assignment_details: assignmentDetails,
         diag: { hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL, senderName: BREVO_SENDER_NAME },
       });
     }
 
-    // email content
     const safeAction = escHtml(actionLink);
     const subject = copy.subject;
 
@@ -501,6 +657,14 @@ serve(async (req) => {
           ${escHtml(copy.intro2)}<br />
           <span style="color:#6b7280;font-size:12px">${escHtml(copy.expires)}</span>
         </p>
+
+        <div style="margin:0 0 16px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc">
+          <div style="font-weight:700;margin:0 0 8px 0">${escHtml(copy.detailsTitle)}</div>
+          <div style="margin:0 0 6px 0"><b>${escHtml(copy.assignedWindowLabel)}:</b> ${escHtml(assignmentDetails.timeWindow)}</div>
+          <div style="margin:0 0 6px 0"><b>${escHtml(copy.assignedGeofenceLabel)}:</b> ${escHtml(assignmentDetails.geofenceName)}</div>
+          <div style="margin:0"><b>${escHtml(copy.assignedTaskLabel)}:</b> ${escHtml(assignmentDetails.taskName)}</div>
+        </div>
+
         <p style="margin:0 0 16px 0">
           <a href="${safeAction}"
              style="display:inline-block;padding:12px 16px;background:#10b981;color:#0b1220;text-decoration:none;border-radius:10px;font-weight:700">
@@ -520,6 +684,10 @@ serve(async (req) => {
       `${copy.intro1}\n` +
       `${copy.intro2}\n` +
       `${copy.expires}\n\n` +
+      `${copy.detailsTitle}\n` +
+      `${copy.assignedWindowLabel}: ${assignmentDetails.timeWindow}\n` +
+      `${copy.assignedGeofenceLabel}: ${assignmentDetails.geofenceName}\n` +
+      `${copy.assignedTaskLabel}: ${assignmentDetails.taskName}\n\n` +
       `${actionLink}\n\n` +
       `${copy.footer2}\n`;
 
@@ -553,21 +721,20 @@ serve(async (req) => {
           brevo_last_error: null,
         });
       } catch (e) {
-        console.log("[invite] brevo state update failed", { msg: String(e?.message || e) });
+        console.log("[invite] brevo state update failed", { msg: String((e as any)?.message || e) });
       }
     } catch (e) {
-      console.log("[invite] brevo send error", { msg: String(e?.message || e) });
+      console.log("[invite] brevo send error", { msg: String((e as any)?.message || e) });
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {
           brevo_sent_at: nowIso,
           brevo_last_status: "error",
           brevo_last_event_at: nowIso,
-          brevo_last_error: String(e?.message || e).slice(0, 500),
+          brevo_last_error: String((e as any)?.message || e).slice(0, 500),
         });
       } catch (e2) {
-        console.log("[invite] brevo error state update failed", { msg: String(e2?.message || e2) });
+        console.log("[invite] brevo error state update failed", { msg: String((e2 as any)?.message || e2) });
       }
-      // No rompemos el flujo: devolvemos action_link para uso manual
       return jsonResponse(200, {
         ok: true,
         build_tag: BUILD_TAG,
@@ -575,11 +742,13 @@ serve(async (req) => {
         lang,
         org_id,
         email,
+        assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
         redirect_to: redirectTo,
         action_link: actionLink,
+        assignment_details: assignmentDetails,
         warning: "BREVO_SEND_FAILED_RETURNING_MANUAL_LINK",
-        error: String(e?.message || e),
+        error: String((e as any)?.message || e),
       });
     }
 
@@ -590,14 +759,16 @@ serve(async (req) => {
       lang,
       org_id,
       email,
+      assignment_id: assignment_id || null,
       tracker_invite_id: trackerInviteId,
       redirect_to: redirectTo,
       action_link: actionLink,
       delivery_hint: "Email delivery may take a few minutes depending on the provider.",
+      assignment_details: assignmentDetails,
       brevo: { ok: true, messageId: brevoMessageId || null, sample: String(brevoResp).slice(0, 160) },
     });
   } catch (e) {
-    console.log("[invite] error", { msg: String(e?.message || e) });
-    return jsonResponse(500, { ok: false, error: String(e?.message || e), build_tag: BUILD_TAG });
+    console.log("[invite] error", { msg: String((e as any)?.message || e) });
+    return jsonResponse(500, { ok: false, error: String((e as any)?.message || e), build_tag: BUILD_TAG });
   }
 });
