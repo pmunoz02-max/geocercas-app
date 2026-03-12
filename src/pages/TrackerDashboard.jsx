@@ -1025,8 +1025,8 @@ export default function TrackerDashboard() {
     // primer tick inmediato
     tick();
 
-    // luego intervalo único
-    demoTimerRef.current = setInterval(tick, 1000);
+    // luego intervalo único (3 segundos para caminata visible y grabación de pantalla)
+    demoTimerRef.current = setInterval(tick, 3000);
 
     return () => {
       if (demoTimerRef.current) {
