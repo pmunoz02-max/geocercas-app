@@ -13,8 +13,8 @@ declare
   -- 1 tick cada 1 segundo
   v_tick bigint := floor(extract(epoch from clock_timestamp()))::bigint;
 
-  -- 30 pasos por segmento => movimiento extremadamente suave, tipo caminata real para grabación en pantalla
-  v_steps_per_segment integer := 30;
+  -- 80 pasos por segmento => movimiento extremadamente suave, tipo caminata humana lenta para grabación en pantalla
+  v_steps_per_segment integer := 80;
 
   v_rows_inserted integer := 0;
 begin
@@ -36,7 +36,7 @@ begin
     select
       '11111111-1111-1111-1111-111111111111'::uuid as tracker_user_id,
       'demo.carlos@preview.local'::text as fallback_email,
-      1.2::double precision as nominal_speed,
+      0.35::double precision as nominal_speed,
       jsonb_build_array(
         jsonb_build_array(-78.47032, -0.07062),
         jsonb_build_array(-78.46990, -0.07055),
@@ -55,7 +55,7 @@ begin
     select
       '22222222-2222-2222-2222-222222222222'::uuid,
       'demo.lucia@preview.local'::text,
-      1.0::double precision,
+      0.32::double precision,
       jsonb_build_array(
         jsonb_build_array(-78.46910, -0.07152),
         jsonb_build_array(-78.46870, -0.07145),
@@ -74,7 +74,7 @@ begin
     select
       '33333333-3333-3333-3333-333333333333'::uuid,
       'demo.jorge@preview.local'::text,
-      0.95::double precision,
+      0.28::double precision,
       jsonb_build_array(
         jsonb_build_array(-78.47118, -0.06982),
         jsonb_build_array(-78.47075, -0.06978),
