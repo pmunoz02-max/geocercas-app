@@ -507,6 +507,8 @@ export default function TrackerDashboard() {
   const mapRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
+  // flag that indicates the live movement interval should run (preview only)
+  const [demoLive, setDemoLive] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
@@ -947,6 +949,8 @@ export default function TrackerDashboard() {
       setSelectedTrackerId("all");
       setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
       setFitSignal((x) => x + 1);
+      // start live demo movement once data is in place
+      setDemoLive(true);
     } catch (e) {
       const msg = e?.message || String(e);
       setErrorMsg(`DEMO loader error: ${msg}`);
@@ -956,19 +960,24 @@ export default function TrackerDashboard() {
   }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, assignments, tOr]);
 
   useEffect(() => {
-    if (!orgId || !previewUiEnabled || !isDemoOrg) return;
+    let timer = null;
+    if (!orgId || !previewUiEnabled || !isDemoOrg || !demoLive) return;
 
-    const interval = setInterval(async () => {
+    timer = setInterval(async () => {
       try {
         await supabase.rpc("demo_move_trackers");
         await fetchPositions(orgId, { showSpinner: false });
       } catch (e) {
-        console.warn("demo move error", e);
+        console.error("demo move error", e);
+        setDemoLive(false);
+        if (timer) clearInterval(timer);
       }
     }, 1000); // 1 segundo rápido para demos grabadas
 
-    return () => clearInterval(interval);
-  }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions]);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions, demoLive]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
