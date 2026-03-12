@@ -522,6 +522,7 @@ export default function TrackerDashboard() {
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [geofenceEvents, setGeofenceEvents] = useState([]);
 
   const [geofenceRows, setGeofenceRows] = useState([]);
   const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
@@ -924,6 +925,30 @@ export default function TrackerDashboard() {
     [assignmentTrackers, timeWindowId, tOr]
   );
 
+  const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
+    if (!currentOrgId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("tracker_geofence_events")
+        .select("id, user_id, personal_id, geocerca_nombre, event_type, lat, lng, created_at")
+        .eq("org_id", currentOrgId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error("Error loading geofence events:", error);
+        setGeofenceEvents([]);
+        return;
+      }
+
+      setGeofenceEvents(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error("Unexpected error loading events:", e);
+      setGeofenceEvents([]);
+    }
+  }, []);
+
   const reloadAllForCurrentOrg = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
     await Promise.all([
@@ -959,6 +984,7 @@ export default function TrackerDashboard() {
       await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
       await fetchGeofences(orgId, assignments);
       await fetchPositions(orgId, { showSpinner: true, isDemo: true });
+      await fetchGeofenceEvents(orgId);
 
       setSelectedTrackerId("all");
       setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
@@ -976,7 +1002,7 @@ export default function TrackerDashboard() {
     } finally {
       setLoadingDemo(false);
     }
-  }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, assignments, tOr]);
+  }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, fetchGeofenceEvents, assignments, tOr]);
 
   useEffect(() => {
     // limpiar cualquier timer anterior antes de decidir si crear uno nuevo
@@ -1009,6 +1035,7 @@ export default function TrackerDashboard() {
         }
 
         await fetchPositions(orgId, { showSpinner: false, isDemo: true });
+        await fetchGeofenceEvents(orgId);
       } catch (err) {
         console.error("demo move unexpected error:", err);
         setDemoLive(false);
@@ -1035,14 +1062,14 @@ export default function TrackerDashboard() {
       }
       demoInFlightRef.current = false;
     };
-  }, [orgId, previewUiEnabled, isDemoOrg, demoLive, fetchPositions]);
+  }, [orgId, previewUiEnabled, isDemoOrg, demoLive, fetchPositions, fetchGeofenceEvents]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
     (async () => {
-      await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
+      await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId), fetchGeofenceEvents(orgId)]);
     })();
-  }, [orgId, entitlementsLoading, isFree, fetchAssignments, fetchPersonalCatalog]);
+  }, [orgId, entitlementsLoading, isFree, fetchAssignments, fetchPersonalCatalog, fetchGeofenceEvents]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
@@ -1601,6 +1628,68 @@ export default function TrackerDashboard() {
               </div>
             </div>
           </section>
+
+          {previewUiEnabled && isDemoOrg && geofenceEvents.length > 0 && (
+            <section className="lg:col-span-8 xl:col-span-9">
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {tOr("trackerDashboard.sections.recentEvents", "Recent Geofence Events")}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">
+                          {tOr("trackerDashboard.events.time", "Time")}
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">
+                          {tOr("trackerDashboard.events.tracker", "Tracker")}
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">
+                          {tOr("trackerDashboard.events.geofence", "Geofence")}
+                        </th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">
+                          {tOr("trackerDashboard.events.type", "Event")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {geofenceEvents.slice(0, 20).map((evt) => {
+                        const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
+                        const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
+                        const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || evt.user_id;
+
+                        const eventColor = evt.event_type === 'ENTER' ? 'text-green-700' : 'text-red-700';
+                        const eventBg = evt.event_type === 'ENTER' ? 'bg-green-50' : 'bg-red-50';
+
+                        return (
+                          <tr key={evt.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-2 text-gray-600">
+                              {evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : '—'}
+                            </td>
+                            <td className="px-4 py-2 text-gray-900">
+                              <span className="truncate">{trackerLabel}</span>
+                            </td>
+                            <td className="px-4 py-2 text-gray-900">
+                              <span className="truncate">{evt.geocerca_nombre}</span>
+                            </td>
+                            <td className="px-4 py-2">
+                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${eventBg} ${eventColor}`}>
+                                {evt.event_type}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>

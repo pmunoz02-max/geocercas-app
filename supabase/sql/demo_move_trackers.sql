@@ -17,6 +17,7 @@ declare
   v_steps_per_segment integer := 80;
 
   v_rows_inserted integer := 0;
+  v_events_inserted integer := 0;
 begin
   if current_setting('app.env', true) = 'production' then
     raise exception 'Demo live movement disabled in production';
@@ -217,12 +218,128 @@ begin
 
   get diagnostics v_rows_inserted = row_count;
 
+  -- Detectar eventos ENTER/EXIT para geocercas DEMO
+  with demo_geofences as (
+    select
+      g.id as geocerca_id,
+      g.name as geocerca_nombre,
+      g.org_id,
+      jsonb_object_agg(
+        'minLng', (jsonb_path_query_first(g.geojson, '$.features[*].bbox[0]'))::text::double precision
+      ) as geom_meta
+    from public.geofences g
+    where g.org_id = v_demo_org_id
+      and g.active = true
+      and g.geojson is not null
+    group by g.id, g.name, g.org_id
+  ),
+  tracker_positions_prev as (
+    select distinct on (tp.user_id)
+      tp.user_id,
+      tp.lat,
+      tp.lng
+    from public.tracker_positions tp
+    where tp.org_id = v_demo_org_id
+      and tp.user_id in ('11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333')::uuid[]
+      and tp.recorded_at < v_now
+    order by tp.user_id, tp.recorded_at desc
+  ),
+  tracker_positions_new as (
+    select
+      user_id,
+      personal_id,
+      lat,
+      lng
+    from final_rows
+  ),
+  event_detection as (
+    select
+      v_demo_org_id as org_id,
+      n.user_id,
+      n.personal_id,
+      g.geocerca_id,
+      g.geocerca_nombre,
+      public.is_point_in_bbox(
+        jsonb_build_object(
+          'minLng', -78.481,
+          'maxLng', -78.465,
+          'minLat', -0.075,
+          'maxLat', -0.065
+        ),
+        coalesce(p.lat, 0),
+        coalesce(p.lng, 0)
+      ) as was_in_geocerca,
+      public.is_point_in_bbox(
+        jsonb_build_object(
+          'minLng', -78.481,
+          'maxLng', -78.465,
+          'minLat', -0.075,
+          'maxLat', -0.065
+        ),
+        n.lat,
+        n.lng
+      ) as is_now_in_geocerca,
+      n.lat,
+      n.lng
+    from tracker_positions_new n
+    cross join (
+      select '1'::uuid as geocerca_id, 'Parcela Demo'::text as geocerca_nombre
+    ) g
+    left join tracker_positions_prev p on p.user_id = n.user_id
+  ),
+  events_to_create as (
+    select
+      org_id,
+      user_id,
+      personal_id,
+      geocerca_id,
+      geocerca_nombre,
+      case
+        when not was_in_geocerca and is_now_in_geocerca then 'ENTER'
+        when was_in_geocerca and not is_now_in_geocerca then 'EXIT'
+        else null::text
+      end as event_type,
+      lat,
+      lng
+    from event_detection
+    where (not was_in_geocerca and is_now_in_geocerca)
+       or (was_in_geocerca and not is_now_in_geocerca)
+  )
+  insert into public.tracker_geofence_events (
+    org_id,
+    user_id,
+    personal_id,
+    geocerca_id,
+    geocerca_nombre,
+    event_type,
+    lat,
+    lng,
+    source,
+    created_at
+  )
+  select
+    e.org_id,
+    e.user_id,
+    e.personal_id,
+    e.geocerca_id,
+    e.geocerca_nombre,
+    e.event_type,
+    e.lat,
+    e.lng,
+    'demo-geofence'::text,
+    v_now
+  from events_to_create e
+  on conflict do nothing;
+
+  get diagnostics v_events_inserted = row_count;
+
   return jsonb_build_object(
     'ok', true,
     'org_id', v_demo_org_id,
     'tick', v_tick,
     'steps_per_segment', v_steps_per_segment,
     'moved', v_rows_inserted,
+    'events', v_events_inserted,
     'source', 'demo-live',
     'mode', 'walking-route-smooth'
   );
