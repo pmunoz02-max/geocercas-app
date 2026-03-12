@@ -1,7 +1,4 @@
--- preview-only: drop old version when return type changed
--- (does nothing in production due to safety guard later)
-
-DROP FUNCTION IF EXISTS public.demo_move_trackers();
+drop function if exists public.demo_move_trackers();
 
 create or replace function public.demo_move_trackers()
 returns jsonb
@@ -12,13 +9,15 @@ as $$
 declare
   v_demo_org_id uuid;
   v_now timestamptz := now();
-  -- tick increments every second (interval set to 1s in UI)
+
+  -- 1 tick cada 1 segundo
   v_tick bigint := floor(extract(epoch from clock_timestamp()))::bigint;
-  -- one step per segment means each call moves to next waypoint
-  v_steps_per_segment integer := 1; -- 1 tick por tramo => movimiento inmediato
+
+  -- 4 pasos por segmento => movimiento visible y suave
+  v_steps_per_segment integer := 4;
+
   v_rows_inserted integer := 0;
 begin
-  -- Seguridad: jamás en producción
   if current_setting('app.env', true) = 'production' then
     raise exception 'Demo live movement disabled in production';
   end if;
@@ -38,12 +37,16 @@ begin
       '11111111-1111-1111-1111-111111111111'::uuid as tracker_user_id,
       'demo.carlos@preview.local'::text as fallback_email,
       1.2::double precision as nominal_speed,
-      -- square route ~0.002° sides for visible movement
       jsonb_build_array(
         jsonb_build_array(-78.47032, -0.07062),
-        jsonb_build_array(-78.46832, -0.07062),
-        jsonb_build_array(-78.46832, -0.06862),
-        jsonb_build_array(-78.47032, -0.06862),
+        jsonb_build_array(-78.46990, -0.07055),
+        jsonb_build_array(-78.46930, -0.07040),
+        jsonb_build_array(-78.46880, -0.07010),
+        jsonb_build_array(-78.46870, -0.06955),
+        jsonb_build_array(-78.46905, -0.06910),
+        jsonb_build_array(-78.46965, -0.06895),
+        jsonb_build_array(-78.47015, -0.06920),
+        jsonb_build_array(-78.47035, -0.06975),
         jsonb_build_array(-78.47032, -0.07062)
       ) as route_points
 
@@ -55,9 +58,14 @@ begin
       1.0::double precision,
       jsonb_build_array(
         jsonb_build_array(-78.46910, -0.07152),
-        jsonb_build_array(-78.46710, -0.07152),
-        jsonb_build_array(-78.46710, -0.06952),
-        jsonb_build_array(-78.46910, -0.06952),
+        jsonb_build_array(-78.46870, -0.07145),
+        jsonb_build_array(-78.46810, -0.07130),
+        jsonb_build_array(-78.46755, -0.07095),
+        jsonb_build_array(-78.46745, -0.07035),
+        jsonb_build_array(-78.46785, -0.06990),
+        jsonb_build_array(-78.46845, -0.06978),
+        jsonb_build_array(-78.46895, -0.07005),
+        jsonb_build_array(-78.46912, -0.07062),
         jsonb_build_array(-78.46910, -0.07152)
       )
 
@@ -69,9 +77,14 @@ begin
       0.95::double precision,
       jsonb_build_array(
         jsonb_build_array(-78.47118, -0.06982),
-        jsonb_build_array(-78.46918, -0.06982),
-        jsonb_build_array(-78.46918, -0.06782),
-        jsonb_build_array(-78.47118, -0.06782),
+        jsonb_build_array(-78.47075, -0.06978),
+        jsonb_build_array(-78.47015, -0.06965),
+        jsonb_build_array(-78.46960, -0.06930),
+        jsonb_build_array(-78.46948, -0.06875),
+        jsonb_build_array(-78.46985, -0.06830),
+        jsonb_build_array(-78.47045, -0.06818),
+        jsonb_build_array(-78.47098, -0.06842),
+        jsonb_build_array(-78.47118, -0.06900),
         jsonb_build_array(-78.47118, -0.06982)
       )
   ),
@@ -106,9 +119,7 @@ begin
       rd.nominal_speed,
       rd.route_points,
       jsonb_array_length(rd.route_points) as route_len,
-      ((v_tick / v_steps_per_segment) % jsonb_array_length(rd.route_points))::int as segment_idx,
-      (((v_tick / v_steps_per_segment) + 1) % jsonb_array_length(rd.route_points))::int as next_idx,
-      ((v_tick % v_steps_per_segment)::numeric / v_steps_per_segment::numeric) as segment_progress
+      floor((v_tick::numeric / v_steps_per_segment))::bigint as route_tick
     from route_defs rd
     left join latest_state ls
       on ls.user_id = rd.tracker_user_id
@@ -119,11 +130,10 @@ begin
       p.personal_id,
       p.battery,
       greatest(0.6, p.nominal_speed) as speed,
-      ((p.route_points -> p.segment_idx ->> 0)::double precision) as start_lng,
-      ((p.route_points -> p.segment_idx ->> 1)::double precision) as start_lat,
-      ((p.route_points -> p.next_idx    ->> 0)::double precision) as end_lng,
-      ((p.route_points -> p.next_idx    ->> 1)::double precision) as end_lat,
-      p.segment_progress
+      (p.route_tick % p.route_len)::int as segment_idx,
+      ((p.route_tick + 1) % p.route_len)::int as next_idx,
+      ((v_tick % v_steps_per_segment)::numeric / v_steps_per_segment::numeric)::double precision as segment_progress,
+      p.route_points
     from prepared p
     where p.personal_id is not null
   ),
@@ -133,15 +143,32 @@ begin
       c.user_id,
       c.personal_id,
       (
-        c.start_lat + ((c.end_lat - c.start_lat) * c.segment_progress::double precision)
+        ((c.route_points -> c.segment_idx ->> 1)::double precision) +
+        (
+          (((c.route_points -> c.next_idx ->> 1)::double precision) -
+           ((c.route_points -> c.segment_idx ->> 1)::double precision)
+          ) * c.segment_progress
+        )
       )::double precision as lat,
       (
-        c.start_lng + ((c.end_lng - c.start_lng) * c.segment_progress::double precision)
+        ((c.route_points -> c.segment_idx ->> 0)::double precision) +
+        (
+          (((c.route_points -> c.next_idx ->> 0)::double precision) -
+           ((c.route_points -> c.segment_idx ->> 0)::double precision)
+          ) * c.segment_progress
+        )
       )::double precision as lng,
       6::integer as accuracy,
       c.speed,
       mod(
-        degrees(atan2(c.end_lng - c.start_lng, c.end_lat - c.start_lat)) + 360.0,
+        degrees(
+          atan2(
+            ((c.route_points -> c.next_idx ->> 0)::double precision) -
+            ((c.route_points -> c.segment_idx ->> 0)::double precision),
+            ((c.route_points -> c.next_idx ->> 1)::double precision) -
+            ((c.route_points -> c.segment_idx ->> 1)::double precision)
+          )
+        ) + 360.0,
         360.0
       )::double precision as heading,
       greatest(25, least(100, c.battery))::integer as battery,
@@ -188,9 +215,11 @@ begin
     'steps_per_segment', v_steps_per_segment,
     'moved', v_rows_inserted,
     'source', 'demo-live',
-    'mode', 'walking-route-long'
+    'mode', 'walking-route-smooth'
   );
 end;
 $$;
 
 grant execute on function public.demo_move_trackers() to authenticated;
+
+notify pgrst, 'reload schema';

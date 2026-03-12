@@ -804,9 +804,9 @@ export default function TrackerDashboard() {
   }, []);
 
   const fetchPositions = useCallback(
-    async (currentOrgId, options = { showSpinner: true }) => {
+    async (currentOrgId, options = { showSpinner: true, isDemo: false }) => {
       if (!currentOrgId) return;
-      const { showSpinner } = options;
+      const { showSpinner, isDemo } = options;
 
       try {
         if (showSpinner) setLoading(true);
@@ -903,6 +903,17 @@ export default function TrackerDashboard() {
 
         setPositions(normalized);
         setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
+      } else {
+        // In demo mode, keep only the latest position per tracker
+        const m = new Map();
+        for (const p of normalized) {
+          const key = getTrackerKey(p);
+          if (!m.has(key)) m.set(key, p);
+        }
+        const reducedPositions = Array.from(m.values());
+        setPositions(reducedPositions);
+        setDiag((d) => ({ ...d, positionsFound: reducedPositions.length, positionsSource: tableUsed }));
+      }
       } finally {
         if (showSpinner) setLoading(false);
       }
@@ -944,7 +955,7 @@ export default function TrackerDashboard() {
       await resolveOrgId();
       await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
       await fetchGeofences(orgId, assignments);
-      await fetchPositions(orgId, { showSpinner: true });
+      await fetchPositions(orgId, { showSpinner: true, isDemo: true });
 
       setSelectedTrackerId("all");
       setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
@@ -961,23 +972,37 @@ export default function TrackerDashboard() {
 
   useEffect(() => {
     let timer = null;
+    let inFlight = false;
+
     if (!orgId || !previewUiEnabled || !isDemoOrg || !demoLive) return;
 
     timer = setInterval(async () => {
+      // prevent overlapping calls if previous one is still in flight
+      if (inFlight) return;
+
+      inFlight = true;
       try {
         await supabase.rpc("demo_move_trackers");
-        await fetchPositions(orgId, { showSpinner: false });
+        await fetchPositions(orgId, { showSpinner: false, isDemo: true });
       } catch (e) {
-        console.error("demo move error", e);
+        console.error("demo move error:", e);
         setDemoLive(false);
-        if (timer) clearInterval(timer);
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+      } finally {
+        inFlight = false;
       }
     }, 1000); // 1 segundo rápido para demos grabadas
 
     return () => {
-      if (timer) clearInterval(timer);
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
     };
-  }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions, demoLive]);
+  }, [orgId, previewUiEnabled, isDemoOrg, demoLive, fetchPositions]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
@@ -1079,20 +1104,9 @@ export default function TrackerDashboard() {
   const visiblePositions = useMemo(() => {
     if (!positions?.length) return [];
 
+    // In demo mode, positions are already reduced to one per tracker in fetchPositions
     if (isDemoOrg) {
-      // only keep the most recent position per tracker in demo mode
-      const m = new Map();
-      (positions || []).forEach((p) => {
-        const key = getTrackerKey(p);
-        if (!m.has(key)) m.set(key, p);
-        else {
-          const prev = m.get(key);
-          if (p.recorded_at && prev.recorded_at && p.recorded_at > prev.recorded_at) {
-            m.set(key, p);
-          }
-        }
-      });
-      return Array.from(m.values());
+      return positions || [];
     }
 
     if (selectedTrackerId === "all") return positions || [];
