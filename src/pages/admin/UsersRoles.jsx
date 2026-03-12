@@ -1,5 +1,6 @@
 // src/pages/admin/UsersRoles.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from 'react-i18next';
 import { supabase } from "../supabaseClient.js";
 function Notice({ type = "info", children }) {
   const colors =
@@ -58,6 +59,7 @@ function formatEdgeError(info) {
 }
 
 export default function UsersRoles() {
+  const { t } = useTranslation();
   const [roles, setRoles] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [pending, setPending] = useState([]);
@@ -137,7 +139,7 @@ export default function UsersRoles() {
       }
 
       if (data?.ok) {
-        setMessage("success", `Invitación enviada a ${email}`);
+        setMessage("success", t('admin.usersRoles.inviteSuccess', { email }));
         setInviteForm({ email: "", full_name: "", role_name: "tracker" });
         await refreshAll();
       } else {
@@ -177,7 +179,9 @@ export default function UsersRoles() {
       if (data?.ok) {
         setMessage(
           "success",
-          data.mode === "INVITE_SENT" ? `Invitación enviada a ${email}` : `Magic link enviado a ${email}`
+          data.mode === "INVITE_SENT"
+            ? t('admin.usersRoles.magicLinkSentInvite', { email })
+            : t('admin.usersRoles.magicLinkSentLink', { email })
         );
       } else {
         throw new Error(data?.error || "Error enviando Magic Link");
@@ -208,7 +212,7 @@ export default function UsersRoles() {
       }
 
       if (data?.ok) {
-        setMessage("success", `Rol "${role_name}" asignado a ${email}`);
+        setMessage("success", t('admin.usersRoles.assignSuccess', { role: role_name, email }));
         await refreshAll();
       } else {
         throw new Error(data?.error || "Error asignando rol");
@@ -222,7 +226,7 @@ export default function UsersRoles() {
   }
 
   async function handleDeleteOrSuspend(email) {
-    if (!window.confirm(`¿Eliminar/suspender a ${email}?`)) return;
+    if (!window.confirm(t('admin.usersRoles.confirmDelete', { email }))) return;
     setLoading(true);
     setMsg(null);
     try {
@@ -237,7 +241,7 @@ export default function UsersRoles() {
       }
 
       if (data?.ok) {
-        setMessage("success", `Usuario ${email} eliminado/suspendido`);
+        setMessage("success", t('admin.usersRoles.deleteSuccess', { email }));
         await refreshAll();
       } else {
         throw new Error(data?.error || "Error eliminando/suspendiendo usuario");
@@ -253,15 +257,15 @@ export default function UsersRoles() {
   return (
     <div className="p-4 space-y-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Usuarios y Roles</h1>
-        {loading && <span className="text-sm text-gray-500">Procesando…</span>}
+        <h1 className="text-xl font-semibold">{t('admin.usersRoles.title')}</h1>
+        {loading && <span className="text-sm text-gray-500">{t('admin.usersRoles.processing')}</span>}
       </header>
 
       {msg && <Notice type={msg.type}>{msg.text}</Notice>}
 
       {/* INVITAR */}
       <section className="border rounded-lg p-4 space-y-3">
-        <h2 className="text-lg font-medium">Invitar usuario</h2>
+        <h2 className="text-lg font-medium">{t('admin.usersRoles.inviteSection')}</h2>
         <form className="grid sm:grid-cols-4 gap-3" onSubmit={handleInvite}>
           <input
             type="email"
@@ -269,7 +273,7 @@ export default function UsersRoles() {
             required
             value={inviteForm.email}
             onChange={onInviteChange}
-            placeholder="correo@dominio.com"
+            placeholder={t('admin.usersRoles.emailPlaceholder')}
             className="border rounded p-2"
           />
           <input
@@ -277,7 +281,7 @@ export default function UsersRoles() {
             name="full_name"
             value={inviteForm.full_name}
             onChange={onInviteChange}
-            placeholder="Nombre completo"
+            placeholder={t('admin.usersRoles.fullNamePlaceholder')}
             className="border rounded p-2"
           />
           <select
@@ -297,25 +301,25 @@ export default function UsersRoles() {
             disabled={loading}
             className="bg-black text-white rounded p-2 hover:bg-gray-800 disabled:opacity-50"
           >
-            Invitar
+            {t('admin.usersRoles.inviteButton')}
           </button>
         </form>
       </section>
 
       {/* INVITACIONES PENDIENTES */}
       <section className="border rounded-lg p-4 space-y-3">
-        <h2 className="text-lg font-medium">Invitaciones pendientes</h2>
+        <h2 className="text-lg font-medium">{t('admin.usersRoles.pendingInvitesTitle')}</h2>
         {pending.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay invitaciones.</p>
+          <p className="text-sm text-gray-500">{t('admin.usersRoles.noPending')}</p>
         ) : (
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
-                  <th>Email</th>
-                  <th>Rol</th>
-                  <th>Fecha</th>
-                  <th>Acciones</th>
+                  <th>{t('admin.usersRoles.table.email')}</th>
+                  <th>{t('admin.usersRoles.table.role')}</th>
+                  <th>{t('admin.usersRoles.table.date')}</th>
+                  <th>{t('admin.usersRoles.table.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -330,14 +334,14 @@ export default function UsersRoles() {
                         className="px-2 py-1 border rounded hover:bg-gray-50"
                         disabled={loading}
                       >
-                        Magic Link
+                        {t('admin.usersRoles.magicLink')}
                       </button>
                       <button
                         onClick={() => handleDeleteOrSuspend(p.email)}
                         className="px-2 py-1 border rounded text-red-700 border-red-300 hover:bg-red-50"
                         disabled={loading}
                       >
-                        Eliminar
+                        {t('admin.usersRoles.deleteButton')}
                       </button>
                     </td>
                   </tr>
@@ -350,19 +354,19 @@ export default function UsersRoles() {
 
       {/* USUARIOS */}
       <section className="border rounded-lg p-4 space-y-3">
-        <h2 className="text-lg font-medium">Usuarios</h2>
+        <h2 className="text-lg font-medium">{t('admin.usersRoles.usersTitle')}</h2>
         {profiles.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay usuarios registrados.</p>
+          <p className="text-sm text-gray-500">{t('admin.usersRoles.noUsers')}</p>
         ) : (
           <div className="overflow-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="border-b text-left">
-                  <th>Email</th>
-                  <th>Nombre</th>
-                  <th>Rol</th>
-                  <th>Nuevo Rol</th>
-                  <th>Acciones</th>
+                  <th>{t('admin.usersRoles.table.email')}</th>
+                  <th>{t('admin.usersRoles.table.name')}</th>
+                  <th>{t('admin.usersRoles.table.role')}</th>
+                  <th>{t('admin.usersRoles.table.newRole')}</th>
+                  <th>{t('admin.usersRoles.table.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -397,7 +401,7 @@ export default function UsersRoles() {
                           className="px-2 py-1 border rounded hover:bg-gray-50"
                           disabled={loading}
                         >
-                          Asignar
+                          {t('admin.usersRoles.assignButton')}
                         </button>
                       </div>
                     </td>
@@ -407,14 +411,14 @@ export default function UsersRoles() {
                         className="px-2 py-1 border rounded hover:bg-gray-50"
                         disabled={loading}
                       >
-                        Magic Link
+                        {t('admin.usersRoles.magicLink')}
                       </button>
                       <button
                         onClick={() => handleDeleteOrSuspend(u.email)}
                         className="px-2 py-1 border rounded text-red-700 border-red-300 hover:bg-red-50"
                         disabled={loading}
                       >
-                        Eliminar
+                        {t('admin.usersRoles.deleteButton')}
                       </button>
                     </td>
                   </tr>

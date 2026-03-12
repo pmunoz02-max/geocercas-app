@@ -5,10 +5,12 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { getSupabase } from "../../lib/supabaseClient.js";
 
 export default function GeocercasV2() {
   const mapRef = useRef(null);
+  const { t } = useTranslation();
   const [geocercas, setGeocercas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -32,7 +34,7 @@ export default function GeocercasV2() {
 
     if (error) {
       console.error(error);
-      notify("❌ No se pudo cargar la lista", "error");
+      notify(t("admin.geofences.errors.loadFailed"), "error");
       setGeocercas([]);
     } else {
       setGeocercas(Array.isArray(data) ? data : []);
@@ -52,10 +54,10 @@ export default function GeocercasV2() {
   const handleSavePolygon = async (latLngRing) => {
     const ring = normalizeLatLngs(latLngRing);
     if (!ring || ring.length < 3) {
-      notify("❌ Dibuja un polígono válido.", "error");
+      notify(t("admin.geofences.errors.invalidPolygon"), "error");
       return;
     }
-    const nombre = prompt("Nombre de la geocerca:");
+    const nombre = prompt(t("admin.geocercasV2.prompt.name"));
     if (!nombre) return;
 
     const coords = ring.map((p) => ({ lat: +p.lat, lng: +p.lng }));
@@ -65,10 +67,10 @@ export default function GeocercasV2() {
 
     if (error) {
       console.error(error);
-      notify("❌ Error al guardar", "error");
+      notify(t("admin.geofences.errors.saveFailed"), "error");
       return;
     }
-    notify("✅ Geocerca guardada.");
+    notify(t("admin.geofences.messages.created"));
     await load();
   };
 
@@ -76,7 +78,7 @@ export default function GeocercasV2() {
   const handleSaveManual = async ({ nombre, texto }) => {
     const parsed = parseManualCoords(texto);
     if (!nombre || parsed.length < 3) {
-      notify("❌ Revisa nombre y al menos 3 coordenadas válidas.", "error");
+      notify(t("admin.geofences.errors.invalidInput"), "error");
       return;
     }
     const { error } = await supabase
@@ -84,10 +86,10 @@ export default function GeocercasV2() {
       .insert({ nombre, coordenadas: parsed, activa: false });
     if (error) {
       console.error(error);
-      notify("❌ No se pudo guardar la geocerca", "error");
+      notify(t("admin.geofences.errors.createFailed"), "error");
       return;
     }
-    notify("✅ Geocerca creada (manual).");
+    notify(t("admin.geofences.messages.createdManual"));
     await load();
   };
 
@@ -99,19 +101,23 @@ export default function GeocercasV2() {
       .eq("id", g.id);
     if (error) {
       console.error(error);
-      notify("❌ No se pudo cambiar estado", "error");
+      notify(t("admin.geofences.errors.statusChangeFailed"), "error");
       return;
     }
-    notify(`✅ ${!g.activa ? "Activada" : "Desactivada"}`);
+    notify(
+      !g.activa
+        ? t("admin.geofences.messages.activated")
+        : t("admin.geofences.messages.deactivated")
+    );
     await load();
   };
 
   /* ---------- Eliminar ---------- */
   const eliminar = async (g) => {
-    if (!confirm(`¿Eliminar "${g.nombre}"?`)) return;
+    if (!confirm(t("admin.geofences.confirmDelete", { name: g.nombre }))) return;
     const { error } = await supabase.from("geocercas").delete().eq("id", g.id);
     if (error) {
-      notify("❌ No se pudo eliminar", "error");
+      notify(t("admin.geofences.errors.deleteFailed"), "error");
       return;
     }
     notify("🗑️ Eliminada.");
@@ -122,7 +128,7 @@ export default function GeocercasV2() {
   const verEnMapa = (g) => {
     const coords = safeCoordsFromJSON(g.coordenadas);
     if (!coords || coords.length < 3) {
-      notify("⚠️ Geocerca sin coordenadas válidas", "error");
+      notify(t("admin.geofences.errors.noCoordinates"), "error");
       return;
     }
     const b = L.latLngBounds(coords);
@@ -137,13 +143,13 @@ export default function GeocercasV2() {
   /* ---------- Editar (texto) ---------- */
   const editarTexto = async (g) => {
     const nuevoNombre =
-      prompt("Nuevo nombre (deja igual si no quieres cambiar):", g.nombre) ??
+      prompt(t("admin.geocercasV2.prompt.newName"), g.nombre) ??
       g.nombre;
     const actualTxt = (Array.isArray(g.coordenadas) ? g.coordenadas : [])
       .map((p) => `${p.lat},${p.lng}`)
       .join("\n");
     const nuevoTxt = prompt(
-      "Edita coordenadas (lat,lng por línea). Deja en blanco para mantener:",
+      t("admin.geocercasV2.prompt.editCoords"),
       actualTxt
     );
 
@@ -151,7 +157,7 @@ export default function GeocercasV2() {
     if (nuevoTxt !== null) {
       const parsed = parseManualCoords(nuevoTxt);
       if (parsed.length < 3) {
-        notify("❌ Se requieren al menos 3 puntos válidos.", "error");
+        notify(t("admin.geofences.errors.minimumPoints"), "error");
         return;
       }
       update.coordenadas = parsed;
@@ -162,10 +168,10 @@ export default function GeocercasV2() {
       .eq("id", g.id);
     if (error) {
       console.error(error);
-      notify("❌ No se pudo editar", "error");
+      notify(t("admin.geofences.errors.editFailed"), "error");
       return;
     }
-    notify("✏️ Geocerca actualizada.");
+    notify(t("admin.geofences.messages.updated"));
     await load();
   };
 
@@ -174,7 +180,7 @@ export default function GeocercasV2() {
     if (!mapRef.current) return;
     const coords = safeCoordsFromJSON(g.coordenadas);
     if (!coords) {
-      notify("❌ Coordenadas inválidas.", "error");
+      notify(t("admin.geofences.errors.invalidCoordinates"), "error");
       return;
     }
 
@@ -190,13 +196,13 @@ export default function GeocercasV2() {
     mapRef.current.fitBounds(layer.getBounds(), { padding: [30, 30] });
     try { layer.pm && layer.pm.enable({ allowSelfIntersection: false }); } catch {}
     setEditing({ id: g.id, layer });
-    notify("🟠 Edición en mapa activa. Ajusta vértices y pulsa 'Guardar cambios'.", "ok", 5000);
+    notify(t("admin.geofences.messages.mapEditActive"), "ok", 5000);
   };
 
   const cancelarEdicionMapa = () => {
     if (editing?.layer) { try { editing.layer.remove(); } catch {} }
     setEditing(null);
-    notify("Edición cancelada.");
+    notify(t("admin.geofences.messages.editCancelled"));
   };
 
   const guardarEdicionMapa = async () => {
@@ -207,7 +213,7 @@ export default function GeocercasV2() {
         : null;
     const ring = normalizeLatLngs(raw);
     if (!ring || ring.length < 3) {
-      notify("❌ Polígono inválido.", "error");
+      notify(t("admin.geofences.errors.invalidPolygonData"), "error");
       return;
     }
 
@@ -218,23 +224,33 @@ export default function GeocercasV2() {
       .eq("id", editing.id);
     if (error) {
       console.error(error);
-      notify("❌ No se pudo guardar la edición", "error");
+      notify(t("admin.geofences.errors.saveFailed"), "error");
       return;
     }
 
     try { editing.layer.remove(); } catch {}
     setEditing(null);
-    notify("✅ Cambios guardados.");
+    notify(t("admin.geofences.messages.changesSaved"));
     await load();
   };
 
   return (
-    <div className="min-h-screen p-6 md:p-10 space-y-6">
-      <header className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Geocercas (V2)</h2>
+    <div className="min-h-screen p-4 md:p-10 space-y-6">
+      <style>{`
+        /* Mobile-only: Move Geoman toolbar below header area */
+        @media (max-width: 767px) {
+          .leaflet-top.leaflet-left {
+            top: 120px !important;
+          }
+        }
+      `}</style>
+
+      {/* mobile header stacks */}
+      <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 md:gap-0">
+        <h2 className="text-2xl font-bold">{t("admin.geocercasV2.title")}</h2>
         <div className="flex gap-2">
-          <button onClick={mostrarTodas} className="rounded-lg border px-4 py-2 hover:bg-gray-50">Mostrar todas</button>
-          <Link to="/admin" className="rounded-lg border px-4 py-2 hover:bg-gray-50">← Volver</Link>
+          <button onClick={mostrarTodas} className="rounded-lg border px-4 py-2 hover:bg-gray-50">{t("admin.geocercasV2.showAll")}</button>
+          <Link to="/admin" className="rounded-lg border px-4 py-2 hover:bg-gray-50">{t("admin.geocercasV2.back")}</Link>
         </div>
       </header>
 
@@ -244,8 +260,19 @@ export default function GeocercasV2() {
         </div>
       )}
 
+      {/* MOBILE 'Nueva geocerca' panel above map */}
+      <div className="block md:hidden">
+        <details>
+          <summary className="bg-gray-100 px-4 py-2 rounded-lg cursor-pointer font-semibold">
+            {t("admin.geocercasV2.manualFormTitle")}
+          </summary>
+          <ManualForm onSave={handleSaveManual} />
+        </details>
+      </div>
+
       {/* MAPA */}
-      <div className="rounded-2xl border overflow-hidden relative" style={{ height: "520px" }}>
+      <div className="rounded-2xl border overflow-hidden relative h-[60vh] md:h-[520px]">
+        {/* map container adapts height on mobile */}
         <MapContainer
           center={[-0.1807, -78.4678]}
           zoom={12}
@@ -274,44 +301,87 @@ export default function GeocercasV2() {
         {editing && (
           <div className="absolute top-3 right-3 flex gap-2">
             <button onClick={guardarEdicionMapa} className="rounded bg-green-600 text-white px-3 py-1 text-sm">
-              Guardar cambios
+              {t("admin.geocercasV2.floatingActions.save")}
             </button>
             <button onClick={cancelarEdicionMapa} className="rounded bg-white border px-3 py-1 text-sm">
-              Cancelar
+              {t("admin.geocercasV2.floatingActions.cancel")}
             </button>
           </div>
         )}
       </div>
 
-      {/* Formulario manual */}
-      <ManualForm onSave={handleSaveManual} />
+      {/* DESKTOP manual form */}
+      <div className="hidden md:block">
+        <ManualForm onSave={handleSaveManual} />
+      </div>
 
-      {/* LISTADO */}
-      <section className="rounded-xl border p-4">
-        <h3 className="font-semibold mb-3">Geocercas guardadas</h3>
-        {loading && <p>Cargando...</p>}
-        {!loading && geocercas.length === 0 && <p>No hay geocercas.</p>}
-        {!loading &&
-          geocercas.map((g) => (
-            <div key={g.id} className="py-2 flex flex-wrap items-center justify-between border-t first:border-t-0">
+      {/* LISTADO (collapsible on mobile) */}
+      <details className="md:block">
+        <summary className="md:hidden bg-gray-100 px-4 py-2 rounded-lg cursor-pointer font-semibold">
+          {t("admin.geocercasV2.savedGeofencesHeader")}
+        </summary>
+        <section className="rounded-xl border p-4">
+          <h3 className="font-semibold mb-3">
+            {t("admin.geocercasV2.savedGeofencesHeader")}
+          </h3>
+          {loading && <p>{t("common.loading")}</p>}
+          {!loading && geocercas.length === 0 && (
+            <p>{t("admin.geocercasV2.noGeofences")}</p>
+          )}
+          {!loading && geocercas.map((g) => (
+            <div
+              key={g.id}
+              className="py-2 flex flex-wrap items-center justify-between border-t first:border-t-0"
+            >
               <div>
                 <div className="font-medium">{g.nombre}</div>
                 <div className="text-xs text-gray-500">
-                  {new Date(g.created_at).toLocaleString()} · {g.activa ? "Activa" : "Inactiva"}
+                  {new Date(g.created_at).toLocaleString()} ·{' '}
+                  {g.activa
+                    ? t("common.states.active")
+                    : t("common.states.inactive")}
                 </div>
               </div>
               <div className="flex gap-2">
-                <button className="text-blue-600 hover:underline" onClick={() => verEnMapa(g)}>Ver</button>
-                <button className={`rounded px-3 py-1 text-sm border ${g.activa ? "bg-green-600 text-white" : "bg-white"}`} onClick={() => toggleActiva(g)}>
-                  {g.activa ? "Desactivar" : "Activar"}
+                <button
+                  className="text-blue-600 hover:underline"
+                  onClick={() => verEnMapa(g)}
+                >
+                  {t("admin.geocercasV2.actions.view")}
                 </button>
-                <button className="rounded px-3 py-1 text-sm border" onClick={() => editarTexto(g)}>Editar</button>
-                <button className="rounded px-3 py-1 text-sm border" onClick={() => editarEnMapa(g)}>Editar en mapa</button>
-                <button className="rounded px-3 py-1 text-sm border text-red-700" onClick={() => eliminar(g)}>Eliminar</button>
+                <button
+                  className={`rounded px-3 py-1 text-sm border ${
+                    g.activa ? "bg-green-600 text-white" : "bg-white"
+                  }`}
+                  onClick={() => toggleActiva(g)}
+                >
+                  {g.activa
+                    ? t("admin.geocercasV2.actions.deactivate")
+                    : t("admin.geocercasV2.actions.activate")}
+                </button>
+                <button
+                  className="rounded px-3 py-1 text-sm border"
+                  onClick={() => editarTexto(g)}
+                >
+                  {t("admin.geocercasV2.actions.edit")}
+                </button>
+                <button
+                  className="rounded px-3 py-1 text-sm border"
+                  onClick={() => editarEnMapa(g)}
+                >
+                  {t("admin.geocercasV2.actions.editInMap")}
+                </button>
+                <button
+                  className="rounded px-3 py-1 text-sm border text-red-700"
+                  onClick={() => eliminar(g)}
+                >
+                  {t("admin.geocercasV2.actions.delete")}
+                </button>
               </div>
             </div>
           ))}
-      </section>
+        </section>
+
     </div>
   );
 }
@@ -364,7 +434,7 @@ function LatLngControl() {
       div.style.border = "1px solid #e5e7eb";
       div.style.borderRadius = "8px";
       div.style.fontSize = "12px";
-      div.textContent = "Mover cursor para ver Lat/Lng";
+      div.textContent = t("admin.geocercasV2.mapControls.latLngTip");
       return div;
     };
     ctrl.addTo(map);
@@ -389,17 +459,17 @@ function ManualForm({ onSave }) {
 
   return (
     <form onSubmit={submit} className="rounded-xl border p-4 space-y-3">
-      <h3 className="font-semibold">Crear geocerca manualmente</h3>
+      <h3 className="font-semibold">{t("admin.geocercasV2.manualFormTitle")}</h3>
       <div className="grid gap-3 md:grid-cols-2">
         <input
           className="border rounded-lg px-3 py-2 w-full"
-          placeholder="Nombre"
+          placeholder={t("common.placeholders.name")}
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           required
         />
         <div className="text-sm text-gray-500 md:text-right">
-          Formato: <code>lat,lng</code> por línea. Mínimo 3 líneas.
+          {t("admin.geocercasV2.manualForm.hintFormat")}
         </div>
       </div>
       <textarea
@@ -409,7 +479,7 @@ function ManualForm({ onSave }) {
         onChange={(e) => setTexto(e.target.value)}
       />
       <button type="submit" className="rounded-lg bg-blue-600 text-white px-4 py-2 font-medium">
-        Guardar manual
+        {t("admin.geocercasV2.manualForm.saveButton")}
       </button>
     </form>
   );

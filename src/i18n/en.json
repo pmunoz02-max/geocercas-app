@@ -1393,5 +1393,245 @@
       "activity": "activity",
       "tracker": "tracker"
     }
+  },
+
+  "trackerPanel": {
+    "title": "Tracker Panel",
+    "description": "Here you will see your assigned geofences, your status (inside/outside) and you can report incidents.",
+    "logout": "Log out"
+  },
+  "mapaTracking": {
+    "traceLabel": "Trace:",
+    "timeWindows": {
+      "15min": "15 min",
+      "30min": "30 min",
+      "60min": "60 min"
+    },
+    "refresh": "Refresh",
+    "loading": "Loading…"
+  },
+  "newOrg": {
+    "title": "New organization",
+    "labels": {
+      "name": "Name",
+      "slug": "Slug (optional)"
+    },
+    "placeholders": {
+      "name": "E.g. Main Farm",
+      "slug": "e.g. my-main-farm"
+    },
+    "buttons": {
+      "create": "Create",
+      "cancel": "Cancel"
+    }
+  },
+  "geofenceForm": {
+    "title": "New geofence",
+    "fields": {
+      "name": "Name",
+      "coordinates": "Coordinates",
+      "onePerLine": "per line"
+    },
+    "placeholders": {
+      "name": "E.g. Field 1",
+      "example": "-0.1807, -78.4678"
+    },
+    "labels": {
+      "name": "Name",
+      "coordinates": "Coordinates (lat,lng per line)"
+    },
+    "actions": {
+      "save": "Save geofence",
+      "saving": "Saving..."
+    },
+    "hints": {
+      "mapSelection": "Draw or select on the map; if the box is empty, that polygon will be used."
+    },
+    "map": {
+      "lat": "Lat",
+      "lng": "Lng",
+      "movePointer": "Move the pointer over the map…"
+    },
+    "errors": {
+      "minPoints": "At least 3 points are required."
+    },
+    "fallbacks": {
+      "unnamed": "Unnamed"
+    },
+    "messages": {
+      "saved": "Geofence saved successfully.",
+      "errorPrefix": "Error",
+      "created": "Geofence created successfully.",
+      "createError": "Error creating geofence",
+      "updated": "Geofence(s) updated successfully.",
+      "updateError": "Error updating geofence",
+      "deleted": "Geofence(s) deleted successfully.",
+      "deleteError": "Error deleting geofence"
+    }
+  },
+  "asignaciones": {
+    "form": {
+      "newActivityPlaceholder": "Name of the new activity",
+      "saveActivityButton": "Save activity",
+      "savingActivity": "Saving…",
+      "cancelButton": "Cancel",
+      "frequencyLabel": "Frequency (minutes)",
+      "startDateLabel": "Start date",
+      "startDatePlaceholder": "DD/MM/YYYY HH:MM or 2025-11-13T09:11",
+      "endDateLabel": "End date (optional)",
+      "endDatePlaceholder": "DD/MM/YYYY HH:MM or 2025-11-14T19:17",
+      "activityOptional": "(Optional) Select…",
+      "createButtonLabel": "Create assignment"
+    },
+    "filters": {
+      "searchPlaceholder": "Search (person/geofence)",
+      "statusDefault": "Status: all",
+      "statusAll": "Status: all",
+      "geofenceAll": "Geofence: all",
+      "personalAll": "Personal: all"
+    },
+    "states": {
+      "all": "all",
+      "active": "active",
+      "inactive": "inactive"
+    }
+  },
+  "auth": {
+    "signup": {
+      "title": "Create account",
+      "labels": {
+        "fullName": "Full name (optional)",
+        "email": "Email"
+      },
+      "placeholders": {
+        "fullName": "Your name",
+        "email": "youremail@domain.com"
+      },
+      "buttons": {
+        "creating": "Sending...",
+        "create": "Create account with Magic Link"
+      },
+      "separator": "or",
+      "oauthGoogle": "Sign up with Google"
+    }
+  },
+  "admin": {
+    "dashboard": {
+      "title": "Administration Panel",
+      "configRequired": "Configuration Required",
+      "modules": {
+        "geocercas": "Geocercas",
+        "geocercasV2": "Geocercas V2",
+        "personal": "Personal",
+        "reports": "Reports"
+      },
+      "modulesDescriptions": {
+        "geocercas": "Manage your organization's geocercas",
+        "geocercasV2": "Enhanced geocercas with new interface",
+        "personal": "Manage field personnel",
+        "reports": "View reports and events"
+      },
+      "logout": "Sign out"
+    },
+    "geocercasV2": {
+      "title": "Geocercas",
+      "showAll": "Show All",
+      "back": "← Back",
+      "savedGeofencesHeader": "Saved Geocercas",
+      "loading": "Loading...",
+      "noGeofences": "No geocercas",
+      "status": {
+        "active": "Active",
+        "inactive": "Inactive"
+      },
+      "actions": {
+        "view": "View",
+        "deactivate": "Deactivate",
+        "activate": "Activate",
+        "edit": "Edit",
+        "editInMap": "Edit in Map",
+        "delete": "Delete"
+      },
+      "floatingActions": {
+        "save": "Save",
+        "cancel": "Cancel"
+      },
+      "prompt": {
+        "name": "Geofence name:",
+        "newName": "New name (leave blank to keep):",
+        "editCoords": "Edit coordinates (lat,lng per line). Leave blank to keep:"
+      },
+      "manualForm": {
+        "title": "Create geofence manually",
+        "hintFormat": "Format: lat,lng per line. Minimum 3 lines.",
+        "saveButton": "Save manual"
+      },
+      "labels": {
+        "personal": "Personal:",
+        "assignments": "Assignments:"
+      },
+      "mapControls": {
+        "latLngTip": "Move cursor to see Lat/Lng"
+      }
+    },
+    "usersRoles": {
+      "title": "Users and Roles",
+      "processing": "Processing...",
+      "inviteSection": "Invite New User",
+      "emailPlaceholder": "email@example.com",
+      "fullNamePlaceholder": "Full Name",
+      "fullNameLabel": "Full Name",
+      "roleOwner": "Owner",
+      "inviteButton": "Invite",
+      "pendingInvitesTitle": "Pending invitations",
+      "noPending": "No pending invites.",
+      "usersTitle": "Users",
+      "noUsers": "No users registered.",
+      "table": {
+        "email": "Email",
+        "name": "Name",
+        "role": "Role",
+        "date": "Date",
+        "actions": "Actions",
+        "newRole": "New role"
+      },
+      "magicLink": "Magic Link",
+      "deleteButton": "Delete",
+      "assignButton": "Assign",
+      "confirmDelete": "Delete/suspend {{email}}?",
+      "inviteSuccess": "Invitation sent to {{email}}",
+      "assignSuccess": "Role \"{{role}}\" assigned to {{email}}",
+      "magicLinkSentInvite": "Invitation sent to {{email}}",
+      "magicLinkSentLink": "Magic link sent to {{email}}",
+      "deleteSuccess": "User {{email}} deleted/suspended"
+    }
+  },
+  "geofences": {
+    "labels": {
+      "personal": "Personal:",
+      "assignments": "Assignments:"
+    },
+    "actions": {
+      "links": "Links"
+    }
+  },
+  "common": {
+    "show": "Show",
+    "hide": "Hide",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "actions": "Actions",
+    "loading": "Loading",
+    "noResults": "No results",
+    "separator": "—",
+    "zoom": "Zoom",
+    "refresh": "Refresh",
+    "states": {
+      "pending": "Pending",
+      "visible": "Visible",
+      "hidden": "Hidden"
+    }
   }
 }

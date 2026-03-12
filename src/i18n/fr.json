@@ -660,6 +660,39 @@
     "colRegistros": "Dossiers",
     "tableEmpty": "Pas de données à afficher"
   },
+  "admin": {
+    "usersRoles": {
+      "title": "Utilisateurs et rôles",
+      "processing": "Traitement...",
+      "inviteSection": "Inviter un nouvel utilisateur",
+      "emailPlaceholder": "email@exemple.com",
+      "fullNamePlaceholder": "Nom complet",
+      "fullNameLabel": "Nom complet",
+      "roleOwner": "Propriétaire",
+      "inviteButton": "Inviter",
+      "pendingInvitesTitle": "Invitations en attente",
+      "noPending": "Aucune invitation en attente.",
+      "usersTitle": "Utilisateurs",
+      "noUsers": "Aucun utilisateur enregistré.",
+      "table": {
+        "email": "Courriel",
+        "name": "Nom",
+        "role": "Rôle",
+        "date": "Date",
+        "actions": "Actions",
+        "newRole": "Nouveau rôle"
+      },
+      "magicLink": "Lien magique",
+      "deleteButton": "Supprimer",
+      "assignButton": "Attribuer",
+      "confirmDelete": "Supprimer/suspendre {{email}}?",
+      "inviteSuccess": "Invitation envoyée à {{email}}",
+      "assignSuccess": "Rôle \"{{role}}\" attribué à {{email}}",
+      "magicLinkSentInvite": "Invitation envoyée à {{email}}",
+      "magicLinkSentLink": "Lien magique envoyé à {{email}}",
+      "deleteSuccess": "Utilisateur {{email}} supprimé/suspendu"
+    }
+  },
   "tracker": {
     "title": "Tracker GPS",
     "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",

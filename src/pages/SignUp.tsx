@@ -1,9 +1,11 @@
 // src/pages/SignUp.tsx
 import { FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
 
 export default function SignUp() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [accept, setAccept] = useState(false);
@@ -17,11 +19,11 @@ export default function SignUp() {
     const target = email.trim();
 
     if (!target) {
-      setMsg("Ingresa un email válido.");
+      setMsg(t("auth.signup.errors.invalidEmail"));
       return;
     }
     if (!accept) {
-      setMsg("Debes aceptar los Términos y la Política de Privacidad.");
+      setMsg(t("auth.signup.errors.mustAcceptTerms"));
       return;
     }
 
@@ -39,14 +41,12 @@ export default function SignUp() {
       });
 
       if (error) {
-        setMsg(`No se pudo enviar el Magic Link: ${error.message}`);
+        setMsg(t("auth.signup.errors.sendFailed", { message: error.message }));
       } else {
-        setMsg(
-          "Te enviamos un Magic Link. Revisa tu correo y abre el enlace para confirmar tu cuenta."
-        );
+        setMsg(t("auth.signup.messages.magicLinkSent"));
       }
     } catch (e: any) {
-      setMsg(e?.message ?? "Error desconocido");
+      setMsg(e?.message ? t("auth.signup.errors.unknown", { message: e.message }) : t("auth.signup.errors.unknown"));
     } finally {
       setSending(false);
     }
@@ -65,15 +65,15 @@ export default function SignUp() {
         },
       });
       if (error) {
-        setMsg(`No se pudo iniciar con Google: ${error.message}`);
+        setMsg(t("auth.signup.errors.googleFailed", { message: error.message }));
       } else if (!data?.url) {
-        setMsg("No se obtuvo URL de redirección de Google.");
+        setMsg(t("auth.signup.errors.googleNoUrl"));
       } else {
         // Redirige al flujo de Google
         window.location.href = data.url;
       }
     } catch (e: any) {
-      setMsg(e?.message ?? "Error desconocido con Google OAuth");
+      setMsg(e?.message ? t("auth.signup.errors.googleUnknown", { message: e.message }) : t("auth.signup.errors.googleUnknown"));
     } finally {
       setSending(false);
     }
@@ -83,18 +83,18 @@ export default function SignUp() {
 
   return (
     <div className="max-w-md mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-1">Crear cuenta</h1>
+      <h1 className="text-2xl font-bold mb-1">{t("auth.signup.title")}</h1>
       <p className="text-sm text-gray-600 mb-6">
-        Crea tu cuenta con Magic Link o usa Google.
+        {t("auth.signup.subtitle")}
       </p>
 
       <form onSubmit={onSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Nombre completo (opcional)</label>
+          <label className="block text-sm font-medium mb-1">{t("auth.signup.labels.fullName")}</label>
           <input
             type="text"
             className="w-full border rounded px-3 py-2"
-            placeholder="Tu nombre"
+            placeholder={t("auth.signup.placeholders.fullName")}
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
             autoComplete="name"
@@ -102,11 +102,11 @@ export default function SignUp() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Email</label>
+          <label className="block text-sm font-medium mb-1">{t("auth.signup.labels.email")}</label>
           <input
             type="email"
             className="w-full border rounded px-3 py-2"
-            placeholder="tucorreo@dominio.com"
+            placeholder={t("auth.signup.placeholders.email")}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
@@ -122,13 +122,13 @@ export default function SignUp() {
             onChange={(e) => setAccept(e.target.checked)}
           />
           <span>
-            Acepto los{" "}
+            {t("auth.signup.terms.acceptance")} {" "}
             <a href="/terms" className="underline" onClick={(e) => e.stopPropagation()}>
-              Términos
+              {t("auth.signup.terms.terms")}
             </a>{" "}
-            y la{" "}
+            {t("auth.signup.terms.and")} {" "}
             <a href="/privacy" className="underline" onClick={(e) => e.stopPropagation()}>
-              Política de Privacidad
+              {t("auth.signup.terms.privacy")}
             </a>
             .
           </span>
@@ -139,7 +139,7 @@ export default function SignUp() {
           className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-50"
           disabled={!canSubmit}
         >
-          {sending ? "Enviando..." : "Crear cuenta con Magic Link"}
+            {sending ? t("auth.signup.buttons.creating") : t("auth.signup.buttons.create")}
         </button>
 
         <div className="relative my-2">
@@ -147,7 +147,7 @@ export default function SignUp() {
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">o</span>
+            <span className="bg-white px-2 text-gray-500">{t("auth.signup.separator")}</span>
           </div>
         </div>
 
@@ -156,7 +156,7 @@ export default function SignUp() {
           onClick={signUpWithGoogle}
           className="w-full px-4 py-2 rounded border disabled:opacity-50"
           disabled={sending}
-          title="Registrarse con Google"
+            title={t("auth.signup.oauthGoogle")}
         >
           Continuar con Google
         </button>
@@ -164,9 +164,9 @@ export default function SignUp() {
         {msg && <p className="text-sm text-gray-700">{msg}</p>}
 
         <p className="text-sm text-gray-600">
-          ¿Ya tienes cuenta?{" "}
+          {t("auth.signup.alreadyHaveAccount")} {" "}
           <Link to="/login" className="underline">
-            Inicia sesión
+            {t("auth.signup.loginLink")}
           </Link>
         </p>
       </form>

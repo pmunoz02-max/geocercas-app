@@ -1,5 +1,6 @@
 // src/components/asignaciones/AsignacionesForm.jsx
 
+import { useTranslation } from 'react-i18next';
 /* eslint-disable react/prop-types */
 export default function AsignacionesForm({
   formMode,
@@ -32,10 +33,13 @@ export default function AsignacionesForm({
   onCancel,
   onCreateActivity,
 }) {
+  const { t } = useTranslation();
   return (
     <div className="mb-8 bg-white rounded-lg border border-gray-100 shadow-sm p-4">
       <h2 className="text-lg font-medium mb-3">
-        {formMode === 'create' ? 'Nueva asignación' : 'Editar asignación'}
+        {formMode === 'create'
+          ? t('asignaciones.form.newTitle')
+          : t('asignaciones.form.editTitle')}
       </h2>
 
       {/* noValidate para que el navegador no se meta en la validación */}
@@ -47,7 +51,7 @@ export default function AsignacionesForm({
         {/* Personal */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Personal
+            {t('asignaciones.form.personLabel')}
           </label>
           <select
             className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -67,7 +71,7 @@ export default function AsignacionesForm({
         {/* Geocerca */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Geocerca
+            {t('asignaciones.form.geofenceLabel')}
           </label>
           <select
             className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -86,7 +90,7 @@ export default function AsignacionesForm({
         {/* Actividad */}
         <div className="md:col-span-2">
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Actividad
+            {t('asignaciones.form.activityLabel')}
           </label>
           <select
             className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -95,8 +99,8 @@ export default function AsignacionesForm({
           >
             <option value="">
               {actividadOptions.length === 0
-                ? 'No hay actividades (cree una en el módulo Actividades o aquí abajo)'
-                : '(Opcional) Seleccione…'}
+                ? t('asignaciones.form.quickActivity.noActivitiesHint')
+                : t('asignaciones.form.activityOptional')}
             </option>
             {actividadOptions.map((a) => (
               <option key={a.id} value={a.id}>
@@ -127,7 +131,7 @@ export default function AsignacionesForm({
                 className="inline-flex items-center gap-2 self-start rounded-full bg-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-400"
               >
                 <span className="text-base leading-none">＋</span>
-                <span>Nueva actividad</span>
+                <span>{t('asignaciones.form.quickActivity.newButton')}</span>
               </button>
             )}
 
@@ -135,7 +139,7 @@ export default function AsignacionesForm({
               <div className="flex flex-col md:flex-row gap-2 items-start">
                 <input
                   type="text"
-                  placeholder="Nombre de la nueva actividad"
+                  placeholder={t('asignaciones.form.quickActivity.newNamePlaceholder')}
                   className="w-full md:flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={newActivityName}
                   onChange={(e) => setNewActivityName(e.target.value)}
@@ -147,7 +151,9 @@ export default function AsignacionesForm({
                     onClick={onCreateActivity}
                     className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60"
                   >
-                    {savingActivity ? 'Guardando…' : 'Guardar actividad'}
+                    {savingActivity
+                      ? t('asignaciones.form.quickActivity.saving')
+                      : t('asignaciones.form.quickActivity.saveButton')}
                   </button>
                   <button
                     type="button"
@@ -157,7 +163,7 @@ export default function AsignacionesForm({
                     }}
                     className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white hover:bg-gray-50"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -168,7 +174,7 @@ export default function AsignacionesForm({
         {/* Frecuencia */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Frecuencia (minutos)
+            {t('asignaciones.form.frequencyLabel')}
           </label>
           <input
             type="number"
@@ -182,11 +188,11 @@ export default function AsignacionesForm({
         {/* Fecha/hora inicio (TEXT, no datetime-local) */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Fecha inicio
+            {t('asignaciones.form.startLabel')}
           </label>
           <input
             type="text"
-            placeholder="DD/MM/AAAA HH:MM o 2025-11-13T09:11"
+            placeholder={t('asignaciones.form.startDatePlaceholder')}
             className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={formInicio}
             onChange={(e) => setFormInicio(e.target.value)}
@@ -196,11 +202,11 @@ export default function AsignacionesForm({
         {/* Fecha/hora fin (TEXT, opcional) */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Fecha fin (opcional)
+            {t('asignaciones.form.endLabel')}
           </label>
           <input
             type="text"
-            placeholder="DD/MM/AAAA HH:MM o 2025-11-14T19:17"
+            placeholder={t('asignaciones.form.endDatePlaceholder')}
             className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             value={formFin}
             onChange={(e) => setFormFin(e.target.value)}
@@ -213,7 +219,9 @@ export default function AsignacionesForm({
             type="submit"
             className="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            {formMode === 'create' ? 'Crear asignación' : 'Guardar cambios'}
+            {formMode === 'create'
+              ? t('asignaciones.form.buttonCreate')
+              : t('asignaciones.form.buttonUpdate')}}
           </button>
           {formMode === 'edit' && (
             <button
@@ -221,7 +229,7 @@ export default function AsignacionesForm({
               onClick={onCancel}
               className="inline-flex items-center rounded-md border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
           )}
         </div>

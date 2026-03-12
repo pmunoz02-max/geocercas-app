@@ -1,5 +1,6 @@
 // src/components/asignaciones/FiltersBar.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function FiltersBar({
   q, setQ,
@@ -11,26 +12,24 @@ export default function FiltersBar({
   personalId, setPersonalId,
   onRefresh,
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-3 p-3 bg-white/70 rounded-2xl shadow">
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         <input
           type="text"
           className="border rounded-xl px-3 py-2"
-          placeholder="Buscar (persona/geocerca)"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+          placeholder={t("asignaciones.filters.searchPlaceholder")}
 
         <select
           className="border rounded-xl px-3 py-2"
           value={estado}
           onChange={(e) => setEstado(e.target.value)}
         >
-          <option value="todos">Estado: todos</option>
-          <option value="activa">Activa</option>
-          <option value="inactiva">Inactiva</option>
-          <option value="pendiente">Pendiente</option>
+          <option value="todos">{t("asignaciones.filters.statusAll")}</option>
+          <option value="activa">{t("common.states.active")}</option>
+          <option value="inactiva">{t("common.states.inactive")}</option>
+          <option value="pendiente">{t("common.states.pending")}</option>
         </select>
 
         <select
@@ -38,7 +37,7 @@ export default function FiltersBar({
           value={geocercaId || ''}
           onChange={(e) => setGeocercaId(e.target.value || null)}
         >
-          <option value="">Geocerca: todas</option>
+          <option value="">{t("asignaciones.filters.geofenceAll")}</option>
           {geocercas.map((g) => (
             <option key={g.id} value={g.id}>{g.nombre}</option>
           ))}
@@ -49,7 +48,7 @@ export default function FiltersBar({
           value={personalId || ''}
           onChange={(e) => setPersonalId(e.target.value || null)}
         >
-          <option value="">Personal: todos</option>
+          <option value="">{t("asignaciones.filters.personalAll")}</option>
           {personal.map((p) => (
             <option key={p.id} value={p.id}>
               {`${p.nombre ?? ''} ${p.apellido ?? ''}`.trim() || p.email}
@@ -78,7 +77,7 @@ export default function FiltersBar({
           onClick={onRefresh}
           className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
         >
-          Actualizar
+          {t("common.refresh")}
         </button>
       </div>
     </div>

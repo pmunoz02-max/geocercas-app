@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { getSupabase } from "../../lib/supabaseClient.js";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [email, setEmail] = useState(null);
   const [sbError, setSbError] = useState(null);
 
@@ -30,27 +32,27 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen px-6 md:px-12 py-10">
       <header className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl md:text-4xl font-extrabold text-blue-700">Panel de Administración</h1>
+        <h1 className="text-3xl md:text-4xl font-extrabold text-blue-700">{t("admin.dashboard.title")}</h1>
         {email && <div className="text-sm text-gray-600">{email} — <span className="font-semibold">OWNER</span></div>}
       </header>
 
       {sbError && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-800 mb-6">
-          <div className="font-semibold mb-1">Configuración requerida</div>
+          <div className="font-semibold mb-1">{t("admin.dashboard.configRequired")}</div>
           <pre className="whitespace-pre-wrap text-sm">{sbError}</pre>
         </div>
       )}
 
       <section className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        <Card title="Geocercas" subtitle="(Módulo original)" onClick={go("/admin/geocercas")} />
-        <Card title="Geocercas (V2)" subtitle="Mapa + activar/desactivar" onClick={go("/admin/geocercas-v2")} />
-        <Card title="Personal" subtitle="Usuarios, roles y permisos" onClick={go("/admin/personal")} />
-        <Card title="Reportes" subtitle="Entradas/salidas, cumplimiento" onClick={go("/admin/reportes")} />
+        <Card title={t("admin.dashboard.modules.geocercas")} subtitle={t("admin.dashboard.modulesDescriptions.geocercas")} onClick={go("/admin/geocercas")} />
+        <Card title={t("admin.dashboard.modules.geocercasV2")} subtitle={t("admin.dashboard.modulesDescriptions.geocercasV2")} onClick={go("/admin/geocercas-v2")} />
+        <Card title={t("admin.dashboard.modules.personal")} subtitle={t("admin.dashboard.modulesDescriptions.personal")} onClick={go("/admin/personal")} />
+        <Card title={t("admin.dashboard.modules.reports")} subtitle={t("admin.dashboard.modulesDescriptions.reports")} onClick={go("/admin/reportes")} />
       </section>
 
       <button type="button" onClick={signOut}
         className="inline-flex items-center gap-2 rounded-lg bg-red-600 text-white px-5 py-3 font-semibold shadow hover:opacity-90">
-        Cerrar sesión
+        {t("admin.dashboard.logout")}
       </button>
     </div>
   );
