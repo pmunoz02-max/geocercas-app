@@ -549,6 +549,9 @@ export default function TrackerDashboard() {
 
   const previewUiEnabled = useMemo(() => isPreviewLikeHost(), []);
 
+  const DEMO_ORG_ID = "f0f185ae-e6d1-4045-9e4b-372a5b7b471a";
+  const isDemoOrg = orgId === DEMO_ORG_ID;
+
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
     return data?.session?.access_token || null;
@@ -597,6 +600,23 @@ export default function TrackerDashboard() {
   useEffect(() => {
     resolveOrgId();
   }, [resolveOrgId]);
+
+  useEffect(() => {
+    if (!orgId || !previewUiEnabled || !isDemoOrg) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { error } = await supabase.rpc("demo_move_trackers");
+        if (error) throw error;
+
+        await fetchPositions(orgId, { showSpinner: false });
+      } catch (e) {
+        console.warn("demo move error", e);
+      }
+    }, 10000); // 10 segundos
+
+    return () => clearInterval(interval);
+  }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions]);
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;

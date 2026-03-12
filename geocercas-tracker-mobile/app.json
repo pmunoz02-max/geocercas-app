@@ -1,58 +1,69 @@
 {
   "expo": {
-    "name": "geocercas-tracker-mobile",
+    "name": "Geocercas Tracker",
     "slug": "geocercas-tracker-mobile",
     "scheme": "geocercas",
     "version": "1.0.0",
     "orientation": "portrait",
-
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "updates": {
       "fallbackToCacheTimeout": 0
     },
-
-    "assetBundlePatterns": ["**/*"],
-
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tugeocercas.tracker",
-
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "App Geocercas necesita tu ubicación para registrar tus recorridos.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "App Geocercas usa tu ubicación en segundo plano incluso con la app cerrada o pantalla apagada.",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
-
     "android": {
       "package": "com.tugeocercas.tracker",
-
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
-    "plugins": []
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permitir que Geocercas Tracker acceda a tu ubicación incluso cuando la app está cerrada para registrar recorridos de trabajo.",
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "34f15be8-8492-4fea-86db-203c0e96b8ad"
+      }
+    }
   }
 }
