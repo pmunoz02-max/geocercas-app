@@ -960,14 +960,12 @@ export default function TrackerDashboard() {
 
     const interval = setInterval(async () => {
       try {
-        const { error } = await supabase.rpc("demo_move_trackers");
-        if (error) throw error;
-
+        await supabase.rpc("demo_move_trackers");
         await fetchPositions(orgId, { showSpinner: false });
       } catch (e) {
         console.warn("demo move error", e);
       }
-    }, 10000); // 10 segundos
+    }, 3000); // 3 segundos para movimiento visible en grabación
 
     return () => clearInterval(interval);
   }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions]);

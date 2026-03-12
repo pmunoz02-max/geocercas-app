@@ -74,6 +74,32 @@ begin
     raise exception 'No se pudo obtener v_demo_org_id';
   end if;
 
+  -- 1.1) Billing DEMO
+  insert into public.org_billing (
+    org_id,
+    plan_code,
+    plan_status,
+    updated_at,
+    over_limit,
+    subscribed_plan_code
+  )
+  values (
+    v_demo_org_id,
+    'starter',
+    'active',
+    v_now,
+    false,
+    'starter'
+  )
+  on conflict (org_id) do update
+    set plan_code = excluded.plan_code,
+        subscribed_plan_code = excluded.subscribed_plan_code,
+        plan_status = excluded.plan_status,
+        updated_at = v_now,
+        over_limit = false,
+        over_limit_reason = null,
+        over_limit_checked_at = v_now;
+
   -- 2) Membership owner
   update public.memberships
      set is_default = false
@@ -122,16 +148,15 @@ begin
       telefono,
       documento,
       owner_id,
+      created_at,
+      updated_at,
       org_id,
       vigente,
-      activo_bool,
       position_interval_sec,
-      is_deleted,
-      email_norm,
-      phone_norm,
       telefono_norm,
+      activo_bool,
+      is_deleted,
       telefono_raw,
-      identity_key,
       user_id
     )
     values (
@@ -141,16 +166,15 @@ begin
       '+593900000001',
       'DEMO-001',
       v_owner_user_id,
+      v_now,
+      v_now,
       v_demo_org_id,
       true,
-      true,
       300,
+      '+593900000001',
+      true,
       false,
-      'demo.carlos@preview.local',
-      '+593900000001',
-      '+593900000001',
       '0990000001',
-      'demo.carlos@preview.local',
       null
     )
     returning id into v_personal_1;
@@ -162,17 +186,15 @@ begin
            telefono = '+593900000001',
            documento = 'DEMO-001',
            owner_id = v_owner_user_id,
+           updated_at = v_now,
            org_id = v_demo_org_id,
            vigente = true,
-           activo_bool = true,
            position_interval_sec = 300,
+           telefono_norm = '+593900000001',
+           activo_bool = true,
            is_deleted = false,
            deleted_at = null,
-           email_norm = 'demo.carlos@preview.local',
-           phone_norm = '+593900000001',
-           telefono_norm = '+593900000001',
            telefono_raw = '0990000001',
-           identity_key = 'demo.carlos@preview.local',
            user_id = null
      where id = v_personal_1;
   end if;
@@ -191,16 +213,15 @@ begin
       telefono,
       documento,
       owner_id,
+      created_at,
+      updated_at,
       org_id,
       vigente,
-      activo_bool,
       position_interval_sec,
-      is_deleted,
-      email_norm,
-      phone_norm,
       telefono_norm,
+      activo_bool,
+      is_deleted,
       telefono_raw,
-      identity_key,
       user_id
     )
     values (
@@ -210,16 +231,15 @@ begin
       '+593900000002',
       'DEMO-002',
       v_owner_user_id,
+      v_now,
+      v_now,
       v_demo_org_id,
       true,
-      true,
       300,
+      '+593900000002',
+      true,
       false,
-      'demo.lucia@preview.local',
-      '+593900000002',
-      '+593900000002',
       '0990000002',
-      'demo.lucia@preview.local',
       null
     )
     returning id into v_personal_2;
@@ -231,17 +251,15 @@ begin
            telefono = '+593900000002',
            documento = 'DEMO-002',
            owner_id = v_owner_user_id,
+           updated_at = v_now,
            org_id = v_demo_org_id,
            vigente = true,
-           activo_bool = true,
            position_interval_sec = 300,
+           telefono_norm = '+593900000002',
+           activo_bool = true,
            is_deleted = false,
            deleted_at = null,
-           email_norm = 'demo.lucia@preview.local',
-           phone_norm = '+593900000002',
-           telefono_norm = '+593900000002',
            telefono_raw = '0990000002',
-           identity_key = 'demo.lucia@preview.local',
            user_id = null
      where id = v_personal_2;
   end if;
@@ -260,16 +278,15 @@ begin
       telefono,
       documento,
       owner_id,
+      created_at,
+      updated_at,
       org_id,
       vigente,
-      activo_bool,
       position_interval_sec,
-      is_deleted,
-      email_norm,
-      phone_norm,
       telefono_norm,
+      activo_bool,
+      is_deleted,
       telefono_raw,
-      identity_key,
       user_id
     )
     values (
@@ -279,16 +296,15 @@ begin
       '+593900000003',
       'DEMO-003',
       v_owner_user_id,
+      v_now,
+      v_now,
       v_demo_org_id,
       true,
-      true,
       300,
+      '+593900000003',
+      true,
       false,
-      'demo.jorge@preview.local',
-      '+593900000003',
-      '+593900000003',
       '0990000003',
-      'demo.jorge@preview.local',
       null
     )
     returning id into v_personal_3;
@@ -300,64 +316,85 @@ begin
            telefono = '+593900000003',
            documento = 'DEMO-003',
            owner_id = v_owner_user_id,
+           updated_at = v_now,
            org_id = v_demo_org_id,
            vigente = true,
-           activo_bool = true,
            position_interval_sec = 300,
+           telefono_norm = '+593900000003',
+           activo_bool = true,
            is_deleted = false,
            deleted_at = null,
-           email_norm = 'demo.jorge@preview.local',
-           phone_norm = '+593900000003',
-           telefono_norm = '+593900000003',
            telefono_raw = '0990000003',
-           identity_key = 'demo.jorge@preview.local',
            user_id = null
      where id = v_personal_3;
   end if;
 
-  -- 5) Geocercas DEMO
-  insert into public.geocercas (
-    name,
-    nombre,
-    nombre_ci,
-    descripcion,
-    usuario_id,
-    created_by,
-    updated_by,
-    org_id,
-    tenant_id,
-    active,
-    visible,
-    activa,
-    activo,
-    lat,
-    lng,
-    radius_m,
-    geojson,
-    polygon,
-    bbox,
-    is_deleted
-  )
-  values (
-    'Lote Norte',
-    'Lote Norte',
-    'lote norte',
-    'Zona demo de trabajo - lote norte',
-    v_owner_user_id,
-    v_owner_user_id,
-    v_owner_user_id,
-    v_demo_org_id,
-    v_demo_org_id,
-    true,
-    true,
-    true,
-    true,
-    -0.07030,
-    -78.46980,
-    80,
-    jsonb_build_object(
-      'type','Feature',
-      'geometry', jsonb_build_object(
+  -- 5) Geocercas DEMO (update-or-insert, sin upsert)
+  select id
+    into v_geocerca_1
+  from public.geocercas
+  where org_id = v_demo_org_id
+    and nombre_ci = 'lote norte'
+  limit 1;
+
+  if v_geocerca_1 is null then
+    insert into public.geocercas (
+      name,
+      nombre,
+      descripcion,
+      usuario_id,
+      created_at,
+      created_by,
+      updated_by,
+      org_id,
+      tenant_id,
+      active,
+      visible,
+      activa,
+      activo,
+      lat,
+      lng,
+      radius_m,
+      geojson,
+      polygon,
+      bbox,
+      is_deleted,
+      updated_at
+    )
+    values (
+      'Lote Norte',
+      'Lote Norte',
+      'Zona demo de trabajo - lote norte',
+      v_owner_user_id,
+      v_now,
+      v_owner_user_id,
+      v_owner_user_id,
+      v_demo_org_id,
+      v_demo_org_id,
+      true,
+      true,
+      true,
+      true,
+      -0.07030,
+      -78.46980,
+      80,
+      jsonb_build_object(
+        'type','Feature',
+        'geometry', jsonb_build_object(
+          'type','Polygon',
+          'coordinates', jsonb_build_array(
+            jsonb_build_array(
+              jsonb_build_array(-78.47020,-0.07055),
+              jsonb_build_array(-78.46940,-0.07055),
+              jsonb_build_array(-78.46940,-0.07005),
+              jsonb_build_array(-78.47020,-0.07005),
+              jsonb_build_array(-78.47020,-0.07055)
+            )
+          )
+        ),
+        'properties', jsonb_build_object('name','Lote Norte')
+      ),
+      jsonb_build_object(
         'type','Polygon',
         'coordinates', jsonb_build_array(
           jsonb_build_array(
@@ -369,91 +406,136 @@ begin
           )
         )
       ),
-      'properties', jsonb_build_object('name','Lote Norte')
-    ),
-    jsonb_build_object(
-      'type','Polygon',
-      'coordinates', jsonb_build_array(
-        jsonb_build_array(
-          jsonb_build_array(-78.47020,-0.07055),
-          jsonb_build_array(-78.46940,-0.07055),
-          jsonb_build_array(-78.46940,-0.07005),
-          jsonb_build_array(-78.47020,-0.07005),
-          jsonb_build_array(-78.47020,-0.07055)
-        )
-      )
-    ),
-    jsonb_build_object(
-      'minLng', -78.47020,
-      'minLat', -0.07055,
-      'maxLng', -78.46940,
-      'maxLat', -0.07005
-    ),
-    false
-  )
-  on conflict (org_id, nombre_ci) do update
-    set name = excluded.name,
-        nombre = excluded.nombre,
-        descripcion = excluded.descripcion,
-        usuario_id = excluded.usuario_id,
-        created_by = excluded.created_by,
-        updated_by = excluded.updated_by,
-        tenant_id = excluded.tenant_id,
-        active = true,
-        visible = true,
-        activa = true,
-        activo = true,
-        lat = excluded.lat,
-        lng = excluded.lng,
-        radius_m = excluded.radius_m,
-        geojson = excluded.geojson,
-        polygon = excluded.polygon,
-        bbox = excluded.bbox,
-        is_deleted = false,
-        updated_at = v_now;
+      jsonb_build_object(
+        'minLng', -78.47020,
+        'minLat', -0.07055,
+        'maxLng', -78.46940,
+        'maxLat', -0.07005
+      ),
+      false,
+      v_now
+    )
+    returning id into v_geocerca_1;
+  else
+    update public.geocercas
+       set name = 'Lote Norte',
+           nombre = 'Lote Norte',
+           descripcion = 'Zona demo de trabajo - lote norte',
+           usuario_id = v_owner_user_id,
+           updated_by = v_owner_user_id,
+           org_id = v_demo_org_id,
+           tenant_id = v_demo_org_id,
+           active = true,
+           visible = true,
+           activa = true,
+           activo = true,
+           lat = -0.07030,
+           lng = -78.46980,
+           radius_m = 80,
+           geojson = jsonb_build_object(
+             'type','Feature',
+             'geometry', jsonb_build_object(
+               'type','Polygon',
+               'coordinates', jsonb_build_array(
+                 jsonb_build_array(
+                   jsonb_build_array(-78.47020,-0.07055),
+                   jsonb_build_array(-78.46940,-0.07055),
+                   jsonb_build_array(-78.46940,-0.07005),
+                   jsonb_build_array(-78.47020,-0.07005),
+                   jsonb_build_array(-78.47020,-0.07055)
+                 )
+               )
+             ),
+             'properties', jsonb_build_object('name','Lote Norte')
+           ),
+           polygon = jsonb_build_object(
+             'type','Polygon',
+             'coordinates', jsonb_build_array(
+               jsonb_build_array(
+                 jsonb_build_array(-78.47020,-0.07055),
+                 jsonb_build_array(-78.46940,-0.07055),
+                 jsonb_build_array(-78.46940,-0.07005),
+                 jsonb_build_array(-78.47020,-0.07005),
+                 jsonb_build_array(-78.47020,-0.07055)
+               )
+             )
+           ),
+           bbox = jsonb_build_object(
+             'minLng', -78.47020,
+             'minLat', -0.07055,
+             'maxLng', -78.46940,
+             'maxLat', -0.07005
+           ),
+           is_deleted = false,
+           updated_at = v_now
+     where id = v_geocerca_1;
+  end if;
 
-  insert into public.geocercas (
-    name,
-    nombre,
-    nombre_ci,
-    descripcion,
-    usuario_id,
-    created_by,
-    updated_by,
-    org_id,
-    tenant_id,
-    active,
-    visible,
-    activa,
-    activo,
-    lat,
-    lng,
-    radius_m,
-    geojson,
-    polygon,
-    bbox,
-    is_deleted
-  )
-  values (
-    'Empaque Central',
-    'Empaque Central',
-    'empaque central',
-    'Zona demo de empaque',
-    v_owner_user_id,
-    v_owner_user_id,
-    v_owner_user_id,
-    v_demo_org_id,
-    v_demo_org_id,
-    true,
-    true,
-    true,
-    true,
-    -0.07120,
-    -78.46870,
-    70,
-    jsonb_build_object(
-      'type','Feature',
-      'geometry', jsonb_build_object(
+  select id
+    into v_geocerca_2
+  from public.geocercas
+  where org_id = v_demo_org_id
+    and nombre_ci = 'empaque central'
+  limit 1;
+
+  if v_geocerca_2 is null then
+    insert into public.geocercas (
+      name,
+      nombre,
+      descripcion,
+      usuario_id,
+      created_at,
+      created_by,
+      updated_by,
+      org_id,
+      tenant_id,
+      active,
+      visible,
+      activa,
+      activo,
+      lat,
+      lng,
+      radius_m,
+      geojson,
+      polygon,
+      bbox,
+      is_deleted,
+      updated_at
+    )
+    values (
+      'Empaque Central',
+      'Empaque Central',
+      'Zona demo de empaque',
+      v_owner_user_id,
+      v_now,
+      v_owner_user_id,
+      v_owner_user_id,
+      v_demo_org_id,
+      v_demo_org_id,
+      true,
+      true,
+      true,
+      true,
+      -0.07120,
+      -78.46870,
+      70,
+      jsonb_build_object(
+        'type','Feature',
+        'geometry', jsonb_build_object(
+          'type','Polygon',
+          'coordinates', jsonb_build_array(
+            jsonb_build_array(
+              jsonb_build_array(-78.46900,-0.07145),
+              jsonb_build_array(-78.46840,-0.07145),
+              jsonb_build_array(-78.46840,-0.07100),
+              jsonb_build_array(-78.46900,-0.07100),
+              jsonb_build_array(-78.46900,-0.07145)
+            )
+          )
+        ),
+        'properties', jsonb_build_object('name','Empaque Central')
+      ),
+      jsonb_build_object(
         'type','Polygon',
         'coordinates', jsonb_build_array(
           jsonb_build_array(
@@ -465,91 +547,136 @@ begin
           )
         )
       ),
-      'properties', jsonb_build_object('name','Empaque Central')
-    ),
-    jsonb_build_object(
-      'type','Polygon',
-      'coordinates', jsonb_build_array(
-        jsonb_build_array(
-          jsonb_build_array(-78.46900,-0.07145),
-          jsonb_build_array(-78.46840,-0.07145),
-          jsonb_build_array(-78.46840,-0.07100),
-          jsonb_build_array(-78.46900,-0.07100),
-          jsonb_build_array(-78.46900,-0.07145)
-        )
-      )
-    ),
-    jsonb_build_object(
-      'minLng', -78.46900,
-      'minLat', -0.07145,
-      'maxLng', -78.46840,
-      'maxLat', -0.07100
-    ),
-    false
-  )
-  on conflict (org_id, nombre_ci) do update
-    set name = excluded.name,
-        nombre = excluded.nombre,
-        descripcion = excluded.descripcion,
-        usuario_id = excluded.usuario_id,
-        created_by = excluded.created_by,
-        updated_by = excluded.updated_by,
-        tenant_id = excluded.tenant_id,
-        active = true,
-        visible = true,
-        activa = true,
-        activo = true,
-        lat = excluded.lat,
-        lng = excluded.lng,
-        radius_m = excluded.radius_m,
-        geojson = excluded.geojson,
-        polygon = excluded.polygon,
-        bbox = excluded.bbox,
-        is_deleted = false,
-        updated_at = v_now;
+      jsonb_build_object(
+        'minLng', -78.46900,
+        'minLat', -0.07145,
+        'maxLng', -78.46840,
+        'maxLat', -0.07100
+      ),
+      false,
+      v_now
+    )
+    returning id into v_geocerca_2;
+  else
+    update public.geocercas
+       set name = 'Empaque Central',
+           nombre = 'Empaque Central',
+           descripcion = 'Zona demo de empaque',
+           usuario_id = v_owner_user_id,
+           updated_by = v_owner_user_id,
+           org_id = v_demo_org_id,
+           tenant_id = v_demo_org_id,
+           active = true,
+           visible = true,
+           activa = true,
+           activo = true,
+           lat = -0.07120,
+           lng = -78.46870,
+           radius_m = 70,
+           geojson = jsonb_build_object(
+             'type','Feature',
+             'geometry', jsonb_build_object(
+               'type','Polygon',
+               'coordinates', jsonb_build_array(
+                 jsonb_build_array(
+                   jsonb_build_array(-78.46900,-0.07145),
+                   jsonb_build_array(-78.46840,-0.07145),
+                   jsonb_build_array(-78.46840,-0.07100),
+                   jsonb_build_array(-78.46900,-0.07100),
+                   jsonb_build_array(-78.46900,-0.07145)
+                 )
+               )
+             ),
+             'properties', jsonb_build_object('name','Empaque Central')
+           ),
+           polygon = jsonb_build_object(
+             'type','Polygon',
+             'coordinates', jsonb_build_array(
+               jsonb_build_array(
+                 jsonb_build_array(-78.46900,-0.07145),
+                 jsonb_build_array(-78.46840,-0.07145),
+                 jsonb_build_array(-78.46840,-0.07100),
+                 jsonb_build_array(-78.46900,-0.07100),
+                 jsonb_build_array(-78.46900,-0.07145)
+               )
+             )
+           ),
+           bbox = jsonb_build_object(
+             'minLng', -78.46900,
+             'minLat', -0.07145,
+             'maxLng', -78.46840,
+             'maxLat', -0.07100
+           ),
+           is_deleted = false,
+           updated_at = v_now
+     where id = v_geocerca_2;
+  end if;
 
-  insert into public.geocercas (
-    name,
-    nombre,
-    nombre_ci,
-    descripcion,
-    usuario_id,
-    created_by,
-    updated_by,
-    org_id,
-    tenant_id,
-    active,
-    visible,
-    activa,
-    activo,
-    lat,
-    lng,
-    radius_m,
-    geojson,
-    polygon,
-    bbox,
-    is_deleted
-  )
-  values (
-    'Bodega Insumos',
-    'Bodega Insumos',
-    'bodega insumos',
-    'Zona demo de bodega',
-    v_owner_user_id,
-    v_owner_user_id,
-    v_owner_user_id,
-    v_demo_org_id,
-    v_demo_org_id,
-    true,
-    true,
-    true,
-    true,
-    -0.06950,
-    -78.47080,
-    60,
-    jsonb_build_object(
-      'type','Feature',
-      'geometry', jsonb_build_object(
+  select id
+    into v_geocerca_3
+  from public.geocercas
+  where org_id = v_demo_org_id
+    and nombre_ci = 'bodega insumos'
+  limit 1;
+
+  if v_geocerca_3 is null then
+    insert into public.geocercas (
+      name,
+      nombre,
+      descripcion,
+      usuario_id,
+      created_at,
+      created_by,
+      updated_by,
+      org_id,
+      tenant_id,
+      active,
+      visible,
+      activa,
+      activo,
+      lat,
+      lng,
+      radius_m,
+      geojson,
+      polygon,
+      bbox,
+      is_deleted,
+      updated_at
+    )
+    values (
+      'Bodega Insumos',
+      'Bodega Insumos',
+      'Zona demo de bodega',
+      v_owner_user_id,
+      v_now,
+      v_owner_user_id,
+      v_owner_user_id,
+      v_demo_org_id,
+      v_demo_org_id,
+      true,
+      true,
+      true,
+      true,
+      -0.06950,
+      -78.47080,
+      60,
+      jsonb_build_object(
+        'type','Feature',
+        'geometry', jsonb_build_object(
+          'type','Polygon',
+          'coordinates', jsonb_build_array(
+            jsonb_build_array(
+              jsonb_build_array(-78.47110,-0.06975),
+              jsonb_build_array(-78.47050,-0.06975),
+              jsonb_build_array(-78.47050,-0.06930),
+              jsonb_build_array(-78.47110,-0.06930),
+              jsonb_build_array(-78.47110,-0.06975)
+            )
+          )
+        ),
+        'properties', jsonb_build_object('name','Bodega Insumos')
+      ),
+      jsonb_build_object(
         'type','Polygon',
         'coordinates', jsonb_build_array(
           jsonb_build_array(
@@ -561,67 +688,72 @@ begin
           )
         )
       ),
-      'properties', jsonb_build_object('name','Bodega Insumos')
-    ),
-    jsonb_build_object(
-      'type','Polygon',
-      'coordinates', jsonb_build_array(
-        jsonb_build_array(
-          jsonb_build_array(-78.47110,-0.06975),
-          jsonb_build_array(-78.47050,-0.06975),
-          jsonb_build_array(-78.47050,-0.06930),
-          jsonb_build_array(-78.47110,-0.06930),
-          jsonb_build_array(-78.47110,-0.06975)
-        )
-      )
-    ),
-    jsonb_build_object(
-      'minLng', -78.47110,
-      'minLat', -0.06975,
-      'maxLng', -78.47050,
-      'maxLat', -0.06930
-    ),
-    false
-  )
-  on conflict (org_id, nombre_ci) do update
-    set name = excluded.name,
-        nombre = excluded.nombre,
-        descripcion = excluded.descripcion,
-        usuario_id = excluded.usuario_id,
-        created_by = excluded.created_by,
-        updated_by = excluded.updated_by,
-        tenant_id = excluded.tenant_id,
-        active = true,
-        visible = true,
-        activa = true,
-        activo = true,
-        lat = excluded.lat,
-        lng = excluded.lng,
-        radius_m = excluded.radius_m,
-        geojson = excluded.geojson,
-        polygon = excluded.polygon,
-        bbox = excluded.bbox,
-        is_deleted = false,
-        updated_at = v_now;
+      jsonb_build_object(
+        'minLng', -78.47110,
+        'minLat', -0.06975,
+        'maxLng', -78.47050,
+        'maxLat', -0.06930
+      ),
+      false,
+      v_now
+    )
+    returning id into v_geocerca_3;
+  else
+    update public.geocercas
+       set name = 'Bodega Insumos',
+           nombre = 'Bodega Insumos',
+           descripcion = 'Zona demo de bodega',
+           usuario_id = v_owner_user_id,
+           updated_by = v_owner_user_id,
+           org_id = v_demo_org_id,
+           tenant_id = v_demo_org_id,
+           active = true,
+           visible = true,
+           activa = true,
+           activo = true,
+           lat = -0.06950,
+           lng = -78.47080,
+           radius_m = 60,
+           geojson = jsonb_build_object(
+             'type','Feature',
+             'geometry', jsonb_build_object(
+               'type','Polygon',
+               'coordinates', jsonb_build_array(
+                 jsonb_build_array(
+                   jsonb_build_array(-78.47110,-0.06975),
+                   jsonb_build_array(-78.47050,-0.06975),
+                   jsonb_build_array(-78.47050,-0.06930),
+                   jsonb_build_array(-78.47110,-0.06930),
+                   jsonb_build_array(-78.47110,-0.06975)
+                 )
+               )
+             ),
+             'properties', jsonb_build_object('name','Bodega Insumos')
+           ),
+           polygon = jsonb_build_object(
+             'type','Polygon',
+             'coordinates', jsonb_build_array(
+               jsonb_build_array(
+                 jsonb_build_array(-78.47110,-0.06975),
+                 jsonb_build_array(-78.47050,-0.06975),
+                 jsonb_build_array(-78.47050,-0.06930),
+                 jsonb_build_array(-78.47110,-0.06930),
+                 jsonb_build_array(-78.47110,-0.06975)
+               )
+             )
+           ),
+           bbox = jsonb_build_object(
+             'minLng', -78.47110,
+             'minLat', -0.06975,
+             'maxLng', -78.47050,
+             'maxLat', -0.06930
+           ),
+           is_deleted = false,
+           updated_at = v_now
+     where id = v_geocerca_3;
+  end if;
 
-  select id into v_geocerca_1
-  from public.geocercas
-  where org_id = v_demo_org_id
-    and nombre_ci = 'lote norte'
-  limit 1;
-
-  select id into v_geocerca_2
-  from public.geocercas
-  where org_id = v_demo_org_id
-    and nombre_ci = 'empaque central'
-  limit 1;
-
-  select id into v_geocerca_3
-  from public.geocercas
-  where org_id = v_demo_org_id
-    and nombre_ci = 'bodega insumos'
-  limit 1;
-
+  -- Relación personal -> geocercas
   if v_geocerca_1 is not null then
     update public.geocercas
        set personal_ids = array[v_personal_1]::uuid[],
