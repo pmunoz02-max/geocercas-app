@@ -38,16 +38,19 @@ begin
       'demo.carlos@preview.local'::text as fallback_email,
       0.35::double precision as nominal_speed,
       jsonb_build_array(
-        jsonb_build_array(-78.47032, -0.07062),
-        jsonb_build_array(-78.46990, -0.07055),
-        jsonb_build_array(-78.46930, -0.07040),
-        jsonb_build_array(-78.46880, -0.07010),
-        jsonb_build_array(-78.46870, -0.06955),
-        jsonb_build_array(-78.46905, -0.06910),
-        jsonb_build_array(-78.46965, -0.06895),
-        jsonb_build_array(-78.47015, -0.06920),
-        jsonb_build_array(-78.47035, -0.06975),
-        jsonb_build_array(-78.47032, -0.07062)
+        -- Trazo serpenteante este-oeste (Carlos inspeccionar parcela norte)
+        jsonb_build_array(-78.47100, -0.06900),
+        jsonb_build_array(-78.46950, -0.06895),
+        jsonb_build_array(-78.46750, -0.06905),
+        jsonb_build_array(-78.46600, -0.06920),
+        jsonb_build_array(-78.46750, -0.06950),
+        jsonb_build_array(-78.46950, -0.06960),
+        jsonb_build_array(-78.47100, -0.06975),
+        jsonb_build_array(-78.47200, -0.06990),
+        jsonb_build_array(-78.47100, -0.07020),
+        jsonb_build_array(-78.46850, -0.07040),
+        jsonb_build_array(-78.46700, -0.07025),
+        jsonb_build_array(-78.47100, -0.06900)
       ) as route_points
 
     union all
@@ -57,16 +60,19 @@ begin
       'demo.lucia@preview.local'::text,
       0.32::double precision,
       jsonb_build_array(
-        jsonb_build_array(-78.46910, -0.07152),
-        jsonb_build_array(-78.46870, -0.07145),
-        jsonb_build_array(-78.46810, -0.07130),
-        jsonb_build_array(-78.46755, -0.07095),
-        jsonb_build_array(-78.46745, -0.07035),
-        jsonb_build_array(-78.46785, -0.06990),
-        jsonb_build_array(-78.46845, -0.06978),
-        jsonb_build_array(-78.46895, -0.07005),
-        jsonb_build_array(-78.46912, -0.07062),
-        jsonb_build_array(-78.46910, -0.07152)
+        -- Trazo zigzag norte-sur (Lucia inspeccionar parcela central)
+        jsonb_build_array(-78.46850, -0.07200),
+        jsonb_build_array(-78.46900, -0.07050),
+        jsonb_build_array(-78.46950, -0.06920),
+        jsonb_build_array(-78.46900, -0.06800),
+        jsonb_build_array(-78.46800, -0.06900),
+        jsonb_build_array(-78.46750, -0.07050),
+        jsonb_build_array(-78.46850, -0.07150),
+        jsonb_build_array(-78.46950, -0.07100),
+        jsonb_build_array(-78.47000, -0.06950),
+        jsonb_build_array(-78.46900, -0.06850),
+        jsonb_build_array(-78.46800, -0.06950),
+        jsonb_build_array(-78.46850, -0.07200)
       )
 
     union all
@@ -76,16 +82,19 @@ begin
       'demo.jorge@preview.local'::text,
       0.28::double precision,
       jsonb_build_array(
-        jsonb_build_array(-78.47118, -0.06982),
-        jsonb_build_array(-78.47075, -0.06978),
-        jsonb_build_array(-78.47015, -0.06965),
-        jsonb_build_array(-78.46960, -0.06930),
-        jsonb_build_array(-78.46948, -0.06875),
-        jsonb_build_array(-78.46985, -0.06830),
-        jsonb_build_array(-78.47045, -0.06818),
-        jsonb_build_array(-78.47098, -0.06842),
-        jsonb_build_array(-78.47118, -0.06900),
-        jsonb_build_array(-78.47118, -0.06982)
+        -- Trazo diagonal con bucles (Jorge inspeccionar parcela sur)
+        jsonb_build_array(-78.46500, -0.07300),
+        jsonb_build_array(-78.46650, -0.07200),
+        jsonb_build_array(-78.46800, -0.07150),
+        jsonb_build_array(-78.46950, -0.07100),
+        jsonb_build_array(-78.47050, -0.07050),
+        jsonb_build_array(-78.46950, -0.07000),
+        jsonb_build_array(-78.46800, -0.07080),
+        jsonb_build_array(-78.46650, -0.07150),
+        jsonb_build_array(-78.46550, -0.07250),
+        jsonb_build_array(-78.46650, -0.07300),
+        jsonb_build_array(-78.46800, -0.07250),
+        jsonb_build_array(-78.46500, -0.07300)
       )
   ),
   latest_state as (
