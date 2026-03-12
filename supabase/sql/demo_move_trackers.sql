@@ -13,8 +13,8 @@ declare
   -- 1 tick cada 1 segundo
   v_tick bigint := floor(extract(epoch from clock_timestamp()))::bigint;
 
-  -- 12 pasos por segmento => movimiento lento y suave para grabación en pantalla
-  v_steps_per_segment integer := 12;
+  -- 30 pasos por segmento => movimiento extremadamente suave, tipo caminata real para grabación en pantalla
+  v_steps_per_segment integer := 30;
 
   v_rows_inserted integer := 0;
 begin
