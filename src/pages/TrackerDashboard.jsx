@@ -901,19 +901,20 @@ export default function TrackerDashboard() {
           })
           .filter((p) => p._valid);
 
-        setPositions(normalized);
-        setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
-      } else {
-        // In demo mode, keep only the latest position per tracker
-        const m = new Map();
-        for (const p of normalized) {
-          const key = getTrackerKey(p);
-          if (!m.has(key)) m.set(key, p);
+        if (!isDemo) {
+          setPositions(normalized);
+          setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
+        } else {
+          // In demo mode, keep only the latest position per tracker
+          const m = new Map();
+          for (const p of normalized) {
+            const key = getTrackerKey(p);
+            if (!m.has(key)) m.set(key, p);
+          }
+          const reducedPositions = Array.from(m.values());
+          setPositions(reducedPositions);
+          setDiag((d) => ({ ...d, positionsFound: reducedPositions.length, positionsSource: tableUsed }));
         }
-        const reducedPositions = Array.from(m.values());
-        setPositions(reducedPositions);
-        setDiag((d) => ({ ...d, positionsFound: reducedPositions.length, positionsSource: tableUsed }));
-      }
       } finally {
         if (showSpinner) setLoading(false);
       }
