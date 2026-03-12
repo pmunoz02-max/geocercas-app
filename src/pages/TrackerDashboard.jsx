@@ -81,6 +81,12 @@ function getTrackerKey(row) {
   return String(row.personal_id || row.user_id || "unknown");
 }
 
+function isPreviewLikeHost() {
+  if (typeof window === "undefined") return false;
+  const host = String(window.location.hostname || "").toLowerCase();
+  return host.includes("preview") || host === "localhost" || host === "127.0.0.1";
+}
+
 // GeoJSON is [lng,lat] => Leaflet [lat,lng]
 function toLatLngStrict(coord) {
   if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
@@ -500,6 +506,7 @@ export default function TrackerDashboard() {
 
   const mapRef = useRef(null);
   const [loading, setLoading] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
@@ -539,6 +546,8 @@ export default function TrackerDashboard() {
   const [viewportText, setViewportText] = useState("—");
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
+
+  const previewUiEnabled = useMemo(() => isPreviewLikeHost(), []);
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -800,8 +809,6 @@ export default function TrackerDashboard() {
         const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
         const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
 
-        const allowedUserIds = (assignmentTrackers || []).map((x) => x.user_id).filter(Boolean);
-
         const selectCols =
           "id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at";
 
@@ -818,8 +825,9 @@ export default function TrackerDashboard() {
             .order("created_at", { ascending: false })
             .limit(500);
 
-          if (Array.isArray(allowedUserIds) && allowedUserIds.length) {
-            q = q.in("user_id", allowedUserIds);
+          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
+            const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
+            if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
           }
 
           return await q;
@@ -894,6 +902,53 @@ export default function TrackerDashboard() {
     },
     [assignmentTrackers, timeWindowId, tOr]
   );
+
+  const reloadAllForCurrentOrg = useCallback(async (currentOrgId) => {
+    if (!currentOrgId) return;
+    await Promise.all([
+      fetchAssignments(currentOrgId),
+      fetchPersonalCatalog(currentOrgId),
+    ]);
+    await fetchGeofences(currentOrgId, assignments);
+    await fetchPositions(currentOrgId, { showSpinner: true });
+  }, [assignments, fetchAssignments, fetchGeofences, fetchPersonalCatalog, fetchPositions]);
+
+  const onLoadDemo = useCallback(async () => {
+    if (!previewUiEnabled) {
+      setErrorMsg("DEMO loader available only in preview/localhost.");
+      return;
+    }
+    if (!orgId) {
+      setErrorMsg("No active org resolved.");
+      return;
+    }
+
+    setLoadingDemo(true);
+    setErrorMsg("");
+    setInfoMsg("");
+
+    try {
+      const r = await supabase.rpc("load_demo_preview_dataset", { p_org_id: orgId });
+
+      if (r?.error) {
+        throw new Error(r.error.message || String(r.error));
+      }
+
+      await resolveOrgId();
+      await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
+      await fetchGeofences(orgId, assignments);
+      await fetchPositions(orgId, { showSpinner: true });
+
+      setSelectedTrackerId("all");
+      setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
+      setFitSignal((x) => x + 1);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setErrorMsg(`DEMO loader error: ${msg}`);
+    } finally {
+      setLoadingDemo(false);
+    }
+  }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, assignments, tOr]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
@@ -1125,6 +1180,7 @@ export default function TrackerDashboard() {
               <Badge>{tOr("trackerDashboard.badges.circles", "circles")}: {diag.geofenceCircles}</Badge>
               <Badge>{tOr("trackerDashboard.badges.positions", "positions")}: {diag.positionsFound}</Badge>
               {diag.positionsSource && <Badge>{tOr("trackerDashboard.badges.source", "src")}: {diag.positionsSource}</Badge>}
+              {previewUiEnabled && <Badge>preview-demo-ui</Badge>}
             </div>
 
             {orgResolveError && (
@@ -1136,6 +1192,18 @@ export default function TrackerDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {previewUiEnabled && (
+              <button
+                type="button"
+                onClick={onLoadDemo}
+                className="inline-flex items-center justify-center rounded-md bg-emerald-600 text-white px-4 py-2 text-sm font-medium
+                           hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
+                disabled={loadingDemo || loading || !orgId}
+              >
+                {loadingDemo ? "Cargando DEMO…" : "Cargar DEMO"}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => resolveOrgId()}
