@@ -505,6 +505,8 @@ export default function TrackerDashboard() {
   const [orgResolveError, setOrgResolveError] = useState("");
 
   const mapRef = useRef(null);
+  const demoTimerRef = useRef(null);
+  const demoInFlightRef = useRef(false);
   const [loading, setLoading] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
   // flag that indicates the live movement interval should run (preview only)
@@ -962,6 +964,11 @@ export default function TrackerDashboard() {
       setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
       setFitSignal((x) => x + 1);
       // start live demo movement once data is in place
+      if (demoTimerRef.current) {
+        clearInterval(demoTimerRef.current);
+        demoTimerRef.current = null;
+      }
+      demoInFlightRef.current = false;
       setDemoLive(true);
     } catch (e) {
       const msg = e?.message || String(e);
@@ -972,36 +979,61 @@ export default function TrackerDashboard() {
   }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, assignments, tOr]);
 
   useEffect(() => {
-    let timer = null;
-    let inFlight = false;
+    // limpiar cualquier timer anterior antes de decidir si crear uno nuevo
+    if (demoTimerRef.current) {
+      clearInterval(demoTimerRef.current);
+      demoTimerRef.current = null;
+    }
+    demoInFlightRef.current = false;
 
-    if (!orgId || !previewUiEnabled || !isDemoOrg || !demoLive) return;
+    if (!orgId || !previewUiEnabled || !isDemoOrg || !demoLive) {
+      return;
+    }
 
-    timer = setInterval(async () => {
-      // prevent overlapping calls if previous one is still in flight
-      if (inFlight) return;
+    const tick = async () => {
+      if (demoInFlightRef.current) return;
+      demoInFlightRef.current = true;
 
-      inFlight = true;
       try {
-        await supabase.rpc("demo_move_trackers");
+        const { error } = await supabase.rpc("demo_move_trackers");
+
+        if (error) {
+          console.error("demo_move_trackers failed:", error);
+          setDemoLive(false);
+
+          if (demoTimerRef.current) {
+            clearInterval(demoTimerRef.current);
+            demoTimerRef.current = null;
+          }
+          return;
+        }
+
         await fetchPositions(orgId, { showSpinner: false, isDemo: true });
-      } catch (e) {
-        console.error("demo move error:", e);
+      } catch (err) {
+        console.error("demo move unexpected error:", err);
         setDemoLive(false);
-        if (timer) {
-          clearInterval(timer);
-          timer = null;
+
+        if (demoTimerRef.current) {
+          clearInterval(demoTimerRef.current);
+          demoTimerRef.current = null;
         }
       } finally {
-        inFlight = false;
+        demoInFlightRef.current = false;
       }
-    }, 1000); // 1 segundo rápido para demos grabadas
+    };
+
+    // primer tick inmediato
+    tick();
+
+    // luego intervalo único
+    demoTimerRef.current = setInterval(tick, 1000);
 
     return () => {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
+      if (demoTimerRef.current) {
+        clearInterval(demoTimerRef.current);
+        demoTimerRef.current = null;
       }
+      demoInFlightRef.current = false;
     };
   }, [orgId, previewUiEnabled, isDemoOrg, demoLive, fetchPositions]);
 
