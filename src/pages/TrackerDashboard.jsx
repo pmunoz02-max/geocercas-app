@@ -215,7 +215,7 @@ function shouldFitToBounds(map, bounds) {
   }
 }
 
-function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed }) {
+function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
 
@@ -252,7 +252,7 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
       const doFit = force ? true : shouldFitToBounds(map, bounds);
 
       if (doFit) {
-        map.fitBounds(bounds, { padding: [24, 24] });
+        map.fitBounds(bounds, { padding: [24, 24], maxZoom: isDemoOrg ? 18 : undefined });
         lastFitSignalRef.current = fitSignal;
       }
     } catch {}
@@ -965,7 +965,7 @@ export default function TrackerDashboard() {
       } catch (e) {
         console.warn("demo move error", e);
       }
-    }, 3000); // 3 segundos para movimiento visible en grabación
+    }, 1000); // 1 segundo rápido para demos grabadas
 
     return () => clearInterval(interval);
   }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions]);
@@ -1068,9 +1068,29 @@ export default function TrackerDashboard() {
   const { items: layerItems } = useMemo(() => buildGeofenceLayerItems(filteredGeofenceRows), [filteredGeofenceRows]);
 
   const visiblePositions = useMemo(() => {
+    if (!positions?.length) return [];
+
+    if (isDemoOrg) {
+      // only keep the most recent position per tracker in demo mode
+      const m = new Map();
+      (positions || []).forEach((p) => {
+        const key = getTrackerKey(p);
+        if (!m.has(key)) m.set(key, p);
+        else {
+          const prev = m.get(key);
+          if (p.recorded_at && prev.recorded_at && p.recorded_at > prev.recorded_at) {
+            m.set(key, p);
+          }
+        }
+      });
+      return Array.from(m.values());
+    }
+
     if (selectedTrackerId === "all") return positions || [];
     return (positions || []).filter((p) => getTrackerKey(p) === selectedTrackerId);
-  }, [positions, selectedTrackerId]);
+  }, [positions, selectedTrackerId, isDemoOrg]);
+
+  const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
   const mapCenter = useMemo(() => {
     const last = visiblePositions?.[0] || positions?.[0];
@@ -1080,7 +1100,7 @@ export default function TrackerDashboard() {
     const circ = layerItems.find((x) => x.type === "circle" && Array.isArray(x.center))?.center;
     if (circ) return circ;
     return [-0.22985, -78.52495];
-  }, [visiblePositions, positions, layerItems]);
+  }, [visiblePositions, positions, layerItems, isDemoOrg]);
 
   const pointsByTracker = useMemo(() => {
     const map = new Map();
@@ -1397,7 +1417,7 @@ export default function TrackerDashboard() {
               <div style={{ height: 560, minHeight: 440 }} className="relative">
                 <MapContainer
                   center={mapCenter}
-                  zoom={12}
+                  zoom={mapZoom}
                   style={{ height: "100%", width: "100%" }}
                   scrollWheelZoom
                   whenCreated={(map) => {
@@ -1412,6 +1432,7 @@ export default function TrackerDashboard() {
                   <FitIfOutOfView
                     layerItems={layerItems}
                     fitSignal={fitSignal}
+                    isDemoOrg={isDemoOrg}
                     onBoundsComputed={(b) => {
                       try {
                         const sw = b.getSouthWest();
