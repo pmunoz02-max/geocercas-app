@@ -601,22 +601,7 @@ export default function TrackerDashboard() {
     resolveOrgId();
   }, [resolveOrgId]);
 
-  useEffect(() => {
-    if (!orgId || !previewUiEnabled || !isDemoOrg) return;
 
-    const interval = setInterval(async () => {
-      try {
-        const { error } = await supabase.rpc("demo_move_trackers");
-        if (error) throw error;
-
-        await fetchPositions(orgId, { showSpinner: false });
-      } catch (e) {
-        console.warn("demo move error", e);
-      }
-    }, 10000); // 10 segundos
-
-    return () => clearInterval(interval);
-  }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions]);
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
     if (!currentOrgId) return;
@@ -969,6 +954,23 @@ export default function TrackerDashboard() {
       setLoadingDemo(false);
     }
   }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, assignments, tOr]);
+
+  useEffect(() => {
+    if (!orgId || !previewUiEnabled || !isDemoOrg) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const { error } = await supabase.rpc("demo_move_trackers");
+        if (error) throw error;
+
+        await fetchPositions(orgId, { showSpinner: false });
+      } catch (e) {
+        console.warn("demo move error", e);
+      }
+    }, 10000); // 10 segundos
+
+    return () => clearInterval(interval);
+  }, [orgId, previewUiEnabled, isDemoOrg, fetchPositions]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
