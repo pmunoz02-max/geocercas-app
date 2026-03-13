@@ -257,7 +257,7 @@ export default function Inicio() {
               onClick={() => navigate("/settings/delete-account")}
               type="button"
             >
-              Delete account
+              {t("home.deleteAccount", { defaultValue: "Eliminar cuenta" })}
             </button>
 
             <button

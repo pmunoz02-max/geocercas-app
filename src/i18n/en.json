@@ -1245,6 +1245,8 @@
     "loadingPermissions": "Resolving permissions…",
     "loginToContinue": "Sign in to continue.",
     "goToLogin": "Go to Login",
+    "goDashboard": "Go to dashboard",
+    "deleteAccount": "Delete account",
     "missingContextTitle": "Signed in, but missing context",
     "missingContextBody": "The session exists ({{email}}), but your role or active organization could not be determined yet.",
     "orgNotResolved": "(not resolved)",

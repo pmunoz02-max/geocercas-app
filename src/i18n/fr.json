@@ -1206,11 +1206,57 @@
     "loadingPermissions": "Résolution des autorisations…",
     "loginToContinue": "Connectez-vous pour continuer.",
     "goToLogin": "Aller à Connexion",
+    "goDashboard": "Aller au tableau de bord",
+    "deleteAccount": "Supprimer le compte",
     "missingContextTitle": "Session ouverte, mais contexte manquant",
     "missingContextBody": "La session existe ({{email}}), mais votre rôle ou votre organisation active n’a pas encore pu être déterminé.",
     "orgNotResolved": "(non résolue)",
     "roleEmpty": "(vide)",
     "retry": "Réessayer"
+  },
+  "deleteAccount": {
+    "title": "Supprimer le compte",
+    "subtitle": "Demandez la suppression définitive de votre compte App Geocercas et des données associées.",
+    "warning": {
+      "title": "Avertissement",
+      "body": "La suppression de votre compte est définitive et ne peut pas être annulée."
+    },
+    "whatWillBeDeleted": {
+      "title": "Ce qui sera supprimé",
+      "items": {
+        "accountInfo": "Informations du compte utilisateur",
+        "profileData": "Données du profil personnel",
+        "trackerAssignments": "Attributions des trackers",
+        "gpsRecords": "Enregistrements de localisation GPS",
+        "geofences": "Géorepérages créés par le compte",
+        "activityLogs": "Journaux d’activité liés au compte"
+      }
+    },
+    "retention": {
+      "title": "Note de conservation",
+      "body": "Certaines données limitées peuvent être temporairement conservées lorsque cela est requis pour des raisons de conformité légale, de prévention de la fraude ou de sécurité."
+    },
+    "processingTime": {
+      "title": "Délai de traitement",
+      "body": "Les demandes de suppression de compte sont traitées dans les 30 jours suivant la réception de la demande. Une fois le processus terminé, le compte et les données associées ne pourront pas être récupérés."
+    },
+    "account": {
+      "title": "Compte",
+      "signedInAs": "Connecté en tant que :",
+      "unknownUser": "Utilisateur inconnu"
+    },
+    "confirmCheckbox": "Je comprends que cette action est définitive et que les données de mon compte ne pourront pas être récupérées.",
+    "confirmInputLabel": "Tapez DELETE pour confirmer",
+    "confirmKeyword": "DELETE",
+    "submitButton": "Demander la suppression du compte",
+    "submitting": "Envoi...",
+    "successMessage": "Votre demande de suppression a bien été reçue. Votre compte et les données associées seront supprimés dans un délai de 30 jours.",
+    "publicPolicyLink": "Voir la politique publique de suppression",
+    "errors": {
+      "noAuthenticatedUser": "Aucun utilisateur authentifié actif n’a été trouvé.",
+      "confirmationRequired": "Veuillez confirmer l’action et taper \"DELETE\" pour continuer.",
+      "requestFailed": "Impossible de créer la demande de suppression."
+    }
   },
   "forgot": {
     "back": "Retour à la connexion",

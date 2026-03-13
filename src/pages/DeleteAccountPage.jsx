@@ -1,11 +1,13 @@
 // src/pages/DeleteAccountPage.jsx
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../supabaseClient";
 
 export default function DeleteAccountPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user, profile, role, currentRole, authenticated } = useAuth();
 
   const [confirmChecked, setConfirmChecked] = useState(false);
@@ -24,10 +26,12 @@ export default function DeleteAccountPage() {
     [user, profile]
   );
 
+  const deleteKeyword = "DELETE";
+
   const canSubmit =
     !!userId &&
     confirmChecked &&
-    confirmText.trim().toUpperCase() === "DELETE" &&
+    confirmText.trim().toUpperCase() === deleteKeyword &&
     !submitting &&
     !success;
 
@@ -36,12 +40,20 @@ export default function DeleteAccountPage() {
     setErrorMsg("");
 
     if (!authenticated || !userId) {
-      setErrorMsg("No active authenticated user was found.");
+      setErrorMsg(
+        t("deleteAccount.errors.noAuthenticatedUser", {
+          defaultValue: "No active authenticated user was found.",
+        })
+      );
       return;
     }
 
-    if (!confirmChecked || confirmText.trim().toUpperCase() !== "DELETE") {
-      setErrorMsg('Please confirm and type "DELETE" to continue.');
+    if (!confirmChecked || confirmText.trim().toUpperCase() !== deleteKeyword) {
+      setErrorMsg(
+        t("deleteAccount.errors.confirmationRequired", {
+          defaultValue: 'Please confirm and type "DELETE" to continue.',
+        })
+      );
       return;
     }
 
@@ -78,7 +90,12 @@ export default function DeleteAccountPage() {
       }, 1600);
     } catch (err) {
       console.error("[DeleteAccountPage] request error:", err);
-      setErrorMsg(err?.message || "Could not create deletion request.");
+      setErrorMsg(
+        err?.message ||
+          t("deleteAccount.errors.requestFailed", {
+            defaultValue: "Could not create deletion request.",
+          })
+      );
     } finally {
       setSubmitting(false);
     }
@@ -88,52 +105,112 @@ export default function DeleteAccountPage() {
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="border-b border-slate-200 px-6 py-5">
-          <h1 className="text-2xl font-bold text-slate-900">Delete account</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {t("deleteAccount.title", { defaultValue: "Delete account" })}
+          </h1>
           <p className="mt-2 text-sm text-slate-600">
-            Request permanent deletion of your App Geocercas account and associated data.
+            {t("deleteAccount.subtitle", {
+              defaultValue:
+                "Request permanent deletion of your App Geocercas account and associated data.",
+            })}
           </p>
         </div>
 
         <div className="px-6 py-6 space-y-6">
           <section className="rounded-xl border border-red-200 bg-red-50 p-4">
-            <h2 className="text-sm font-semibold text-red-800">Warning</h2>
+            <h2 className="text-sm font-semibold text-red-800">
+              {t("deleteAccount.warning.title", { defaultValue: "Warning" })}
+            </h2>
             <p className="mt-2 text-sm text-red-700">
-              Deleting your account is permanent and cannot be undone.
+              {t("deleteAccount.warning.body", {
+                defaultValue:
+                  "Deleting your account is permanent and cannot be undone.",
+              })}
             </p>
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">What will be deleted</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              {t("deleteAccount.whatWillBeDeleted.title", {
+                defaultValue: "What will be deleted",
+              })}
+            </h2>
             <ul className="mt-3 list-disc pl-5 space-y-1 text-sm text-slate-700">
-              <li>User account information</li>
-              <li>Personal profile data</li>
-              <li>Tracker assignments</li>
-              <li>GPS location records</li>
-              <li>Geofences created by the account</li>
-              <li>Activity logs related to the account</li>
+              <li>
+                {t("deleteAccount.whatWillBeDeleted.items.accountInfo", {
+                  defaultValue: "User account information",
+                })}
+              </li>
+              <li>
+                {t("deleteAccount.whatWillBeDeleted.items.profileData", {
+                  defaultValue: "Personal profile data",
+                })}
+              </li>
+              <li>
+                {t("deleteAccount.whatWillBeDeleted.items.trackerAssignments", {
+                  defaultValue: "Tracker assignments",
+                })}
+              </li>
+              <li>
+                {t("deleteAccount.whatWillBeDeleted.items.gpsRecords", {
+                  defaultValue: "GPS location records",
+                })}
+              </li>
+              <li>
+                {t("deleteAccount.whatWillBeDeleted.items.geofences", {
+                  defaultValue: "Geofences created by the account",
+                })}
+              </li>
+              <li>
+                {t("deleteAccount.whatWillBeDeleted.items.activityLogs", {
+                  defaultValue: "Activity logs related to the account",
+                })}
+              </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">Retention note</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              {t("deleteAccount.retention.title", {
+                defaultValue: "Retention note",
+              })}
+            </h2>
             <p className="mt-2 text-sm text-slate-700">
-              Some limited data may be temporarily retained when required for legal
-              compliance, fraud prevention, or security purposes.
+              {t("deleteAccount.retention.body", {
+                defaultValue:
+                  "Some limited data may be temporarily retained when required for legal compliance, fraud prevention, or security purposes.",
+              })}
             </p>
           </section>
 
           <section>
-            <h2 className="text-sm font-semibold text-slate-900">Processing time</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              {t("deleteAccount.processingTime.title", {
+                defaultValue: "Processing time",
+              })}
+            </h2>
             <p className="mt-2 text-sm text-slate-700">
-              Account deletion requests are processed within 30 days of receiving the request.
-              Once completed, the account and associated data cannot be recovered.
+              {t("deleteAccount.processingTime.body", {
+                defaultValue:
+                  "Account deletion requests are processed within 30 days of receiving the request. Once completed, the account and associated data cannot be recovered.",
+              })}
             </p>
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h2 className="text-sm font-semibold text-slate-900">Account</h2>
+            <h2 className="text-sm font-semibold text-slate-900">
+              {t("deleteAccount.account.title", { defaultValue: "Account" })}
+            </h2>
             <p className="mt-2 text-sm text-slate-700">
-              Signed in as: <span className="font-medium">{email || "Unknown user"}</span>
+              {t("deleteAccount.account.signedInAs", {
+                defaultValue: "Signed in as:",
+              })}{" "}
+              <span className="font-medium">
+                {email ||
+                  t("deleteAccount.account.unknownUser", {
+                    defaultValue: "Unknown user",
+                  })}
+              </span>
             </p>
           </section>
 
@@ -146,20 +223,30 @@ export default function DeleteAccountPage() {
                 onChange={(e) => setConfirmChecked(e.target.checked)}
               />
               <span className="text-sm text-slate-700">
-                I understand that this action is permanent and my account data cannot be recovered.
+                {t("deleteAccount.confirmCheckbox", {
+                  defaultValue:
+                    "I understand that this action is permanent and my account data cannot be recovered.",
+                })}
               </span>
             </label>
 
             <div>
-              <label htmlFor="delete-confirm" className="block text-sm font-medium text-slate-800">
-                Type <span className="font-bold">DELETE</span> to confirm
+              <label
+                htmlFor="delete-confirm"
+                className="block text-sm font-medium text-slate-800"
+              >
+                {t("deleteAccount.confirmInputLabel", {
+                  defaultValue: "Type DELETE to confirm",
+                })}
               </label>
               <input
                 id="delete-confirm"
                 type="text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="DELETE"
+                placeholder={t("deleteAccount.confirmKeyword", {
+                  defaultValue: "DELETE",
+                })}
                 autoComplete="off"
                 className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-slate-500"
               />
@@ -173,7 +260,10 @@ export default function DeleteAccountPage() {
 
             {success ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Your deletion request has been received. Your account and associated data will be removed within 30 days.
+                {t("deleteAccount.successMessage", {
+                  defaultValue:
+                    "Your deletion request has been received. Your account and associated data will be removed within 30 days.",
+                })}
               </div>
             ) : null}
 
@@ -183,14 +273,20 @@ export default function DeleteAccountPage() {
                 disabled={!canSubmit}
                 className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? "Submitting..." : "Request account deletion"}
+                {submitting
+                  ? t("deleteAccount.submitting", {
+                      defaultValue: "Submitting...",
+                    })
+                  : t("deleteAccount.submitButton", {
+                      defaultValue: "Request account deletion",
+                    })}
               </button>
 
               <Link
                 to="/inicio"
                 className="px-4 py-2 rounded-xl text-sm font-semibold border border-slate-300 text-slate-700 hover:bg-slate-50"
               >
-                Cancel
+                {t("common.cancel", { defaultValue: "Cancel" })}
               </Link>
 
               <a
@@ -199,7 +295,9 @@ export default function DeleteAccountPage() {
                 rel="noreferrer"
                 className="text-sm font-medium text-slate-600 underline underline-offset-2"
               >
-                View public deletion policy
+                {t("deleteAccount.publicPolicyLink", {
+                  defaultValue: "View public deletion policy",
+                })}
               </a>
             </div>
           </form>

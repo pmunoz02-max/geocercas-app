@@ -599,6 +599,8 @@
   },
   "home": {
     "goToLogin": "Ir a Login",
+    "goDashboard": "Ir al dashboard",
+    "deleteAccount": "Eliminar cuenta",
     "help": {
       "faq": "Preguntas frecuentes",
       "faqDesc": "Respuestas a las dudas más comunes.",
@@ -626,6 +628,50 @@
     "roleEmpty": "(vacío)",
     "sessionAs": "Sesión iniciada como",
     "welcome": "Bienvenido a App Geocercas"
+  },
+  "deleteAccount": {
+    "title": "Eliminar cuenta",
+    "subtitle": "Solicita la eliminación permanente de tu cuenta de App Geocercas y de los datos asociados.",
+    "warning": {
+      "title": "Advertencia",
+      "body": "Eliminar tu cuenta es permanente y no se puede deshacer."
+    },
+    "whatWillBeDeleted": {
+      "title": "Qué se eliminará",
+      "items": {
+        "accountInfo": "Información de la cuenta de usuario",
+        "profileData": "Datos del perfil personal",
+        "trackerAssignments": "Asignaciones de trackers",
+        "gpsRecords": "Registros de ubicación GPS",
+        "geofences": "Geocercas creadas por la cuenta",
+        "activityLogs": "Registros de actividad relacionados con la cuenta"
+      }
+    },
+    "retention": {
+      "title": "Nota de retención",
+      "body": "Algunos datos limitados pueden conservarse temporalmente cuando sea necesario por cumplimiento legal, prevención de fraude o motivos de seguridad."
+    },
+    "processingTime": {
+      "title": "Tiempo de procesamiento",
+      "body": "Las solicitudes de eliminación de cuenta se procesan dentro de los 30 días posteriores a la recepción de la solicitud. Una vez completado el proceso, la cuenta y los datos asociados no podrán recuperarse."
+    },
+    "account": {
+      "title": "Cuenta",
+      "signedInAs": "Sesión iniciada como:",
+      "unknownUser": "Usuario desconocido"
+    },
+    "confirmCheckbox": "Entiendo que esta acción es permanente y que los datos de mi cuenta no podrán recuperarse.",
+    "confirmInputLabel": "Escribe DELETE para confirmar",
+    "confirmKeyword": "DELETE",
+    "submitButton": "Solicitar eliminación de cuenta",
+    "submitting": "Enviando...",
+    "successMessage": "Tu solicitud de eliminación fue recibida. Tu cuenta y los datos asociados se eliminarán dentro de los próximos 30 días.",
+    "publicPolicyLink": "Ver política pública de eliminación",
+    "errors": {
+      "noAuthenticatedUser": "No se encontró un usuario autenticado activo.",
+      "confirmationRequired": "Confirma la acción y escribe \"DELETE\" para continuar.",
+      "requestFailed": "No se pudo crear la solicitud de eliminación."
+    }
   },
   "inicio": {
     "cards": {
