@@ -934,7 +934,6 @@ export default function TrackerDashboard() {
             grouped[uid].positions.push(p);
           }
 
-          const demoPositions = [];
           for (const uid of Object.keys(grouped)) {
             const entry = grouped[uid];
             entry.positions.sort((a, b) => {
@@ -946,13 +945,48 @@ export default function TrackerDashboard() {
               entry.positions = entry.positions.slice(-MAX_HISTORY_PER_TRACKER);
             }
             entry.latest = entry.positions[entry.positions.length - 1] || null;
-
-            demoPositions.push(...entry.positions);
           }
 
-          setDemoTrackerHistories(grouped);
-          setPositions(demoPositions);
-          setDiag((d) => ({ ...d, positionsFound: demoPositions.length, positionsSource: tableUsed }));
+          setDemoTrackerHistories((prev) => {
+            const merged = { ...(prev || {}) };
+
+            for (const [uid, incoming] of Object.entries(grouped)) {
+              const previous = merged[uid] || { positions: [], latest: null, personal_id: null, nombre: null };
+              const byKey = new Map();
+
+              const pushPosition = (pos) => {
+                if (!pos) return;
+                const key = String(
+                  pos.id ||
+                    `${uid}-${pos.recorded_at || pos.created_at || "no-ts"}-${pos.lat}-${pos.lng}`
+                );
+                byKey.set(key, pos);
+              };
+
+              (previous.positions || []).forEach(pushPosition);
+              (incoming.positions || []).forEach(pushPosition);
+
+              const mergedPositions = Array.from(byKey.values()).sort((a, b) => {
+                const ta = a.recorded_at ? Date.parse(a.recorded_at) : a.created_at ? Date.parse(a.created_at) : 0;
+                const tb = b.recorded_at ? Date.parse(b.recorded_at) : b.created_at ? Date.parse(b.created_at) : 0;
+                return ta - tb;
+              });
+
+              const trimmedPositions = mergedPositions.slice(-MAX_HISTORY_PER_TRACKER);
+              merged[uid] = {
+                positions: trimmedPositions,
+                latest: trimmedPositions[trimmedPositions.length - 1] || null,
+                personal_id: incoming.personal_id || previous.personal_id || null,
+                nombre: incoming.nombre || previous.nombre || null,
+              };
+            }
+
+            const demoPositions = Object.values(merged).flatMap((entry) => entry.positions || []);
+            setPositions(demoPositions);
+            setDiag((d) => ({ ...d, positionsFound: demoPositions.length, positionsSource: tableUsed }));
+
+            return merged;
+          });
         }
       } finally {
         if (showSpinner) setLoading(false);
@@ -1664,7 +1698,7 @@ export default function TrackerDashboard() {
 
                     return (
                       <React.Fragment key={trackerId}>
-                        {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
+                        {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
                         <CircleMarker
                           center={[latest.lat, latest.lng]}
                           radius={7}
