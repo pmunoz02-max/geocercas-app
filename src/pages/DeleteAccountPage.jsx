@@ -6,7 +6,7 @@ import { supabase } from "../supabaseClient";
 
 export default function DeleteAccountPage() {
   const navigate = useNavigate();
-  const { session, profile, currentRole } = useAuth();
+  const { user, profile, role, currentRole, authenticated } = useAuth();
 
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -15,13 +15,13 @@ export default function DeleteAccountPage() {
   const [success, setSuccess] = useState(false);
 
   const email = useMemo(
-    () => session?.user?.email || profile?.email || "",
-    [session, profile]
+    () => user?.email || profile?.email || "",
+    [user, profile]
   );
 
   const userId = useMemo(
-    () => session?.user?.id || profile?.user_id || null,
-    [session, profile]
+    () => user?.id || profile?.user_id || null,
+    [user, profile]
   );
 
   const canSubmit =
@@ -35,8 +35,8 @@ export default function DeleteAccountPage() {
     e.preventDefault();
     setErrorMsg("");
 
-    if (!userId) {
-      setErrorMsg("No active user session was found.");
+    if (!authenticated || !userId) {
+      setErrorMsg("No active authenticated user was found.");
       return;
     }
 
@@ -54,7 +54,7 @@ export default function DeleteAccountPage() {
         requested_by: userId,
         status: "pending",
         source: "in_app",
-        notes: `Role: ${String(currentRole || "").toLowerCase() || "unknown"}`,
+        notes: `Role: ${String(role || currentRole || "").toLowerCase() || "unknown"}`,
       };
 
       const { error } = await supabase
