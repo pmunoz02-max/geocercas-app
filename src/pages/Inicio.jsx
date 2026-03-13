@@ -248,6 +248,21 @@ export default function Inicio() {
             <button
               className="
                 rounded-xl
+                border border-red-300
+                bg-white hover:bg-red-50
+                text-red-700 font-medium
+                px-4 py-2
+                transition
+              "
+              onClick={() => navigate("/settings/delete-account")}
+              type="button"
+            >
+              Delete account
+            </button>
+
+            <button
+              className="
+                rounded-xl
                 bg-slate-900 hover:bg-slate-800
                 text-white font-medium
                 px-4 py-2
