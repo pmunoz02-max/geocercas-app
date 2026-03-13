@@ -26,6 +26,47 @@ const TIME_WINDOWS = [
   { id: "24h", labelKey: "trackerDashboard.timeWindows.24h", fallback: "24 hours", ms: 24 * 60 * 60 * 1000 },
 ];
 
+
+const DEMO_VISUAL_SUBSTEPS = 6;
+const DEMO_ZIGZAG_AMPLITUDE = 0.00010;
+
+function buildDemoVisualPath(points, amplitude = DEMO_ZIGZAG_AMPLITUDE, substeps = DEMO_VISUAL_SUBSTEPS) {
+  if (!Array.isArray(points) || points.length < 2) return points?.map(p => [p.lat, p.lng]) || [];
+  const out = [];
+  let zig = 1;
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i+1];
+    const lat1 = Number(a.lat);
+    const lng1 = Number(a.lng);
+    const lat2 = Number(b.lat);
+    const lng2 = Number(b.lng);
+    if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) continue;
+
+    const dx = lng2 - lng1;
+    const dy = lat2 - lat1;
+    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    const perpLng = (-dy/len) * amplitude * zig;
+    const perpLat = ( dx/len) * amplitude * zig;
+
+    if (out.length === 0) out.push([lat1, lng1]);
+
+    for (let s=1; s<substeps; s++) {
+      const t = s/substeps;
+      const baseLat = lat1 + (lat2-lat1)*t;
+      const baseLng = lng1 + (lng2-lng1)*t;
+      const wave = Math.sin(Math.PI*t);
+      out.push([baseLat + perpLat*wave, baseLng + perpLng*wave]);
+    }
+
+    out.push([lat2, lng2]);
+    zig *= -1;
+  }
+  return out;
+}
+
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
 function toNum(v) {
@@ -1689,7 +1730,7 @@ export default function TrackerDashboard() {
                     const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
                     if (!latest) return null;
 
-                    const latlngs = positions.map((p) => [p.lat, p.lng]).filter(Boolean);
+                    const latlngs = buildDemoVisualPath(positions);
 
                     const personalId = latest.personal_id || entry.personal_id || null;
                     const person = personalId ? personalById.get(String(personalId)) : null;
