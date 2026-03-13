@@ -522,6 +522,7 @@ export default function TrackerDashboard() {
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [demoTrackerHistories, setDemoTrackerHistories] = useState({});
   const [geofenceEvents, setGeofenceEvents] = useState([]);
 
   const [geofenceRows, setGeofenceRows] = useState([]);
@@ -909,27 +910,47 @@ export default function TrackerDashboard() {
           setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
         } else {
           // In demo mode we want to show the actual zigzag history that the backend generates.
-          // Keep a short sliding window of recent positions per tracker, sorted by recorded_at asc.
+          // Keep a short sliding window of recent positions per tracker, sorted by user_id asc, recorded_at asc.
           const MAX_HISTORY_PER_TRACKER = 40;
-          const grouped = new Map();
-          for (const p of normalized) {
-            const key = getTrackerKey(p);
-            if (!grouped.has(key)) grouped.set(key, []);
-            grouped.get(key).push(p);
+
+          // Sort globally to make grouping deterministic (user_id asc, recorded_at asc).
+          const sorted = [...normalized].sort((a, b) => {
+            const ua = a.user_id ? String(a.user_id) : "";
+            const ub = b.user_id ? String(b.user_id) : "";
+            if (ua < ub) return -1;
+            if (ua > ub) return 1;
+
+            const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
+            const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
+            return ta - tb;
+          });
+
+          const grouped = {};
+          for (const p of sorted) {
+            const uid = String(p.user_id || "unknown");
+            if (!grouped[uid]) {
+              grouped[uid] = { positions: [], latest: null, personal_id: p.personal_id || null, nombre: null };
+            }
+            grouped[uid].positions.push(p);
           }
 
           const demoPositions = [];
-          for (const pts of grouped.values()) {
-            pts.sort((a, b) => {
+          for (const uid of Object.keys(grouped)) {
+            const entry = grouped[uid];
+            entry.positions.sort((a, b) => {
               const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
               const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
               return ta - tb;
             });
+            if (entry.positions.length > MAX_HISTORY_PER_TRACKER) {
+              entry.positions = entry.positions.slice(-MAX_HISTORY_PER_TRACKER);
+            }
+            entry.latest = entry.positions[entry.positions.length - 1] || null;
 
-            const slice = pts.length > MAX_HISTORY_PER_TRACKER ? pts.slice(-MAX_HISTORY_PER_TRACKER) : pts;
-            demoPositions.push(...slice);
+            demoPositions.push(...entry.positions);
           }
 
+          setDemoTrackerHistories(grouped);
           setPositions(demoPositions);
           setDiag((d) => ({ ...d, positionsFound: demoPositions.length, positionsSource: tableUsed }));
         }
@@ -1185,24 +1206,44 @@ export default function TrackerDashboard() {
   }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
+    // In demo mode we maintain a rolling history per tracker and explicitly expose latest
+    // so the marker does not accidentally become the first point.
+    if (isDemoOrg && demoTrackerHistories && Object.keys(demoTrackerHistories).length) {
+      const map = new Map();
+      const entries = Object.entries(demoTrackerHistories);
+      const filtered = selectedTrackerId === "all" ? entries : entries.filter(([id]) => id === selectedTrackerId);
+
+      for (const [id, entry] of filtered) {
+        map.set(id, {
+          positions: Array.isArray(entry.positions) ? entry.positions : [],
+          latest: entry.latest || null,
+          personal_id: entry.personal_id || null,
+          nombre: entry.nombre || null,
+        });
+      }
+
+      return map;
+    }
+
     const map = new Map();
     for (const p of visiblePositions || []) {
       const key = getTrackerKey(p);
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(p);
+      if (!map.has(key)) map.set(key, { positions: [], latest: null });
+      map.get(key).positions.push(p);
     }
 
     // Ensure each tracker's points are ordered chronologically (oldest -> newest)
-    for (const pts of map.values()) {
-      pts.sort((a, b) => {
+    for (const entry of map.values()) {
+      entry.positions.sort((a, b) => {
         const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
         const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
         return ta - tb;
       });
+      entry.latest = entry.positions[entry.positions.length - 1] || null;
     }
 
     return map;
-  }, [visiblePositions]);
+  }, [visiblePositions, isDemoOrg, demoTrackerHistories, selectedTrackerId]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
@@ -1608,21 +1649,22 @@ export default function TrackerDashboard() {
                     return null;
                   })}
 
-                  {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
+                  {Array.from(pointsByTracker.entries()).map(([trackerId, entry], idx) => {
                     const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
-                    const ordered = pts; // already sorted oldest -> newest
-                    const latest = ordered[ordered.length - 1];
+                    const positions = Array.isArray(entry.positions) ? entry.positions : [];
+                    const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
                     if (!latest) return null;
 
-                    const latlngs = ordered.map((p) => [p.lat, p.lng]).filter(Boolean);
+                    const latlngs = positions.map((p) => [p.lat, p.lng]).filter(Boolean);
 
-                    const person = latest.personal_id ? personalById.get(String(latest.personal_id)) : null;
+                    const personalId = latest.personal_id || entry.personal_id || null;
+                    const person = personalId ? personalById.get(String(personalId)) : null;
                     const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
                     const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
 
                     return (
                       <React.Fragment key={trackerId}>
-                        {latlngs.length > 2 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
+                        {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
                         <CircleMarker
                           center={[latest.lat, latest.lng]}
                           radius={7}
