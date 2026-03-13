@@ -908,15 +908,30 @@ export default function TrackerDashboard() {
           setPositions(normalized);
           setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
         } else {
-          // In demo mode, keep only the latest position per tracker
-          const m = new Map();
+          // In demo mode we want to show the actual zigzag history that the backend generates.
+          // Keep a short sliding window of recent positions per tracker, sorted by recorded_at asc.
+          const MAX_HISTORY_PER_TRACKER = 40;
+          const grouped = new Map();
           for (const p of normalized) {
             const key = getTrackerKey(p);
-            if (!m.has(key)) m.set(key, p);
+            if (!grouped.has(key)) grouped.set(key, []);
+            grouped.get(key).push(p);
           }
-          const reducedPositions = Array.from(m.values());
-          setPositions(reducedPositions);
-          setDiag((d) => ({ ...d, positionsFound: reducedPositions.length, positionsSource: tableUsed }));
+
+          const demoPositions = [];
+          for (const pts of grouped.values()) {
+            pts.sort((a, b) => {
+              const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
+              const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
+              return ta - tb;
+            });
+
+            const slice = pts.length > MAX_HISTORY_PER_TRACKER ? pts.slice(-MAX_HISTORY_PER_TRACKER) : pts;
+            demoPositions.push(...slice);
+          }
+
+          setPositions(demoPositions);
+          setDiag((d) => ({ ...d, positionsFound: demoPositions.length, positionsSource: tableUsed }));
         }
       } finally {
         if (showSpinner) setLoading(false);
@@ -1164,26 +1179,10 @@ export default function TrackerDashboard() {
   const visiblePositions = useMemo(() => {
     if (!positions?.length) return [];
 
-    // In demo mode, positions are already reduced to one per tracker in fetchPositions
-    if (isDemoOrg) {
-      return positions || [];
-    }
-
-    if (selectedTrackerId === "all") return positions || [];
-    return (positions || []).filter((p) => getTrackerKey(p) === selectedTrackerId);
-  }, [positions, selectedTrackerId, isDemoOrg]);
-
-  const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
-
-  const mapCenter = useMemo(() => {
-    const last = visiblePositions?.[0] || positions?.[0];
-    if (last && isValidLatLng(last.lat, last.lng)) return [last.lat, last.lng];
-    const poly = layerItems.find((x) => x.type === "polygon" && x.positions?.length)?.positions?.[0];
-    if (poly) return poly;
-    const circ = layerItems.find((x) => x.type === "circle" && Array.isArray(x.center))?.center;
-    if (circ) return circ;
-    return [-0.22985, -78.52495];
-  }, [visiblePositions, positions, layerItems, isDemoOrg]);
+    const base = positions || [];
+    const filtered = selectedTrackerId === "all" ? base : base.filter((p) => getTrackerKey(p) === selectedTrackerId);
+    return filtered;
+  }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
     const map = new Map();
@@ -1192,8 +1191,42 @@ export default function TrackerDashboard() {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(p);
     }
+
+    // Ensure each tracker's points are ordered chronologically (oldest -> newest)
+    for (const pts of map.values()) {
+      pts.sort((a, b) => {
+        const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
+        const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
+        return ta - tb;
+      });
+    }
+
     return map;
   }, [visiblePositions]);
+
+  const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
+
+  const mapCenter = useMemo(() => {
+    const candidates = visiblePositions?.length ? visiblePositions : positions;
+    if (candidates?.length) {
+      let best = null;
+      let bestTs = -Infinity;
+      for (const p of candidates) {
+        const ts = p.recorded_at ? Date.parse(p.recorded_at) : p.created_at ? Date.parse(p.created_at) : 0;
+        if (Number.isFinite(ts) && ts > bestTs) {
+          bestTs = ts;
+          best = p;
+        }
+      }
+      if (best && isValidLatLng(best.lat, best.lng)) return [best.lat, best.lng];
+    }
+
+    const poly = layerItems.find((x) => x.type === "polygon" && x.positions?.length)?.positions?.[0];
+    if (poly) return poly;
+    const circ = layerItems.find((x) => x.type === "circle" && Array.isArray(x.center))?.center;
+    if (circ) return circ;
+    return [-0.22985, -78.52495];
+  }, [visiblePositions, positions, layerItems]);
 
   const Badge = ({ children }) => (
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
@@ -1577,10 +1610,11 @@ export default function TrackerDashboard() {
 
                   {Array.from(pointsByTracker.entries()).map(([trackerId, pts], idx) => {
                     const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
-                    const chron = [...pts].reverse();
-                    const latlngs = chron.map((p) => [p.lat, p.lng]).filter(Boolean);
-                    const latest = pts[0];
+                    const ordered = pts; // already sorted oldest -> newest
+                    const latest = ordered[ordered.length - 1];
                     if (!latest) return null;
+
+                    const latlngs = ordered.map((p) => [p.lat, p.lng]).filter(Boolean);
 
                     const person = latest.personal_id ? personalById.get(String(latest.personal_id)) : null;
                     const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
@@ -1588,7 +1622,7 @@ export default function TrackerDashboard() {
 
                     return (
                       <React.Fragment key={trackerId}>
-                        {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
+                        {latlngs.length > 2 && <Polyline positions={latlngs} pathOptions={{ color, weight: 3 }} />}
                         <CircleMarker
                           center={[latest.lat, latest.lng]}
                           radius={7}
