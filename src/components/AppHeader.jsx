@@ -93,6 +93,13 @@ export default function AppHeader() {
                 </Link>
               )}
 
+              <Link
+                to="/settings/delete-account"
+                className="px-3 py-1.5 rounded-md text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-50"
+              >
+                Delete account
+              </Link>
+
               <button
                 type="button"
                 onClick={handleLogout}

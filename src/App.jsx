@@ -30,6 +30,7 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+import DeleteAccountPage from "./pages/DeleteAccountPage.jsx";
 
 // ✅ Billing / Pricing pages
 import Billing from "./pages/Billing.jsx";
@@ -171,6 +172,15 @@ function AppRoutes() {
         />
         <Route path="/billing/success" element={<BillingSuccess />} />
         <Route path="/billing/cancel" element={<BillingCancel />} />
+
+        <Route
+          path="/settings/delete-account"
+          element={
+            <RequireOrg>
+              <DeleteAccountPage />
+            </RequireOrg>
+          }
+        />
 
         <Route
           path="/geocerca"
