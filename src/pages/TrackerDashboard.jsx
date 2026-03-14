@@ -29,6 +29,20 @@ const TIME_WINDOWS = [
 
 const DEMO_VISUAL_SUBSTEPS = 6;
 const DEMO_ZIGZAG_AMPLITUDE = 0.00010;
+const DEMO_MOVE_INTERVAL_MS = 2000;
+const TRACKER_ANIMATION_MS = 1600;
+const LARGE_JUMP_METERS = 250;
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function distanceMeters(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return Infinity;
+  const p1 = L.latLng(Number(a[0]), Number(a[1]));
+  const p2 = L.latLng(Number(b[0]), Number(b[1]));
+  return p1.distanceTo(p2);
+}
 
 function buildDemoVisualPath(points, amplitude = DEMO_ZIGZAG_AMPLITUDE, substeps = DEMO_VISUAL_SUBSTEPS) {
   if (!Array.isArray(points) || points.length < 2) return points?.map(p => [p.lat, p.lng]) || [];
@@ -527,6 +541,99 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
         </div>
       )}
     </div>
+  );
+}
+
+function AnimatedTrackerDot({
+  center,
+  color,
+  radius = 7,
+  duration = TRACKER_ANIMATION_MS,
+  children,
+}) {
+  const markerRef = useRef(null);
+  const frameRef = useRef(null);
+  const lastCenterRef = useRef(center);
+
+  useEffect(() => {
+    const layer = markerRef.current?.instance || markerRef.current;
+    if (!layer || typeof layer.setLatLng !== "function") return;
+    if (!Array.isArray(center) || center.length !== 2) return;
+
+    const next = [Number(center[0]), Number(center[1])];
+    if (!Number.isFinite(next[0]) || !Number.isFinite(next[1])) return;
+
+    const previous =
+      Array.isArray(lastCenterRef.current) && lastCenterRef.current.length === 2
+        ? [Number(lastCenterRef.current[0]), Number(lastCenterRef.current[1])]
+        : next;
+
+    if (!Number.isFinite(previous[0]) || !Number.isFinite(previous[1])) {
+      layer.setLatLng(next);
+      lastCenterRef.current = next;
+      return;
+    }
+
+    const jumpMeters = distanceMeters(previous, next);
+    const samePoint = previous[0] === next[0] && previous[1] === next[1];
+
+    if (samePoint || !Number.isFinite(jumpMeters) || jumpMeters > LARGE_JUMP_METERS) {
+      layer.setLatLng(next);
+      lastCenterRef.current = next;
+      return;
+    }
+
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+
+    const startTime = performance.now();
+
+    const animate = (now) => {
+      const rawT = Math.min(1, (now - startTime) / duration);
+      const t = easeOutCubic(rawT);
+
+      const lat = previous[0] + (next[0] - previous[0]) * t;
+      const lng = previous[1] + (next[1] - previous[1]) * t;
+
+      layer.setLatLng([lat, lng]);
+
+      if (rawT < 1) {
+        frameRef.current = requestAnimationFrame(animate);
+      } else {
+        frameRef.current = null;
+        lastCenterRef.current = next;
+      }
+    };
+
+    frameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    };
+  }, [center, duration]);
+
+  useEffect(() => {
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <CircleMarker
+      ref={markerRef}
+      center={center}
+      radius={radius}
+      pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
+    >
+      {children}
+    </CircleMarker>
   );
 }
 
@@ -1163,8 +1270,8 @@ export default function TrackerDashboard() {
     // primer tick inmediato
     tick();
 
-    // luego intervalo único (6 segundos para caminata humana lenta y grabación de pantalla)
-    demoTimerRef.current = setInterval(tick, 6000);
+    // intervalo más corto para movimiento visual fluido en Preview-Demo
+    demoTimerRef.current = setInterval(tick, DEMO_MOVE_INTERVAL_MS);
 
     return () => {
       if (demoTimerRef.current) {
@@ -1740,10 +1847,10 @@ export default function TrackerDashboard() {
                     return (
                       <React.Fragment key={trackerId}>
                         {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
-                        <CircleMarker
+                        <AnimatedTrackerDot
                           center={[latest.lat, latest.lng]}
+                          color={color}
                           radius={7}
-                          pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
                         >
                           <Tooltip direction="top">
                             <div className="text-xs">
@@ -1771,7 +1878,7 @@ export default function TrackerDashboard() {
                               )}
                             </div>
                           </Tooltip>
-                        </CircleMarker>
+                        </AnimatedTrackerDot>
                       </React.Fragment>
                     );
                   })}
