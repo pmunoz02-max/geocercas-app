@@ -234,7 +234,7 @@ export default function HeroGeocercasDemo() {
 
           <div className="flex flex-wrap items-center gap-3">
             <Button as={Link} to="/demo">
-              Ver demo en preview
+              Probar demo interactiva
               <span aria-hidden="true">→</span>
             </Button>
             <Button variant="outline">

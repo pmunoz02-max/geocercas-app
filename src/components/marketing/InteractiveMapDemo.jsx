@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -138,14 +138,40 @@ function trailUntil(metrics, t) {
 }
 
 export default function InteractiveMapDemo() {
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [showTrails, setShowTrails] = useState(true);
+  const [visibleTrackers, setVisibleTrackers] = useState({
+    T1: true,
+    T2: true,
+    T3: true,
+    T4: true,
+  });
+
   const mapElRef = useRef(null);
   const mapRef = useRef(null);
   const geofenceRef = useRef(null);
+  const trackerLayersRef = useRef([]);
   const rafRef = useRef(0);
-  const startRef = useRef(0);
+  const progressRef = useRef(0);
+  const lastNowRef = useRef(0);
   const geofencePulseUntilRef = useRef(0);
   const prevT1NearEventRef = useRef(false);
   const prevT4NearEventRef = useRef(false);
+  const showTrailsRef = useRef(true);
+  const visibleTrackersRef = useRef({ T1: true, T2: true, T3: true, T4: true });
+  const frameRef = useRef(null);
+  const renderSceneRef = useRef(null);
+  const applyVisibilityRef = useRef(null);
+
+  useEffect(() => {
+    showTrailsRef.current = showTrails;
+    if (applyVisibilityRef.current) applyVisibilityRef.current();
+  }, [showTrails]);
+
+  useEffect(() => {
+    visibleTrackersRef.current = visibleTrackers;
+    if (applyVisibilityRef.current) applyVisibilityRef.current();
+  }, [visibleTrackers]);
 
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return undefined;
@@ -208,15 +234,37 @@ export default function InteractiveMapDemo() {
 
       return { tracker, metrics, marker, trail };
     });
+    trackerLayersRef.current = trackerLayers;
 
-    const frame = (now) => {
-      if (!startRef.current) startRef.current = now;
-      const loopProgress = ((now - startRef.current) % LOOP_MS) / LOOP_MS;
+    applyVisibilityRef.current = () => {
+      if (!mapRef.current) return;
+      const activeMap = mapRef.current;
+
+      trackerLayersRef.current.forEach(({ tracker, marker, trail }) => {
+        const trackerVisible = Boolean(visibleTrackersRef.current[tracker.id]);
+        const showTrackerTrail = trackerVisible && showTrailsRef.current;
+
+        if (trackerVisible) {
+          if (!activeMap.hasLayer(marker)) marker.addTo(activeMap);
+        } else if (activeMap.hasLayer(marker)) {
+          activeMap.removeLayer(marker);
+        }
+
+        if (showTrackerTrail) {
+          if (!activeMap.hasLayer(trail)) trail.addTo(activeMap);
+        } else if (activeMap.hasLayer(trail)) {
+          activeMap.removeLayer(trail);
+        }
+      });
+    };
+
+    renderSceneRef.current = (loopProgress, now) => {
+      const activeTrackerLayers = trackerLayersRef.current;
 
       let t1LocalT = null;
       let t4LocalT = null;
 
-      trackerLayers.forEach(({ tracker, metrics, marker, trail }) => {
+      activeTrackerLayers.forEach(({ tracker, metrics, marker, trail }) => {
         const localT = (loopProgress + tracker.phase) % 1;
         const point = pointAt(metrics, localT);
         const trailPoints = trailUntil(metrics, localT);
@@ -251,22 +299,90 @@ export default function InteractiveMapDemo() {
         });
       }
 
-      rafRef.current = window.requestAnimationFrame(frame);
+      if (applyVisibilityRef.current) applyVisibilityRef.current();
     };
 
-    rafRef.current = window.requestAnimationFrame(frame);
+    frameRef.current = (now) => {
+      if (!lastNowRef.current) lastNowRef.current = now;
+      const deltaMs = now - lastNowRef.current;
+      lastNowRef.current = now;
+
+      progressRef.current = (progressRef.current + deltaMs / LOOP_MS) % 1;
+
+      if (renderSceneRef.current) {
+        renderSceneRef.current(progressRef.current, now);
+      }
+
+      rafRef.current = window.requestAnimationFrame(frameRef.current);
+    };
+
+    if (renderSceneRef.current) {
+      renderSceneRef.current(progressRef.current, performance.now());
+    }
+
+    if (isPlaying && frameRef.current) {
+      rafRef.current = window.requestAnimationFrame(frameRef.current);
+    }
 
     return () => {
       if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
       map.remove();
       mapRef.current = null;
       geofenceRef.current = null;
+      trackerLayersRef.current = [];
       geofencePulseUntilRef.current = 0;
       prevT1NearEventRef.current = false;
       prevT4NearEventRef.current = false;
-      startRef.current = 0;
+      progressRef.current = 0;
+      lastNowRef.current = 0;
+      frameRef.current = null;
+      renderSceneRef.current = null;
+      applyVisibilityRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!frameRef.current) return undefined;
+
+    if (isPlaying) {
+      if (!rafRef.current) {
+        lastNowRef.current = 0;
+        rafRef.current = window.requestAnimationFrame(frameRef.current);
+      }
+    } else if (rafRef.current) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = 0;
+    }
+
+    return undefined;
+  }, [isPlaying]);
+
+  const handleReset = () => {
+    progressRef.current = 0;
+    lastNowRef.current = 0;
+    geofencePulseUntilRef.current = 0;
+    prevT1NearEventRef.current = false;
+    prevT4NearEventRef.current = false;
+
+    if (geofenceRef.current) {
+      geofenceRef.current.setStyle({
+        weight: 2,
+        fillOpacity: 0.08,
+        opacity: 0.85,
+      });
+    }
+
+    if (renderSceneRef.current) {
+      renderSceneRef.current(0, performance.now());
+    }
+  };
+
+  const toggleTracker = (id) => {
+    setVisibleTrackers((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
 
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)]">
@@ -274,14 +390,66 @@ export default function InteractiveMapDemo() {
         Demo en vivo · Quito · Loop 10s
       </div>
 
-      <div className="pointer-events-none absolute left-3 top-12 z-[500] rounded-lg border border-white/80 bg-white/85 px-3 py-2 text-[11px] text-slate-700 shadow-sm backdrop-blur-sm">
-        <p className="font-semibold text-slate-800">Trackers activos: 4</p>
-        <p className="mt-1 font-medium text-slate-700">Eventos recientes:</p>
-        <p className="text-slate-600">T1 entró a geocerca</p>
-        <p className="text-slate-600">T4 salió de geocerca</p>
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setIsPlaying((prev) => !prev)}
+          className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        >
+          {isPlaying ? "Pause" : "Play"}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleReset}
+          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          Reiniciar
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowTrails((prev) => !prev)}
+          className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition ${
+            showTrails
+              ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+          }`}
+        >
+          Mostrar rutas
+        </button>
+
+        <div className="h-4 w-px bg-slate-200" />
+
+        {TRACKERS.map((tracker) => {
+          const active = Boolean(visibleTrackers[tracker.id]);
+          return (
+            <button
+              key={tracker.id}
+              type="button"
+              onClick={() => toggleTracker(tracker.id)}
+              className={`rounded-md border px-2 py-1 text-xs font-semibold transition ${
+                active
+                  ? "border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
+                  : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {tracker.id}
+            </button>
+          );
+        })}
       </div>
 
-      <div ref={mapElRef} className="h-[320px] w-full md:h-[360px]" />
+      <div className="relative">
+        <div className="pointer-events-none absolute left-3 top-3 z-[500] rounded-lg border border-white/80 bg-white/85 px-3 py-2 text-[11px] text-slate-700 shadow-sm backdrop-blur-sm">
+          <p className="font-semibold text-slate-800">Trackers activos: 4</p>
+          <p className="mt-1 font-medium text-slate-700">Eventos recientes:</p>
+          <p className="text-slate-600">T1 entró a geocerca</p>
+          <p className="text-slate-600">T4 salió de geocerca</p>
+        </div>
+
+        <div ref={mapElRef} className="h-[320px] w-full md:h-[360px]" />
+      </div>
     </div>
   );
 }
