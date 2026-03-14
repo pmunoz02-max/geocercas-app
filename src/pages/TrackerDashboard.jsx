@@ -27,10 +27,10 @@ const TIME_WINDOWS = [
 ];
 
 
-const DEMO_VISUAL_SUBSTEPS = 6;
-const DEMO_ZIGZAG_AMPLITUDE = 0.00010;
-const DEMO_MOVE_INTERVAL_MS = 2000;
-const TRACKER_ANIMATION_MS = 1600;
+const DEMO_VISUAL_SUBSTEPS = 1;
+const DEMO_ZIGZAG_AMPLITUDE = 0;
+const DEMO_MOVE_INTERVAL_MS = 3500;
+const TRACKER_ANIMATION_MS = 2800;
 const LARGE_JUMP_METERS = 250;
 
 function easeOutCubic(t) {
@@ -46,6 +46,11 @@ function distanceMeters(a, b) {
 
 function buildDemoVisualPath(points, amplitude = DEMO_ZIGZAG_AMPLITUDE, substeps = DEMO_VISUAL_SUBSTEPS) {
   if (!Array.isArray(points) || points.length < 2) return points?.map(p => [p.lat, p.lng]) || [];
+  if (substeps <= 1 || amplitude <= 0) {
+    return points
+      .map((p) => [Number(p?.lat), Number(p?.lng)])
+      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+  }
   const out = [];
   let zig = 1;
 
