@@ -261,8 +261,8 @@ export function AuthProvider({ children }) {
       const safePreferredOrgId =
         allowPreferred ? sanitizePreferredOrgId(preferredOrgId, orgs) : null;
 
-      // Org final global: preferencia segura (no tracker) > serverOrgId > null
-      const finalOrgId = safePreferredOrgId || serverOrgId || null;
+      // Org final global: serverOrgId canónico > preferencia segura (fallback) > null
+      const finalOrgId = serverOrgId || safePreferredOrgId || null;
 
       if (orgs.length > 0) {
         setOrganizations(orgs);
