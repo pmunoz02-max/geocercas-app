@@ -7,11 +7,19 @@ import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton.jsx";
 import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton.jsx";
 
-function formatDate(value) {
+function resolveDateLocale(language) {
+  const lang = String(language || "").toLowerCase();
+  if (lang.startsWith("es")) return "es-EC";
+  if (lang.startsWith("en")) return "en-US";
+  if (lang.startsWith("fr")) return "fr-FR";
+  return "es-EC";
+}
+
+function formatDate(value, locale) {
   if (!value) return "—";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-EC", {
+  return d.toLocaleDateString(locale, {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -42,9 +50,11 @@ function labelStatus(planStatus, t) {
 }
 
 export default function Billing() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const tr = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
+
+  const dateLocale = useMemo(() => resolveDateLocale(i18n?.language), [i18n?.language]);
 
   const { loading, ready, authenticated, user, currentOrgId } = useAuth();
 
@@ -236,7 +246,7 @@ export default function Billing() {
                   {tr("billing.cards.trialUntil", "Trial until")}
                 </div>
                 <div className="mt-1 text-base font-medium text-slate-900">
-                  {formatDate(billing?.trial_ends_at)}
+                  {formatDate(billing?.trial_ends_at, dateLocale)}
                 </div>
               </div>
 
@@ -245,7 +255,7 @@ export default function Billing() {
                   {tr("billing.cards.currentPeriodUntil", "Current period until")}
                 </div>
                 <div className="mt-1 text-base font-medium text-slate-900">
-                  {formatDate(billing?.current_period_end)}
+                  {formatDate(billing?.current_period_end, dateLocale)}
                 </div>
               </div>
             </div>

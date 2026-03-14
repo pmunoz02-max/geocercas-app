@@ -23,7 +23,9 @@
       "back": "Back",
       "yes": "Yes",
       "no": "No",
-      "loading": "Loading..."
+      "loading": "Loading...",
+      "logout": "Log out",
+      "processing": "Signing out…"
     },
     "createOrganization": "Create organization",
     "orgNamePlaceholder": "Organization name (e.g. Farm A)",
@@ -235,6 +237,56 @@
       "backendAuthority": "The backend remains the real authority for the plan. This page only reflects the plan and shows the available commercial actions.",
       "proCheckout": "The upgrade to Pro reuses the existing Stripe Checkout flow. Subscription management reuses Stripe Customer Portal.",
       "enterpriseSales": "Enterprise is presented as a commercial channel, without enabling automatic checkout."
+    }
+  },
+  "billing": {
+    "title": "Billing",
+    "authRequired": "Sign in to manage your plan.",
+    "previewNotice": {
+      "prefix": "Monetization in",
+      "middle": "(Stripe TEST).",
+      "suffix": "It does not affect production."
+    },
+    "actions": {
+      "viewPlans": "View plans"
+    },
+    "labels": {
+      "email": "Email",
+      "orgId": "Org ID"
+    },
+    "planState": {
+      "title": "Plan status"
+    },
+    "states": {
+      "loadingPlanStatus": "Loading plan status..."
+    },
+    "errors": {
+      "loadPlanStatus": "Could not load the plan status."
+    },
+    "cards": {
+      "currentPlan": "Current plan",
+      "status": "Status",
+      "trialUntil": "Trial until",
+      "currentPeriodUntil": "Current period until"
+    },
+    "subscriptionManagement": {
+      "title": "Subscription management",
+      "description": "Open Stripe Customer Portal to update your card, cancel, or review your subscription."
+    },
+    "messages": {
+      "cancelAtPeriodEnd": "Your subscription is set to cancel at the end of the current period.",
+      "activePlanExists": "There is already an active plan for this organization. The upgrade button is not shown."
+    },
+    "compareBeforeUpgrade": {
+      "title": "Do you want to compare before upgrading?",
+      "description": "Review the plans page to compare Free, Pro, and Enterprise."
+    },
+    "status": {
+      "trialing": "Trial",
+      "active": "Active",
+      "pastDue": "Past due",
+      "canceled": "Canceled",
+      "free": "Free"
     }
   },
   "inicio": {

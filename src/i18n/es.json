@@ -247,6 +247,8 @@
       "edit": "Editar",
       "loading": "Cargando…",
       "no": "No",
+      "logout": "Cerrar sesión",
+      "processing": "Saliendo…",
       "save": "Guardar",
       "yes": "Sí"
     },
@@ -1310,6 +1312,56 @@
       "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
       "proCheckout": "El upgrade a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
       "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
+    }
+  },
+  "billing": {
+    "title": "Facturación",
+    "authRequired": "Inicia sesión para administrar tu plan.",
+    "previewNotice": {
+      "prefix": "Monetización en",
+      "middle": "(Stripe TEST).",
+      "suffix": "No afecta producción."
+    },
+    "actions": {
+      "viewPlans": "Ver planes"
+    },
+    "labels": {
+      "email": "Email",
+      "orgId": "ID de organización"
+    },
+    "planState": {
+      "title": "Estado del plan"
+    },
+    "states": {
+      "loadingPlanStatus": "Cargando estado del plan..."
+    },
+    "errors": {
+      "loadPlanStatus": "No se pudo cargar el estado del plan."
+    },
+    "cards": {
+      "currentPlan": "Plan actual",
+      "status": "Estado",
+      "trialUntil": "Prueba hasta",
+      "currentPeriodUntil": "Periodo actual hasta"
+    },
+    "subscriptionManagement": {
+      "title": "Gestión de suscripción",
+      "description": "Abre el portal de clientes de Stripe para actualizar tu tarjeta, cancelar o revisar tu suscripción."
+    },
+    "messages": {
+      "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
+      "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
+    },
+    "compareBeforeUpgrade": {
+      "title": "¿Quieres comparar antes de actualizar?",
+      "description": "Revisa la página de planes para comparar Free, Pro y Enterprise."
+    },
+    "status": {
+      "trialing": "Prueba",
+      "active": "Activo",
+      "pastDue": "Pago vencido",
+      "canceled": "Cancelado",
+      "free": "Gratis"
     }
   },
   "reports": {
