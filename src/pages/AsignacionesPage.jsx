@@ -152,7 +152,8 @@ export default function AsignacionesPage() {
   const [showForm, setShowForm] = useState(true);
 
   function keepIfSameOrgOrUnknown(row) {
-    if (!row || !orgId) return false;
+    if (!row) return false;
+    if (!orgId) return true;
 
     const rowOrgId =
       row.org_id ??
@@ -162,8 +163,6 @@ export default function AsignacionesPage() {
       row.tenantId ??
       null;
 
-    // Producción filtra por org_id en la consulta; si este payload no trae org,
-    // no lo descartamos en cliente para evitar falsos vacíos.
     if (!rowOrgId) return true;
     return String(rowOrgId) === String(orgId);
   }
