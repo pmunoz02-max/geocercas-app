@@ -29,34 +29,41 @@ const TIME_WINDOWS = [
 
 const DEMO_VISUAL_SUBSTEPS = 1;
 const DEMO_ZIGZAG_AMPLITUDE = 0;
-const DEMO_MOVE_INTERVAL_MS = 4500;
-const TRACKER_ANIMATION_MS = 3800;
+const DEMO_MOVE_INTERVAL_MS = 3200;
+const TRACKER_ANIMATION_MS = 2600;
 const LARGE_JUMP_METERS = 250;
 
 const DEMO_ROUTE_TEMPLATES = {
   blue: [
-    { lat: -0.22998, lng: -78.52534 },
-    { lat: -0.22973, lng: -78.52518 },
-    { lat: -0.22956, lng: -78.52492 },
-    { lat: -0.22968, lng: -78.52463 },
-    { lat: -0.22994, lng: -78.52457 },
-    { lat: -0.23012, lng: -78.52486 },
+    { lat: -0.23010, lng: -78.52530 },
+    { lat: -0.22992, lng: -78.52508 },
+    { lat: -0.22978, lng: -78.52486 },
+    { lat: -0.22960, lng: -78.52474 },
+    { lat: -0.22942, lng: -78.52488 },
+    { lat: -0.22930, lng: -78.52512 },
+    { lat: -0.22946, lng: -78.52534 },
+    { lat: -0.22978, lng: -78.52542 },
   ],
   green: [
-    { lat: -0.23032, lng: -78.52462 },
-    { lat: -0.23049, lng: -78.52433 },
-    { lat: -0.23073, lng: -78.52420 },
-    { lat: -0.23090, lng: -78.52444 },
-    { lat: -0.23086, lng: -78.52478 },
-    { lat: -0.23057, lng: -78.52494 },
+    { lat: -0.23052, lng: -78.52508 },
+    { lat: -0.23072, lng: -78.52492 },
+    { lat: -0.23088, lng: -78.52466 },
+    { lat: -0.23098, lng: -78.52440 },
+    { lat: -0.23086, lng: -78.52418 },
+    { lat: -0.23062, lng: -78.52408 },
+    { lat: -0.23042, lng: -78.52428 },
+    { lat: -0.23034, lng: -78.52462 },
   ],
   orange: [
-    { lat: -0.22942, lng: -78.52562 },
-    { lat: -0.22917, lng: -78.52578 },
-    { lat: -0.22891, lng: -78.52566 },
-    { lat: -0.22880, lng: -78.52534 },
-    { lat: -0.22898, lng: -78.52506 },
-    { lat: -0.22928, lng: -78.52510 },
+    { lat: -0.22934, lng: -78.52588 },
+    { lat: -0.22908, lng: -78.52580 },
+    { lat: -0.22888, lng: -78.52562 },
+    { lat: -0.22874, lng: -78.52534 },
+    { lat: -0.22882, lng: -78.52502 },
+    { lat: -0.22902, lng: -78.52486 },
+    { lat: -0.22926, lng: -78.52498 },
+    { lat: -0.22944, lng: -78.52524 },
+    { lat: -0.22948, lng: -78.52558 },
   ],
 };
 
@@ -1243,11 +1250,7 @@ export default function TrackerDashboard() {
       setSelectedTrackerId("all");
       setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
       setFitSignal((x) => x + 1);
-      // start live demo movement once data is in place
-      if (demoTimerRef.current) {
-        clearInterval(demoTimerRef.current);
-        demoTimerRef.current = null;
-      }
+      // Keep current interval if already running; activation is controlled by demoLive.
       demoInFlightRef.current = false;
       demoRouteStateRef.current = {};
       demoRouteAssignmentRef.current = {};
@@ -1261,14 +1264,18 @@ export default function TrackerDashboard() {
   }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, fetchGeofenceEvents, assignments, tOr]);
 
   useEffect(() => {
-    // limpiar cualquier timer anterior antes de decidir si crear uno nuevo
-    if (demoTimerRef.current) {
-      clearInterval(demoTimerRef.current);
-      demoTimerRef.current = null;
-    }
-    demoInFlightRef.current = false;
+    const canRunDemoLoop = !!orgId && previewUiEnabled && isDemoOrg && demoLive;
 
-    if (!orgId || !previewUiEnabled || !isDemoOrg || !demoLive) {
+    if (!canRunDemoLoop) {
+      if (demoTimerRef.current) {
+        clearInterval(demoTimerRef.current);
+        demoTimerRef.current = null;
+      }
+      demoInFlightRef.current = false;
+      return;
+    }
+
+    if (demoTimerRef.current) {
       return;
     }
 
@@ -1377,7 +1384,7 @@ export default function TrackerDashboard() {
     // primer tick inmediato
     tick();
 
-    // intervalo más corto para movimiento visual fluido en Preview-Demo
+    // El loop de demo se crea solo una vez mientras demoLive siga activo.
     demoTimerRef.current = setInterval(tick, DEMO_MOVE_INTERVAL_MS);
 
     return () => {
