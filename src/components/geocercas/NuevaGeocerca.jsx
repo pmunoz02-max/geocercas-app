@@ -285,18 +285,33 @@ export default function NuevaGeocerca() {
 
   const refreshGeofenceList = useCallback(async () => {
     const orgId = currentOrg?.id || null;
-    if (!orgId) return;
+    if (!orgId) {
+      setGeofenceList([]);
+      return;
+    }
 
-    const items = await listGeofences({ orgId, onlyActive: true, limit: 500 });
+    const { data, error } = await supabase
+      .from("geofences")
+      .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default, created_at, updated_at")
+      .eq("org_id", orgId)
+      .eq("active", true)
+      .order("is_default", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false });
 
-    const normalized = (items || [])
+    if (error) {
+      console.error("[refreshGeofenceList] supabase error:", error);
+      setGeofenceList([]);
+      return;
+    }
+
+    const normalized = (data || [])
       .map((x) => ({
         ...x,
-        name: x?.name ?? x?.nombre ?? "",
+        name: String(x?.name ?? "").trim(),
       }))
-      .filter((x) => String(x.name || "").trim());
+      .filter((x) => x.name);
 
-    normalized.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     setGeofenceList(normalized);
   }, [currentOrg?.id]);
 
