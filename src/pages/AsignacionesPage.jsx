@@ -409,6 +409,21 @@ export default function AsignacionesPage() {
     );
   }
 
+  if (!hasValidSession) {
+    return (
+      <div className="p-4 md:p-6 max-w-5xl mx-auto">
+        <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-800">
+            Debes iniciar sesión para crear asignaciones
+          </p>
+          <p className="text-xs text-red-700">
+            Inicia sesión para cargar personas, geocercas y actividades
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const labelForEstado = (v) => {
     if (v === "todos") {
       return tt("asignaciones.filters.status.todos", "All");
@@ -483,208 +498,197 @@ export default function AsignacionesPage() {
               )}
             </div>
 
-            {!hasValidSession ? (
-              <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
-                <p className="text-sm font-semibold text-red-800">
-                  Debes iniciar sesión para crear asignaciones
-                </p>
-                <p className="text-xs text-red-700">
-                  Inicia sesión para cargar personas, geocercas y actividades
-                </p>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-3">
-                {!orgId && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {!orgId && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {tt(
+                    "asignaciones.messages.noOrg",
+                    "No active organization in session. Select an organization to create assignments."
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  {tt("asignaciones.form.personLabel", "Person")}
+                </label>
+                <select
+                  className={selectBase}
+                  value={selectedPersonalId}
+                  onChange={(e) => setSelectedPersonalId(e.target.value)}
+                  required
+                >
+                  <option value="">
                     {tt(
-                      "asignaciones.messages.noOrg",
-                      "No active organization in session. Select an organization to create assignments."
+                      "asignaciones.form.personPlaceholder",
+                      "Select a person"
                     )}
-                  </div>
+                  </option>
+                  {personalOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label || `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  {tt("asignaciones.form.geofenceLabel", "Geofence")}
+                </label>
+                <select
+                  className={selectBase}
+                  value={selectedGeocercaId}
+                  onChange={(e) => setSelectedGeocercaId(e.target.value)}
+                  required
+                >
+                  <option value="">
+                    {tt(
+                      "asignaciones.form.geofencePlaceholder",
+                      "Select a geofence"
+                    )}
+                  </option>
+                  {geocercaOptions.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.nombre || g.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  {tt("asignaciones.form.activityLabel", "Activity")}
+                </label>
+                <select
+                  className={selectBase}
+                  value={selectedActivityId}
+                  onChange={(e) => setSelectedActivityId(e.target.value)}
+                  required
+                  disabled={activityOptions.length === 0}
+                >
+                  <option value="">
+                    {tt(
+                      "asignaciones.form.activityPlaceholder",
+                      "Select an activity"
+                    )}
+                  </option>
+                  {activityOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name || a.nombre || a.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {tt("asignaciones.form.startLabel", "Start date/time")}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    className={inputBase}
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {tt("asignaciones.form.endLabel", "End date/time")}
+                  </label>
+                  <input
+                    type="datetime-local"
+                    className={inputBase}
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {tt("asignaciones.form.statusLabel", "Status")}
+                  </label>
+                  <select
+                    className={selectBase}
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value)}
+                  >
+                    <option value="activa">
+                      {tt("asignaciones.form.statusActive", "Active")}
+                    </option>
+                    <option value="inactiva">
+                      {tt("asignaciones.form.statusInactive", "Inactive")}
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {tt("asignaciones.form.frequencyLabel", "Frequency (min)")}
+                  </label>
+                  <input
+                    type="number"
+                    className={inputBase}
+                    min={5}
+                    value={frecuenciaEnvioMin}
+                    onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    {tt(
+                      "asignaciones.form.frequencyHint",
+                      "Minimum: 5 minutes."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                {editingId && (
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
+                  >
+                    {tt("asignaciones.form.cancelEditButton", "Cancel")}
+                  </button>
                 )}
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.personLabel", "Person")}
-                  </label>
-                  <select
-                    className={selectBase}
-                    value={selectedPersonalId}
-                    onChange={(e) => setSelectedPersonalId(e.target.value)}
-                    required
-                  >
-                    <option value="">
-                      {tt(
-                        "asignaciones.form.personPlaceholder",
-                        "Select a person"
-                      )}
-                    </option>
-                    {personalOptions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label || `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <button
+                  type="submit"
+                  className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={
+                    !orgId ||
+                    loading ||
+                    activityOptions.length === 0 ||
+                    personalOptions.length === 0 ||
+                    geocercaOptions.length === 0
+                  }
+                >
+                  {editingId
+                    ? tt("asignaciones.form.updateButton", "Update")
+                    : tt("asignaciones.form.saveButton", "Save")}
+                </button>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.geofenceLabel", "Geofence")}
-                  </label>
-                  <select
-                    className={selectBase}
-                    value={selectedGeocercaId}
-                    onChange={(e) => setSelectedGeocercaId(e.target.value)}
-                    required
-                  >
-                    <option value="">
-                      {tt(
-                        "asignaciones.form.geofencePlaceholder",
-                        "Select a geofence"
-                      )}
-                    </option>
-                    {geocercaOptions.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.nombre || g.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.activityLabel", "Activity")}
-                  </label>
-                  <select
-                    className={selectBase}
-                    value={selectedActivityId}
-                    onChange={(e) => setSelectedActivityId(e.target.value)}
-                    required
-                    disabled={activityOptions.length === 0}
-                  >
-                    <option value="">
-                      {tt(
-                        "asignaciones.form.activityPlaceholder",
-                        "Select an activity"
-                      )}
-                    </option>
-                    {activityOptions.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name || a.nombre || a.id}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      {tt("asignaciones.form.startLabel", "Start date/time")}
-                    </label>
-                    <input
-                      type="datetime-local"
-                      className={inputBase}
-                      value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      {tt("asignaciones.form.endLabel", "End date/time")}
-                    </label>
-                    <input
-                      type="datetime-local"
-                      className={inputBase}
-                      value={endTime}
-                      onChange={(e) => setEndTime(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      {tt("asignaciones.form.statusLabel", "Status")}
-                    </label>
-                    <select
-                      className={selectBase}
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
-                    >
-                      <option value="activa">
-                        {tt("asignaciones.form.statusActive", "Active")}
-                      </option>
-                      <option value="inactiva">
-                        {tt("asignaciones.form.statusInactive", "Inactive")}
-                      </option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      {tt("asignaciones.form.frequencyLabel", "Frequency (min)")}
-                    </label>
-                    <input
-                      type="number"
-                      className={inputBase}
-                      min={5}
-                      value={frecuenciaEnvioMin}
-                      onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
-                    />
-                    <p className="mt-1 text-[11px] text-gray-500">
-                      {tt(
-                        "asignaciones.form.frequencyHint",
-                        "Minimum: 5 minutes."
-                      )}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  {editingId && (
-                    <button
-                      type="button"
-                      onClick={resetForm}
-                      className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
-                    >
-                      {tt("asignaciones.form.cancelEditButton", "Cancel")}
-                    </button>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={
-                      !orgId ||
-                      loading ||
-                      activityOptions.length === 0 ||
-                      personalOptions.length === 0 ||
-                      geocercaOptions.length === 0
-                    }
-                  >
-                    {editingId
-                      ? tt("asignaciones.form.updateButton", "Update")
-                      : tt("asignaciones.form.saveButton", "Save")}
-                  </button>
-                </div>
-
-                <div className="pt-1">
-                  {successMessage && (
-                    <p className="text-green-700 text-sm font-semibold">
-                      {successMessage}
-                    </p>
-                  )}
-                  {error && (
-                    <p className="text-red-700 text-sm font-semibold">
-                      {error}
-                    </p>
-                  )}
-                </div>
-              </form>
-            )}
+              <div className="pt-1">
+                {successMessage && (
+                  <p className="text-green-700 text-sm font-semibold">
+                    {successMessage}
+                  </p>
+                )}
+                {error && (
+                  <p className="text-red-700 text-sm font-semibold">
+                    {error}
+                  </p>
+                )}
+              </div>
+            </form>
           </div>
         )}
 
