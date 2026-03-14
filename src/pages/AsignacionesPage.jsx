@@ -125,8 +125,8 @@ export default function AsignacionesPage() {
   const tt = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { ready, currentOrg } = useAuth();
-  const orgId = currentOrg?.id || null;
+  const { ready, currentOrg, currentOrgId } = useAuth();
+  const orgId = currentOrgId || currentOrg?.id || null;
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -151,14 +151,43 @@ export default function AsignacionesPage() {
 
   const [showForm, setShowForm] = useState(true);
 
+  function keepIfSameOrgOrUnknown(row) {
+    if (!row || !orgId) return false;
+
+    const rowOrgId =
+      row.org_id ??
+      row.tenant_id ??
+      row.organization_id ??
+      row.orgId ??
+      row.tenantId ??
+      null;
+
+    // Producción filtra por org_id en la consulta; si este payload no trae org,
+    // no lo descartamos en cliente para evitar falsos vacíos.
+    if (!rowOrgId) return true;
+    return String(rowOrgId) === String(orgId);
+  }
+
   async function loadCatalogsCanonical() {
+    if (!orgId) {
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+      return;
+    }
+
     const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
     const personalRaw = extractArray(rP.payload);
-    const personalNorm = personalRaw.map(normalizePersonRow).filter((p) => p.id);
+    const personalNorm = personalRaw
+      .filter((p) => keepIfSameOrgOrUnknown(p))
+      .map(normalizePersonRow)
+      .filter((p) => p.id);
 
     const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
     const geofencesRaw = extractArray(rG.payload);
-    const geofencesNorm = geofencesRaw.map(normalizeGeofenceRow).filter((g) => g.id);
+    const geofencesNorm = geofencesRaw
+      .filter((g) => keepIfSameOrgOrUnknown(g))
+      .map(normalizeGeofenceRow)
+      .filter((g) => g.id);
 
     setPersonalOptions(personalNorm);
     setGeocercaOptions(geofencesNorm);
@@ -193,12 +222,16 @@ export default function AsignacionesPage() {
     }
 
     const bundle = data || {};
-    const rows = Array.isArray(bundle.asignaciones) ? bundle.asignaciones : [];
+    const rows = Array.isArray(bundle.asignaciones)
+      ? bundle.asignaciones.filter((a) => keepIfSameOrgOrUnknown(a))
+      : [];
     const catalogs = bundle.catalogs || {};
 
     setAsignaciones(rows);
 
-    const activitiesRaw = Array.isArray(catalogs.activities) ? catalogs.activities : [];
+    const activitiesRaw = Array.isArray(catalogs.activities)
+      ? catalogs.activities.filter((a) => keepIfSameOrgOrUnknown(a))
+      : [];
     setActivityOptions(activitiesRaw);
 
     if (!selectedActivityId && activitiesRaw.length === 1) {
@@ -209,7 +242,22 @@ export default function AsignacionesPage() {
   }
 
   useEffect(() => {
-    if (!ready || !orgId) return;
+    if (!ready) return;
+
+    if (!orgId) {
+      setAsignaciones([]);
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+      setActivityOptions([]);
+      setError(
+        tt(
+          "asignaciones.messages.noOrg",
+          "No active organization in session. Select an organization to create assignments."
+        )
+      );
+      return;
+    }
+
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, orgId]);
@@ -335,16 +383,6 @@ export default function AsignacionesPage() {
     );
   }
 
-  if (!currentOrg) {
-    return (
-      <div className="p-4 md:p-6 max-w-3xl mx-auto">
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          {tt("asignaciones.messages.noOrg", "No active organization.")}
-        </div>
-      </div>
-    );
-  }
-
   const labelForEstado = (v) => {
     if (v === "todos") {
       return tt("asignaciones.filters.status.todos", "All");
@@ -368,7 +406,7 @@ export default function AsignacionesPage() {
           <p className="text-xs text-gray-600 mt-1">
             {tt("asignaciones.currentOrgLabel", "Current organization")}:{" "}
             <span className="font-medium text-gray-900">
-              {currentOrg?.name || "—"}
+              {currentOrg?.name || orgId || tt("common.unknown", "Unknown")}
             </span>
           </p>
         </div>
@@ -420,6 +458,15 @@ export default function AsignacionesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
+              {!orgId && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  {tt(
+                    "asignaciones.messages.noOrg",
+                    "No active organization in session. Select an organization to create assignments."
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   {tt("asignaciones.form.personLabel", "Person")}
@@ -575,6 +622,7 @@ export default function AsignacionesPage() {
                   type="submit"
                   className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
                   disabled={
+                    !orgId ||
                     loading ||
                     activityOptions.length === 0 ||
                     personalOptions.length === 0 ||
