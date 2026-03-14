@@ -614,7 +614,6 @@ export default function TrackerDashboard() {
 
   const mapRef = useRef(null);
   const [loading, setLoading] = useState(false);
-  const [loadingDemo, setLoadingDemo] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
@@ -1051,44 +1050,6 @@ export default function TrackerDashboard() {
     await fetchPositions(currentOrgId, { showSpinner: true });
   }, [assignments, fetchAssignments, fetchGeofences, fetchPersonalCatalog, fetchPositions]);
 
-  const onLoadDemo = useCallback(async () => {
-    if (!previewUiEnabled) {
-      setErrorMsg("DEMO loader available only in preview/localhost.");
-      return;
-    }
-    if (!orgId) {
-      setErrorMsg("No active org resolved.");
-      return;
-    }
-
-    setLoadingDemo(true);
-    setErrorMsg("");
-    setInfoMsg("");
-
-    try {
-      const r = await supabase.rpc("load_demo_preview_dataset", { p_org_id: orgId });
-
-      if (r?.error) {
-        throw new Error(r.error.message || String(r.error));
-      }
-
-      await resolveOrgId();
-      await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
-      await fetchGeofences(orgId, assignments);
-      await fetchPositions(orgId, { showSpinner: true });
-      await fetchGeofenceEvents(orgId);
-
-      setSelectedTrackerId("all");
-      setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
-      setFitSignal((x) => x + 1);
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setErrorMsg(`DEMO loader error: ${msg}`);
-    } finally {
-      setLoadingDemo(false);
-    }
-  }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, fetchGeofenceEvents, assignments, tOr]);
-
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
     (async () => {
@@ -1365,18 +1326,6 @@ export default function TrackerDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {previewUiEnabled && (
-              <button
-                type="button"
-                onClick={onLoadDemo}
-                className="inline-flex items-center justify-center rounded-md bg-emerald-600 text-white px-4 py-2 text-sm font-medium
-                           hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
-                disabled={loadingDemo || loading || !orgId}
-              >
-                {loadingDemo ? "Cargando DEMO…" : "Cargar DEMO"}
-              </button>
-            )}
-
             <button
               type="button"
               onClick={() => resolveOrgId()}
