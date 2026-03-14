@@ -74,6 +74,39 @@ export default function Landing() {
           </div>
         </section>
 
+        <section className="rounded-3xl border border-slate-800 bg-slate-900/55 p-6 text-center shadow-2xl sm:p-10">
+          <div className="mx-auto max-w-3xl space-y-4">
+            <p className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
+              <span className="h-2 w-2 rounded-full bg-sky-400" />
+              Empieza a monitorear tu operación
+            </p>
+
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
+              Convierte posiciones GPS en control operativo.
+            </h2>
+
+            <p className="mx-auto max-w-2xl text-sm leading-relaxed text-slate-300 sm:text-base">
+              App Geocercas permite visualizar personal, rutas y eventos de entrada y salida en tiempo real dentro
+              de zonas definidas.
+            </p>
+
+            <div className="pt-2 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Link
+                to="/demo"
+                className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
+              >
+                Ver demo del sistema
+              </Link>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-600 bg-slate-900/70 px-6 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-800"
+              >
+                Solicitar presentación
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section className="flex justify-center pb-10">
           <div className="max-w-xl w-full px-0 sm:px-2">
             <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-8 shadow-2xl">
