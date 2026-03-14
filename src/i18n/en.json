@@ -25,13 +25,29 @@
       "no": "No",
       "loading": "Loading...",
       "logout": "Log out",
-      "processing": "Signing out…"
+      "processing": "Signing out..."
     },
     "createOrganization": "Create organization",
     "orgNamePlaceholder": "Organization name (e.g. Farm A)",
     "refreshContext": "Refresh context",
     "select": "— Select —",
-    "sending": "Sending..."
+    "sending": "Sending...",
+    "show": "Show",
+    "hide": "Hide",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading",
+    "noResults": "No results",
+    "separator": "—",
+    "zoom": "Zoom",
+    "refresh": "Refresh",
+    "states": {
+      "pending": "Pending",
+      "visible": "Visible",
+      "hidden": "Hidden"
+    }
   },
   "app": {
     "brand": "App Geocercas",
@@ -548,7 +564,12 @@
         "inactivo": "Inactive"
       },
       "refresh": "Refresh",
-      "refreshLoading": "Refreshing…"
+      "refreshLoading": "Refreshing…",
+      "searchPlaceholder": "Search (person/geofence)",
+      "statusDefault": "Status: all",
+      "statusAll": "Status: all",
+      "geofenceAll": "Geofence: all",
+      "personalAll": "Personal: all"
     },
     "form": {
       "newTitle": "New assignment",
@@ -564,7 +585,7 @@
       "statusLabel": "Status",
       "statusActive": "Active",
       "statusInactive": "Inactive",
-      "frequencyLabel": "Frequency (min)",
+      "frequencyLabel": "Frequency (minutes)",
       "saveButton": "Save assignment",
       "updateButton": "Update assignment",
       "cancelEditButton": "Cancel editing",
@@ -578,7 +599,17 @@
         "newNamePlaceholder": "New activity name",
         "saveButton": "Save activity",
         "saving": "Saving…"
-      }
+      },
+      "newActivityPlaceholder": "Name of the new activity",
+      "saveActivityButton": "Save activity",
+      "savingActivity": "Saving…",
+      "cancelButton": "Cancel",
+      "startDateLabel": "Start date",
+      "startDatePlaceholder": "DD/MM/YYYY HH:MM or 2025-11-13T09:11",
+      "endDateLabel": "End date (optional)",
+      "endDatePlaceholder": "DD/MM/YYYY HH:MM or 2025-11-14T19:17",
+      "activityOptional": "(Optional) Select…",
+      "createButtonLabel": "Create assignment"
     },
     "table": {
       "title": "Assignments list",
@@ -632,6 +663,11 @@
       "missingActivity": "You must select an activity.",
       "missingStart": "You must enter a start date/time.",
       "missingEnd": "You must enter an end date/time."
+    },
+    "states": {
+      "all": "all",
+      "active": "active",
+      "inactive": "inactive"
     }
   },
   "reportes": {
@@ -1271,7 +1307,24 @@
     "timeout": "Authentication took too long. Please try again.",
     "invalidOrExpiredLink": "The link is invalid, expired, or already used.",
     "errorTitle": "Authentication failed",
-    "backToLogin": "Back to login"
+    "backToLogin": "Back to login",
+    "signup": {
+      "title": "Create account",
+      "labels": {
+        "fullName": "Full name (optional)",
+        "email": "Email"
+      },
+      "placeholders": {
+        "fullName": "Your name",
+        "email": "youremail@domain.com"
+      },
+      "buttons": {
+        "creating": "Sending...",
+        "create": "Create account with Magic Link"
+      },
+      "separator": "or",
+      "oauthGoogle": "Sign up with Google"
+    }
   },
   "home": {
     "welcome": "Welcome to App Geocercas",
@@ -1448,7 +1501,6 @@
       "tracker": "tracker"
     }
   },
-
   "trackerPanel": {
     "title": "Tracker Panel",
     "description": "Here you will see your assigned geofences, your status (inside/outside) and you can report incidents.",
@@ -1521,52 +1573,6 @@
       "updateError": "Error updating geofence",
       "deleted": "Geofence(s) deleted successfully.",
       "deleteError": "Error deleting geofence"
-    }
-  },
-  "asignaciones": {
-    "form": {
-      "newActivityPlaceholder": "Name of the new activity",
-      "saveActivityButton": "Save activity",
-      "savingActivity": "Saving…",
-      "cancelButton": "Cancel",
-      "frequencyLabel": "Frequency (minutes)",
-      "startDateLabel": "Start date",
-      "startDatePlaceholder": "DD/MM/YYYY HH:MM or 2025-11-13T09:11",
-      "endDateLabel": "End date (optional)",
-      "endDatePlaceholder": "DD/MM/YYYY HH:MM or 2025-11-14T19:17",
-      "activityOptional": "(Optional) Select…",
-      "createButtonLabel": "Create assignment"
-    },
-    "filters": {
-      "searchPlaceholder": "Search (person/geofence)",
-      "statusDefault": "Status: all",
-      "statusAll": "Status: all",
-      "geofenceAll": "Geofence: all",
-      "personalAll": "Personal: all"
-    },
-    "states": {
-      "all": "all",
-      "active": "active",
-      "inactive": "inactive"
-    }
-  },
-  "auth": {
-    "signup": {
-      "title": "Create account",
-      "labels": {
-        "fullName": "Full name (optional)",
-        "email": "Email"
-      },
-      "placeholders": {
-        "fullName": "Your name",
-        "email": "youremail@domain.com"
-      },
-      "buttons": {
-        "creating": "Sending...",
-        "create": "Create account with Magic Link"
-      },
-      "separator": "or",
-      "oauthGoogle": "Sign up with Google"
     }
   },
   "admin": {
@@ -1667,25 +1673,6 @@
     },
     "actions": {
       "links": "Links"
-    }
-  },
-  "common": {
-    "show": "Show",
-    "hide": "Hide",
-    "save": "Save",
-    "cancel": "Cancel",
-    "delete": "Delete",
-    "edit": "Edit",
-    "actions": "Actions",
-    "loading": "Loading",
-    "noResults": "No results",
-    "separator": "—",
-    "zoom": "Zoom",
-    "refresh": "Refresh",
-    "states": {
-      "pending": "Pending",
-      "visible": "Visible",
-      "hidden": "Hidden"
     }
   }
 }
