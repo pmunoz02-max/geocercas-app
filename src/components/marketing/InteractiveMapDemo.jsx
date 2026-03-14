@@ -153,10 +153,12 @@ export default function InteractiveMapDemo() {
     const map = L.map(mapElRef.current, {
       center: MAP_CENTER,
       zoom: MAP_ZOOM,
-      zoomControl: true,
+      zoomControl: false,
       scrollWheelZoom: false,
     });
     mapRef.current = map;
+
+    L.control.zoom({ position: "topright" }).addTo(map);
 
     // Ensure Leaflet computes size correctly when mounted inside responsive hero layouts.
     map.invalidateSize();
