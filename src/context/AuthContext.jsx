@@ -8,6 +8,7 @@ import React, {
   useState,
   useRef,
 } from "react";
+import { supabase } from "@/lib/supabaseClient.js";
 
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
@@ -174,6 +175,7 @@ export function AuthProvider({ children }) {
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
+  const [switchingOrg, setSwitchingOrg] = useState(false);
 
   const didBootstrapOnceRef = useRef(false);
   const didEnsureContextThisRunRef = useRef(false);
@@ -213,7 +215,7 @@ export function AuthProvider({ children }) {
    * Regla universal: solo persistimos como "org global" si NO es tracker.
    */
   const selectOrg = useCallback(
-    (orgIdToSelect) => {
+    async (orgIdToSelect) => {
       if (!orgIdToSelect) return;
 
       const found = organizations.find((o) => o?.id === orgIdToSelect);
@@ -232,8 +234,35 @@ export function AuthProvider({ children }) {
           localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
         } catch {}
       }
+
+      setCurrentRole(normalizeRole(found?.role) || currentRole || null);
+
+      setSwitchingOrg(true);
+
+      try {
+        let persisted = false;
+
+        try {
+          const { error } = await supabase.rpc("set_current_org", { p_org: orgIdToSelect });
+          if (!error) persisted = true;
+        } catch {}
+
+        if (!persisted) {
+          try {
+            const { error } = await supabase.rpc("rpc_set_current_org", { p_org_id: orgIdToSelect });
+            if (!error) persisted = true;
+          } catch {}
+        }
+
+        const s1 = await fetchSession();
+        if (s1.ok && s1.data?.authenticated === true) {
+          applySessionData(s1.data);
+        }
+      } finally {
+        setSwitchingOrg(false);
+      }
     },
-    [organizations]
+    [applySessionData, currentRole, organizations]
   );
 
   /**
@@ -429,6 +458,7 @@ export function AuthProvider({ children }) {
       isAppRoot,
       organizations,
       currentOrg,
+      switchingOrg,
       selectOrg,
 
       role: currentRole,
@@ -447,6 +477,7 @@ export function AuthProvider({ children }) {
       isAppRoot,
       organizations,
       currentOrg,
+      switchingOrg,
       selectOrg,
       bootstrap,
       logout,
@@ -472,6 +503,7 @@ const SAFE_FALLBACK = {
   isAppRoot: false,
   organizations: [],
   currentOrg: null,
+  switchingOrg: false,
   selectOrg: () => {},
 
   role: null,

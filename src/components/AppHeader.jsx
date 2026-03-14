@@ -19,12 +19,23 @@ function safeText(v) {
 }
 
 export default function AppHeader() {
-  const { isAuthenticated, user, currentRole, logout } = useAuth();
+  const {
+    isAuthenticated,
+    user,
+    currentRole,
+    organizations,
+    currentOrg,
+    switchingOrg,
+    selectOrg,
+    logout,
+  } = useAuth();
   const { t } = useTranslation();
 
   const isLogged = Boolean(isAuthenticated);
   const rawRole = String(currentRole || "").toLowerCase();
   const email = user?.email || "";
+  const orgOptions = Array.isArray(organizations) ? organizations.filter((org) => org?.id) : [];
+  const showOrgSelector = isLogged && orgOptions.length > 1;
 
   const handleLogout = async () => {
     try {
@@ -71,8 +82,29 @@ export default function AppHeader() {
 
           {isLogged ? (
             <>
+              {showOrgSelector && (
+                <label className="flex flex-col gap-1 text-[11px] text-slate-500">
+                  <span>{safeText(t("app.header.currentOrg", { defaultValue: "Organization" }))}</span>
+                  <select
+                    className="min-w-[180px] rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    value={currentOrg?.id || ""}
+                    onChange={(e) => selectOrg(e.target.value)}
+                    disabled={switchingOrg}
+                  >
+                    {orgOptions.map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {safeText(org.name || org.id)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <div className="hidden sm:flex flex-col items-end">
                 {email && <span className="font-medium text-slate-700">{email}</span>}
+                {currentOrg?.name && (
+                  <span className="text-[10px] text-slate-500">{currentOrg.name}</span>
+                )}
                 {rawRole && (
                   <span className="uppercase tracking-wide text-[10px] text-slate-400">
                     {safeText(roleLabel)}
