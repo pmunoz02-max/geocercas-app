@@ -143,6 +143,9 @@ export default function InteractiveMapDemo() {
   const geofenceRef = useRef(null);
   const rafRef = useRef(0);
   const startRef = useRef(0);
+  const geofencePulseUntilRef = useRef(0);
+  const prevT1NearEventRef = useRef(false);
+  const prevT4NearEventRef = useRef(false);
 
   useEffect(() => {
     if (!mapElRef.current || mapRef.current) return undefined;
@@ -230,11 +233,19 @@ export default function InteractiveMapDemo() {
         ? wrapDistance(t4LocalT, TRACKERS.find((t) => t.id === "T4")?.eventAt || 0) < 0.05
         : false;
 
+      // Trigger a short geofence pulse when each event window starts.
+      if (t1Glow && !prevT1NearEventRef.current) geofencePulseUntilRef.current = now + 420;
+      if (t4Glow && !prevT4NearEventRef.current) geofencePulseUntilRef.current = now + 420;
+      prevT1NearEventRef.current = t1Glow;
+      prevT4NearEventRef.current = t4Glow;
+
+      const pulseActive = now < geofencePulseUntilRef.current;
+
       if (geofenceRef.current) {
         geofenceRef.current.setStyle({
-          weight: t1Glow || t4Glow ? 3.2 : 2,
-          fillOpacity: t1Glow || t4Glow ? 0.18 : 0.08,
-          opacity: t1Glow || t4Glow ? 0.95 : 0.85,
+          weight: pulseActive ? 3.2 : 2,
+          fillOpacity: pulseActive ? 0.18 : 0.08,
+          opacity: pulseActive ? 0.95 : 0.85,
         });
       }
 
@@ -248,15 +259,26 @@ export default function InteractiveMapDemo() {
       map.remove();
       mapRef.current = null;
       geofenceRef.current = null;
+      geofencePulseUntilRef.current = 0;
+      prevT1NearEventRef.current = false;
+      prevT4NearEventRef.current = false;
       startRef.current = 0;
     };
   }, []);
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)]">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)]">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
         Demo en vivo · Quito · Loop 10s
       </div>
+
+      <div className="pointer-events-none absolute left-3 top-12 z-[500] rounded-lg border border-white/80 bg-white/85 px-3 py-2 text-[11px] text-slate-700 shadow-sm backdrop-blur-sm">
+        <p className="font-semibold text-slate-800">Trackers activos: 4</p>
+        <p className="mt-1 font-medium text-slate-700">Eventos recientes:</p>
+        <p className="text-slate-600">T1 entró a geocerca</p>
+        <p className="text-slate-600">T4 salió de geocerca</p>
+      </div>
+
       <div ref={mapElRef} className="h-[320px] w-full md:h-[360px]" />
     </div>
   );
