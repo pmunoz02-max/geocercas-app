@@ -26,54 +26,9 @@ const TIME_WINDOWS = [
   { id: "24h", labelKey: "trackerDashboard.timeWindows.24h", fallback: "24 hours", ms: 24 * 60 * 60 * 1000 },
 ];
 
-
-const DEMO_VISUAL_SUBSTEPS = 1;
-const DEMO_ZIGZAG_AMPLITUDE = 0;
-const DEMO_MOVE_INTERVAL_MS = 3200;
 const TRACKER_ANIMATION_MS = 2600;
 const LARGE_JUMP_METERS = 250;
-
-const DEMO_ROUTE_TEMPLATES = {
-  blue: [
-    { lat: -0.11795, lng: -78.48635 },
-    { lat: -0.11770, lng: -78.48610 },
-    { lat: -0.11745, lng: -78.48588 },
-    { lat: -0.11718, lng: -78.48570 },
-    { lat: -0.11692, lng: -78.48552 },
-    { lat: -0.11672, lng: -78.48528 },
-    { lat: -0.11655, lng: -78.48505 },
-  ],
-  green: [
-    { lat: -0.11855, lng: -78.48495 },
-    { lat: -0.11830, lng: -78.48482 },
-    { lat: -0.11802, lng: -78.48465 },
-    { lat: -0.11778, lng: -78.48448 },
-    { lat: -0.11748, lng: -78.48428 },
-    { lat: -0.11720, lng: -78.48408 },
-    { lat: -0.11695, lng: -78.48392 },
-  ],
-  orange: [
-    { lat: -0.11782, lng: -78.48682 },
-    { lat: -0.11752, lng: -78.48672 },
-    { lat: -0.11728, lng: -78.48658 },
-    { lat: -0.11698, lng: -78.48642 },
-    { lat: -0.11672, lng: -78.48620 },
-    { lat: -0.11648, lng: -78.48598 },
-    { lat: -0.11622, lng: -78.48578 },
-  ],
-};
-
-const DEMO_ROUTE_KEYS = ["blue", "green", "orange"];
-
-function getDemoRouteKey(trackerId, index) {
-  if (typeof trackerId === "string") {
-    const lower = trackerId.toLowerCase();
-    if (lower.includes("blue")) return "blue";
-    if (lower.includes("green")) return "green";
-    if (lower.includes("orange")) return "orange";
-  }
-  return DEMO_ROUTE_KEYS[index % DEMO_ROUTE_KEYS.length];
-}
+const MAX_HISTORY_PER_TRACKER = 40;
 
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
@@ -84,48 +39,6 @@ function distanceMeters(a, b) {
   const p1 = L.latLng(Number(a[0]), Number(a[1]));
   const p2 = L.latLng(Number(b[0]), Number(b[1]));
   return p1.distanceTo(p2);
-}
-
-function buildDemoVisualPath(points, amplitude = DEMO_ZIGZAG_AMPLITUDE, substeps = DEMO_VISUAL_SUBSTEPS) {
-  if (!Array.isArray(points) || points.length < 2) return points?.map(p => [p.lat, p.lng]) || [];
-  if (substeps <= 1 || amplitude <= 0) {
-    return points
-      .map((p) => [Number(p?.lat), Number(p?.lng)])
-      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
-  }
-  const out = [];
-  let zig = 1;
-
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i];
-    const b = points[i+1];
-    const lat1 = Number(a.lat);
-    const lng1 = Number(a.lng);
-    const lat2 = Number(b.lat);
-    const lng2 = Number(b.lng);
-    if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) continue;
-
-    const dx = lng2 - lng1;
-    const dy = lat2 - lat1;
-    const len = Math.sqrt(dx*dx + dy*dy) || 1;
-
-    const perpLng = (-dy/len) * amplitude * zig;
-    const perpLat = ( dx/len) * amplitude * zig;
-
-    if (out.length === 0) out.push([lat1, lng1]);
-
-    for (let s=1; s<substeps; s++) {
-      const t = s/substeps;
-      const baseLat = lat1 + (lat2-lat1)*t;
-      const baseLng = lng1 + (lng2-lng1)*t;
-      const wave = Math.sin(Math.PI*t);
-      out.push([baseLat + perpLat*wave, baseLng + perpLng*wave]);
-    }
-
-    out.push([lat2, lng2]);
-    zig *= -1;
-  }
-  return out;
 }
 
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
@@ -700,14 +613,8 @@ export default function TrackerDashboard() {
   const [orgResolveError, setOrgResolveError] = useState("");
 
   const mapRef = useRef(null);
-  const demoTimerRef = useRef(null);
-  const demoInFlightRef = useRef(false);
-  const demoWaypointIndexRef = useRef({});
-  const demoRouteAssignmentRef = useRef({});
   const [loading, setLoading] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
-  // flag that indicates the live movement interval should run (preview only)
-  const [demoLive, setDemoLive] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
@@ -719,7 +626,6 @@ export default function TrackerDashboard() {
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
   const [personalRows, setPersonalRows] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [demoTrackerHistories, setDemoTrackerHistories] = useState({});
   const [geofenceEvents, setGeofenceEvents] = useState([]);
 
   const [geofenceRows, setGeofenceRows] = useState([]);
@@ -1005,9 +911,9 @@ export default function TrackerDashboard() {
   }, []);
 
   const fetchPositions = useCallback(
-    async (currentOrgId, options = { showSpinner: true, isDemo: false }) => {
+    async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
-      const { showSpinner, isDemo } = options;
+      const { showSpinner } = options;
 
       try {
         if (showSpinner) setLoading(true);
@@ -1102,82 +1008,8 @@ export default function TrackerDashboard() {
           })
           .filter((p) => p._valid);
 
-        if (!isDemo) {
-          setPositions(normalized);
-          setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
-        } else {
-          const latestByTracker = new Map();
-          for (const p of normalized) {
-            const uid = String(p.user_id || "unknown");
-            if (!uid) continue;
-            const prevLatest = latestByTracker.get(uid);
-            const prevTs = prevLatest?.recorded_at ? Date.parse(prevLatest.recorded_at) : 0;
-            const nextTs = p.recorded_at ? Date.parse(p.recorded_at) : 0;
-            if (!prevLatest || nextTs >= prevTs) latestByTracker.set(uid, p);
-          }
-
-          const trackerIdsFromData = Array.from(latestByTracker.keys());
-          const trackerIdsFromAssignments = (assignmentTrackers || [])
-            .map((x) => String(x?.user_id || ""))
-            .filter(Boolean);
-
-          setDemoTrackerHistories((prev) => {
-            const prevIds = Object.keys(prev || {});
-            const mergedIds = Array.from(new Set([...trackerIdsFromData, ...trackerIdsFromAssignments, ...prevIds]))
-              .sort((a, b) => String(a).localeCompare(String(b)));
-
-            const nowIso = new Date().toISOString();
-            const seeded = {};
-
-            for (let i = 0; i < mergedIds.length; i += 1) {
-              const trackerId = mergedIds[i];
-              const prevEntry = prev?.[trackerId] || { positions: [], latest: null, personal_id: null, nombre: null };
-              const latest = latestByTracker.get(trackerId) || prevEntry.latest || null;
-
-              const routeKey = getDemoRouteKey(trackerId, i);
-              demoRouteAssignmentRef.current[trackerId] = routeKey;
-
-              const route = DEMO_ROUTE_TEMPLATES[routeKey] || DEMO_ROUTE_TEMPLATES.blue;
-              if (!Array.isArray(route) || route.length < 2) continue;
-
-              demoWaypointIndexRef.current[trackerId] = 0;
-              const start = route[0];
-
-              const startPoint = {
-                id: `demo-route-seed-${trackerId}-${nowIso}`,
-                org_id: latest?.org_id || currentOrgId,
-                user_id: latest?.user_id || String(trackerId),
-                personal_id: latest?.personal_id || prevEntry.personal_id || null,
-                asignacion_id: latest?.asignacion_id || null,
-                lat: Number(start.lat),
-                lng: Number(start.lng),
-                recorded_at: nowIso,
-                created_at: nowIso,
-                accuracy: latest?.accuracy ?? null,
-                speed: latest?.speed ?? null,
-                heading: latest?.heading ?? null,
-                battery: latest?.battery ?? null,
-                is_mock: true,
-                source: "preview_demo_route",
-                tracker_key: trackerId,
-                _valid: true,
-              };
-
-              seeded[trackerId] = {
-                ...prevEntry,
-                positions: [startPoint],
-                latest: startPoint,
-                personal_id: startPoint.personal_id || prevEntry.personal_id || null,
-              };
-            }
-
-            const demoPositions = Object.values(seeded).flatMap((entry) => entry.positions || []);
-            setPositions(demoPositions);
-            setDiag((d) => ({ ...d, positionsFound: demoPositions.length, positionsSource: "preview_demo_route" }));
-
-            return seeded;
-          });
-        }
+        setPositions(normalized);
+        setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
       } finally {
         if (showSpinner) setLoading(false);
       }
@@ -1243,17 +1075,12 @@ export default function TrackerDashboard() {
       await resolveOrgId();
       await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId)]);
       await fetchGeofences(orgId, assignments);
-      await fetchPositions(orgId, { showSpinner: true, isDemo: true });
+      await fetchPositions(orgId, { showSpinner: true });
       await fetchGeofenceEvents(orgId);
 
       setSelectedTrackerId("all");
       setInfoMsg(tOr("trackerDashboard.messages.demoLoaded", "DEMO dataset loaded successfully."));
       setFitSignal((x) => x + 1);
-      // Keep current interval if already running; activation is controlled by demoLive.
-      demoInFlightRef.current = false;
-      demoWaypointIndexRef.current = {};
-      demoRouteAssignmentRef.current = {};
-      setDemoLive(true);
     } catch (e) {
       const msg = e?.message || String(e);
       setErrorMsg(`DEMO loader error: ${msg}`);
@@ -1261,125 +1088,6 @@ export default function TrackerDashboard() {
       setLoadingDemo(false);
     }
   }, [previewUiEnabled, orgId, resolveOrgId, fetchAssignments, fetchPersonalCatalog, fetchGeofences, fetchPositions, fetchGeofenceEvents, assignments, tOr]);
-
-  useEffect(() => {
-    const canRunDemoLoop = !!orgId && previewUiEnabled && isDemoOrg && demoLive;
-
-    if (!canRunDemoLoop) {
-      if (demoTimerRef.current) {
-        clearInterval(demoTimerRef.current);
-        demoTimerRef.current = null;
-      }
-      demoInFlightRef.current = false;
-      return;
-    }
-
-    if (demoTimerRef.current) {
-      return;
-    }
-
-    const tick = () => {
-      if (demoInFlightRef.current) return;
-      demoInFlightRef.current = true;
-
-      try {
-        const nowIso = new Date().toISOString();
-        const MAX_HISTORY_PER_TRACKER = 40;
-
-        setDemoTrackerHistories((prev) => {
-          const entries = Object.entries(prev || {});
-          if (!entries.length) return prev;
-
-          const sortedTrackerIds = entries.map(([id]) => id).sort((a, b) => String(a).localeCompare(String(b)));
-
-          for (let i = 0; i < sortedTrackerIds.length; i += 1) {
-            const trackerId = sortedTrackerIds[i];
-            if (!demoRouteAssignmentRef.current[trackerId]) {
-              demoRouteAssignmentRef.current[trackerId] = getDemoRouteKey(trackerId, i);
-            }
-          }
-
-          const nextHistories = { ...(prev || {}) };
-          const nextPositions = [];
-
-          for (const trackerId of sortedTrackerIds) {
-            const entry = nextHistories[trackerId] || { positions: [], latest: null, personal_id: null, nombre: null };
-            const routeKey = demoRouteAssignmentRef.current[trackerId] || DEMO_ROUTE_KEYS[0];
-            const route = DEMO_ROUTE_TEMPLATES[routeKey] || DEMO_ROUTE_TEMPLATES.blue;
-            if (!Array.isArray(route) || route.length < 2) continue;
-
-            const latest = entry.latest || (entry.positions?.length ? entry.positions[entry.positions.length - 1] : null);
-
-            const currentWaypointIndex = Number.isInteger(demoWaypointIndexRef.current[trackerId])
-              ? demoWaypointIndexRef.current[trackerId]
-              : 0;
-            const nextWaypointIndex = (currentWaypointIndex + 1) % route.length;
-            const target = route[nextWaypointIndex];
-            demoWaypointIndexRef.current[trackerId] = nextWaypointIndex;
-
-            const nextPoint = {
-              id: `demo-route-${trackerId}-${nowIso}-${nextWaypointIndex}`,
-              org_id: latest?.org_id || orgId,
-              user_id: latest?.user_id || String(trackerId),
-              personal_id: latest?.personal_id || entry.personal_id || null,
-              asignacion_id: latest?.asignacion_id || null,
-              lat: Number(target.lat),
-              lng: Number(target.lng),
-              recorded_at: nowIso,
-              created_at: nowIso,
-              accuracy: latest?.accuracy ?? null,
-              speed: latest?.speed ?? null,
-              heading: latest?.heading ?? null,
-              battery: latest?.battery ?? null,
-              is_mock: true,
-              source: "preview_demo_route",
-              tracker_key: trackerId,
-              _valid: true,
-            };
-
-            const nextTrackerPositions = [...(entry.positions || []), nextPoint].slice(-MAX_HISTORY_PER_TRACKER);
-            nextHistories[trackerId] = {
-              ...entry,
-              positions: nextTrackerPositions,
-              latest: nextPoint,
-              personal_id: nextPoint.personal_id || entry.personal_id || null,
-            };
-
-            nextPositions.push(...nextTrackerPositions);
-          }
-
-          setPositions(nextPositions);
-          setDiag((d) => ({ ...d, positionsFound: nextPositions.length, positionsSource: "preview_demo_route" }));
-
-          return nextHistories;
-        });
-      } catch (err) {
-        console.error("demo move unexpected error:", err);
-        setDemoLive(false);
-
-        if (demoTimerRef.current) {
-          clearInterval(demoTimerRef.current);
-          demoTimerRef.current = null;
-        }
-      } finally {
-        demoInFlightRef.current = false;
-      }
-    };
-
-    // primer tick inmediato
-    tick();
-
-    // El loop de demo se crea solo una vez mientras demoLive siga activo.
-    demoTimerRef.current = setInterval(tick, DEMO_MOVE_INTERVAL_MS);
-
-    return () => {
-      if (demoTimerRef.current) {
-        clearInterval(demoTimerRef.current);
-        demoTimerRef.current = null;
-      }
-      demoInFlightRef.current = false;
-    };
-  }, [orgId, previewUiEnabled, isDemoOrg, demoLive]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
@@ -1487,44 +1195,31 @@ export default function TrackerDashboard() {
   }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
-    // In demo mode we maintain a rolling history per tracker and explicitly expose latest
-    // so the marker does not accidentally become the first point.
-    if (isDemoOrg && demoTrackerHistories && Object.keys(demoTrackerHistories).length) {
-      const map = new Map();
-      const entries = Object.entries(demoTrackerHistories);
-      const filtered = selectedTrackerId === "all" ? entries : entries.filter(([id]) => id === selectedTrackerId);
-
-      for (const [id, entry] of filtered) {
-        map.set(id, {
-          positions: Array.isArray(entry.positions) ? entry.positions : [],
-          latest: entry.latest || null,
-          personal_id: entry.personal_id || null,
-          nombre: entry.nombre || null,
-        });
-      }
-
-      return map;
-    }
-
-    const map = new Map();
+    const grouped = new Map();
     for (const p of visiblePositions || []) {
       const key = getTrackerKey(p);
-      if (!map.has(key)) map.set(key, { positions: [], latest: null });
-      map.get(key).positions.push(p);
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(p);
     }
 
-    // Ensure each tracker's points are ordered chronologically (oldest -> newest)
-    for (const entry of map.values()) {
-      entry.positions.sort((a, b) => {
+    const sorted = new Map();
+    for (const [trackerId, rows] of grouped.entries()) {
+      const trackerPositions = [...rows].sort((a, b) => {
         const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
         const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
         return ta - tb;
       });
+
+      const entry = {
+        positions: trackerPositions.slice(-MAX_HISTORY_PER_TRACKER),
+      };
       entry.latest = entry.positions[entry.positions.length - 1] || null;
+
+      sorted.set(trackerId, entry);
     }
 
-    return map;
-  }, [visiblePositions, isDemoOrg, demoTrackerHistories, selectedTrackerId]);
+    return sorted;
+  }, [visiblePositions]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
@@ -1936,7 +1631,9 @@ export default function TrackerDashboard() {
                     const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
                     if (!latest) return null;
 
-                    const latlngs = buildDemoVisualPath(positions);
+                    const latlngs = positions
+                      .map((p) => [Number(p?.lat), Number(p?.lng)])
+                      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
 
                     const personalId = latest.personal_id || entry.personal_id || null;
                     const person = personalId ? personalById.get(String(personalId)) : null;
