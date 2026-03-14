@@ -1,5 +1,8 @@
 # Base de Datos – Overview
 
+> For the complete database structure, see:
+> **[DB_SCHEMA_MAP.md](./DB_SCHEMA_MAP.md)**
+
 **Base de datos:** PostgreSQL (Supabase)
 
 ## Tablas principales

@@ -4,6 +4,10 @@ Este documento describe cómo está construido el sistema.
 
 ## Arquitectura General
 
+El esquema completo de base de datos está documentado en:
+
+**[DB_SCHEMA_MAP.md](./DB_SCHEMA_MAP.md)**
+
 ```
 Cliente
   ↓

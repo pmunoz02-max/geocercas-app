@@ -52,6 +52,7 @@ El objetivo es:
 |-----------|----------|
 | REGLAS_DEL_SISTEMA | reglas obligatorias de desarrollo |
 | MAPA_TECNICO | arquitectura completa |
+| DB_SCHEMA_MAP | mapa tecnico completo de tablas, vistas, RPC y relaciones de BD |
 | DB_OVERVIEW | tablas y relaciones |
 | FLUJOS_CLAVE | flujos funcionales del sistema |
 | KNOWN_ISSUES | problemas conocidos |

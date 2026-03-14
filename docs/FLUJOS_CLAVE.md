@@ -1,5 +1,8 @@
 # Flujos Clave del Sistema
 
+> Database tables referenced in these flows are documented in
+> **[DB_SCHEMA_MAP.md](./DB_SCHEMA_MAP.md)**
+
 ## Registro de usuario
 
 ```
