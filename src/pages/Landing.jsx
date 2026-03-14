@@ -74,6 +74,51 @@ export default function Landing() {
           </div>
         </section>
 
+        <section className="rounded-3xl border border-slate-800/80 bg-slate-900/40 p-6 sm:p-8">
+          <div className="max-w-3xl space-y-3">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
+              Casos de uso
+            </h2>
+            <p className="text-sm leading-relaxed text-slate-300 sm:text-base">
+              Cómo utilizan App Geocercas diferentes equipos operativos.
+            </p>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-sky-400" />
+              <h3 className="text-base font-semibold text-slate-100">Seguridad privada</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                Controla rondas de guardias, entradas a zonas restringidas y supervisión de turnos.
+              </p>
+            </article>
+
+            <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-indigo-400" />
+              <h3 className="text-base font-semibold text-slate-100">Equipos comerciales</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                Verifica visitas a clientes, cobertura territorial y actividad de vendedores.
+              </p>
+            </article>
+
+            <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              <h3 className="text-base font-semibold text-slate-100">Operaciones técnicas</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                Supervisa técnicos en campo y valida entradas y salidas en zonas de trabajo.
+              </p>
+            </article>
+
+            <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+              <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+              <h3 className="text-base font-semibold text-slate-100">Logística urbana</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">
+                Monitorea movimientos dentro de zonas operativas y detecta eventos automáticamente.
+              </p>
+            </article>
+          </div>
+        </section>
+
         <section className="rounded-3xl border border-slate-800 bg-slate-900/55 p-6 text-center shadow-2xl sm:p-10">
           <div className="mx-auto max-w-3xl space-y-4">
             <p className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
