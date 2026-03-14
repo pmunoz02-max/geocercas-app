@@ -1,5 +1,5 @@
 ﻿// src/pages/Inicio.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
@@ -40,15 +40,6 @@ export default function Inicio() {
   const { loading, ready, user, role, currentOrgId, authenticated } = useAuth();
 
   const [signingOut, setSigningOut] = useState(false);
-
-  useEffect(() => {
-    console.log("i18n language", i18n.language);
-    console.log("logout translation", t("common.actions.logout"));
-    console.log(
-      "common bundle",
-      i18n.getResourceBundle(i18n.language.slice(0, 2), "translation")?.common
-    );
-  }, [i18n, t]);
 
   async function onLogout() {
     try {
