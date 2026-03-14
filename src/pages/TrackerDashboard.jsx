@@ -29,9 +29,38 @@ const TIME_WINDOWS = [
 
 const DEMO_VISUAL_SUBSTEPS = 1;
 const DEMO_ZIGZAG_AMPLITUDE = 0;
-const DEMO_MOVE_INTERVAL_MS = 3500;
-const TRACKER_ANIMATION_MS = 2800;
+const DEMO_MOVE_INTERVAL_MS = 4500;
+const TRACKER_ANIMATION_MS = 3800;
 const LARGE_JUMP_METERS = 250;
+
+const DEMO_ROUTE_TEMPLATES = {
+  blue: [
+    { lat: -0.22998, lng: -78.52534 },
+    { lat: -0.22973, lng: -78.52518 },
+    { lat: -0.22956, lng: -78.52492 },
+    { lat: -0.22968, lng: -78.52463 },
+    { lat: -0.22994, lng: -78.52457 },
+    { lat: -0.23012, lng: -78.52486 },
+  ],
+  green: [
+    { lat: -0.23032, lng: -78.52462 },
+    { lat: -0.23049, lng: -78.52433 },
+    { lat: -0.23073, lng: -78.52420 },
+    { lat: -0.23090, lng: -78.52444 },
+    { lat: -0.23086, lng: -78.52478 },
+    { lat: -0.23057, lng: -78.52494 },
+  ],
+  orange: [
+    { lat: -0.22942, lng: -78.52562 },
+    { lat: -0.22917, lng: -78.52578 },
+    { lat: -0.22891, lng: -78.52566 },
+    { lat: -0.22880, lng: -78.52534 },
+    { lat: -0.22898, lng: -78.52506 },
+    { lat: -0.22928, lng: -78.52510 },
+  ],
+};
+
+const DEMO_ROUTE_KEYS = ["blue", "green", "orange"];
 
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3);
@@ -660,6 +689,8 @@ export default function TrackerDashboard() {
   const mapRef = useRef(null);
   const demoTimerRef = useRef(null);
   const demoInFlightRef = useRef(false);
+  const demoRouteStateRef = useRef({});
+  const demoRouteAssignmentRef = useRef({});
   const [loading, setLoading] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
   // flag that indicates the live movement interval should run (preview only)
@@ -1218,6 +1249,8 @@ export default function TrackerDashboard() {
         demoTimerRef.current = null;
       }
       demoInFlightRef.current = false;
+      demoRouteStateRef.current = {};
+      demoRouteAssignmentRef.current = {};
       setDemoLive(true);
     } catch (e) {
       const msg = e?.message || String(e);
@@ -1239,26 +1272,95 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const tick = async () => {
+    const tick = () => {
       if (demoInFlightRef.current) return;
       demoInFlightRef.current = true;
 
       try {
-        const { error } = await supabase.rpc("demo_move_trackers");
+        const nowIso = new Date().toISOString();
+        const MAX_HISTORY_PER_TRACKER = 40;
 
-        if (error) {
-          console.error("demo_move_trackers failed:", error);
-          setDemoLive(false);
+        setDemoTrackerHistories((prev) => {
+          const entries = Object.entries(prev || {});
+          if (!entries.length) return prev;
 
-          if (demoTimerRef.current) {
-            clearInterval(demoTimerRef.current);
-            demoTimerRef.current = null;
+          const sortedTrackerIds = entries.map(([id]) => id).sort((a, b) => String(a).localeCompare(String(b)));
+
+          for (let i = 0; i < sortedTrackerIds.length; i += 1) {
+            const trackerId = sortedTrackerIds[i];
+            if (!demoRouteAssignmentRef.current[trackerId]) {
+              demoRouteAssignmentRef.current[trackerId] = DEMO_ROUTE_KEYS[i % DEMO_ROUTE_KEYS.length];
+            }
           }
-          return;
-        }
 
-        await fetchPositions(orgId, { showSpinner: false, isDemo: true });
-        await fetchGeofenceEvents(orgId);
+          const nextHistories = { ...(prev || {}) };
+          const nextPositions = [];
+
+          for (const trackerId of sortedTrackerIds) {
+            const entry = nextHistories[trackerId] || { positions: [], latest: null, personal_id: null, nombre: null };
+            const routeKey = demoRouteAssignmentRef.current[trackerId] || DEMO_ROUTE_KEYS[0];
+            const route = DEMO_ROUTE_TEMPLATES[routeKey] || DEMO_ROUTE_TEMPLATES.blue;
+            if (!Array.isArray(route) || route.length < 2) continue;
+
+            const latest = entry.latest || (entry.positions?.length ? entry.positions[entry.positions.length - 1] : null);
+
+            let state = demoRouteStateRef.current[trackerId];
+            if (!state || !Number.isInteger(state.waypointIndex)) {
+              let nearestIndex = 0;
+              if (latest && Number.isFinite(latest.lat) && Number.isFinite(latest.lng)) {
+                let minDistance = Infinity;
+                for (let i = 0; i < route.length; i += 1) {
+                  const wp = route[i];
+                  const d = distanceMeters([latest.lat, latest.lng], [wp.lat, wp.lng]);
+                  if (d < minDistance) {
+                    minDistance = d;
+                    nearestIndex = i;
+                  }
+                }
+              }
+              state = { waypointIndex: nearestIndex };
+            }
+
+            const nextWaypointIndex = (state.waypointIndex + 1) % route.length;
+            const target = route[nextWaypointIndex];
+            demoRouteStateRef.current[trackerId] = { waypointIndex: nextWaypointIndex };
+
+            const nextPoint = {
+              id: `demo-route-${trackerId}-${nowIso}-${nextWaypointIndex}`,
+              org_id: latest?.org_id || orgId,
+              user_id: latest?.user_id || String(trackerId),
+              personal_id: latest?.personal_id || entry.personal_id || null,
+              asignacion_id: latest?.asignacion_id || null,
+              lat: Number(target.lat),
+              lng: Number(target.lng),
+              recorded_at: nowIso,
+              created_at: nowIso,
+              accuracy: latest?.accuracy ?? null,
+              speed: latest?.speed ?? null,
+              heading: latest?.heading ?? null,
+              battery: latest?.battery ?? null,
+              is_mock: true,
+              source: "preview_demo_route",
+              tracker_key: trackerId,
+              _valid: true,
+            };
+
+            const nextTrackerPositions = [...(entry.positions || []), nextPoint].slice(-MAX_HISTORY_PER_TRACKER);
+            nextHistories[trackerId] = {
+              ...entry,
+              positions: nextTrackerPositions,
+              latest: nextPoint,
+              personal_id: nextPoint.personal_id || entry.personal_id || null,
+            };
+
+            nextPositions.push(...nextTrackerPositions);
+          }
+
+          setPositions(nextPositions);
+          setDiag((d) => ({ ...d, positionsFound: nextPositions.length, positionsSource: "preview_demo_route" }));
+
+          return nextHistories;
+        });
       } catch (err) {
         console.error("demo move unexpected error:", err);
         setDemoLive(false);
@@ -1285,7 +1387,7 @@ export default function TrackerDashboard() {
       }
       demoInFlightRef.current = false;
     };
-  }, [orgId, previewUiEnabled, isDemoOrg, demoLive, fetchPositions, fetchGeofenceEvents]);
+  }, [orgId, previewUiEnabled, isDemoOrg, demoLive]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
