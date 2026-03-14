@@ -125,9 +125,9 @@ export default function AsignacionesPage() {
   const tt = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { ready, authenticated, currentOrg, currentOrgId } = useAuth();
+  const { ready, session, user, currentOrg, currentOrgId } = useAuth();
   const orgId = currentOrgId || currentOrg?.id || null;
-  const hasValidSession = Boolean(authenticated);
+  const hasValidSession = Boolean(session?.user?.id || user?.id);
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
