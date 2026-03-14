@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
 import { ArrowRight, PlayCircle, Radar, Route, ShieldCheck } from "lucide-react";
 
 const LOOP_SECONDS = 10;
@@ -215,12 +214,7 @@ export default function HeroGeocercasDemo() {
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.15),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.14),transparent_30%)]" />
 
       <div className="grid items-center gap-10 lg:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
-          className="space-y-6"
-        >
+        <div className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/80 px-4 py-2 text-xs font-semibold tracking-wide text-sky-700">
             <Radar className="h-3.5 w-3.5" />
             Monitoreo GPS con geocercas en tiempo real
@@ -260,14 +254,9 @@ export default function HeroGeocercasDemo() {
               Eventos: Entrada / salida
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.7, ease: "easeOut", delay: 0.08 }}
-          className="w-full"
-        >
+        <div className="w-full">
           <Card className="overflow-hidden rounded-[1.6rem] border-white/70 shadow-[0_24px_80px_-32px_rgba(2,8,23,0.55)]">
             <CardContent className="p-0">
               <div className="relative aspect-[16/11] w-full overflow-hidden">
@@ -293,7 +282,7 @@ export default function HeroGeocercasDemo() {
                   viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`}
                   preserveAspectRatio="none"
                 >
-                  <motion.rect
+                  <rect
                     x={GEOFENCE.x}
                     y={GEOFENCE.y}
                     width={GEOFENCE.width}
@@ -302,13 +291,13 @@ export default function HeroGeocercasDemo() {
                     fill="rgba(37, 99, 235, 0.12)"
                     stroke="rgba(37, 99, 235, 0.9)"
                     strokeWidth="0.7"
-                    animate={{
-                      opacity: geofenceGlow ? 1 : 0.72,
+                    opacity={geofenceGlow ? 1 : 0.72}
+                    style={{
                       filter: geofenceGlow
                         ? "drop-shadow(0 0 8px rgba(37,99,235,0.8))"
                         : "drop-shadow(0 0 0px rgba(37,99,235,0))",
+                      transition: "opacity 280ms ease-out, filter 280ms ease-out",
                     }}
-                    transition={{ duration: 0.28, ease: "easeOut" }}
                   />
 
                   {trackerStates.map((tracker, idx) => {
@@ -335,20 +324,15 @@ export default function HeroGeocercasDemo() {
                           opacity="0.95"
                         />
 
-                        <motion.circle
+                        <circle
                           cx={tracker.x}
                           cy={tracker.y}
                           r="2.6"
                           fill={tracker.color}
-                          opacity="0.22"
-                          animate={{ scale: [1, 2.3], opacity: [0.28, 0] }}
-                          transition={{
-                            duration: 1.8,
-                            repeat: Infinity,
-                            ease: "easeOut",
-                            delay: idx * 0.18,
+                          style={{
+                            transformOrigin: `${tracker.x}px ${tracker.y}px`,
+                            animation: `trackerPulse 1.8s ease-out ${idx * 0.18}s infinite`,
                           }}
-                          style={{ transformOrigin: `${tracker.x}px ${tracker.y}px` }}
                         />
 
                         <circle cx={tracker.x} cy={tracker.y} r="1.15" fill={tracker.color} stroke="white" strokeWidth="0.45" />
@@ -366,8 +350,21 @@ export default function HeroGeocercasDemo() {
               </div>
             </CardContent>
           </Card>
-        </motion.div>
+        </div>
       </div>
+
+      <style>{`
+        @keyframes trackerPulse {
+          0% {
+            transform: scale(1);
+            opacity: 0.28;
+          }
+          100% {
+            transform: scale(2.3);
+            opacity: 0;
+          }
+        }
+      `}</style>
     </section>
   );
 }
