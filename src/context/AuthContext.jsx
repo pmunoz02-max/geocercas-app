@@ -211,61 +211,6 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * selectOrg = selección explícita del usuario desde selector de org.
-   * Regla universal: solo persistimos como "org global" si NO es tracker.
-   */
-  const selectOrg = useCallback(
-    async (orgIdToSelect) => {
-      if (!orgIdToSelect) return;
-
-      const found = organizations.find((o) => o?.id === orgIdToSelect);
-
-      // Siempre actualiza el estado
-      setCurrentOrg(found || { id: orgIdToSelect });
-
-      setOrganizations((prev) => {
-        if (prev.some((o) => o?.id === orgIdToSelect)) return prev;
-        return [{ id: orgIdToSelect }, ...prev];
-      });
-
-      // Persistencia SOLO si no es tracker
-      if (isNonTrackerRole(found?.role)) {
-        try {
-          localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
-        } catch {}
-      }
-
-      setCurrentRole(normalizeRole(found?.role) || currentRole || null);
-
-      setSwitchingOrg(true);
-
-      try {
-        let persisted = false;
-
-        try {
-          const { error } = await supabase.rpc("set_current_org", { p_org: orgIdToSelect });
-          if (!error) persisted = true;
-        } catch {}
-
-        if (!persisted) {
-          try {
-            const { error } = await supabase.rpc("rpc_set_current_org", { p_org_id: orgIdToSelect });
-            if (!error) persisted = true;
-          } catch {}
-        }
-
-        const s1 = await fetchSession();
-        if (s1.ok && s1.data?.authenticated === true) {
-          applySessionData(s1.data);
-        }
-      } finally {
-        setSwitchingOrg(false);
-      }
-    },
-    [applySessionData, currentRole, organizations]
-  );
-
-  /**
    * Aplica session data sin contaminar org global por tracker.
    */
   const applySessionData = useCallback(
@@ -359,6 +304,61 @@ export function AuthProvider({ children }) {
       setCurrentRole(roleNorm);
     }
   }, [path]);
+
+  /**
+   * selectOrg = selección explícita del usuario desde selector de org.
+   * Regla universal: solo persistimos como "org global" si NO es tracker.
+   */
+  const selectOrg = useCallback(
+    async (orgIdToSelect) => {
+      if (!orgIdToSelect) return;
+
+      const found = organizations.find((o) => o?.id === orgIdToSelect);
+
+      // Siempre actualiza el estado
+      setCurrentOrg(found || { id: orgIdToSelect });
+
+      setOrganizations((prev) => {
+        if (prev.some((o) => o?.id === orgIdToSelect)) return prev;
+        return [{ id: orgIdToSelect }, ...prev];
+      });
+
+      // Persistencia SOLO si no es tracker
+      if (isNonTrackerRole(found?.role)) {
+        try {
+          localStorage.setItem(LS_ORG_KEY, orgIdToSelect);
+        } catch {}
+      }
+
+      setCurrentRole(normalizeRole(found?.role) || currentRole || null);
+
+      setSwitchingOrg(true);
+
+      try {
+        let persisted = false;
+
+        try {
+          const { error } = await supabase.rpc("set_current_org", { p_org: orgIdToSelect });
+          if (!error) persisted = true;
+        } catch {}
+
+        if (!persisted) {
+          try {
+            const { error } = await supabase.rpc("rpc_set_current_org", { p_org_id: orgIdToSelect });
+            if (!error) persisted = true;
+          } catch {}
+        }
+
+        const s1 = await fetchSession();
+        if (s1.ok && s1.data?.authenticated === true) {
+          applySessionData(s1.data);
+        }
+      } finally {
+        setSwitchingOrg(false);
+      }
+    },
+    [applySessionData, currentRole, organizations]
+  );
 
   const bootstrap = useCallback(async () => {
     if (isPublicAuthPath(path)) {
