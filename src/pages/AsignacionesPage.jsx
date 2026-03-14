@@ -125,8 +125,9 @@ export default function AsignacionesPage() {
   const tt = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { ready, currentOrg, currentOrgId } = useAuth();
+  const { ready, authenticated, currentOrg, currentOrgId } = useAuth();
   const orgId = currentOrgId || currentOrg?.id || null;
+  const hasValidSession = Boolean(authenticated);
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -169,7 +170,7 @@ export default function AsignacionesPage() {
   }
 
   async function loadCatalogsCanonical() {
-    if (!orgId) {
+    if (!hasValidSession || !orgId) {
       setPersonalOptions([]);
       setGeocercaOptions([]);
       return;
@@ -194,6 +195,15 @@ export default function AsignacionesPage() {
   }
 
   async function loadAll() {
+    if (!hasValidSession || !orgId) {
+      setAsignaciones([]);
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+      setActivityOptions([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -244,6 +254,17 @@ export default function AsignacionesPage() {
   useEffect(() => {
     if (!ready) return;
 
+    if (!hasValidSession) {
+      setAsignaciones([]);
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
+      setActivityOptions([]);
+      setError(null);
+      setSuccessMessage(null);
+      setLoading(false);
+      return;
+    }
+
     if (!orgId) {
       setAsignaciones([]);
       setPersonalOptions([]);
@@ -260,7 +281,7 @@ export default function AsignacionesPage() {
 
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, orgId]);
+  }, [ready, hasValidSession, orgId]);
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
@@ -286,6 +307,11 @@ export default function AsignacionesPage() {
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
+
+    if (!hasValidSession) {
+      setError("Debes iniciar sesión para crear asignaciones");
+      return;
+    }
 
     if (!orgId) {
       setError(tt("asignaciones.messages.noOrg", "No active organization."));
@@ -458,7 +484,13 @@ export default function AsignacionesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
-              {!orgId && (
+              {!hasValidSession && (
+                <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+                  Debes iniciar sesión para crear asignaciones
+                </div>
+              )}
+
+              {hasValidSession && !orgId && (
                 <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   {tt(
                     "asignaciones.messages.noOrg",
@@ -475,6 +507,7 @@ export default function AsignacionesPage() {
                   className={selectBase}
                   value={selectedPersonalId}
                   onChange={(e) => setSelectedPersonalId(e.target.value)}
+                  disabled={!hasValidSession}
                   required
                 >
                   <option value="">
@@ -499,6 +532,7 @@ export default function AsignacionesPage() {
                   className={selectBase}
                   value={selectedGeocercaId}
                   onChange={(e) => setSelectedGeocercaId(e.target.value)}
+                  disabled={!hasValidSession}
                   required
                 >
                   <option value="">
@@ -524,7 +558,7 @@ export default function AsignacionesPage() {
                   value={selectedActivityId}
                   onChange={(e) => setSelectedActivityId(e.target.value)}
                   required
-                  disabled={activityOptions.length === 0}
+                  disabled={!hasValidSession || activityOptions.length === 0}
                 >
                   <option value="">
                     {tt(
@@ -550,6 +584,7 @@ export default function AsignacionesPage() {
                     className={inputBase}
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
+                    disabled={!hasValidSession}
                     required
                   />
                 </div>
@@ -563,6 +598,7 @@ export default function AsignacionesPage() {
                     className={inputBase}
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
+                    disabled={!hasValidSession}
                     required
                   />
                 </div>
@@ -577,6 +613,7 @@ export default function AsignacionesPage() {
                     className={selectBase}
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
+                    disabled={!hasValidSession}
                   >
                     <option value="activa">
                       {tt("asignaciones.form.statusActive", "Active")}
@@ -597,6 +634,7 @@ export default function AsignacionesPage() {
                     min={5}
                     value={frecuenciaEnvioMin}
                     onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
+                    disabled={!hasValidSession}
                   />
                   <p className="mt-1 text-[11px] text-gray-500">
                     {tt(
@@ -622,6 +660,7 @@ export default function AsignacionesPage() {
                   type="submit"
                   className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
                   disabled={
+                    !hasValidSession ||
                     !orgId ||
                     loading ||
                     activityOptions.length === 0 ||
