@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import InteractiveMapDemo from "@/components/marketing/InteractiveMapDemo.jsx";
 
 const LOOP_SECONDS = 10;
 const VIEWBOX = { width: 100, height: 62 };
@@ -261,96 +262,7 @@ export default function HeroGeocercasDemo() {
         <div className="w-full">
           <Card className="overflow-hidden rounded-2xl border-slate-300/70 bg-slate-900/95 shadow-[0_20px_50px_-28px_rgba(2,8,23,0.55)]">
             <CardContent className="p-0">
-              <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-900">
-                <img
-                  src="/marketing/mapa-geocercas-hero.png"
-                  alt="Mapa de geocercas en preview"
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-b from-slate-900/8 via-transparent to-slate-900/26" />
-                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.08)_1px,transparent_1px)] bg-[size:22px_22px] opacity-35" />
-
-                <div className="absolute left-3 top-3 rounded-lg border border-slate-200/90 bg-white/92 px-3 py-2 text-[11px] shadow-md backdrop-blur">
-                  <p className="font-semibold text-slate-900">Dashboard</p>
-                  <p className="text-slate-600">Trackers activos: 4</p>
-                  <p className="text-slate-600">Geocercas: 1</p>
-                </div>
-
-                <div className="absolute right-3 top-3 rounded-full border border-slate-200/90 bg-white/92 px-3 py-1 text-[11px] font-semibold text-slate-700 shadow-sm">
-                  Loop 10s
-                </div>
-
-                <svg
-                  className="absolute inset-0 h-full w-full"
-                  viewBox={`0 0 ${VIEWBOX.width} ${VIEWBOX.height}`}
-                  preserveAspectRatio="none"
-                >
-                  <rect
-                    x={GEOFENCE.x}
-                    y={GEOFENCE.y}
-                    width={GEOFENCE.width}
-                    height={GEOFENCE.height}
-                    rx="2"
-                    fill="rgba(37, 99, 235, 0.12)"
-                    stroke="rgba(37, 99, 235, 0.9)"
-                    strokeWidth="0.7"
-                    opacity={geofenceGlow ? 1 : 0.72}
-                    style={{
-                      filter: geofenceGlow
-                        ? "drop-shadow(0 0 8px rgba(37,99,235,0.8))"
-                        : "drop-shadow(0 0 0px rgba(37,99,235,0))",
-                      transition: "opacity 280ms ease-out, filter 280ms ease-out",
-                    }}
-                  />
-
-                  {trackerStates.map((tracker, idx) => {
-                    const trailOffset = tracker.metrics.totalLength * (1 - tracker.localT);
-
-                    return (
-                      <g key={tracker.id}>
-                        <path
-                          d={tracker.metrics.d}
-                          fill="none"
-                          stroke={tracker.color}
-                          strokeOpacity="0.15"
-                          strokeWidth="0.7"
-                        />
-
-                        <path
-                          d={tracker.metrics.d}
-                          fill="none"
-                          stroke={tracker.color}
-                          strokeWidth="1"
-                          strokeLinecap="round"
-                          strokeDasharray={tracker.metrics.totalLength}
-                          strokeDashoffset={trailOffset}
-                          opacity="0.95"
-                        />
-
-                        <circle
-                          cx={tracker.x}
-                          cy={tracker.y}
-                          r="2.6"
-                          fill={tracker.color}
-                          style={{
-                            transformOrigin: `${tracker.x}px ${tracker.y}px`,
-                            animation: `trackerPulse 1.8s ease-out ${idx * 0.18}s infinite`,
-                          }}
-                        />
-
-                        <circle cx={tracker.x} cy={tracker.y} r="1.15" fill={tracker.color} stroke="white" strokeWidth="0.45" />
-
-                        <g transform={`translate(${tracker.x + 1.4} ${tracker.y - 3.8})`}>
-                          <rect rx="2.4" width="8" height="4.5" fill="rgba(15, 23, 42, 0.78)" />
-                          <text x="4" y="3" textAnchor="middle" fontSize="2.35" fontWeight="700" fill="white">
-                            {tracker.id}
-                          </text>
-                        </g>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
+              <InteractiveMapDemo />
             </CardContent>
           </Card>
         </div>

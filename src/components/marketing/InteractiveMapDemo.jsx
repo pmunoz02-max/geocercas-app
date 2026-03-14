@@ -25,6 +25,7 @@ const TRACKERS = [
     id: "T1",
     color: "#2563eb",
     phase: 0.0,
+    eventAt: 0.33,
     // North -> South, entering geofence from top.
     path: [
       [-0.02, -78.47],
@@ -58,6 +59,7 @@ const TRACKERS = [
     id: "T4",
     color: "#dc2626",
     phase: 0.6,
+    eventAt: 0.82,
     // Starts inside and exits geofence west/southwest.
     path: [
       [-0.18, -78.46],
@@ -70,6 +72,11 @@ const TRACKERS = [
 
 function distance(a, b) {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
+}
+
+function wrapDistance(a, b) {
+  const d = Math.abs(a - b);
+  return Math.min(d, 1 - d);
 }
 
 function buildPathMetrics(path) {
@@ -133,6 +140,7 @@ function trailUntil(metrics, t) {
 export default function InteractiveMapDemo() {
   const mapElRef = useRef(null);
   const mapRef = useRef(null);
+  const geofenceRef = useRef(null);
   const rafRef = useRef(0);
   const startRef = useRef(0);
 
@@ -143,21 +151,30 @@ export default function InteractiveMapDemo() {
       center: MAP_CENTER,
       zoom: MAP_ZOOM,
       zoomControl: true,
-      scrollWheelZoom: true,
+      scrollWheelZoom: false,
     });
     mapRef.current = map;
+
+    // Ensure Leaflet computes size correctly when mounted inside responsive hero layouts.
+    map.invalidateSize();
+    window.setTimeout(() => {
+      try {
+        map.invalidateSize();
+      } catch {}
+    }, 0);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(map);
 
-    L.rectangle(GEOFENCE_BOUNDS, {
+    const geofence = L.rectangle(GEOFENCE_BOUNDS, {
       color: "#2563eb",
       weight: 2,
       fillColor: "#2563eb",
       fillOpacity: 0.08,
     }).addTo(map);
+    geofenceRef.current = geofence;
 
     const trackerLayers = TRACKERS.map((tracker) => {
       const metrics = buildPathMetrics(tracker.path);
@@ -191,14 +208,35 @@ export default function InteractiveMapDemo() {
       if (!startRef.current) startRef.current = now;
       const loopProgress = ((now - startRef.current) % LOOP_MS) / LOOP_MS;
 
+      let t1LocalT = null;
+      let t4LocalT = null;
+
       trackerLayers.forEach(({ tracker, metrics, marker, trail }) => {
         const localT = (loopProgress + tracker.phase) % 1;
         const point = pointAt(metrics, localT);
         const trailPoints = trailUntil(metrics, localT);
 
+        if (tracker.id === "T1") t1LocalT = localT;
+        if (tracker.id === "T4") t4LocalT = localT;
+
         marker.setLatLng(point);
         trail.setLatLngs(trailPoints);
       });
+
+      const t1Glow = Number.isFinite(t1LocalT)
+        ? wrapDistance(t1LocalT, TRACKERS.find((t) => t.id === "T1")?.eventAt || 0) < 0.05
+        : false;
+      const t4Glow = Number.isFinite(t4LocalT)
+        ? wrapDistance(t4LocalT, TRACKERS.find((t) => t.id === "T4")?.eventAt || 0) < 0.05
+        : false;
+
+      if (geofenceRef.current) {
+        geofenceRef.current.setStyle({
+          weight: t1Glow || t4Glow ? 3.2 : 2,
+          fillOpacity: t1Glow || t4Glow ? 0.18 : 0.08,
+          opacity: t1Glow || t4Glow ? 0.95 : 0.85,
+        });
+      }
 
       rafRef.current = window.requestAnimationFrame(frame);
     };
@@ -209,6 +247,7 @@ export default function InteractiveMapDemo() {
       if (rafRef.current) window.cancelAnimationFrame(rafRef.current);
       map.remove();
       mapRef.current = null;
+      geofenceRef.current = null;
       startRef.current = 0;
     };
   }, []);
@@ -218,7 +257,7 @@ export default function InteractiveMapDemo() {
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
         Demo en vivo · Quito · Loop 10s
       </div>
-      <div ref={mapElRef} className="h-[420px] w-full" />
+      <div ref={mapElRef} className="h-[320px] w-full md:h-[360px]" />
     </div>
   );
 }
