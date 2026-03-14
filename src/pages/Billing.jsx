@@ -58,6 +58,18 @@ export default function Billing() {
 
   const { loading, ready, authenticated, user, currentOrgId } = useAuth();
 
+  const isPreviewBillingNoticeVisible = useMemo(() => {
+    if (import.meta.env.DEV) return true;
+
+    const appEnv = String(import.meta.env.VITE_APP_ENV || "").toLowerCase();
+    if (appEnv === "preview" || appEnv === "test") return true;
+
+    const hostname =
+      typeof window !== "undefined" ? String(window.location?.hostname || "") : "";
+
+    return hostname.startsWith("preview.");
+  }, []);
+
   const [billing, setBilling] = useState(null);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState("");
@@ -179,11 +191,13 @@ export default function Billing() {
             <h1 className="text-2xl font-semibold text-slate-900">
               {tr("billing.title", "Billing")}
             </h1>
-            <p className="mt-2 text-slate-600">
-              {tr("billing.previewNotice.prefix", "Monetization in")} <b>PREVIEW</b>{" "}
-              {tr("billing.previewNotice.middle", "(Stripe TEST).")}{" "}
-              {tr("billing.previewNotice.suffix", "It does not affect production.")}
-            </p>
+            {isPreviewBillingNoticeVisible ? (
+              <p className="mt-2 text-slate-600">
+                {tr("billing.previewNotice.prefix", "Monetization in")} <b>PREVIEW</b>{" "}
+                {tr("billing.previewNotice.middle", "(Stripe TEST).")}{" "}
+                {tr("billing.previewNotice.suffix", "It does not affect production.")}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-3">
