@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowRight, PlayCircle, Radar, Route, ShieldCheck } from "lucide-react";
 
 const LOOP_SECONDS = 10;
 const VIEWBOX = { width: 100, height: 62 };
@@ -216,7 +215,7 @@ export default function HeroGeocercasDemo() {
       <div className="grid items-center gap-10 lg:grid-cols-2">
         <div className="space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/80 px-4 py-2 text-xs font-semibold tracking-wide text-sky-700">
-            <Radar className="h-3.5 w-3.5" />
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-500 shadow-[0_0_0_4px_rgba(14,165,233,0.15)]" />
             Monitoreo GPS con geocercas en tiempo real
           </div>
 
@@ -232,25 +231,25 @@ export default function HeroGeocercasDemo() {
           <div className="flex flex-wrap items-center gap-3">
             <Button>
               Ver demo en preview
-              <PlayCircle className="h-4 w-4" />
+              <span aria-hidden="true">→</span>
             </Button>
             <Button variant="outline">
               Solicitar presentación
-              <ArrowRight className="h-4 w-4" />
+              <span aria-hidden="true">→</span>
             </Button>
           </div>
 
           <div className="flex flex-wrap gap-3 pt-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700">
-              <Route className="h-4 w-4 text-blue-600" />
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
               Trackers activos: 4
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700">
-              <ShieldCheck className="h-4 w-4 text-blue-600" />
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
               Geocercas: 1
             </div>
             <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/80 px-4 py-2 text-sm font-medium text-slate-700">
-              <Radar className="h-4 w-4 text-blue-600" />
+              <span className="h-2.5 w-2.5 rounded-full bg-blue-600" />
               Eventos: Entrada / salida
             </div>
           </div>
