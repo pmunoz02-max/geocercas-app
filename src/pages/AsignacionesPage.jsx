@@ -120,6 +120,37 @@ function normalizeGeofenceRow(g) {
   return { id, nombre: nombre || id };
 }
 
+function detectDominantOrgId(items) {
+  const counts = new Map();
+
+  for (const item of Array.isArray(items) ? items : []) {
+    const rawOrgId =
+      item?.org_id ??
+      item?.tenant_id ??
+      item?.organization_id ??
+      item?.orgId ??
+      item?.tenantId ??
+      null;
+
+    if (!rawOrgId) continue;
+
+    const normalizedOrgId = String(rawOrgId);
+    counts.set(normalizedOrgId, (counts.get(normalizedOrgId) || 0) + 1);
+  }
+
+  let dominantOrgId = null;
+  let dominantCount = 0;
+
+  for (const [candidateOrgId, candidateCount] of counts.entries()) {
+    if (candidateCount > dominantCount) {
+      dominantOrgId = candidateOrgId;
+      dominantCount = candidateCount;
+    }
+  }
+
+  return dominantOrgId;
+}
+
 export default function AsignacionesPage() {
   const { t } = useTranslation();
   const tt = (key, fallback, options = {}) =>
@@ -148,6 +179,7 @@ export default function AsignacionesPage() {
   const [personalOptions, setPersonalOptions] = useState([]);
   const [geocercaOptions, setGeocercaOptions] = useState([]);
   const [activityOptions, setActivityOptions] = useState([]);
+  const [catalogOrgId, setCatalogOrgId] = useState(null);
 
   const [showForm, setShowForm] = useState(true);
 
@@ -171,6 +203,7 @@ export default function AsignacionesPage() {
     if (!isAuthenticated || !orgId) {
       setPersonalOptions([]);
       setGeocercaOptions([]);
+      setCatalogOrgId(null);
       return;
     }
 
@@ -186,6 +219,13 @@ export default function AsignacionesPage() {
       .map(normalizeGeofenceRow)
       .filter((g) => g.id);
 
+    const dominantCatalogOrgId = detectDominantOrgId([...personalRaw, ...geofencesRaw]);
+    if (dominantCatalogOrgId && String(dominantCatalogOrgId) !== String(orgId)) {
+      setCatalogOrgId(String(dominantCatalogOrgId));
+    } else {
+      setCatalogOrgId(null);
+    }
+
     setPersonalOptions(personalNorm);
     setGeocercaOptions(geofencesNorm);
   }
@@ -196,6 +236,7 @@ export default function AsignacionesPage() {
       setPersonalOptions([]);
       setGeocercaOptions([]);
       setActivityOptions([]);
+      setCatalogOrgId(null);
       setLoading(false);
       return;
     }
@@ -209,6 +250,7 @@ export default function AsignacionesPage() {
       console.error("[AsignacionesPage] canonical catalogs crash:", e);
       setPersonalOptions([]);
       setGeocercaOptions([]);
+      setCatalogOrgId(null);
     }
 
     const { data, error: bundleError } = await getAsignacionesBundle();
@@ -255,6 +297,7 @@ export default function AsignacionesPage() {
       setPersonalOptions([]);
       setGeocercaOptions([]);
       setActivityOptions([]);
+      setCatalogOrgId(null);
       setError(null);
       setSuccessMessage(null);
       setLoading(false);
@@ -266,6 +309,7 @@ export default function AsignacionesPage() {
       setPersonalOptions([]);
       setGeocercaOptions([]);
       setActivityOptions([]);
+      setCatalogOrgId(null);
       setError(
         tt(
           "asignaciones.messages.noOrg",
@@ -433,6 +477,8 @@ export default function AsignacionesPage() {
     return v;
   };
 
+  const hasCatalogOrgMismatch = Boolean(catalogOrgId && String(catalogOrgId) !== String(orgId));
+
   return (
     <div className="w-full px-3 md:px-6 py-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-4">
@@ -495,6 +541,12 @@ export default function AsignacionesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3">
+              {hasCatalogOrgMismatch && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  La organización activa no coincide con la organización de personas/geocercas cargadas. Cambia la organización antes de guardar.
+                </div>
+              )}
+
               {!orgId && (
                 <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                   {tt(
@@ -659,6 +711,7 @@ export default function AsignacionesPage() {
                   type="submit"
                   className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
                   disabled={
+                    hasCatalogOrgMismatch ||
                     !orgId ||
                     loading ||
                     activityOptions.length === 0 ||
