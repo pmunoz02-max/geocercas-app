@@ -504,17 +504,19 @@ export default function AsignacionesPage() {
                   {tt("asignaciones.form.personLabel", "Person")}
                 </label>
                 <select
-                  className={selectBase}
+                  className={`${selectBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                   value={selectedPersonalId}
                   onChange={(e) => setSelectedPersonalId(e.target.value)}
                   disabled={!hasValidSession}
                   required
                 >
                   <option value="">
-                    {tt(
-                      "asignaciones.form.personPlaceholder",
-                      "Select a person"
-                    )}
+                    {!hasValidSession
+                      ? "Inicia sesion para ver personas"
+                      : tt(
+                          "asignaciones.form.personPlaceholder",
+                          "Select a person"
+                        )}
                   </option>
                   {personalOptions.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -529,17 +531,19 @@ export default function AsignacionesPage() {
                   {tt("asignaciones.form.geofenceLabel", "Geofence")}
                 </label>
                 <select
-                  className={selectBase}
+                  className={`${selectBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                   value={selectedGeocercaId}
                   onChange={(e) => setSelectedGeocercaId(e.target.value)}
                   disabled={!hasValidSession}
                   required
                 >
                   <option value="">
-                    {tt(
-                      "asignaciones.form.geofencePlaceholder",
-                      "Select a geofence"
-                    )}
+                    {!hasValidSession
+                      ? "Inicia sesion para ver geocercas"
+                      : tt(
+                          "asignaciones.form.geofencePlaceholder",
+                          "Select a geofence"
+                        )}
                   </option>
                   {geocercaOptions.map((g) => (
                     <option key={g.id} value={g.id}>
@@ -554,17 +558,19 @@ export default function AsignacionesPage() {
                   {tt("asignaciones.form.activityLabel", "Activity")}
                 </label>
                 <select
-                  className={selectBase}
+                  className={`${selectBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                   value={selectedActivityId}
                   onChange={(e) => setSelectedActivityId(e.target.value)}
                   required
                   disabled={!hasValidSession || activityOptions.length === 0}
                 >
                   <option value="">
-                    {tt(
-                      "asignaciones.form.activityPlaceholder",
-                      "Select an activity"
-                    )}
+                    {!hasValidSession
+                      ? "Inicia sesion para ver actividades"
+                      : tt(
+                          "asignaciones.form.activityPlaceholder",
+                          "Select an activity"
+                        )}
                   </option>
                   {activityOptions.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -581,7 +587,7 @@ export default function AsignacionesPage() {
                   </label>
                   <input
                     type="datetime-local"
-                    className={inputBase}
+                    className={`${inputBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                     disabled={!hasValidSession}
@@ -595,7 +601,7 @@ export default function AsignacionesPage() {
                   </label>
                   <input
                     type="datetime-local"
-                    className={inputBase}
+                    className={`${inputBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                     disabled={!hasValidSession}
@@ -610,7 +616,7 @@ export default function AsignacionesPage() {
                     {tt("asignaciones.form.statusLabel", "Status")}
                   </label>
                   <select
-                    className={selectBase}
+                    className={`${selectBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
                     disabled={!hasValidSession}
@@ -630,7 +636,7 @@ export default function AsignacionesPage() {
                   </label>
                   <input
                     type="number"
-                    className={inputBase}
+                    className={`${inputBase} ${!hasValidSession ? "opacity-80 cursor-not-allowed" : ""}`}
                     min={5}
                     value={frecuenciaEnvioMin}
                     onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
