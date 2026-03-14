@@ -1,7 +1,7 @@
 // api/asignaciones.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-api-v10-resolve-legacy-geocerca-from-geofences";
+const VERSION = "asignaciones-api-v11-geofence-id-primary-resolve";
 
 /* =========================
    Headers / Cookies / Query
@@ -213,35 +213,93 @@ async function resolveLegacyGeocercaId(sbDb, orgId, payload) {
   if (p.geofenceId && !p.geofence_id) p.geofence_id = p.geofenceId;
   if (p.geocercaId && !p.geocerca_id) p.geocerca_id = p.geocercaId;
 
-  // Si ya viene geocerca_id, lo dejamos (pero lo validamos)
-  if (p.geocerca_id) {
-    const r = await sbDb.from("geocercas").select("id").eq("id", p.geocerca_id).maybeSingle();
-    if (!r.error && r.data?.id) return String(p.geocerca_id);
-    throw new Error("geocerca_id no existe en geocercas (FK).");
-  }
+  // Normalizar: null / undefined / string vacío → null
+  const gfId =
+    p.geofence_id && typeof p.geofence_id === "string" && p.geofence_id.trim()
+      ? p.geofence_id.trim()
+      : null;
+  const gcId =
+    p.geocerca_id && typeof p.geocerca_id === "string" && p.geocerca_id.trim()
+      ? p.geocerca_id.trim()
+      : null;
 
-  // Si viene geofence_id, mapear a source_geocerca_id
-  if (p.geofence_id) {
-    const r = await sbDb
+  console.log("[resolveLegacyGeocercaId] geofence_id recibido:", gfId ?? "(vacío/ausente)");
+  console.log(
+    "[resolveLegacyGeocercaId] geocerca_id recibido:",
+    gcId ?? "(vacío/ausente — se ignora cuando geofence_id está presente)"
+  );
+  console.log("[resolveLegacyGeocercaId] org_id de contexto:", orgId);
+
+  // 1) geofence_id es la fuente principal
+  if (gfId) {
+    // Búsqueda sin filtro de org para poder distinguir inexistencia real vs. filtro de org
+    const rAny = await sbDb
       .from("geofences")
       .select("id,org_id,source_geocerca_id")
-      .eq("org_id", orgId)
-      .eq("id", p.geofence_id)
+      .eq("id", gfId)
       .maybeSingle();
 
-    if (r.error) throw new Error(r.error.message || "No se pudo leer geofences.");
-    if (!r.data?.id) throw new Error("geofence_id no existe.");
-    if (!r.data?.source_geocerca_id)
-      throw new Error("Este geofence no tiene source_geocerca_id. Falta vincularlo a geocercas (legacy).");
+    if (rAny.error) throw new Error(`Error buscando geofence: ${rAny.error.message}`);
 
-    // validar que exista en geocercas
-    const r2 = await sbDb.from("geocercas").select("id").eq("id", r.data.source_geocerca_id).maybeSingle();
-    if (r2.error || !r2.data?.id) throw new Error("source_geocerca_id no existe en geocercas (FK).");
+    if (!rAny.data?.id) {
+      console.log(
+        "[resolveLegacyGeocercaId] geofence_id NO existe en ninguna org:",
+        gfId
+      );
+      throw new Error(`geofence_id '${gfId}' no existe en la base de datos (inexistencia real).`);
+    }
 
-    return String(r.data.source_geocerca_id);
+    // Existe globalmente — verificar que pertenezca a este org
+    if (String(rAny.data.org_id) !== String(orgId)) {
+      console.log(
+        `[resolveLegacyGeocercaId] geofence_id '${gfId}' existe pero su org_id='${rAny.data.org_id}' ` +
+          `no coincide con el org de contexto '${orgId}' (filtrado por org_id).`
+      );
+      throw new Error(
+        `geofence_id '${gfId}' existe pero pertenece a org '${rAny.data.org_id}', ` +
+          `no a la org en contexto '${orgId}'. Acceso denegado (filtro org_id).`
+      );
+    }
+
+    console.log("[resolveLegacyGeocercaId] geofence encontrado:", {
+      id: rAny.data.id,
+      org_id: rAny.data.org_id,
+      source_geocerca_id: rAny.data.source_geocerca_id ?? "(null)",
+    });
+
+    if (!rAny.data.source_geocerca_id) {
+      throw new Error(
+        `geofence_id '${gfId}' no tiene source_geocerca_id vinculado. ` +
+          `Falta enlazarlo a la tabla geocercas (legacy FK).`
+      );
+    }
+
+    // Validar que el source_geocerca_id exista en geocercas
+    const r2 = await sbDb
+      .from("geocercas")
+      .select("id")
+      .eq("id", rAny.data.source_geocerca_id)
+      .maybeSingle();
+    if (r2.error || !r2.data?.id) {
+      throw new Error(
+        `source_geocerca_id '${rAny.data.source_geocerca_id}' no existe en geocercas (FK inválida).`
+      );
+    }
+
+    return String(rAny.data.source_geocerca_id);
   }
 
-  throw new Error("Falta geofence_id o geocerca_id.");
+  // 2) geocerca_id: rama legacy exclusiva cuando geofence_id está vacío/ausente
+  if (gcId) {
+    console.log("[resolveLegacyGeocercaId] geofence_id ausente — usando geocerca_id legacy:", gcId);
+    const r = await sbDb.from("geocercas").select("id").eq("id", gcId).maybeSingle();
+    if (!r.error && r.data?.id) return String(gcId);
+    throw new Error(`geocerca_id '${gcId}' no existe en geocercas (FK).`);
+  }
+
+  throw new Error(
+    "Falta geofence_id (o geocerca_id legacy). Ambos están vacíos o ausentes."
+  );
 }
 
 /* =========================
@@ -294,6 +352,10 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = await readBody(req);
       if (!body?.personal_id) return send(res, 400, { ok: false, error: "personal_id is required" });
+
+      console.log("[asignaciones POST] geofence_id recibido:", body.geofence_id ?? "(no presente)");
+      console.log("[asignaciones POST] geocerca_id recibido:", body.geocerca_id ?? "(no presente)");
+      console.log("[asignaciones POST] org_id contexto:", orgId);
 
       let geocerca_id;
       try {
