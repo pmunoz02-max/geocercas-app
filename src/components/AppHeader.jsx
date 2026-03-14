@@ -1,7 +1,6 @@
 ﻿// src/components/AppHeader.jsx
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
-import { supabase } from "../supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "./LanguageSwitcher";
 
@@ -20,21 +19,18 @@ function safeText(v) {
 }
 
 export default function AppHeader() {
-  const navigate = useNavigate();
-  const { session, currentRole, profile } = useAuth();
+  const { isAuthenticated, user, currentRole, logout } = useAuth();
   const { t } = useTranslation();
 
-  const isLogged = !!session;
-  const rawRole = (currentRole || profile?.role || "").toLowerCase();
-  const email = session?.user?.email || profile?.email || "";
+  const isLogged = Boolean(isAuthenticated);
+  const rawRole = String(currentRole || "").toLowerCase();
+  const email = user?.email || "";
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await logout();
     } catch (err) {
       console.error("[AppHeader] Error signing out:", err);
-    } finally {
-      navigate("/", { replace: true });
     }
   };
 

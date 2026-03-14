@@ -125,9 +125,8 @@ export default function AsignacionesPage() {
   const tt = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { ready, session, user, currentOrg, currentOrgId } = useAuth();
+  const { ready, isAuthenticated, currentOrg, currentOrgId } = useAuth();
   const orgId = currentOrgId || currentOrg?.id || null;
-  const hasValidSession = Boolean(session?.user?.id || user?.id);
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -170,7 +169,7 @@ export default function AsignacionesPage() {
   }
 
   async function loadCatalogsCanonical() {
-    if (!hasValidSession || !orgId) {
+    if (!isAuthenticated || !orgId) {
       setPersonalOptions([]);
       setGeocercaOptions([]);
       return;
@@ -195,7 +194,7 @@ export default function AsignacionesPage() {
   }
 
   async function loadAll() {
-    if (!hasValidSession || !orgId) {
+    if (!isAuthenticated || !orgId) {
       setAsignaciones([]);
       setPersonalOptions([]);
       setGeocercaOptions([]);
@@ -254,7 +253,7 @@ export default function AsignacionesPage() {
   useEffect(() => {
     if (!ready) return;
 
-    if (!hasValidSession) {
+    if (!isAuthenticated) {
       setAsignaciones([]);
       setPersonalOptions([]);
       setGeocercaOptions([]);
@@ -281,7 +280,7 @@ export default function AsignacionesPage() {
 
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, hasValidSession, orgId]);
+  }, [ready, isAuthenticated, orgId]);
 
   const filteredAsignaciones = useMemo(() => {
     let rows = Array.isArray(asignaciones) ? asignaciones : [];
@@ -308,7 +307,7 @@ export default function AsignacionesPage() {
     setError(null);
     setSuccessMessage(null);
 
-    if (!hasValidSession) {
+    if (!isAuthenticated) {
       setError("Debes iniciar sesión para crear asignaciones");
       return;
     }
@@ -409,7 +408,7 @@ export default function AsignacionesPage() {
     );
   }
 
-  if (!hasValidSession) {
+  if (!isAuthenticated) {
     return (
       <div className="p-4 md:p-6 max-w-5xl mx-auto">
         <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3">

@@ -414,12 +414,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({
+    () => {
+      const isAuthenticated = Boolean(user?.id);
+
+      return {
       loading,
       ready,
-      authenticated: Boolean(user),
+      isAuthenticated,
+      authenticated: isAuthenticated,
       user,
-      isLoggedIn: Boolean(user),
+      isLoggedIn: isAuthenticated,
 
       currentRole,
       isAppRoot,
@@ -433,7 +437,8 @@ export function AuthProvider({ children }) {
 
       refreshSession: bootstrap,
       logout,
-    }),
+      };
+    },
     [
       loading,
       ready,
@@ -458,6 +463,7 @@ export function AuthProvider({ children }) {
 const SAFE_FALLBACK = {
   loading: true,
   ready: false,
+  isAuthenticated: false,
   authenticated: false,
   user: null,
   isLoggedIn: false,
