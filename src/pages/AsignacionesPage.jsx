@@ -177,14 +177,12 @@ export default function AsignacionesPage() {
     const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
     const personalRaw = extractArray(rP.payload);
     const personalNorm = personalRaw
-      .filter((p) => keepIfSameOrgOrUnknown(p))
       .map(normalizePersonRow)
       .filter((p) => p.id);
 
     const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
     const geofencesRaw = extractArray(rG.payload);
     const geofencesNorm = geofencesRaw
-      .filter((g) => keepIfSameOrgOrUnknown(g))
       .map(normalizeGeofenceRow)
       .filter((g) => g.id);
 
