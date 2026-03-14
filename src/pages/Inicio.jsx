@@ -159,11 +159,11 @@ export default function Inicio() {
               onClick={onLogout}
               disabled={signingOut}
               type="button"
-              title={t("common.actions.logout", { defaultValue: "Log out" })}
+              title={t("common.actions.logout")}
             >
               {signingOut
-                ? t("common.actions.processing", { defaultValue: "Signing out…" })
-                : t("common.actions.logout", { defaultValue: "Log out" })}
+                ? t("common.actions.processing")
+                : t("common.actions.logout")}
             </button>
           </div>
 
@@ -274,8 +274,8 @@ export default function Inicio() {
               type="button"
             >
               {signingOut
-                ? t("common.actions.processing", { defaultValue: "Signing out…" })
-                : t("common.actions.logout", { defaultValue: "Log out" })}
+                ? t("common.actions.processing")
+                : t("common.actions.logout")}
             </button>
           </div>
         </div>
