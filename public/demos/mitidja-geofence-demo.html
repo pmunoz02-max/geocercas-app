@@ -250,6 +250,11 @@
         color: #fff;
       }
 
+      .hud,
+      .hud * {
+        display: none !important;
+      }
+
       @media (max-width: 900px) {
         .topbar {
           flex-direction: column;
@@ -290,10 +295,7 @@
 
       <section class="map-wrap">
         <div id="map"></div>
-        <!-- HUD geofence label removed for cleaner demo video -->
-
-
-        <div class="controls">
+<div class="controls">
           <button id="zoom-in" class="btn" aria-label="Zoom in">+</button>
           <button id="zoom-out" class="btn" aria-label="Zoom out">-</button>
           <button id="play-pause" class="btn play" aria-label="Pause animation">Pause</button>
