@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeocercasApp | Quito Monitoring Demo</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      :root {
+        --bg: #f3f7f4;
+        --panel: rgba(255, 255, 255, 0.92);
+        --text: #15241c;
+        --muted: #567064;
+        --primary: #0f8f5b;
+        --primary-soft: #d8f2e6;
+        --accent: #1877f2;
+        --warn: #c56d00;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Inter", "Avenir Next", sans-serif;
+        color: var(--text);
+        background: radial-gradient(circle at 10% 10%, #dff6ea 0, transparent 45%),
+          radial-gradient(circle at 90% 90%, #dbe9ff 0, transparent 42%),
+          var(--bg);
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-height: 100vh;
+        padding: 16px;
+        gap: 12px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: var(--panel);
+        backdrop-filter: blur(8px);
+        border: 1px solid rgba(16, 24, 40, 0.08);
+        box-shadow: 0 10px 30px rgba(21, 36, 28, 0.08);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .brand-badge {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-weight: 700;
+        background: linear-gradient(140deg, #0e9d63, #0e7b98);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .brand p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: #eef4f1;
+        border: 1px solid rgba(16, 24, 40, 0.08);
+      }
+
+      .map-wrap {
+        position: relative;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid rgba(16, 24, 40, 0.1);
+        box-shadow: 0 12px 32px rgba(21, 36, 28, 0.1);
+      }
+
+      #map {
+        width: 100%;
+        height: calc(100vh - 130px);
+        min-height: 560px;
+      }
+
+      .hud {
+        position: absolute;
+        z-index: 900;
+        left: 14px;
+        top: 14px;
+        padding: 12px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid rgba(16, 24, 40, 0.1);
+        box-shadow: 0 8px 20px rgba(21, 36, 28, 0.08);
+        min-width: 265px;
+      }
+
+      .hud h2 {
+        margin: 0 0 6px;
+        font-size: 14px;
+      }
+
+      .hud p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .controls {
+        position: absolute;
+        z-index: 900;
+        right: 14px;
+        top: 14px;
+        display: flex;
+        gap: 8px;
+      }
+
+      .btn {
+        border: 1px solid rgba(16, 24, 40, 0.14);
+        background: var(--panel);
+        color: var(--text);
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 18px;
+        cursor: pointer;
+      }
+
+      .btn.play {
+        width: auto;
+        padding: 0 14px;
+        font-size: 13px;
+      }
+
+      .event-toast {
+        position: absolute;
+        z-index: 900;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        background: rgba(19, 31, 23, 0.92);
+        color: #effcf3;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(128, 246, 168, 0.4);
+        font-size: 13px;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+      }
+
+      .event-toast.show {
+        opacity: 1;
+      }
+
+      .legend {
+        position: absolute;
+        z-index: 900;
+        right: 14px;
+        bottom: 14px;
+        background: var(--panel);
+        border: 1px solid rgba(16, 24, 40, 0.1);
+        border-radius: 10px;
+        padding: 10px;
+        font-size: 12px;
+        min-width: 180px;
+      }
+
+      .legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .legend-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+      }
+
+      .region-switcher {
+        position: absolute;
+        z-index: 900;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        background: var(--panel);
+        border: 1px solid rgba(16, 24, 40, 0.1);
+        border-radius: 10px;
+        padding: 4px;
+        box-shadow: 0 4px 12px rgba(21, 36, 28, 0.08);
+      }
+
+      .region-btn {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        padding: 6px 18px;
+        border-radius: 7px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+
+      .region-btn:hover {
+        background: rgba(15, 143, 91, 0.1);
+      }
+
+      .region-btn.active {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      @media (max-width: 900px) {
+        .topbar {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        #map {
+          height: calc(100vh - 170px);
+          min-height: 520px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-badge">G</div>
+          <div>
+            <h1>GeocercasApp</h1>
+            <p>Quito Geofence Monitoring Demo</p>
+          </div>
+        </div>
+        <div class="chips">
+          <div class="chip">Region: Quito, Ecuador</div>
+          <div class="chip">Mode: Preview Simulation</div>
+          <div class="chip" id="status-chip">Tracker: Approaching geofence</div>
+        </div>
+      </header>
+
+      <section class="map-wrap">
+        <div id="map"></div>
+
+        <aside class="hud">
+          <h2>Quito Geofence</h2>
+          <p>Primary tracker is moving toward the monitored city perimeter.</p>
+        </aside>
+
+        <div class="controls">
+          <button id="zoom-in" class="btn" aria-label="Zoom in">+</button>
+          <button id="zoom-out" class="btn" aria-label="Zoom out">-</button>
+          <button id="play-pause" class="btn play" aria-label="Pause animation">Pause</button>
+        </div>
+
+        <div class="region-switcher">
+          <button class="region-btn active" id="btn-quito" data-region="quito" onclick="switchRegion('quito')">Quito</button>
+          <button class="region-btn" id="btn-mwea" data-region="mwea" onclick="switchRegion('mwea')">Mwea</button>
+        </div>
+
+        <div id="event-toast" class="event-toast">Geofence event detected - Quito Demo</div>
+
+        <div class="legend">
+          <div class="legend-row"><span class="dot" style="background:#10b981"></span>Geofence area</div>
+          <div class="legend-row"><span class="dot" style="background:#2563eb"></span>Tracker A (primary)</div>
+          <div class="legend-row"><span class="dot" style="background:#ef4444"></span>Tracker B</div>
+          <div class="legend-row"><span class="dot" style="background:#f59e0b"></span>Tracker C</div>
+        </div>
+      </section>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script>
+      const REGIONS = {
+        quito: {
+          center: [-0.22985, -78.52495],
+          zoom: 15,
+          bounds: [[-0.2328, -78.5289], [-0.2268, -78.5210]],
+          popupText: "Geofence event detected<br/>Quito Operations Area",
+          tooltip: "Quito Operations Area",
+        },
+        mwea: {
+          center: [-0.6305, 37.3783],
+          zoom: 15,
+          bounds: [[-0.6334, 37.3756], [-0.6288, 37.3811]],
+          popupText: "Geofence event detected<br/>Mwea Rice Fields",
+          tooltip: "Mwea Rice Fields",
+        },
+      };
+      let currentRegion = "quito";
+
+      const map = L.map("map", { zoomControl: false }).setView([-0.22985, -78.52495], 15);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      }).addTo(map);
+
+      const geofence = L.rectangle(REGIONS[currentRegion].bounds, {
+        color: "#10b981",
+        weight: 2,
+        fillColor: "#34d399",
+        fillOpacity: 0.2,
+        dashArray: "6 6",
+      }).addTo(map);
+      geofence.bindTooltip(REGIONS[currentRegion].tooltip, { permanent: false });
+      let activeBounds = L.latLngBounds(REGIONS[currentRegion].bounds);
+
+      const fieldA = L.polygon(
+        [
+          [-0.6363, 37.3714],
+          [-0.6349, 37.3743],
+          [-0.6327, 37.3735],
+          [-0.6336, 37.3707],
+        ],
+        { color: "#7c9f89", weight: 1, fillOpacity: 0.08 }
+      ).addTo(map);
+
+      const fieldB = L.polygon(
+        [
+          [-0.6268, 37.3825],
+          [-0.6255, 37.3866],
+          [-0.6218, 37.3855],
+          [-0.6234, 37.3819],
+        ],
+        { color: "#7c9f89", weight: 1, fillOpacity: 0.08 }
+      ).addTo(map);
+
+      const trackerAPath = [
+        [-0.6388, 37.3672],
+        [-0.6372, 37.3709],
+        [-0.6358, 37.3731],
+        [-0.6341, 37.3758],
+        [-0.6325, 37.3772],
+        [-0.6310, 37.3787],
+        [-0.6301, 37.3795],
+      ];
+
+      const trackerBPath = [
+        [-0.6294, 37.3873],
+        [-0.6279, 37.3892],
+        [-0.6256, 37.3903],
+        [-0.6240, 37.3887],
+        [-0.6248, 37.3859],
+        [-0.6271, 37.3847],
+      ];
+
+      const trackerCPath = [
+        [-0.6368, 37.3684],
+        [-0.6380, 37.3711],
+        [-0.6391, 37.3732],
+        [-0.6376, 37.3750],
+        [-0.6355, 37.3740],
+        [-0.6358, 37.3714],
+      ];
+
+      function createTracker(path, color, label) {
+        const marker = L.circleMarker(path[0], {
+          radius: 7,
+          color,
+          fillColor: color,
+          fillOpacity: 1,
+          weight: 2,
+        }).addTo(map);
+        marker.bindPopup(label);
+
+        const routeLine = L.polyline([path[0]], {
+          color,
+          weight: 3,
+          opacity: 0.55,
+        }).addTo(map);
+
+        return { marker, routeLine, path, progress: 0, speed: 0.035 };
+      }
+
+      const trackerA = createTracker(trackerAPath, "#2563eb", "Tracker A");
+      const trackerB = createTracker(trackerBPath, "#ef4444", "Tracker B");
+      const trackerC = createTracker(trackerCPath, "#f59e0b", "Tracker C");
+
+      const trackers = [trackerA, trackerB, trackerC];
+
+      function lerpPoint(a, b, t) {
+        return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      }
+
+      function getPointAlongPath(path, progress) {
+        const segments = path.length - 1;
+        const clamped = Math.max(0, Math.min(progress, 0.9999));
+        const scaled = clamped * segments;
+        const idx = Math.floor(scaled);
+        const segT = scaled - idx;
+        return lerpPoint(path[idx], path[idx + 1], segT);
+      }
+
+      let running = true;
+      let lastTime = performance.now();
+      let eventTriggered = false;
+      let insideBefore = false;
+
+      const toast = document.getElementById("event-toast");
+      const statusChip = document.getElementById("status-chip");
+      const playPauseBtn = document.getElementById("play-pause");
+
+      function showEventToast() {
+        toast.innerHTML = REGIONS[currentRegion].popupText;
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2600);
+      }
+
+      function switchRegion(key) {
+        if (!REGIONS[key]) return;
+        currentRegion = key;
+        const r = REGIONS[key];
+        map.flyTo(r.center, r.zoom);
+        geofence.setBounds(r.bounds);
+        geofence.unbindTooltip();
+        geofence.bindTooltip(r.tooltip, { permanent: false });
+        activeBounds = L.latLngBounds(r.bounds);
+        eventTriggered = false;
+        insideBefore = false;
+        trackerA.marker.closePopup();
+        document.querySelectorAll(".region-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.region === key);
+        });
+      }
+
+      function updateTracker(tracker, dt, loop) {
+        tracker.progress += tracker.speed * dt;
+        if (tracker.progress > 1) {
+          tracker.progress = loop ? tracker.progress - 1 : 1;
+        }
+
+        const [lat, lng] = getPointAlongPath(tracker.path, tracker.progress);
+        const ll = L.latLng(lat, lng);
+        tracker.marker.setLatLng(ll);
+
+        const latlngs = tracker.routeLine.getLatLngs();
+        latlngs.push(ll);
+        if (latlngs.length > 120) latlngs.shift();
+        tracker.routeLine.setLatLngs(latlngs);
+      }
+
+      function tick(now) {
+        const dt = Math.min((now - lastTime) / 1000, 0.06);
+        lastTime = now;
+
+        if (running) {
+          updateTracker(trackerA, dt, false);
+          updateTracker(trackerB, dt, true);
+          updateTracker(trackerC, dt, true);
+
+          const insideNow = activeBounds.contains(trackerA.marker.getLatLng());
+          if (insideNow && !insideBefore && !eventTriggered) {
+            eventTriggered = true;
+            showEventToast();
+            trackerA.marker
+              .bindPopup(REGIONS[currentRegion].popupText)
+              .openPopup();
+            statusChip.textContent = "Tracker: Geofence event detected";
+          }
+          insideBefore = insideNow;
+        }
+
+        requestAnimationFrame(tick);
+      }
+
+      requestAnimationFrame(tick);
+
+      document.getElementById("zoom-in").addEventListener("click", () => map.zoomIn());
+      document.getElementById("zoom-out").addEventListener("click", () => map.zoomOut());
+
+      playPauseBtn.addEventListener("click", () => {
+        running = !running;
+        playPauseBtn.textContent = running ? "Pause" : "Play";
+      });
+
+      // Initial framing for the geofence and nearby activity.
+      const allTargets = L.featureGroup([
+        geofence,
+        fieldA,
+        fieldB,
+        trackerA.marker,
+        trackerB.marker,
+        trackerC.marker,
+      ]);
+      map.fitBounds(allTargets.getBounds().pad(0.18));
+    </script>
+  </body>
+</html>
