@@ -233,16 +233,19 @@ const DEMO_CSS = `
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function GeofenceTrackerDemo({ initialRegion }) {
+export default function GeofenceTrackerDemo({ initialRegion = "quito" }) {
+  console.log("[GeofenceTrackerDemo] initialRegion =", initialRegion);
+
+  const normalizedInitialRegion = REGIONS[initialRegion] ? initialRegion : "quito";
   const mapDivRef = useRef(null);
   const leafletRef = useRef(null); // { map, geofence, trackerA, activeBounds }
   const rafIdRef = useRef(null);
   const runningRef = useRef(true);
-  const regionKeyRef = useRef(initialRegion);
+  const regionKeyRef = useRef(normalizedInitialRegion);
   const toastTimerRef = useRef(null);
   const stateRef = useRef({ eventTriggered: false, insideBefore: false, lastTime: 0 });
 
-  const [regionKey, setRegionKey] = useState(initialRegion);
+  const [currentRegion, setCurrentRegion] = useState(normalizedInitialRegion);
   const [running, setRunning] = useState(true);
   const [statusText, setStatusText] = useState("Tracker: Approaching geofence");
   const [toastVisible, setToastVisible] = useState(false);
@@ -250,7 +253,7 @@ export default function GeofenceTrackerDemo({ initialRegion }) {
 
   // Keep refs in sync with state
   useEffect(() => { runningRef.current = running; }, [running]);
-  useEffect(() => { regionKeyRef.current = regionKey; }, [regionKey]);
+  useEffect(() => { regionKeyRef.current = currentRegion; }, [currentRegion]);
 
   // ------------------------------------------------------------------
   // Map initialisation — runs once on mount
@@ -259,7 +262,7 @@ export default function GeofenceTrackerDemo({ initialRegion }) {
     const container = mapDivRef.current;
     if (!container || leafletRef.current) return;
 
-    const initR = REGIONS[initialRegion];
+    const initR = REGIONS[normalizedInitialRegion];
     const map = L.map(container, { zoomControl: false }).setView(initR.center, initR.zoom);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -359,13 +362,13 @@ export default function GeofenceTrackerDemo({ initialRegion }) {
   // ------------------------------------------------------------------
   // Region switch — driven by React state change
   // ------------------------------------------------------------------
-  const prevRegionRef = useRef(initialRegion);
+  const prevRegionRef = useRef(normalizedInitialRegion);
   useEffect(() => {
-    if (regionKey === prevRegionRef.current) return;
-    prevRegionRef.current = regionKey;
+    if (currentRegion === prevRegionRef.current) return;
+    prevRegionRef.current = currentRegion;
     const inst = leafletRef.current;
     if (!inst) return;
-    const r = REGIONS[regionKey];
+    const r = REGIONS[currentRegion];
     inst.map.flyTo(r.center, r.zoom);
     inst.geofence.setBounds(r.bounds);
     inst.geofence.unbindTooltip();
@@ -375,17 +378,18 @@ export default function GeofenceTrackerDemo({ initialRegion }) {
     stateRef.current.insideBefore = false;
     inst.trackerA.marker.closePopup();
     setStatusText("Tracker: Approaching geofence");
-  }, [regionKey]);
+  }, [currentRegion]);
 
   const handleSwitchRegion = useCallback((key) => {
-    setRegionKey(key);
+    if (!REGIONS[key]) return;
+    setCurrentRegion(key);
   }, []);
 
   const handleTogglePlay = useCallback(() => {
     setRunning((v) => !v);
   }, []);
 
-  const region = REGIONS[regionKey];
+  const region = REGIONS[currentRegion];
 
   return (
     <>
@@ -436,13 +440,13 @@ export default function GeofenceTrackerDemo({ initialRegion }) {
           {/* region switcher */}
           <div className="gd-region-switcher">
             <button
-              className={`gd-region-btn${regionKey === "quito" ? " active" : ""}`}
+              className={`gd-region-btn${currentRegion === "quito" ? " active" : ""}`}
               onClick={() => handleSwitchRegion("quito")}
             >
               Quito
             </button>
             <button
-              className={`gd-region-btn${regionKey === "mwea" ? " active" : ""}`}
+              className={`gd-region-btn${currentRegion === "mwea" ? " active" : ""}`}
               onClick={() => handleSwitchRegion("mwea")}
             >
               Mwea
