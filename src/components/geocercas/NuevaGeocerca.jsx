@@ -62,11 +62,17 @@ function StatBadge({ label, value, tone = "default" }) {
   );
 }
 
-function CursorPosLive({ setCursorLatLng }) {
-  useMapEvents({
+function CursorPosLive({ setCursorLatLng, setMapZoom }) {
+  const map = useMapEvents({
     mousemove: (e) => setCursorLatLng(e.latlng),
     mouseout: () => setCursorLatLng(null),
+    zoomend: (e) => setMapZoom(e?.target?.getZoom?.() ?? null),
   });
+
+  useEffect(() => {
+    setMapZoom(map?.getZoom?.() ?? null);
+  }, [map, setMapZoom]);
+
   return null;
 }
 
@@ -280,6 +286,7 @@ export default function NuevaGeocerca() {
   const [coordText, setCoordText] = useState("");
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
+  const [mapZoom, setMapZoom] = useState(8);
 
   const [draftFeature, setDraftFeature] = useState(null);
   const [draftId, setDraftId] = useState(0);
@@ -980,6 +987,7 @@ export default function NuevaGeocerca() {
             style={{ height: "100%", width: "100%" }}
             whenReady={(e) => {
               mapRef.current = e.target;
+              setMapZoom(e?.target?.getZoom?.() ?? 8);
               try {
                 e.target.invalidateSize?.();
               } catch {}
@@ -991,7 +999,7 @@ export default function NuevaGeocerca() {
             />
 
             {dataset && <GeoJSON data={dataset} {...pointStyle} />}
-            <CursorPosLive setCursorLatLng={setCursorLatLng} />
+            <CursorPosLive setCursorLatLng={setCursorLatLng} setMapZoom={setMapZoom} />
 
             <Pane name="draftPane" style={{ zIndex: 650 }}>
               {draftFeature && (
@@ -1117,25 +1125,17 @@ export default function NuevaGeocerca() {
         </div>
 
         <div className="hidden md:block absolute right-3 bottom-24 z-[1100] space-y-2">
-          <div className="rounded-xl bg-slate-950/82 px-3 py-2 text-[11px] text-slate-50 shadow-lg backdrop-blur-md">
-            {cursorLatLng ? (
-              <>
-                <span>
-                  {t("geocercas.lat", { defaultValue: "Lat" })}: {cursorLatLng.lat.toFixed(6)}
-                </span>
-                <span className="ml-2">
-                  {t("geocercas.lng", { defaultValue: "Lng" })}: {cursorLatLng.lng.toFixed(6)}
-                </span>
-              </>
-            ) : (
-              <span>{t("geocercas.cursorHint", { defaultValue: "Move the mouse over the map" })}</span>
-            )}
-          </div>
-
-          <div className="rounded-xl bg-slate-950/82 px-3 py-2 text-[11px] text-slate-50 shadow-lg backdrop-blur-md">
-            {t("geocercas.draftLabel", { defaultValue: "Draft" })}:{" "}
-            {draftFeature ? t("geocercas.draftYes", { defaultValue: "yes" }) : t("geocercas.draftNo", { defaultValue: "no" })}{" "}
-            | {t("geocercas.pointsLabel", { defaultValue: "Pts" })}: {draftPointsCount}
+          <div className="rounded-xl bg-white/85 px-3 py-2 text-xs backdrop-blur-md border border-black/10 shadow-md">
+            <span className="text-gray-500">{t("geocercas.lat", { defaultValue: "Lat" })} </span>
+            <span className="text-gray-900 font-semibold">
+              {Number.isFinite(cursorLatLng?.lat) ? cursorLatLng.lat.toFixed(6) : "-"}
+            </span>
+            <span className="mx-2 text-gray-500">{t("geocercas.lng", { defaultValue: "Lng" })} </span>
+            <span className="text-gray-900 font-semibold">
+              {Number.isFinite(cursorLatLng?.lng) ? cursorLatLng.lng.toFixed(6) : "-"}
+            </span>
+            <span className="mx-2 text-gray-500">Zoom </span>
+            <span className="text-gray-900 font-semibold">{Number.isFinite(mapZoom) ? String(mapZoom) : "-"}</span>
           </div>
         </div>
 
