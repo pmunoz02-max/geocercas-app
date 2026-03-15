@@ -111,6 +111,51 @@ function centroidFeatureFromGeojson(fc) {
   }
 }
 
+function centerFromBbox(bbox) {
+  if (!Array.isArray(bbox) || bbox.length < 4) return null;
+  const [minLng, minLat, maxLng, maxLat] = bbox.map(Number);
+  if (![minLng, minLat, maxLng, maxLat].every(Number.isFinite)) return null;
+  return {
+    lat: (minLat + maxLat) / 2,
+    lng: (minLng + maxLng) / 2,
+  };
+}
+
+function centerFromAnyGeo(input) {
+  try {
+    const fc = ensureFeatureCollection(input);
+    if (!fc) return null;
+    const layer = L.geoJSON(fc);
+    const bounds = layer.getBounds();
+    if (!bounds?.isValid?.()) return null;
+    const c = bounds.getCenter();
+    if (!Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
+    return { lat: c.lat, lng: c.lng };
+  } catch {
+    return null;
+  }
+}
+
+function getGeofenceCenter(row) {
+  const lat = Number(row?.lat);
+  const lng = Number(row?.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { lat, lng };
+  }
+
+  const fromBbox = centerFromBbox(row?.bbox);
+  if (fromBbox) return fromBbox;
+
+  const fromGeo =
+    centerFromAnyGeo(row?.geojson) ||
+    centerFromAnyGeo(row?.polygon_geojson) ||
+    centerFromAnyGeo(row?.geom);
+
+  if (fromGeo) return fromGeo;
+
+  return null;
+}
+
 function parsePairs(text) {
   const lines = String(text || "")
     .split("\n")
@@ -292,7 +337,7 @@ export default function NuevaGeocerca() {
 
     const { data, error } = await supabase
       .from("geofences")
-      .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default, created_at, updated_at")
+      .select("id, org_id, name, geojson, polygon_geojson, geom, bbox, lat, lng, radius_m, active, is_default, created_at, updated_at")
       .eq("org_id", orgId)
       .eq("active", true)
       .order("is_default", { ascending: false })
@@ -306,10 +351,15 @@ export default function NuevaGeocerca() {
     }
 
     const normalized = (data || [])
-      .map((x) => ({
-        ...x,
-        name: String(x?.name ?? "").trim(),
-      }))
+      .map((x) => {
+        const center = getGeofenceCenter(x);
+        return {
+          ...x,
+          name: String(x?.name ?? "").trim(),
+          centerLat: center?.lat ?? null,
+          centerLng: center?.lng ?? null,
+        };
+      })
       .filter((x) => x.name);
 
     setGeofenceList(normalized);
@@ -1176,7 +1226,14 @@ export default function NuevaGeocerca() {
                             setLastSelectedName(g.name);
                           }}
                         />
-                        <span className="min-w-0 truncate text-sm text-slate-100">{g.name}</span>
+                        <div className="min-w-0">
+                          <div className="truncate text-sm text-slate-100">{g.name}</div>
+                          {Number.isFinite(g.centerLat) && Number.isFinite(g.centerLng) ? (
+                            <div className="truncate text-xs text-slate-400">
+                              Lat: {g.centerLat.toFixed(6)} | Lng: {g.centerLng.toFixed(6)}
+                            </div>
+                          ) : null}
+                        </div>
                       </label>
                     ))}
                   </div>
