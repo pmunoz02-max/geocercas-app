@@ -1,34 +1,17 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/tracker-accept", "destination": "/tracker-gps" },
-    { "source": "/tracker-accept/(.*)", "destination": "/tracker-gps" },
+  "routes": [
+    { "src": "/mwea-geofence-demo.html", "dest": "/mwea-geofence-demo.html" },
+    { "src": "/quito-geofence-demo.html", "dest": "/quito-geofence-demo.html" },
 
-    { "source": "/api/auth/(.*)", "destination": "/api/auth?route=$1" },
+    { "src": "/tracker-accept", "dest": "/tracker-gps" },
+    { "src": "/tracker-accept/(.*)", "dest": "/tracker-gps" },
 
-    {
-      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-|mwea-geofence-demo\\.html$|quito-geofence-demo\\.html$).*)",
-      "destination": "/"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    },
-    {
-      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|site\\.webmanifest)$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/(service-worker\\.js|sw\\.js|workbox-.*\\.js)$",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    },
-    {
-      "source": "/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
-    }
+    { "src": "/api/auth/(.*)", "dest": "/api/auth?route=$1" },
+
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
+
+    { "src": "/(.*)", "dest": "/" }
   ]
 }
