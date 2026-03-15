@@ -5,9 +5,12 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 
 export default function MainNav({ role }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const currentLang = String(i18n?.resolvedLanguage || i18n?.language || "es")
+    .toLowerCase()
+    .slice(0, 2);
 
   const isAdmin = useMemo(() => {
     const r = (role || "").toLowerCase();
@@ -62,6 +65,31 @@ export default function MainNav({ role }) {
           {t("app.header.logout")}
         </button>
       )}
+
+      <div className="flex items-center gap-2 ml-1">
+        {[
+          { code: "es", label: "ES" },
+          { code: "en", label: "EN" },
+          { code: "fr", label: "FR" },
+        ].map((lang) => {
+          const isActive = currentLang === lang.code;
+          return (
+            <button
+              key={lang.code}
+              type="button"
+              onClick={() => i18n.changeLanguage(lang.code)}
+              className={`inline-flex items-center justify-center px-2.5 py-1.5 rounded-full text-xs border transition ${
+                isActive
+                  ? "font-bold bg-slate-900 text-white border-slate-900"
+                  : "font-medium bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+              }`}
+              aria-pressed={isActive}
+            >
+              {lang.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
