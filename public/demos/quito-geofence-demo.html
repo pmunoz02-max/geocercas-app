@@ -532,32 +532,43 @@
         trackerC.marker,
       ]);
       map.fitBounds(allTargets.getBounds().pad(0.18));
-    </script>
 
-    <script>
-      /*
-        Universal demo UI cleanup
-        Removes geofence labels / HUD info panels
-        so demo videos stay visually clean
-      */
-      function removeGeofenceLabels() {
+      const hideDemoHudStyle = document.createElement('style');
+      hideDemoHudStyle.innerHTML = `
+        .hud,
+        .map-overlay,
+        .info-card,
+        .geofence-info,
+        .leaflet-top.leaflet-left .hud,
+        .leaflet-control .hud {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      `;
+      document.head.appendChild(hideDemoHudStyle);
+
+      function removeDemoHud() {
         const selectors = [
+          '.hud',
+          '.map-overlay',
+          '.info-card',
           '.geofence-info',
-          '.geofence-label',
-          '#geofenceLabel',
-          '.hud-geofence',
-          '.info-panel',
-          '.map-label',
-          '.leaflet-popup',
+          '.leaflet-top.leaflet-left .hud',
+          '.leaflet-control .hud'
         ];
-        selectors.forEach(selector => {
-          document.querySelectorAll(selector).forEach(el => el.remove());
+        selectors.forEach((selector) => {
+          document.querySelectorAll(selector).forEach((el) => el.remove());
         });
       }
 
-      window.addEventListener('load', () => {
-        removeGeofenceLabels();
-      });
+      removeDemoHud();
+      window.addEventListener('load', removeDemoHud);
+      setTimeout(removeDemoHud, 300);
+      setTimeout(removeDemoHud, 800);
+      setTimeout(removeDemoHud, 1500);
+      setTimeout(removeDemoHud, 2500);
     </script>
   </body>
 </html>
