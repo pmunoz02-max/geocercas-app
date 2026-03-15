@@ -62,16 +62,24 @@ function StatBadge({ label, value, tone = "default" }) {
   );
 }
 
-function CursorPosLive({ setCursorLatLng, setMapZoom }) {
+function CursorPosLive({ setCursorLatLng, setMapZoom, setMapScale }) {
   const map = useMapEvents({
     mousemove: (e) => setCursorLatLng(e.latlng),
     mouseout: () => setCursorLatLng(null),
-    zoomend: (e) => setMapZoom(e?.target?.getZoom?.() ?? null),
+    zoomend: (e) => {
+      const m = e?.target;
+      setMapZoom(m?.getZoom?.() ?? null);
+      setMapScale(computeMapScale(m));
+    },
+    moveend: (e) => {
+      setMapScale(computeMapScale(e?.target));
+    },
   });
 
   useEffect(() => {
     setMapZoom(map?.getZoom?.() ?? null);
-  }, [map, setMapZoom]);
+    setMapScale(computeMapScale(map));
+  }, [map, setMapZoom, setMapScale]);
 
   return null;
 }
@@ -160,6 +168,31 @@ function getGeofenceCenter(row) {
   if (fromGeo) return fromGeo;
 
   return null;
+}
+
+function getRoundNum(num) {
+  const pow10 = Math.pow(10, (Math.floor(num) + "").length - 1);
+  let d = num / pow10;
+  d = d >= 10 ? 10 : d >= 5 ? 5 : d >= 3 ? 3 : d >= 2 ? 2 : 1;
+  return pow10 * d;
+}
+
+function computeMapScale(map) {
+  if (!map) return null;
+  try {
+    const maxWidthPx = 100;
+    const y = map.getSize().y / 2;
+    const leftLatLng = map.containerPointToLatLng(L.point(0, y));
+    const rightLatLng = map.containerPointToLatLng(L.point(maxWidthPx, y));
+    const maxMeters = leftLatLng.distanceTo(rightLatLng);
+    if (!Number.isFinite(maxMeters) || maxMeters <= 0) return null;
+    const meters = getRoundNum(maxMeters);
+    const label = meters < 1000 ? `${meters} m` : `${meters / 1000} km`;
+    const barWidthPx = Math.round((meters / maxMeters) * maxWidthPx);
+    return { label, barWidthPx };
+  } catch {
+    return null;
+  }
 }
 
 function parsePairs(text) {
@@ -287,6 +320,7 @@ export default function NuevaGeocerca() {
 
   const [cursorLatLng, setCursorLatLng] = useState(null);
   const [mapZoom, setMapZoom] = useState(8);
+  const [mapScale, setMapScale] = useState(null);
 
   const [draftFeature, setDraftFeature] = useState(null);
   const [draftId, setDraftId] = useState(0);
@@ -991,6 +1025,7 @@ export default function NuevaGeocerca() {
               try {
                 e.target.invalidateSize?.();
               } catch {}
+              setMapScale(computeMapScale(e?.target));
             }}
           >
             <TileLayer
@@ -999,7 +1034,7 @@ export default function NuevaGeocerca() {
             />
 
             {dataset && <GeoJSON data={dataset} {...pointStyle} />}
-            <CursorPosLive setCursorLatLng={setCursorLatLng} setMapZoom={setMapZoom} />
+            <CursorPosLive setCursorLatLng={setCursorLatLng} setMapZoom={setMapZoom} setMapScale={setMapScale} />
 
             <Pane name="draftPane" style={{ zIndex: 650 }}>
               {draftFeature && (
@@ -1124,18 +1159,29 @@ export default function NuevaGeocerca() {
           )}
         </div>
 
-        <div className="hidden md:block absolute right-3 bottom-24 z-[1100] space-y-2">
+        <div className="hidden md:block absolute right-3 bottom-24 z-[1100]">
           <div className="rounded-xl bg-white/85 px-3 py-2 text-xs backdrop-blur-md border border-black/10 shadow-md">
-            <span className="text-gray-500">{t("geocercas.lat", { defaultValue: "Lat" })} </span>
-            <span className="text-gray-900 font-semibold">
-              {Number.isFinite(cursorLatLng?.lat) ? cursorLatLng.lat.toFixed(6) : "-"}
-            </span>
-            <span className="mx-2 text-gray-500">{t("geocercas.lng", { defaultValue: "Lng" })} </span>
-            <span className="text-gray-900 font-semibold">
-              {Number.isFinite(cursorLatLng?.lng) ? cursorLatLng.lng.toFixed(6) : "-"}
-            </span>
-            <span className="mx-2 text-gray-500">Zoom </span>
-            <span className="text-gray-900 font-semibold">{Number.isFinite(mapZoom) ? String(mapZoom) : "-"}</span>
+            <div>
+              <span className="text-gray-500">{t("geocercas.lat", { defaultValue: "Lat" })} </span>
+              <span className="text-gray-900 font-semibold">
+                {Number.isFinite(cursorLatLng?.lat) ? cursorLatLng.lat.toFixed(6) : "-"}
+              </span>
+              <span className="mx-2 text-gray-500">{t("geocercas.lng", { defaultValue: "Lng" })} </span>
+              <span className="text-gray-900 font-semibold">
+                {Number.isFinite(cursorLatLng?.lng) ? cursorLatLng.lng.toFixed(6) : "-"}
+              </span>
+              <span className="mx-2 text-gray-500">Zoom </span>
+              <span className="text-gray-900 font-semibold">{Number.isFinite(mapZoom) ? String(mapZoom) : "-"}</span>
+            </div>
+            {mapScale ? (
+              <div className="mt-1.5 flex items-center gap-2">
+                <div
+                  className="h-1.5 shrink-0 border-b-2 border-l border-r border-gray-400"
+                  style={{ width: `${mapScale.barWidthPx}px` }}
+                />
+                <span className="text-gray-500">{mapScale.label}</span>
+              </div>
+            ) : null}
           </div>
         </div>
 
