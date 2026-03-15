@@ -352,7 +352,7 @@
         fillOpacity: 0.2,
         dashArray: "6 6",
       }).addTo(map);
-      geofence.bindTooltip(REGIONS[currentRegion].tooltip, { permanent: false });
+      // geofence.bindTooltip(REGIONS[currentRegion].tooltip, { permanent: false });
       let activeBounds = L.latLngBounds(REGIONS[currentRegion].bounds);
 
       const fieldA = L.polygon(
@@ -463,7 +463,7 @@
         map.flyTo(r.center, r.zoom);
         geofence.setBounds(r.bounds);
         geofence.unbindTooltip();
-        geofence.bindTooltip(r.tooltip, { permanent: false });
+        // geofence.bindTooltip(r.tooltip, { permanent: false });
         activeBounds = L.latLngBounds(r.bounds);
         eventTriggered = false;
         insideBefore = false;
