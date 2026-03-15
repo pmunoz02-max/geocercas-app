@@ -114,7 +114,6 @@
       }
 
       .hud {
-        display: none !important;
         position: absolute;
         z-index: 900;
         left: 14px;
@@ -267,7 +266,8 @@
       .leaflet-container > div:first-child,
       .map-overlay,
       .geofence-card,
-      .info-card {
+      .info-card,
+      .hud {
         display: none !important;
       }
     </style>
@@ -291,7 +291,8 @@
 
       <section class="map-wrap">
         <div id="map"></div>
-<div class="controls">
+
+        <div class="controls">
           <button id="zoom-in" class="btn" aria-label="Zoom in">+</button>
           <button id="zoom-out" class="btn" aria-label="Zoom out">-</button>
           <button id="play-pause" class="btn play" aria-label="Pause animation">Pause</button>
@@ -532,43 +533,33 @@
         trackerC.marker,
       ]);
       map.fitBounds(allTargets.getBounds().pad(0.18));
+    </script>
 
-      const hideDemoHudStyle = document.createElement('style');
-      hideDemoHudStyle.innerHTML = `
-        .hud,
-        .map-overlay,
-        .info-card,
-        .geofence-info,
-        .leaflet-top.leaflet-left .hud,
-        .leaflet-control .hud {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-        }
-      `;
-      document.head.appendChild(hideDemoHudStyle);
-
-      function removeDemoHud() {
+    <script>
+      /*
+        Universal demo UI cleanup
+        Removes geofence labels / HUD info panels
+        so demo videos stay visually clean
+      */
+      function removeGeofenceLabels() {
         const selectors = [
-          '.hud',
-          '.map-overlay',
-          '.info-card',
           '.geofence-info',
-          '.leaflet-top.leaflet-left .hud',
-          '.leaflet-control .hud'
+          '.geofence-label',
+          '#geofenceLabel',
+          '.hud-geofence',
+          '.hud',
+          '.info-panel',
+          '.map-label',
+          '.leaflet-popup',
         ];
-        selectors.forEach((selector) => {
-          document.querySelectorAll(selector).forEach((el) => el.remove());
+        selectors.forEach(selector => {
+          document.querySelectorAll(selector).forEach(el => el.remove());
         });
       }
 
-      removeDemoHud();
-      window.addEventListener('load', removeDemoHud);
-      setTimeout(removeDemoHud, 300);
-      setTimeout(removeDemoHud, 800);
-      setTimeout(removeDemoHud, 1500);
-      setTimeout(removeDemoHud, 2500);
+      window.addEventListener('load', () => {
+        removeGeofenceLabels();
+      });
     </script>
   </body>
 </html>
