@@ -1,8 +1,34 @@
 {
+  "version": 2,
   "rewrites": [
+    { "source": "/tracker-accept", "destination": "/tracker-gps" },
+    { "source": "/tracker-accept/(.*)", "destination": "/tracker-gps" },
+
+    { "source": "/api/auth/(.*)", "destination": "/api/auth?route=$1" },
+
+    {
+      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*)",
+      "destination": "/"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|site\\.webmanifest)$",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
+    {
+      "source": "/(service-worker\\.js|sw\\.js|workbox-.*\\.js)$",
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+    },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
     }
   ]
 }
