@@ -7,7 +7,7 @@
     { "source": "/api/auth/(.*)", "destination": "/api/auth?route=$1" },
 
     {
-      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*)",
+      "source": "/((?!api/|assets/|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-|mwea-geofence-demo\\.html$|quito-geofence-demo\\.html$).*)",
       "destination": "/"
     }
   ],
