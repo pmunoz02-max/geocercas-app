@@ -11,6 +11,8 @@ import AuthGuard from "./components/AuthGuard.jsx";
 // Public pages
 import Landing from "./pages/Landing.jsx";
 import DemoGeocercas from "./pages/DemoGeocercas.jsx";
+import DemoQuito from "./pages/demo/DemoQuito.jsx";
+import DemoMwea from "./pages/demo/DemoMwea.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
@@ -121,6 +123,8 @@ function AppRoutes() {
       {/* 🌐 Public */}
       <Route path="/" element={<RootEntry />} />
       <Route path="/demo" element={<DemoGeocercas />} />
+      <Route path="/demo/quito" element={<DemoQuito />} />
+      <Route path="/demo/mwea" element={<DemoMwea />} />
       <Route path="/login" element={<Login />} />
 
       {/* ✅ App callback */}
