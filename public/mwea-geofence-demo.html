@@ -215,6 +215,41 @@
         border-radius: 50%;
       }
 
+      .region-switcher {
+        position: absolute;
+        z-index: 900;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        background: var(--panel);
+        border: 1px solid rgba(16, 24, 40, 0.1);
+        border-radius: 10px;
+        padding: 4px;
+        box-shadow: 0 4px 12px rgba(21, 36, 28, 0.08);
+      }
+
+      .region-btn {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        padding: 6px 18px;
+        border-radius: 7px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+
+      .region-btn:hover {
+        background: rgba(15, 143, 91, 0.1);
+      }
+
+      .region-btn.active {
+        background: var(--primary);
+        color: #fff;
+      }
+
       @media (max-width: 900px) {
         .topbar {
           flex-direction: column;
@@ -259,6 +294,11 @@
           <button id="play-pause" class="btn play" aria-label="Pause animation">Pause</button>
         </div>
 
+        <div class="region-switcher">
+          <button class="region-btn" id="btn-quito" data-region="quito" onclick="switchRegion('quito')">Quito</button>
+          <button class="region-btn active" id="btn-mwea" data-region="mwea" onclick="switchRegion('mwea')">Mwea</button>
+        </div>
+
         <div id="event-toast" class="event-toast">Geofence event detected<br />Mwea Rice Fields</div>
 
         <div class="legend">
@@ -276,6 +316,24 @@
       crossorigin=""
     ></script>
     <script>
+      const REGIONS = {
+        quito: {
+          center: [-0.22985, -78.52495],
+          zoom: 15,
+          bounds: [[-0.2328, -78.5289], [-0.2268, -78.5210]],
+          popupText: "Geofence event detected<br/>Quito Operations Area",
+          tooltip: "Quito Operations Area",
+        },
+        mwea: {
+          center: [-0.6305, 37.3783],
+          zoom: 15,
+          bounds: [[-0.6334, 37.3756], [-0.6288, 37.3811]],
+          popupText: "Geofence event detected<br/>Mwea Rice Fields",
+          tooltip: "Mwea Rice Fields",
+        },
+      };
+      let currentRegion = "mwea";
+
       const map = L.map("map", { zoomControl: false }).setView([-0.6305, 37.3783], 15);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -283,19 +341,15 @@
         attribution: '&copy; OpenStreetMap contributors',
       }).addTo(map);
 
-      const geofenceBounds = [
-        [-0.6334, 37.3756],
-        [-0.6288, 37.3811],
-      ];
-
-      const geofence = L.rectangle(geofenceBounds, {
+      const geofence = L.rectangle(REGIONS[currentRegion].bounds, {
         color: "#10b981",
         weight: 2,
         fillColor: "#34d399",
         fillOpacity: 0.2,
         dashArray: "6 6",
       }).addTo(map);
-      geofence.bindTooltip("Rice Field Geofence", { permanent: false });
+      geofence.bindTooltip(REGIONS[currentRegion].tooltip, { permanent: false });
+      let activeBounds = L.latLngBounds(REGIONS[currentRegion].bounds);
 
       const fieldA = L.polygon(
         [
@@ -393,8 +447,26 @@
       const playPauseBtn = document.getElementById("play-pause");
 
       function showEventToast() {
+        toast.innerHTML = REGIONS[currentRegion].popupText;
         toast.classList.add("show");
         setTimeout(() => toast.classList.remove("show"), 2600);
+      }
+
+      function switchRegion(key) {
+        if (!REGIONS[key]) return;
+        currentRegion = key;
+        const r = REGIONS[key];
+        map.flyTo(r.center, r.zoom);
+        geofence.setBounds(r.bounds);
+        geofence.unbindTooltip();
+        geofence.bindTooltip(r.tooltip, { permanent: false });
+        activeBounds = L.latLngBounds(r.bounds);
+        eventTriggered = false;
+        insideBefore = false;
+        trackerA.marker.closePopup();
+        document.querySelectorAll(".region-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.region === key);
+        });
       }
 
       function updateTracker(tracker, dt, loop) {
@@ -422,12 +494,12 @@
           updateTracker(trackerB, dt, true);
           updateTracker(trackerC, dt, true);
 
-          const insideNow = L.latLngBounds(geofenceBounds).contains(trackerA.marker.getLatLng());
+          const insideNow = activeBounds.contains(trackerA.marker.getLatLng());
           if (insideNow && !insideBefore && !eventTriggered) {
             eventTriggered = true;
             showEventToast();
             trackerA.marker
-              .bindPopup("Geofence event detected<br/>Mwea Rice Fields")
+              .bindPopup(REGIONS[currentRegion].popupText)
               .openPopup();
             statusChip.textContent = "Tracker: Geofence event detected";
           }
