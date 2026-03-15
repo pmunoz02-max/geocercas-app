@@ -538,5 +538,31 @@
       ]);
       map.fitBounds(allTargets.getBounds().pad(0.18));
     </script>
+
+    <script>
+      /*
+        Universal demo UI cleanup
+        Removes geofence labels / HUD info panels
+        so demo videos stay visually clean
+      */
+      function removeGeofenceLabels() {
+        const selectors = [
+          '.geofence-info',
+          '.geofence-label',
+          '#geofenceLabel',
+          '.hud-geofence',
+          '.info-panel',
+          '.map-label',
+          '.leaflet-popup',
+        ];
+        selectors.forEach(selector => {
+          document.querySelectorAll(selector).forEach(el => el.remove());
+        });
+      }
+
+      window.addEventListener('load', () => {
+        removeGeofenceLabels();
+      });
+    </script>
   </body>
 </html>
