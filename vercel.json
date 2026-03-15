@@ -1,18 +1,17 @@
 {
   "version": 2,
-  "rewrites": [
-    { "source": "/tracker-accept", "destination": "/tracker-gps" },
-    { "source": "/tracker-accept/(.*)", "destination": "/tracker-gps" },
+  "routes": [
+    { "src": "/tracker-accept", "dest": "/tracker-gps" },
+    { "src": "/tracker-accept/(.*)", "dest": "/tracker-gps" },
 
-    { "source": "/api/auth/(.*)", "destination": "/api/auth?route=$1" },
+    { "src": "/api/auth/(.*)", "dest": "/api/auth?route=$1" },
 
-    { "source": "/demo/mwea", "destination": "/demo/mwea-geofence-demo.html" },
-    { "source": "/demo/quito", "destination": "/demo/quito-geofence-demo.html" },
+    { "src": "/demo/mwea", "dest": "/demo/mwea-geofence-demo.html" },
+    { "src": "/demo/quito", "dest": "/demo/quito-geofence-demo.html" },
 
-    {
-      "source": "/((?!api/|assets/|demo/.*\\.html$|favicon\\.ico$|robots\\.txt$|sitemap\\.xml$|manifest\\.webmanifest$|site\\.webmanifest$|service-worker\\.js$|sw\\.js$|workbox-).*)",
-      "destination": "/"
-    }
+    { "handle": "filesystem" },
+
+    { "src": "/(.*)", "dest": "/" }
   ],
   "headers": [
     {
