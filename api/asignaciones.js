@@ -183,6 +183,7 @@ async function loadCatalogs(sbDb, orgId) {
       catalogs.geocercas = (r.data || []).map((g) => ({
         id: g.id,
         nombre: g.name,
+        org_id: g.org_id,
         active: g.active,
         source_geocerca_id: g.source_geocerca_id || null,
       }));
@@ -196,7 +197,14 @@ async function loadCatalogs(sbDb, orgId) {
       .eq("org_id", orgId)
       .order("name", { ascending: true })
       .limit(500);
-    if (!r.error) catalogs.activities = (r.data || []).map((a) => ({ id: a.id, nombre: a.name, active: a.active }));
+    if (!r.error) {
+      catalogs.activities = (r.data || []).map((a) => ({
+        id: a.id,
+        nombre: a.name,
+        org_id: a.org_id,
+        active: a.active,
+      }));
+    }
   } catch {}
 
   return catalogs;

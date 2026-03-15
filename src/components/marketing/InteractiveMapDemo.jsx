@@ -387,7 +387,7 @@ export default function InteractiveMapDemo() {
   return (
     <div className="relative w-full overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_20px_60px_-30px_rgba(15,23,42,0.45)]">
       <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
-        Demo en vivo · Quito · Loop 10s
+        Demo en vivo · Operations Area · Loop 10s
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
