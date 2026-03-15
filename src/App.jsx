@@ -123,8 +123,8 @@ function AppRoutes() {
       {/* 🌐 Public */}
       <Route path="/" element={<RootEntry />} />
       <Route path="/demo" element={<DemoGeocercas />} />
-      <Route path="/demo/quito" element={<DemoQuito />} />
-      <Route path="/demo/mwea" element={<DemoMwea />} />
+      <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
+      <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/login" element={<Login />} />
 
       {/* ✅ App callback */}
