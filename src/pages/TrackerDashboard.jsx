@@ -451,6 +451,7 @@ const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
               key={`p-${it.geofenceId}-${it.idx}`}
               positions={it.positions}
               pathOptions={{ color: "#2563eb", weight: 4, opacity: 1, fillOpacity: 0.18 }}
+              interactive={false}
             >
               <Tooltip sticky>{it.name}</Tooltip>
             </Polygon>
@@ -463,6 +464,7 @@ const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
               center={it.center}
               radius={it.radius_m}
               pathOptions={{ color: "#2563eb", weight: 3, opacity: 1, fillOpacity: 0.12 }}
+              interactive={false}
             >
               <Tooltip sticky>
                 {t("trackerDashboard.map.circleLabel", {
