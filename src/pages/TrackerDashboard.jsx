@@ -490,26 +490,37 @@ const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, perso
 
         const latlngs = Array.isArray(entry.latlngs) ? entry.latlngs : [];
 
+        // Normalize coordinates to numbers
+        const latestLat = Number(latest.lat);
+        const latestLng = Number(latest.lng);
+
+        // Validate coordinates; skip rendering if invalid
+        if (!isValidLatLng(latestLat, latestLng)) return null;
+
         const personalId = latest.personal_id || entry.personal_id || null;
         const person = personalId ? personalById.get(String(personalId)) : null;
         const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
         const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
         const shouldRenderPolyline = selectedTrackerId !== "all" && trackerId === selectedTrackerId && latlngs.length > 1;
 
+        // Normalize timestamp for tooltip display
+        const latestTime = latest.recorded_at || latest.created_at || null;
+
         return (
           <React.Fragment key={trackerId}>
             {shouldRenderPolyline && <Polyline positions={latlngs} pathOptions={{ color, weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
             <AnimatedTrackerDot
-              center={[latest.lat, latest.lng]}
+              center={[latestLat, latestLng]}
               color={color}
               radius={7}
             >
               <Tooltip direction="top">
                 <div className="text-xs">
                   <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latest.recorded_at)}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latest.lat.toFixed(6)}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latest.lng.toFixed(6)}</div>
+                  {personalId && <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {personalId}</div>}
+                  <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latestTime)}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLat.toFixed(6)}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLng.toFixed(6)}</div>
                   {latest.accuracy !== null && latest.accuracy !== undefined && (
                     <div>
                       <b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>{": "}
