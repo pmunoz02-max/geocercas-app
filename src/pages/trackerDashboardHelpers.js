@@ -44,6 +44,32 @@ export function getTrackerKey(row) {
   return String(row.personal_id || row.user_id || "unknown");
 }
 
+export function getPositionTs(row) {
+  if (!row) return 0;
+
+  if (row.recorded_at) {
+    const ts = Date.parse(row.recorded_at);
+    if (Number.isFinite(ts)) return ts;
+  }
+
+  if (row.tracker_latest_at) {
+    const ts = Date.parse(row.tracker_latest_at);
+    if (Number.isFinite(ts)) return ts;
+  }
+
+  if (row.position_at) {
+    const ts = Date.parse(row.position_at);
+    if (Number.isFinite(ts)) return ts;
+  }
+
+  if (row.created_at) {
+    const ts = Date.parse(row.created_at);
+    if (Number.isFinite(ts)) return ts;
+  }
+
+  return 0;
+}
+
 // GeoJSON is [lng,lat] => Leaflet [lat,lng]
 function toLatLngStrict(coord) {
   if (!coord || !Array.isArray(coord) || coord.length < 2) return null;

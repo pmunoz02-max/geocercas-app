@@ -7,6 +7,7 @@ import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
 import {
   boundsFromPolys,
   buildGeofenceLayerItems,
+  getPositionTs,
   getTrackerKey,
   isProbablyZeroZeroBounds,
   isValidLatLng,
@@ -1026,9 +1027,9 @@ export default function TrackerDashboard() {
     for (const row of mappedRows) {
       if (!row?.user_id) continue;
       const key = String(row.user_id);
-      const currentTs = row.recorded_at ? Date.parse(row.recorded_at) : 0;
+      const currentTs = getPositionTs(row);
       const previous = latestByUser.get(key);
-      const previousTs = previous?.recorded_at ? Date.parse(previous.recorded_at) : 0;
+      const previousTs = getPositionTs(previous);
       if (!previous || currentTs >= previousTs) latestByUser.set(key, row);
     }
 
@@ -1475,13 +1476,6 @@ export default function TrackerDashboard() {
   const visiblePositions = useMemo(() => {
     if (!positions?.length) return [];
 
-    const getPositionTs = (p) =>
-      p?.recorded_at
-        ? Date.parse(p.recorded_at)
-        : p?.created_at
-        ? Date.parse(p.created_at)
-        : 0;
-
     // MODE 1: All trackers → only latest position per tracker
     if (selectedTrackerId === "all") {
       const latestByTracker = new Map();
@@ -1527,11 +1521,7 @@ export default function TrackerDashboard() {
 
     const sorted = new Map();
     for (const [trackerId, rows] of grouped.entries()) {
-      const trackerPositions = [...rows].sort((a, b) => {
-        const ta = a.recorded_at ? Date.parse(a.recorded_at) : 0;
-        const tb = b.recorded_at ? Date.parse(b.recorded_at) : 0;
-        return ta - tb;
-      });
+      const trackerPositions = [...rows].sort((a, b) => getPositionTs(a) - getPositionTs(b));
 
       const positions = trackerPositions.slice(-MAX_HISTORY_PER_TRACKER);
       const latlngs = positions
@@ -1558,7 +1548,7 @@ export default function TrackerDashboard() {
       let best = null;
       let bestTs = -Infinity;
       for (const p of candidates) {
-        const ts = p.recorded_at ? Date.parse(p.recorded_at) : p.created_at ? Date.parse(p.created_at) : 0;
+        const ts = getPositionTs(p);
         if (Number.isFinite(ts) && ts > bestTs) {
           bestTs = ts;
           best = p;
