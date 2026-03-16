@@ -59,6 +59,13 @@ function isValidUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function normalizeUuid(v) {
+  if (v === null || v === undefined) return null;
+  const value = String(v).trim();
+  if (!value || value.toLowerCase() === "null" || value.toLowerCase() === "undefined") return null;
+  return isValidUuid(value) ? value : null;
+}
+
 function formatTime(dtString) {
   if (!dtString) return "-";
   try {
@@ -662,7 +669,7 @@ export default function TrackerDashboard() {
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
-  const resolvedOrgId = isValidUuid(orgId) ? orgId : null;
+  const resolvedOrgId = normalizeUuid(orgId);
 
   const previewUiEnabled = useMemo(() => isPreviewLikeHost(), []);
 
@@ -691,17 +698,20 @@ export default function TrackerDashboard() {
       const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
       if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
       if (r1?.data) {
-        const v = String(r1.data);
-        setOrgId(v);
-        setOrgIdSource("rpc:resolve_org_for_tracker_dashboard");
-        return v;
+        const v = normalizeUuid(r1.data);
+        if (v) {
+          setOrgId(v);
+          setOrgIdSource("rpc:resolve_org_for_tracker_dashboard");
+          return v;
+        }
       }
 
       const r2 = await supabase.rpc("get_current_org_id");
       if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
       if (!r2?.data) throw new Error("RPC returned null (no org).");
 
-      const v = String(r2.data);
+      const v = normalizeUuid(r2.data);
+      if (!v) throw new Error("RPC returned invalid org id.");
       setOrgId(v);
       setOrgIdSource("rpc:get_current_org_id");
       return v;
@@ -721,7 +731,8 @@ export default function TrackerDashboard() {
 
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
-    if (!isValidUuid(currentOrgId)) return;
+    const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) return;
 
     setErrorMsg("");
     setInfoMsg("");
@@ -736,7 +747,7 @@ export default function TrackerDashboard() {
     const { data, error } = await supabase
       .from("tracker_assignments")
       .select("tracker_user_id, geofence_id, org_id, active, start_date, end_date")
-      .eq("org_id", currentOrgId)
+      .eq("org_id", safeOrgId)
       .eq("active", true)
       .or(orVigencia);
 
@@ -761,7 +772,7 @@ export default function TrackerDashboard() {
       const asigRes = await supabase
         .from("asignaciones")
         .select("*")
-        .eq("org_id", currentOrgId);
+        .eq("org_id", safeOrgId);
 
       if (!asigRes.error) {
         const asigRows = Array.isArray(asigRes.data) ? asigRes.data : [];
@@ -805,7 +816,9 @@ export default function TrackerDashboard() {
 
     setAssignments(rows);
 
-    const uniqTrackers = Array.from(new Set(rows.map((r) => String(r.tracker_user_id)).filter(Boolean))).map((user_id) => ({ user_id }));
+    const uniqTrackers = Array.from(
+      new Set(rows.map((r) => normalizeUuid(r?.tracker_user_id)).filter(Boolean))
+    ).map((user_id) => ({ user_id }));
     const uniqGeof = Array.from(
       new Set(rows.map((r) => String(r.geofence_id || r.geocerca_id || "")).filter(Boolean))
     );
@@ -829,7 +842,8 @@ export default function TrackerDashboard() {
   }, [todayStrUtc, tOr]);
 
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
-    if (!isValidUuid(currentOrgId)) return;
+    const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) return;
 
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
@@ -846,7 +860,7 @@ export default function TrackerDashboard() {
     let q = supabase
       .from("geofences")
       .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
-      .eq("org_id", currentOrgId)
+      .eq("org_id", safeOrgId)
       .eq("active", true);
 
     if (assignedIds.length > 0) {
@@ -883,7 +897,7 @@ export default function TrackerDashboard() {
       const fb = await supabase
         .from("geofences")
         .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
-        .eq("org_id", currentOrgId)
+        .eq("org_id", safeOrgId)
         .eq("active", true)
         .order("updated_at", { ascending: false })
         .order("created_at", { ascending: false })
@@ -959,11 +973,12 @@ export default function TrackerDashboard() {
   }, [t, tOr]);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
-    if (!isValidUuid(currentOrgId)) return;
+    const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) return;
     const { data, error } = await supabase
       .from("personal")
       .select("*")
-      .eq("org_id", currentOrgId)
+      .eq("org_id", safeOrgId)
       .order("nombre", { ascending: true });
 
     if (error) {
@@ -975,8 +990,9 @@ export default function TrackerDashboard() {
 
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
-      if (!isValidUuid(currentOrgId)) {
-        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved");
+      const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) {
+        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
         return;
       }
       const { showSpinner } = options;
@@ -989,7 +1005,7 @@ export default function TrackerDashboard() {
         const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
         const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
-        const latestRes = await loadLatestPositions(currentOrgId);
+        const latestRes = await loadLatestPositions(safeOrgId)
         const latestRows = latestRes?.rows || [];
         console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
 
@@ -997,7 +1013,7 @@ export default function TrackerDashboard() {
         let finalRows = latestRows;
 
         if (latestRows.length === 0) {
-          const fallbackRows = await loadLivePositionsFromPositions(currentOrgId, selectedWindowHours);
+          const fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours)
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
           source = "positions";
           finalRows = fallbackRows;
@@ -1021,15 +1037,18 @@ export default function TrackerDashboard() {
   );
 
   async function loadLatestPositions(currentOrgId) {
-    if (!isValidUuid(currentOrgId)) {
-      console.warn("[tracker-dashboard] org_id not ready, skipping positions query");
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] org_id missing, skip tracker_latest query", currentOrgId);
       return { rows: [], error: null };
     }
+
+    console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
 
     const { data, error } = await supabase
       .from("tracker_latest")
       .select("user_id, org_id, lat, lng, accuracy, ts")
-      .eq("org_id", currentOrgId)
+      .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
 
@@ -1055,28 +1074,31 @@ export default function TrackerDashboard() {
   }
 
   async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
-    if (!isValidUuid(currentOrgId)) {
-      console.warn("[tracker-dashboard] org_id not ready, skipping positions query");
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] org_id missing, skip positions query", currentOrgId);
       return [];
     }
 
     const fromIso = new Date(Date.now() - Number(hoursBack || 6) * 60 * 60 * 1000).toISOString();
+    console.log("[tracker-dashboard] positions query org:", safeOrgId);
 
     let query = supabase
       .from("positions")
       .select("id, user_id, lat, lng, accuracy, recorded_at, created_at")
-      .eq("org_id", currentOrgId)
+      .eq("org_id", safeOrgId)
       .gte("recorded_at", fromIso)
       .order("recorded_at", { ascending: false, nullsFirst: false })
       .limit(500);
 
     if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-      const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
+      const allowedUserIds = assignmentTrackers
+        .map((x) => normalizeUuid(x?.user_id))
+        .filter(Boolean);
       if (allowedUserIds.length) query = query.in("user_id", allowedUserIds);
     }
 
     const { data, error } = await query;
-
     if (error) {
       console.warn("positions live fallback error:", error);
       return [];
@@ -1108,27 +1130,30 @@ export default function TrackerDashboard() {
   }
 
   async function loadLatestPositionsSafe(currentOrgId) {
-    if (!isValidUuid(currentOrgId)) {
-      console.warn("[tracker-dashboard] invalid org_id for tracker_latest, skipping query");
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] invalid org_id for tracker_latest, skipping query", currentOrgId);
       return [];
     }
 
-    const res = await loadLatestPositions(currentOrgId);
+    const res = await loadLatestPositions(safeOrgId);
     return res?.rows || [];
   }
 
   async function loadPositionsFallbackSafe(currentOrgId, hoursBack) {
-    if (!isValidUuid(currentOrgId)) {
-      console.warn("[tracker-dashboard] invalid org_id for positions fallback, skipping query");
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] invalid org_id for positions fallback, skipping query", currentOrgId);
       return [];
     }
 
-    return await loadLivePositionsFromPositions(currentOrgId, hoursBack);
+    return await loadLivePositionsFromPositions(safeOrgId, hoursBack);
   }
 
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
-      if (!isValidUuid(currentOrgId)) return;
+      const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) return;
       const { showSpinner } = options;
 
       try {
@@ -1149,22 +1174,23 @@ export default function TrackerDashboard() {
           let q = supabase
             .from(tableName)
             .select(selectCols)
-            .eq("org_id", currentOrgId)
+            .eq("org_id", safeOrgId)
             .or(orTime)
             .order("recorded_at", { ascending: false, nullsFirst: false })
             .order("created_at", { ascending: false })
             .limit(500);
 
           if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-            const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
+            const allowedUserIds = assignmentTrackers
+              .map((x) => normalizeUuid(x?.user_id))
+              .filter(Boolean);
             if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
           }
 
           return await q;
         };
 
-        // 1️⃣ Intentar cargar estado LIVE
-        const latestRes = await loadLatestPositions(currentOrgId);
+        const latestRes = await loadLatestPositions(safeOrgId);
         const latestRows = latestRes?.rows || [];
 
         let finalRows = [];
@@ -1173,7 +1199,6 @@ export default function TrackerDashboard() {
         if (latestRows.length > 0) {
           finalRows = latestRows;
         } else {
-          // 2️⃣ Fallback a tabla positions
           tableUsed = "positions";
           let res = await queryTable("positions");
 
@@ -1183,7 +1208,6 @@ export default function TrackerDashboard() {
             res.data.length === 0;
 
           if (shouldFallbackToLegacy) {
-            // 3️⃣ Fallback final a tracker_positions
             const res2 = await queryTable("tracker_positions");
             tableUsed = "tracker_positions";
             res = res2;
@@ -1198,10 +1222,7 @@ export default function TrackerDashboard() {
           }
         }
 
-        // Log para diagnóstico en preview
         console.log("[tracker-dashboard] source:", tableUsed, "rows:", finalRows.length);
-
-        // Renderizar posiciones
         setPositions(finalRows);
         setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: tableUsed }));
       } finally {
@@ -1212,13 +1233,14 @@ export default function TrackerDashboard() {
   );
 
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
-    if (!isValidUuid(currentOrgId)) return;
+    const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) return;
 
     try {
       const { data, error } = await supabase
         .from("tracker_geofence_events")
         .select("id, user_id, personal_id, geocerca_nombre, event_type, lat, lng, created_at")
-        .eq("org_id", currentOrgId)
+        .eq("org_id", safeOrgId)
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -1236,7 +1258,8 @@ export default function TrackerDashboard() {
   }, []);
 
   const reloadAllForCurrentOrg = useCallback(async (currentOrgId) => {
-    if (!isValidUuid(currentOrgId)) return;
+    const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) return;
     await Promise.all([
       fetchAssignments(currentOrgId),
       fetchPersonalCatalog(currentOrgId),
