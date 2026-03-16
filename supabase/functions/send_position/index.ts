@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const build_tag = "send_position-v18_upsert_tracker_latest_preview_20260316";
+const build_tag = "send_position-v19_positions_only_preview_20260316";
 
 function buildCorsHeaders(origin: string | null) {
   return {
@@ -85,25 +85,6 @@ function pickTimestamps(body: any) {
 
   const created_at = nowIso;
   return { recorded_at, created_at };
-}
-
-async function upsertTrackerLatest(admin: any, position: any) {
-  const latestRow = {
-    user_id: String(position?.user_id),
-    org_id: position?.org_id,
-    event: "POSITION",
-    lat: position?.lat,
-    lng: position?.lng,
-    accuracy: position?.accuracy ?? null,
-    ts: position?.recorded_at ?? position?.created_at ?? new Date().toISOString(),
-    // geom: intentionally omitted here to keep the flow resilient without SQL/RPC geometry builders.
-  };
-
-  const { error } = await admin
-    .from("tracker_latest")
-    .upsert(latestRow, { onConflict: "user_id" });
-
-  if (error) throw error;
 }
 
 serve(async (req) => {
@@ -201,16 +182,11 @@ serve(async (req) => {
         created_at,
       };
 
-      const { error } = await admin.from("positions").insert(row);
+      const { data: insertedPos, error } = await admin.from("positions").insert(row).select("id").single();
       if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
 
-      console.log("[send_position] inserted into positions");
-      try {
-        await upsertTrackerLatest(admin, row);
-        console.log("[send_position] upserted tracker_latest");
-      } catch (e: any) {
-        console.error("[send_position] tracker_latest upsert failed", e?.message ?? String(e));
-      }
+      console.log("[send_position] inserted into positions", insertedPos?.id);
+      console.log("[send_position] tracker_latest sync handled by DB trigger");
 
       return json({ ok: true, build_tag, mode: "proxy_hmac" }, 200, CORS);
     }
@@ -256,16 +232,11 @@ serve(async (req) => {
       created_at,
     };
 
-    const { error } = await admin.from("positions").insert(row);
+    const { data: insertedPos, error } = await admin.from("positions").insert(row).select("id").single();
     if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
 
-    console.log("[send_position] inserted into positions");
-    try {
-      await upsertTrackerLatest(admin, row);
-      console.log("[send_position] upserted tracker_latest");
-    } catch (e: any) {
-      console.error("[send_position] tracker_latest upsert failed", e?.message ?? String(e));
-    }
+    console.log("[send_position] inserted into positions", insertedPos?.id);
+    console.log("[send_position] tracker_latest sync handled by DB trigger");
 
     return json({ ok: true, build_tag, mode: "web_auth" }, 200, CORS);
   } catch (err: any) {
