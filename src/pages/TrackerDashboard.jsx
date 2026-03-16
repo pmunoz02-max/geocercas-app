@@ -721,7 +721,7 @@ export default function TrackerDashboard() {
 
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
+    if (!isValidUuid(currentOrgId)) return;
 
     setErrorMsg("");
     setInfoMsg("");
@@ -829,7 +829,7 @@ export default function TrackerDashboard() {
   }, [todayStrUtc, tOr]);
 
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
-    if (!currentOrgId) return;
+    if (!isValidUuid(currentOrgId)) return;
 
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
@@ -959,7 +959,7 @@ export default function TrackerDashboard() {
   }, [t, tOr]);
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
+    if (!isValidUuid(currentOrgId)) return;
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -975,7 +975,7 @@ export default function TrackerDashboard() {
 
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
-      if (!currentOrgId) {
+      if (!isValidUuid(currentOrgId)) {
         console.warn("[tracker-dashboard] dashboard load skipped: org not resolved");
         return;
       }
@@ -1021,7 +1021,7 @@ export default function TrackerDashboard() {
   );
 
   async function loadLatestPositions(currentOrgId) {
-    if (!currentOrgId) {
+    if (!isValidUuid(currentOrgId)) {
       console.warn("[tracker-dashboard] org_id not ready, skipping positions query");
       return { rows: [], error: null };
     }
@@ -1055,7 +1055,7 @@ export default function TrackerDashboard() {
   }
 
   async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
-    if (!currentOrgId) {
+    if (!isValidUuid(currentOrgId)) {
       console.warn("[tracker-dashboard] org_id not ready, skipping positions query");
       return [];
     }
@@ -1128,7 +1128,7 @@ export default function TrackerDashboard() {
 
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
-      if (!currentOrgId) return;
+      if (!isValidUuid(currentOrgId)) return;
       const { showSpinner } = options;
 
       try {
@@ -1212,7 +1212,7 @@ export default function TrackerDashboard() {
   );
 
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
+    if (!isValidUuid(currentOrgId)) return;
 
     try {
       const { data, error } = await supabase
@@ -1600,13 +1600,13 @@ export default function TrackerDashboard() {
             <button
               type="button"
               onClick={() => {
-                if (!orgId) return;
-                if (isHistoryRequested) fetchPositions(orgId, { showSpinner: true });
-                else loadLatestPositionsForDashboard(orgId, { showSpinner: true });
+                if (!resolvedOrgId) return;
+                if (isHistoryRequested) fetchPositions(resolvedOrgId, { showSpinner: true });
+                else loadLatestPositionsForDashboard(resolvedOrgId, { showSpinner: true });
               }}
               className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
                          hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-              disabled={loading || !orgId}
+              disabled={loading || !resolvedOrgId}
             >
               {loading
                 ? tOr("trackerDashboard.actions.loading", "Loading…")
