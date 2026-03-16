@@ -663,6 +663,7 @@ export default function TrackerDashboard() {
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [isHistoryRequested, setIsHistoryRequested] = useState(false);
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const [assignments, setAssignments] = useState([]);
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
@@ -1642,6 +1643,16 @@ export default function TrackerDashboard() {
     }, []);
   }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
 
+  const filteredAllTrackerMarkers = useMemo(() => {
+    if (selectedTrackerId !== "all") return allTrackerMarkers;
+    if (statusFilter === "all") return allTrackerMarkers;
+
+    return (allTrackerMarkers || []).filter((item) => {
+      const live = item?.live || getTrackerLiveStatus(item?.latest);
+      return live.status === statusFilter;
+    });
+  }, [allTrackerMarkers, selectedTrackerId, statusFilter]);
+
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
 
@@ -1909,6 +1920,24 @@ export default function TrackerDashboard() {
                   </select>
                 </label>
 
+                <label className="block">
+                  <span className="block text-sm font-medium text-gray-900 mb-1">
+                    {tOr("trackerDashboard.labels.status", "Status")}
+                  </span>
+                  <select
+                    className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    disabled={!orgId || selectedTrackerId !== "all"}
+                  >
+                    <option value="all">{tOr("trackerDashboard.labels.all", "All")}</option>
+                    <option value="online">{tOr("trackerDashboard.status.online", "Online")}</option>
+                    <option value="stale">{tOr("trackerDashboard.status.stale", "Stale")}</option>
+                    <option value="offline">{tOr("trackerDashboard.status.offline", "Offline")}</option>
+                  </select>
+                </label>
+
                 <div>
                   <span className="block text-sm font-medium text-gray-900 mb-1">
                     {tOr("trackerDashboard.labels.geofences", "Geofences")}
@@ -2026,7 +2055,7 @@ export default function TrackerDashboard() {
                   <GeofenceLayers layerItems={layerItems} t={t} />
 
                   <TrackerLayers
-                    allTrackerMarkers={allTrackerMarkers}
+                    allTrackerMarkers={filteredAllTrackerMarkers}
                     selectedTrackerPath={selectedTrackerPath}
                     personalById={personalById}
                     personalByUserId={personalByUserId}
