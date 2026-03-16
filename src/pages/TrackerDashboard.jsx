@@ -66,6 +66,36 @@ function normalizeUuid(v) {
   return isValidUuid(value) ? value : null;
 }
 
+function mapTrackerLatestRow(row) {
+  if (!row?.user_id) return null;
+
+  const mapped = {
+    user_id: String(row.user_id),
+    lat: Number(row.lat),
+    lng: Number(row.lng),
+    accuracy: row.accuracy ?? null,
+    recorded_at: row.ts ?? null,
+    source: "tracker_latest",
+  };
+
+  if (!isValidLatLng(mapped.lat, mapped.lng)) return null;
+  return mapped;
+}
+
+function replacePositionByUserId(rows, nextRow) {
+  if (!nextRow?.user_id) return Array.isArray(rows) ? rows : [];
+
+  const currentRows = Array.isArray(rows) ? rows : [];
+  const nextUserId = String(nextRow.user_id);
+  const existingIndex = currentRows.findIndex((row) => String(row?.user_id || "") === nextUserId);
+
+  if (existingIndex === -1) return [nextRow, ...currentRows];
+
+  const updatedRows = currentRows.slice();
+  updatedRows[existingIndex] = { ...updatedRows[existingIndex], ...nextRow };
+  return updatedRows;
+}
+
 function formatTime(dtString) {
   if (!dtString) return "-";
   try {
@@ -626,6 +656,7 @@ export default function TrackerDashboard() {
   const [orgResolveError, setOrgResolveError] = useState("");
 
   const mapRef = useRef(null);
+  const positionsRef = useRef([]);
   const [loading, setLoading] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
@@ -672,6 +703,10 @@ export default function TrackerDashboard() {
   const resolvedOrgId = normalizeUuid(orgId);
 
   const previewUiEnabled = useMemo(() => isPreviewLikeHost(), []);
+
+  useEffect(() => {
+    positionsRef.current = Array.isArray(positions) ? positions : [];
+  }, [positions]);
 
   const DEMO_ORG_ID = "f0f185ae-e6d1-4045-9e4b-372a5b7b471a";
   const isDemoOrg = resolvedOrgId === DEMO_ORG_ID;
@@ -1057,18 +1092,7 @@ export default function TrackerDashboard() {
       return { rows: [], error };
     }
 
-    const rows = Array.isArray(data)
-      ? data
-          .filter((p) => p && p.lat != null && p.lng != null)
-          .map((p) => ({
-            user_id: String(p.user_id),
-            lat: Number(p.lat),
-            lng: Number(p.lng),
-            accuracy: p.accuracy ?? null,
-            recorded_at: p.ts ?? null,
-            source: "tracker_latest",
-          }))
-      : [];
+    const rows = Array.isArray(data) ? data.map(mapTrackerLatestRow).filter(Boolean) : [];
 
     return { rows, error: null };
   }
@@ -1345,6 +1369,47 @@ export default function TrackerDashboard() {
       cancelled = true;
     };
   }, [resolvedOrgId, assignmentTrackers, entitlementsLoading, isFree, isHistoryRequested, timeWindowId]);
+
+  useEffect(() => {
+    if (!previewUiEnabled) return;
+    if (!resolvedOrgId || entitlementsLoading || isFree) return;
+    if (isHistoryRequested) return;
+
+    const channel = supabase
+      .channel(`tracker-dashboard-live-${resolvedOrgId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "tracker_latest",
+          filter: `org_id=eq.${resolvedOrgId}`,
+        },
+        (payload) => {
+          if (!payload || (payload.eventType !== "INSERT" && payload.eventType !== "UPDATE")) return;
+
+          const mappedRow = mapTrackerLatestRow(payload.new);
+          if (!mappedRow) return;
+
+          const nextRows = replacePositionByUserId(positionsRef.current, mappedRow);
+          positionsRef.current = nextRows;
+          setPositions(nextRows);
+          setDiag((d) => ({
+            ...d,
+            positionsFound: nextRows.length,
+            positionsSource: "tracker_latest",
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        if (typeof supabase.removeChannel === "function") supabase.removeChannel(channel);
+        else if (typeof channel.unsubscribe === "function") channel.unsubscribe();
+      } catch {}
+    };
+  }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, previewUiEnabled]);
 
   useEffect(() => {
     if (!resolvedOrgId || entitlementsLoading || isFree) return;
