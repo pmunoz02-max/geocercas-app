@@ -490,21 +490,37 @@ const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, perso
 
         const latlngs = Array.isArray(entry.latlngs) ? entry.latlngs : [];
 
-        // Normalize coordinates to numbers
-        const latestLat = Number(latest.lat);
-        const latestLng = Number(latest.lng);
-
-        // Validate coordinates; skip rendering if invalid
+        // Compute safe values for coordinates
+        const latestLat = Number(latest?.lat);
+        const latestLng = Number(latest?.lng);
         if (!isValidLatLng(latestLat, latestLng)) return null;
+
+        // Compute safe display values for coordinates
+        const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
+        const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
+
+        // Compute safe value for time
+        const latestTime = latest?.recorded_at || latest?.created_at || null;
+
+        // Compute safe value for accuracy
+        const accuracyNum = Number(latest?.accuracy);
+        const accuracyText =
+          latest?.accuracy !== null && latest?.accuracy !== undefined && Number.isFinite(accuracyNum)
+            ? `${accuracyNum.toFixed(0)} m`
+            : null;
+
+        // Compute safe value for speed
+        const speedNum = Number(latest?.speed);
+        const speedText =
+          latest?.speed !== null && latest?.speed !== undefined && Number.isFinite(speedNum)
+            ? speedNum.toFixed(1)
+            : null;
 
         const personalId = latest.personal_id || entry.personal_id || null;
         const person = personalId ? personalById.get(String(personalId)) : null;
         const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
         const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
         const shouldRenderPolyline = selectedTrackerId !== "all" && trackerId === selectedTrackerId && latlngs.length > 1;
-
-        // Normalize timestamp for tooltip display
-        const latestTime = latest.recorded_at || latest.created_at || null;
 
         return (
           <React.Fragment key={trackerId}>
@@ -514,30 +530,23 @@ const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, perso
               color={color}
               radius={7}
             >
-              <Tooltip direction="top">
+              <Tooltip direction="top" offset={[0, -8]} opacity={1}>
                 <div className="text-xs">
                   <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
-                  {personalId && <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {personalId}</div>}
+                  {personalId && (
+                    <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(personalId)}</div>
+                  )}
                   <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latestTime)}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLat.toFixed(6)}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLng.toFixed(6)}</div>
-                  {latest.accuracy !== null && latest.accuracy !== undefined && (
-                    <div>
-                      <b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>{": "}
-                      {Number(latest.accuracy).toFixed?.(0) ?? String(latest.accuracy)} m
-                    </div>
+                  <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLngText}</div>
+                  {accuracyText && (
+                    <div><b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>: {accuracyText}</div>
                   )}
-                  {latest.speed !== null && latest.speed !== undefined && (
-                    <div>
-                      <b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>{": "}
-                      {Number(latest.speed).toFixed?.(1) ?? String(latest.speed)}
-                    </div>
+                  {speedText && (
+                    <div><b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>: {speedText}</div>
                   )}
-                  {latest.source && (
-                    <div>
-                      <b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>{": "}
-                      {String(latest.source)}
-                    </div>
+                  {latest?.source && (
+                    <div><b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>: {String(latest.source)}</div>
                   )}
                 </div>
               </Tooltip>
