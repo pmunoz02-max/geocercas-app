@@ -193,6 +193,45 @@ function normalizeGeoJSONToPolygons(input) {
   return polygons;
 }
 
+function boundsFromPolys(polys) {
+  try {
+    const all = [];
+    (polys || []).forEach((ring) => (ring || []).forEach((p) => all.push(p)));
+    if (all.length < 3) return null;
+    const b = L.latLngBounds(all);
+    return b.isValid() ? b : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProbablyZeroZeroBounds(b) {
+  try {
+    if (!b?.isValid?.()) return false;
+    const c = b.getCenter();
+    const sw = b.getSouthWest();
+    const ne = b.getNorthEast();
+    const w = Math.abs(ne.lng - sw.lng);
+    const h = Math.abs(ne.lat - sw.lat);
+    const nearZero = Math.abs(c.lat) < 0.01 && Math.abs(c.lng) < 0.01;
+    const tiny = w < 0.01 && h < 0.01;
+    return nearZero && tiny;
+  } catch {
+    return false;
+  }
+}
+
+function shouldFitToBounds(map, bounds) {
+  try {
+    if (!map || !bounds?.isValid?.()) return false;
+    const view = map.getBounds?.();
+    if (!view?.isValid?.()) return true;
+    return !view.intersects(bounds.pad(0.05));
+  } catch {
+    return true;
+  }
+}
+
 function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
@@ -1045,6 +1084,88 @@ export default function TrackerDashboard() {
     }
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
+
+  async function loadLatestPositions(currentOrgId) {
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] org_id missing, skip tracker_latest query", currentOrgId);
+      return { rows: [], error: null };
+    }
+
+    console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
+
+    const { data, error } = await supabase
+      .from("tracker_latest")
+      .select("user_id, org_id, lat, lng, accuracy, ts")
+      .eq("org_id", safeOrgId)
+      .not("lat", "is", null)
+      .not("lng", "is", null);
+
+    if (error) {
+      console.warn("tracker_latest error:", error);
+      return { rows: [], error };
+    }
+
+    const rows = Array.isArray(data) ? data.map(mapTrackerLatestRow).filter(Boolean) : [];
+
+    return { rows, error: null };
+  }
+
+  async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] org_id missing, skip positions query", currentOrgId);
+      return [];
+    }
+
+    const fromIso = new Date(Date.now() - Number(hoursBack || 6) * 60 * 60 * 1000).toISOString();
+    console.log("[tracker-dashboard] positions query org:", safeOrgId);
+
+    let query = supabase
+      .from("positions")
+      .select("id, user_id, lat, lng, accuracy, recorded_at, created_at")
+      .eq("org_id", safeOrgId)
+      .gte("recorded_at", fromIso)
+      .order("recorded_at", { ascending: false, nullsFirst: false })
+      .limit(500);
+
+    if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
+      const allowedUserIds = assignmentTrackers
+        .map((x) => normalizeUuid(x?.user_id))
+        .filter(Boolean);
+      if (allowedUserIds.length) query = query.in("user_id", allowedUserIds);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn("positions live fallback error:", error);
+      return [];
+    }
+
+    const mappedRows = Array.isArray(data)
+      ? data.map((p) => ({
+          id: p.id,
+          user_id: String(p.user_id),
+          lat: Number(p.lat),
+          lng: Number(p.lng),
+          accuracy: p.accuracy ?? null,
+          recorded_at: p.recorded_at ?? p.created_at ?? null,
+          source: "positions",
+        }))
+      : [];
+
+    const latestByUser = new Map();
+    for (const row of mappedRows) {
+      if (!row?.user_id) continue;
+      const key = String(row.user_id);
+      const currentTs = row.recorded_at ? Date.parse(row.recorded_at) : 0;
+      const previous = latestByUser.get(key);
+      const previousTs = previous?.recorded_at ? Date.parse(previous.recorded_at) : 0;
+      if (!previous || currentTs >= previousTs) latestByUser.set(key, row);
+    }
+
+    return Array.from(latestByUser.values());
+  }
 
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
