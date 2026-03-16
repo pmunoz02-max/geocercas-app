@@ -746,11 +746,61 @@ export default function TrackerDashboard() {
       return;
     }
 
-    const rows = Array.isArray(data) ? data : [];
+    let source = "tracker_assignments";
+    let rows = Array.isArray(data) ? data : [];
+
+    if (rows.length === 0) {
+      const asigRes = await supabase
+        .from("asignaciones")
+        .select("*")
+        .eq("org_id", currentOrgId);
+
+      if (!asigRes.error) {
+        const asigRows = Array.isArray(asigRes.data) ? asigRes.data : [];
+
+        const activeAsigRows = asigRows.filter((r) => {
+          if (!r || r.is_deleted === true) return false;
+
+          const start = r.start_date ? String(r.start_date).slice(0, 10) : null;
+          const end = r.end_date ? String(r.end_date).slice(0, 10) : null;
+          const startOk = !start || start <= todayStrUtc;
+          const endOk = !end || end >= todayStrUtc;
+
+          const hasEstado = Object.prototype.hasOwnProperty.call(r, "estado");
+          const hasStatus = Object.prototype.hasOwnProperty.call(r, "status");
+          let stateOk = true;
+
+          if (hasEstado || hasStatus) {
+            const estadoVal = hasEstado ? String(r.estado || "").toLowerCase() : "";
+            const statusVal = hasStatus ? String(r.status || "").toLowerCase() : "";
+            stateOk = estadoVal === "activa" || statusVal === "activa";
+          }
+
+          return startOk && endOk && stateOk;
+        });
+
+        rows = activeAsigRows.map((r) => ({
+          id: r.id,
+          geofence_id: r.geofence_id || null,
+          geocerca_id: r.geocerca_id || null,
+          personal_id: r.personal_id || null,
+          activity_id: r.activity_id || null,
+          tracker_user_id: r.tracker_user_id || r.user_id || null,
+          source: "asignaciones",
+        }));
+
+        if (rows.length > 0) source = "asignaciones";
+      }
+    }
+
+    console.log("[tracker-dashboard] assignments source:", source, "rows:", rows.length);
+
     setAssignments(rows);
 
     const uniqTrackers = Array.from(new Set(rows.map((r) => String(r.tracker_user_id)).filter(Boolean))).map((user_id) => ({ user_id }));
-    const uniqGeof = Array.from(new Set(rows.map((r) => String(r.geofence_id)).filter(Boolean)));
+    const uniqGeof = Array.from(
+      new Set(rows.map((r) => String(r.geofence_id || r.geocerca_id || "")).filter(Boolean))
+    );
 
     setAssignmentTrackers(uniqTrackers);
     setDiag((d) => ({
@@ -777,7 +827,12 @@ export default function TrackerDashboard() {
     setErrorMsg("");
 
     const assignedIds = Array.from(
-      new Set((assignmentRows || []).map((r) => r?.geofence_id).filter(Boolean).map(String))
+      new Set(
+        (assignmentRows || [])
+          .map((r) => r?.geofence_id || r?.geocerca_id)
+          .filter(Boolean)
+          .map(String)
+      )
     );
 
     let q = supabase
