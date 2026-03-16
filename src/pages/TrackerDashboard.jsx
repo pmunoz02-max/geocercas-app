@@ -646,9 +646,7 @@ const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, perso
         const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
         if (!latest) return null;
 
-        const latlngs = positions
-          .map((p) => [Number(p?.lat), Number(p?.lng)])
-          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+        const latlngs = Array.isArray(entry.latlngs) ? entry.latlngs : [];
 
         const personalId = latest.personal_id || entry.personal_id || null;
         const person = personalId ? personalById.get(String(personalId)) : null;
@@ -1628,8 +1626,14 @@ export default function TrackerDashboard() {
         return ta - tb;
       });
 
+      const positions = trackerPositions.slice(-MAX_HISTORY_PER_TRACKER);
+      const latlngs = positions
+        .map((p) => [Number(p?.lat), Number(p?.lng)])
+        .filter(([lat, lng]) => isValidLatLng(lat, lng));
+
       const entry = {
-        positions: trackerPositions.slice(-MAX_HISTORY_PER_TRACKER),
+        positions,
+        latlngs,
       };
       entry.latest = entry.positions[entry.positions.length - 1] || null;
 
