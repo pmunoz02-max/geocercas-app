@@ -1517,9 +1517,14 @@ export default function TrackerDashboard() {
   }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
+    if (selectedTrackerId === "all") {
+      return new Map();
+    }
+
     const grouped = new Map();
     for (const p of visiblePositions || []) {
       const key = getTrackerKey(p);
+      if (!key) continue;
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key).push(p);
     }
@@ -1547,7 +1552,7 @@ export default function TrackerDashboard() {
     }
 
     return sorted;
-  }, [visiblePositions]);
+  }, [visiblePositions, selectedTrackerId]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
