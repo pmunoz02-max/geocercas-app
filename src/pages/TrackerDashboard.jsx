@@ -619,6 +619,7 @@ export default function TrackerDashboard() {
   const [infoMsg, setInfoMsg] = useState("");
 
   const [timeWindowId, setTimeWindowId] = useState("6h");
+  const [isHistoryRequested, setIsHistoryRequested] = useState(false);
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
 
   const [assignments, setAssignments] = useState([]);
@@ -909,6 +910,140 @@ export default function TrackerDashboard() {
     setPersonalRows(Array.isArray(data) ? data : []);
   }, []);
 
+  const loadLatestPositionsForDashboard = useCallback(
+    async (currentOrgId, options = { showSpinner: true }) => {
+      if (!currentOrgId) return;
+      const { showSpinner } = options;
+
+      try {
+        if (showSpinner) setLoading(true);
+        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
+        setErrorMsg("");
+
+        const queryLatestTable = async (tableName) => {
+          let q = supabase
+            .from(tableName)
+            .select("user_id, org_id, lat, lng, accuracy, ts")
+            .eq("org_id", currentOrgId)
+            .order("ts", { ascending: false })
+            .limit(500);
+
+          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
+            const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
+            if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
+          }
+
+          return await q;
+        };
+
+        let tableUsed = "tracker_latest";
+        let res = await queryLatestTable("tracker_latest");
+
+        if (res.error) {
+          let fbQuery = supabase
+            .from("tracker_positions")
+            .select("user_id, org_id, lat, lng, accuracy, recorded_at, created_at")
+            .eq("org_id", currentOrgId)
+            .order("recorded_at", { ascending: false, nullsFirst: false })
+            .order("created_at", { ascending: false })
+            .limit(500);
+
+          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
+            const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
+            if (allowedUserIds.length) fbQuery = fbQuery.in("user_id", allowedUserIds);
+          }
+
+          const fb = await fbQuery;
+
+          if (!fb.error) {
+            tableUsed = "tracker_positions";
+            res = {
+              data: (fb.data || []).map((r) => ({
+                user_id: r.user_id,
+                org_id: r.org_id,
+                lat: r.lat,
+                lng: r.lng,
+                accuracy: r.accuracy,
+                ts: r.recorded_at || r.created_at || null,
+              })),
+              error: null,
+            };
+          }
+        }
+
+        const { data, error } = res;
+        if (error) {
+          setDiag((d) => ({
+            ...d,
+            lastPositionsError: error.message || String(error),
+            positionsFound: 0,
+            positionsSource: tableUsed,
+          }));
+          setPositions([]);
+          setErrorMsg(tOr("trackerDashboard.messages.loadPositionsError", "Error loading positions."));
+          return;
+        }
+
+        const normalized = (data || [])
+          .map((r) => {
+            const lat = toNum(r.lat);
+            const lng = toNum(r.lng);
+            if (!isValidLatLng(lat, lng)) return null;
+            return {
+              user_id: r.user_id ? String(r.user_id) : null,
+              lat,
+              lng,
+              accuracy: r.accuracy ?? null,
+              recorded_at: r.ts || null,
+              source: tableUsed === "tracker_latest" ? "tracker_latest" : "tracker_positions",
+            };
+          })
+          .filter(Boolean);
+
+        const latestByUser = new Map();
+        for (const row of normalized) {
+          if (!row?.user_id) continue;
+          const key = String(row.user_id);
+          const currTs = row.recorded_at ? Date.parse(row.recorded_at) : 0;
+          const prev = latestByUser.get(key);
+          const prevTs = prev?.recorded_at ? Date.parse(prev.recorded_at) : 0;
+          if (!prev || currTs >= prevTs) latestByUser.set(key, row);
+        }
+
+        const latestNormalized = latestByUser.size ? Array.from(latestByUser.values()) : normalized;
+
+        setPositions(latestNormalized);
+        setDiag((d) => ({ ...d, positionsFound: latestNormalized.length, positionsSource: tableUsed }));
+      } finally {
+        if (showSpinner) setLoading(false);
+      }
+    },
+    [assignmentTrackers, tOr]
+  );
+
+  async function loadLatestPositions(currentOrgId) {
+    const { data, error } = await supabase
+      .from("tracker_latest")
+      .select("user_id, org_id, lat, lng, accuracy, ts")
+      .eq("org_id", currentOrgId);
+
+    if (error) {
+      console.warn("tracker_latest error:", error);
+      return [];
+    }
+
+    if (!data) return [];
+
+    return data.map((p) => ({
+      user_id: p.user_id,
+      lat: p.lat,
+      lng: p.lng,
+      accuracy: p.accuracy,
+      recorded_at: p.ts,
+      source: "tracker_latest",
+    }));
+  }
+
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -946,6 +1081,16 @@ export default function TrackerDashboard() {
           return await q;
         };
 
+        // NUEVO: cargar estado LIVE primero
+        let latest = await loadLatestPositions(currentOrgId);
+
+        if (latest && latest.length > 0) {
+          setPositions(latest);
+          setDiag((d) => ({ ...d, positionsFound: latest.length, positionsSource: "tracker_latest" }));
+          return;
+        }
+
+        // fallback al comportamiento anterior
         let tableUsed = "positions";
         let res = await queryTable("positions");
 
@@ -955,15 +1100,12 @@ export default function TrackerDashboard() {
 
         if (shouldFallback) {
           const res2 = await queryTable("tracker_positions");
-          if (!res2.error) {
-            tableUsed = "tracker_positions";
-            res = res2;
-          } else {
-            const e1 = res.error?.message || String(res.error || "");
-            const e2 = res2.error?.message || String(res2.error || "");
-            res = { data: null, error: new Error(`positions: ${e1}; tracker_positions: ${e2}`) };
-            tableUsed = "positions";
-          }
+          tableUsed = "tracker_positions";
+          res = res2;
+        }
+
+        if (!res.error && Array.isArray(res.data)) {
+          setPositions(res.data);
         }
 
         const { data, error } = res;
@@ -1013,7 +1155,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, timeWindowId, tOr]
+    [assignmentTrackers, timeWindowId, tOr, loadLatestPositions]
   );
 
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
@@ -1047,8 +1189,20 @@ export default function TrackerDashboard() {
       fetchPersonalCatalog(currentOrgId),
     ]);
     await fetchGeofences(currentOrgId, assignments);
-    await fetchPositions(currentOrgId, { showSpinner: true });
-  }, [assignments, fetchAssignments, fetchGeofences, fetchPersonalCatalog, fetchPositions]);
+    if (isHistoryRequested) {
+      await fetchPositions(currentOrgId, { showSpinner: true });
+    } else {
+      await loadLatestPositionsForDashboard(currentOrgId, { showSpinner: true });
+    }
+  }, [
+    assignments,
+    fetchAssignments,
+    fetchGeofences,
+    fetchPersonalCatalog,
+    fetchPositions,
+    isHistoryRequested,
+    loadLatestPositionsForDashboard,
+  ]);
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
@@ -1064,8 +1218,15 @@ export default function TrackerDashboard() {
 
   useEffect(() => {
     if (!orgId || entitlementsLoading || isFree) return;
+    if (isHistoryRequested) return;
+    loadLatestPositionsForDashboard(orgId, { showSpinner: true });
+  }, [orgId, assignmentTrackers, entitlementsLoading, isFree, isHistoryRequested, loadLatestPositionsForDashboard]);
+
+  useEffect(() => {
+    if (!orgId || entitlementsLoading || isFree) return;
+    if (!isHistoryRequested) return;
     fetchPositions(orgId, { showSpinner: true });
-  }, [orgId, assignmentTrackers, timeWindowId, entitlementsLoading, isFree, fetchPositions]);
+  }, [orgId, assignmentTrackers, timeWindowId, entitlementsLoading, isFree, isHistoryRequested, fetchPositions]);
 
   const personalByUserId = useMemo(() => {
     const m = new Map();
@@ -1337,7 +1498,11 @@ export default function TrackerDashboard() {
 
             <button
               type="button"
-              onClick={() => orgId && fetchPositions(orgId, { showSpinner: true })}
+              onClick={() => {
+                if (!orgId) return;
+                if (isHistoryRequested) fetchPositions(orgId, { showSpinner: true });
+                else loadLatestPositionsForDashboard(orgId, { showSpinner: true });
+              }}
               className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
                          hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
               disabled={loading || !orgId}
@@ -1395,7 +1560,10 @@ export default function TrackerDashboard() {
                     className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={timeWindowId}
-                    onChange={(e) => setTimeWindowId(e.target.value)}
+                    onChange={(e) => {
+                      setTimeWindowId(e.target.value);
+                      setIsHistoryRequested(true);
+                    }}
                     disabled={!orgId}
                   >
                     {TIME_WINDOWS.map((w) => (
