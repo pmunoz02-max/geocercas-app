@@ -967,7 +967,10 @@ export default function TrackerDashboard() {
 
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
-      if (!currentOrgId) return;
+      if (!currentOrgId) {
+        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved");
+        return;
+      }
       const { showSpinner } = options;
 
       try {
@@ -1010,6 +1013,11 @@ export default function TrackerDashboard() {
   );
 
   async function loadLatestPositions(currentOrgId) {
+    if (!currentOrgId) {
+      console.warn("[tracker-dashboard] org_id not ready, skipping positions query");
+      return { rows: [], error: null };
+    }
+
     const { data, error } = await supabase
       .from("tracker_latest")
       .select("user_id, org_id, lat, lng, accuracy, ts")
@@ -1039,6 +1047,11 @@ export default function TrackerDashboard() {
   }
 
   async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
+    if (!currentOrgId) {
+      console.warn("[tracker-dashboard] org_id not ready, skipping positions query");
+      return [];
+    }
+
     const fromIso = new Date(Date.now() - Number(hoursBack || 6) * 60 * 60 * 1000).toISOString();
 
     let query = supabase
