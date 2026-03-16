@@ -1,7 +1,7 @@
 // api/asignaciones.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-api-v11-geofence-id-primary-resolve";
+const VERSION = "asignaciones-api-v12-conflict-precheck-preview";
 
 /* =========================
    Headers / Cookies / Query
@@ -84,6 +84,46 @@ function stripUndefined(obj) {
   const o = obj && typeof obj === "object" ? obj : {};
   for (const k of Object.keys(o)) if (o[k] === undefined) delete o[k];
   return o;
+}
+
+function toYmd(input) {
+  if (input === null || input === undefined || input === "") return null;
+  const s = String(input).trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function parseOpenStart(ymd) {
+  if (!ymd) return Number.NEGATIVE_INFINITY;
+  return Date.parse(`${ymd}T00:00:00.000Z`);
+}
+
+function parseOpenEnd(ymd) {
+  if (!ymd) return Number.POSITIVE_INFINITY;
+  return Date.parse(`${ymd}T23:59:59.999Z`);
+}
+
+function rangesOverlap(start1, end1, start2, end2) {
+  const s1 = parseOpenStart(start1);
+  const e1 = parseOpenEnd(end1);
+  const s2 = parseOpenStart(start2);
+  const e2 = parseOpenEnd(end2);
+  return s1 <= e2 && s2 <= e1;
+}
+
+function dayBeforeYmd(ymd) {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function isExclusionConstraintError(err) {
+  const code = String(err?.code || "");
+  const msg = String(err?.message || "").toLowerCase();
+  return code === "23P01" || msg.includes("exclusion constraint");
 }
 
 /* =========================
@@ -361,9 +401,77 @@ export default async function handler(req, res) {
       const body = await readBody(req);
       if (!body?.personal_id) return send(res, 400, { ok: false, error: "personal_id is required" });
 
+      const replaceExisting = body?.replaceExisting === true || String(body?.replaceExisting || "").toLowerCase() === "true";
+      const requestedOrgId = body?.org_id ? String(body.org_id) : String(orgId);
+
+      if (!requestedOrgId) return send(res, 400, { ok: false, error: "org_id is required" });
+      if (requestedOrgId !== String(orgId)) {
+        return send(res, 403, {
+          ok: false,
+          error: "org_id_mismatch",
+          message: "org_id del payload no coincide con la organización activa.",
+        });
+      }
+
+      const orgExistsRes = await sbDb
+        .from("organizations")
+        .select("id")
+        .eq("id", orgId)
+        .maybeSingle();
+
+      if (orgExistsRes.error) {
+        return send(res, 500, { ok: false, error: "Supabase error", details: orgExistsRes.error.message });
+      }
+      if (!orgExistsRes.data?.id) {
+        return send(res, 400, {
+          ok: false,
+          error: "invalid_org_id",
+          message: "org_id no existe para el contexto actual.",
+        });
+      }
+
+      const personalId = String(body.personal_id || "").trim();
+      if (!personalId) return send(res, 400, { ok: false, error: "personal_id is required" });
+
+      const startDate = toYmd(body?.start_date);
+      const endDate = toYmd(body?.end_date);
+
+      if (body?.start_date && !startDate) {
+        return send(res, 400, { ok: false, error: "invalid_start_date", message: "start_date inválida" });
+      }
+      if (body?.end_date && !endDate) {
+        return send(res, 400, { ok: false, error: "invalid_end_date", message: "end_date inválida" });
+      }
+
+      if (startDate && endDate && startDate > endDate) {
+        return send(res, 400, {
+          ok: false,
+          error: "invalid_date_range",
+          message: "start_date no puede ser mayor que end_date",
+        });
+      }
+
       console.log("[asignaciones POST] geofence_id recibido:", body.geofence_id ?? "(no presente)");
       console.log("[asignaciones POST] geocerca_id recibido:", body.geocerca_id ?? "(no presente)");
       console.log("[asignaciones POST] org_id contexto:", orgId);
+
+      const personalExistsRes = await sbDb
+        .from("personal")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("id", personalId)
+        .maybeSingle();
+
+      if (personalExistsRes.error) {
+        return send(res, 500, { ok: false, error: "Supabase error", details: personalExistsRes.error.message });
+      }
+      if (!personalExistsRes.data?.id) {
+        return send(res, 400, {
+          ok: false,
+          error: "invalid_personal_id",
+          message: "personal_id no existe para la organización activa.",
+        });
+      }
 
       let geocerca_id;
       try {
@@ -375,17 +483,103 @@ export default async function handler(req, res) {
       const row = {
         ...body,
         org_id: orgId,
+        personal_id: personalId,
+        start_date: startDate,
+        end_date: endDate,
         geocerca_id, // ✅ FK legacy
       };
 
       // si quieres guardar también geofence_id (si existe la columna), lo dejamos si viene
       // pero nunca lo inventamos
       delete row.is_deleted;
+      delete row.replaceExisting;
 
       stripUndefined(row);
 
+      const existingRes = await sbDb
+        .from("asignaciones")
+        .select("id,org_id,personal_id,start_date,end_date,estado,status,geofence_id,geocerca_id,is_deleted")
+        .eq("org_id", orgId)
+        .eq("personal_id", personalId)
+        .or("is_deleted.is.null,is_deleted.eq.false");
+
+      if (existingRes.error) {
+        return send(res, 500, { ok: false, error: "Supabase error", details: existingRes.error.message });
+      }
+
+      const existingRows = Array.isArray(existingRes.data) ? existingRes.data : [];
+
+      const activeRows = existingRows.filter((r) => {
+        if (!r || r.is_deleted === true) return false;
+        const hasEstadoVal = r.estado !== undefined && r.estado !== null && String(r.estado).trim() !== "";
+        const hasStatusVal = r.status !== undefined && r.status !== null && String(r.status).trim() !== "";
+        if (!hasEstadoVal && !hasStatusVal) return true;
+        return String(r.estado || "").toLowerCase() === "activa" || String(r.status || "").toLowerCase() === "activa";
+      });
+
+      const conflicts = activeRows
+        .filter((r) => rangesOverlap(startDate, endDate, toYmd(r.start_date), toYmd(r.end_date)))
+        .map((r) => ({
+          id: r.id,
+          start_date: toYmd(r.start_date),
+          end_date: toYmd(r.end_date),
+          geofence_id: r.geofence_id || null,
+          geocerca_id: r.geocerca_id || null,
+        }));
+
+      console.log("[asignaciones POST] conflict check rows:", activeRows.length, "conflicts:", conflicts.length);
+
+      if (conflicts.length > 0 && !replaceExisting) {
+        return send(res, 409, {
+          ok: false,
+          error: "assignment_conflict",
+          message:
+            "Ya existe una asignación activa o superpuesta para esta persona. Cierra o reemplaza la asignación actual antes de crear una nueva.",
+          conflicts,
+        });
+      }
+
+      if (conflicts.length > 0 && replaceExisting) {
+        if (!startDate) {
+          return send(res, 400, {
+            ok: false,
+            error: "replace_requires_start_date",
+            message: "replaceExisting=true requiere start_date para cerrar asignaciones previas.",
+            conflicts,
+          });
+        }
+
+        const closeDate = dayBeforeYmd(startDate);
+        console.log("[asignaciones POST] replaceExisting=true closing conflicts:", conflicts.length, "closeDate:", closeDate);
+
+        for (const c of conflicts) {
+          const closeRes = await sbDb
+            .from("asignaciones")
+            .update({ end_date: closeDate })
+            .eq("id", c.id)
+            .eq("org_id", orgId)
+            .eq("personal_id", personalId);
+
+          if (closeRes.error) {
+            return send(res, 500, { ok: false, error: "Supabase error", details: closeRes.error.message });
+          }
+        }
+      }
+
       const r = await sbDb.from("asignaciones").insert(row).select("*").single();
-      if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+      if (r.error) {
+        if (isExclusionConstraintError(r.error)) {
+          console.log("[asignaciones POST] exclusion constraint conflict at insert");
+          return send(res, 409, {
+            ok: false,
+            error: "assignment_conflict",
+            message:
+              "Ya existe una asignación activa o superpuesta para esta persona. Cierra o reemplaza la asignación actual antes de crear una nueva.",
+            conflicts,
+          });
+        }
+        return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+      }
 
       return ok(res, { ok: true, data: r.data });
     }
