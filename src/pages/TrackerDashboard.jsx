@@ -90,6 +90,26 @@ function formatTime(dtString) {
   }
 }
 
+function getTrackerLiveStatus(row) {
+  const ts = getPositionTs(row);
+  if (!ts) return { status: "offline", ageSec: null };
+
+  const ageSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+
+  if (ageSec <= 120) return { status: "online", ageSec };
+  if (ageSec <= 600) return { status: "stale", ageSec };
+  return { status: "offline", ageSec };
+}
+
+function formatAgeShort(ageSec) {
+  if (ageSec == null) return "—";
+  if (ageSec < 60) return `${ageSec}s`;
+  const min = Math.floor(ageSec / 60);
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  return `${hr}h`;
+}
+
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
   if (v === "pro") return "PRO";
@@ -354,6 +374,8 @@ function AnimatedTrackerDot({
   color,
   radius = 7,
   duration = TRACKER_ANIMATION_MS,
+  fillOpacity = 0.9,
+  strokeOpacity = 1,
   children,
 }) {
   const markerRef = useRef(null);
@@ -435,7 +457,7 @@ function AnimatedTrackerDot({
       ref={markerRef}
       center={center}
       radius={radius}
-      pathOptions={{ color, fillColor: color, fillOpacity: 0.9, weight: 2 }}
+      pathOptions={{ color, fillColor: color, fillOpacity, opacity: strokeOpacity, weight: 2 }}
     >
       {children}
     </CircleMarker>
@@ -490,7 +512,17 @@ const TrackerLayers = React.memo(function TrackerLayers({
   tOr,
   selectedTrackerId,
 }) {
-  const renderTrackerTooltip = (trackerLabel, personalId, latest, latestLat, latestLng) => {
+  const getMarkerStyleByStatus = (status, baseColor) => {
+    if (status === "offline") {
+      return { color: "#6b7280", radius: 6, fillOpacity: 0.45, strokeOpacity: 0.65 };
+    }
+    if (status === "stale") {
+      return { color: baseColor, radius: 6, fillOpacity: 0.65, strokeOpacity: 0.8 };
+    }
+    return { color: baseColor, radius: 7, fillOpacity: 0.9, strokeOpacity: 1 };
+  };
+
+  const renderTrackerTooltip = (trackerLabel, personalId, latest, latestLat, latestLng, live) => {
     const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
     const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
 
@@ -514,6 +546,9 @@ const TrackerLayers = React.memo(function TrackerLayers({
         ? speedNum.toFixed(1)
         : null;
 
+    const status = String(live?.status || "offline");
+    const ageText = formatAgeShort(live?.ageSec ?? null);
+
     return (
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div className="text-xs">
@@ -521,6 +556,8 @@ const TrackerLayers = React.memo(function TrackerLayers({
           {personalId && (
             <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(personalId)}</div>
           )}
+          <div><b>{tOr("trackerDashboard.tooltip.status", "Status")}</b>: {status}</div>
+          <div><b>{tOr("trackerDashboard.tooltip.lastSeen", "Last seen")}</b>: {ageText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {latestTimeText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLngText}</div>
@@ -549,14 +586,19 @@ const TrackerLayers = React.memo(function TrackerLayers({
           const latestLng = Number(item?.lng);
           if (!isValidLatLng(latestLat, latestLng)) return null;
 
+          const live = item?.live || getTrackerLiveStatus(latest);
+          const markerStyle = getMarkerStyleByStatus(live.status, item.color);
+
           return (
             <AnimatedTrackerDot
               key={item.key}
               center={[latestLat, latestLng]}
-              color={item.color}
-              radius={7}
+              color={markerStyle.color}
+              radius={markerStyle.radius}
+              fillOpacity={markerStyle.fillOpacity}
+              strokeOpacity={markerStyle.strokeOpacity}
             >
-              {renderTrackerTooltip(item.trackerLabel || item.key, item.personalId, latest, latestLat, latestLng)}
+              {renderTrackerTooltip(item.trackerLabel || item.key, item.personalId, latest, latestLat, latestLng, live)}
             </AnimatedTrackerDot>
           );
         })}
@@ -577,16 +619,20 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
   const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
+  const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
+  const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
 
   return (
     <>
       {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color: TRACKER_COLORS[0], weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
       <AnimatedTrackerDot
         center={[latestLat, latestLng]}
-        color={TRACKER_COLORS[0]}
-        radius={7}
+        color={markerStyle.color}
+        radius={markerStyle.radius}
+        fillOpacity={markerStyle.fillOpacity}
+        strokeOpacity={markerStyle.strokeOpacity}
       >
-        {renderTrackerTooltip(trackerLabel, personalId, latest, latestLat, latestLng)}
+        {renderTrackerTooltip(trackerLabel, personalId, latest, latestLat, latestLng, live)}
       </AnimatedTrackerDot>
     </>
   );
@@ -1589,6 +1635,7 @@ export default function TrackerDashboard() {
         personalId,
         trackerLabel,
         color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
+        live: getTrackerLiveStatus(row),
       });
 
       return acc;
@@ -1607,6 +1654,7 @@ export default function TrackerDashboard() {
       positions: trackerPositions,
       latlngs,
       latest: trackerPositions[trackerPositions.length - 1] || null,
+      live: getTrackerLiveStatus(trackerPositions[trackerPositions.length - 1] || null),
     };
   }, [selectedTrackerId, visiblePositions]);
 
