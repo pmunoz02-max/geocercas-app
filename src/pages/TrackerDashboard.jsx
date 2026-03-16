@@ -501,8 +501,14 @@ const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, perso
         const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
         const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
 
-        // Compute safe value for time
-        const latestTime = latest?.recorded_at || latest?.created_at || null;
+        // Compute safe value for time with fallback chain
+        const latestTimeRaw =
+          latest?.recorded_at ??
+          latest?.tracker_latest_at ??
+          latest?.position_at ??
+          latest?.created_at ??
+          null;
+        const latestTimeText = latestTimeRaw ? formatTime(latestTimeRaw) : "—";
 
         // Compute safe value for accuracy
         const accuracyNum = Number(latest?.accuracy);
@@ -538,7 +544,7 @@ const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, perso
                   {personalId && (
                     <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(personalId)}</div>
                   )}
-                  <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latestTime)}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {latestTimeText}</div>
                   <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
                   <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLngText}</div>
                   {accuracyText && (
@@ -1469,6 +1475,13 @@ export default function TrackerDashboard() {
   const visiblePositions = useMemo(() => {
     if (!positions?.length) return [];
 
+    const getPositionTs = (p) =>
+      p?.recorded_at
+        ? Date.parse(p.recorded_at)
+        : p?.created_at
+        ? Date.parse(p.created_at)
+        : 0;
+
     // MODE 1: All trackers → only latest position per tracker
     if (selectedTrackerId === "all") {
       const latestByTracker = new Map();
@@ -1477,11 +1490,7 @@ export default function TrackerDashboard() {
         const key = getTrackerKey(p);
         if (!key) continue;
 
-        const ts = p.recorded_at
-          ? Date.parse(p.recorded_at)
-          : p.created_at
-          ? Date.parse(p.created_at)
-          : 0;
+        const ts = getPositionTs(p);
 
         const existing = latestByTracker.get(key);
 
@@ -1490,11 +1499,7 @@ export default function TrackerDashboard() {
           continue;
         }
 
-        const ets = existing.recorded_at
-          ? Date.parse(existing.recorded_at)
-          : existing.created_at
-          ? Date.parse(existing.created_at)
-          : 0;
+        const ets = getPositionTs(existing);
 
         if (ts > ets) {
           latestByTracker.set(key, p);
@@ -1504,8 +1509,11 @@ export default function TrackerDashboard() {
       return Array.from(latestByTracker.values());
     }
 
-    // MODE 2: Single tracker → full history
-    return positions.filter((p) => getTrackerKey(p) === selectedTrackerId);
+    // MODE 2: Single tracker → most recent bounded history
+    return positions
+      .filter((p) => getTrackerKey(p) === selectedTrackerId)
+      .sort((a, b) => getPositionTs(a) - getPositionTs(b))
+      .slice(-MAX_HISTORY_PER_TRACKER);
   }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
