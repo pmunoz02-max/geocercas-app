@@ -53,6 +53,12 @@ function isValidLatLng(lat, lng) {
   return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
 }
 
+function isValidUuid(v) {
+  if (typeof v !== "string") return false;
+  const value = v.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function formatTime(dtString) {
   if (!dtString) return "-";
   try {
@@ -656,10 +662,12 @@ export default function TrackerDashboard() {
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
+  const resolvedOrgId = isValidUuid(orgId) ? orgId : null;
+
   const previewUiEnabled = useMemo(() => isPreviewLikeHost(), []);
 
   const DEMO_ORG_ID = "f0f185ae-e6d1-4045-9e4b-372a5b7b471a";
-  const isDemoOrg = orgId === DEMO_ORG_ID;
+  const isDemoOrg = resolvedOrgId === DEMO_ORG_ID;
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -1099,6 +1107,25 @@ export default function TrackerDashboard() {
     return Array.from(latestByUser.values());
   }
 
+  async function loadLatestPositionsSafe(currentOrgId) {
+    if (!isValidUuid(currentOrgId)) {
+      console.warn("[tracker-dashboard] invalid org_id for tracker_latest, skipping query");
+      return [];
+    }
+
+    const res = await loadLatestPositions(currentOrgId);
+    return res?.rows || [];
+  }
+
+  async function loadPositionsFallbackSafe(currentOrgId, hoursBack) {
+    if (!isValidUuid(currentOrgId)) {
+      console.warn("[tracker-dashboard] invalid org_id for positions fallback, skipping query");
+      return [];
+    }
+
+    return await loadLivePositionsFromPositions(currentOrgId, hoursBack);
+  }
+
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       if (!currentOrgId) return;
@@ -1209,7 +1236,7 @@ export default function TrackerDashboard() {
   }, []);
 
   const reloadAllForCurrentOrg = useCallback(async (currentOrgId) => {
-    if (!currentOrgId) return;
+    if (!isValidUuid(currentOrgId)) return;
     await Promise.all([
       fetchAssignments(currentOrgId),
       fetchPersonalCatalog(currentOrgId),
@@ -1231,28 +1258,76 @@ export default function TrackerDashboard() {
   ]);
 
   useEffect(() => {
-    if (!orgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || isFree) return;
     (async () => {
-      await Promise.all([fetchAssignments(orgId), fetchPersonalCatalog(orgId), fetchGeofenceEvents(orgId)]);
+      await Promise.all([
+        fetchAssignments(resolvedOrgId),
+        fetchPersonalCatalog(resolvedOrgId),
+        fetchGeofenceEvents(resolvedOrgId),
+      ]);
     })();
-  }, [orgId, entitlementsLoading, isFree, fetchAssignments, fetchPersonalCatalog, fetchGeofenceEvents]);
+  }, [resolvedOrgId, entitlementsLoading, isFree, fetchAssignments, fetchPersonalCatalog, fetchGeofenceEvents]);
 
   useEffect(() => {
-    if (!orgId || entitlementsLoading || isFree) return;
-    fetchGeofences(orgId, assignments);
-  }, [orgId, assignments, entitlementsLoading, isFree, fetchGeofences]);
+    if (!resolvedOrgId || entitlementsLoading || isFree) return;
+    fetchGeofences(resolvedOrgId, assignments);
+  }, [resolvedOrgId, assignments, entitlementsLoading, isFree, fetchGeofences]);
 
   useEffect(() => {
-    if (!orgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || isFree) return;
     if (isHistoryRequested) return;
-    loadLatestPositionsForDashboard(orgId, { showSpinner: true });
-  }, [orgId, assignmentTrackers, entitlementsLoading, isFree, isHistoryRequested, loadLatestPositionsForDashboard]);
+
+    let cancelled = false;
+
+    (async () => {
+      setLoading(true);
+      setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
+      setErrorMsg("");
+
+      try {
+        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+        const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
+
+        const latestRows = await loadLatestPositionsSafe(resolvedOrgId);
+        console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
+
+        let source = "tracker_latest";
+        let finalRows = latestRows;
+
+        if (latestRows.length === 0) {
+          const fallbackRows = await loadPositionsFallbackSafe(resolvedOrgId, selectedWindowHours);
+          console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
+          source = "positions";
+          finalRows = fallbackRows;
+        }
+
+        finalRows = (finalRows || []).filter((p) => {
+          const lat = Number(p?.lat);
+          const lng = Number(p?.lng);
+          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
+        });
+
+        console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
+
+        if (cancelled) return;
+
+        setPositions(finalRows);
+        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedOrgId, assignmentTrackers, entitlementsLoading, isFree, isHistoryRequested, timeWindowId]);
 
   useEffect(() => {
-    if (!orgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || isFree) return;
     if (!isHistoryRequested) return;
-    fetchPositions(orgId, { showSpinner: true });
-  }, [orgId, assignmentTrackers, timeWindowId, entitlementsLoading, isFree, isHistoryRequested, fetchPositions]);
+    fetchPositions(resolvedOrgId, { showSpinner: true });
+  }, [resolvedOrgId, assignmentTrackers, timeWindowId, entitlementsLoading, isFree, isHistoryRequested, fetchPositions]);
 
   const personalByUserId = useMemo(() => {
     const m = new Map();
