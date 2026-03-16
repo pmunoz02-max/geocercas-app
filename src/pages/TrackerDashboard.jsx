@@ -193,94 +193,6 @@ function normalizeGeoJSONToPolygons(input) {
   return polygons;
 }
 
-function boundsFromPolys(polys) {
-  try {
-    const all = [];
-    (polys || []).forEach((ring) => (ring || []).forEach((p) => all.push(p)));
-    if (all.length < 3) return null;
-    const b = L.latLngBounds(all);
-    return b.isValid() ? b : null;
-  } catch {
-    return null;
-  }
-}
-
-function isProbablyZeroZeroBounds(b) {
-  try {
-    if (!b?.isValid?.()) return false;
-    const c = b.getCenter();
-    const sw = b.getSouthWest();
-    const ne = b.getNorthEast();
-    const w = Math.abs(ne.lng - sw.lng);
-    const h = Math.abs(ne.lat - sw.lat);
-    const nearZero = Math.abs(c.lat) < 0.01 && Math.abs(c.lng) < 0.01;
-    const tiny = w < 0.01 && h < 0.01;
-    return nearZero && tiny;
-  } catch {
-    return false;
-  }
-}
-
-function MapDiagnostics({ setDiag }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!map) return;
-    const container = map.getContainer();
-
-    const updateSize = () => {
-      const r = container?.getBoundingClientRect?.();
-      setDiag((d) => ({
-        ...d,
-        mapCreated: true,
-        w: Math.round(r?.width ?? 0),
-        h: Math.round(r?.height ?? 0),
-        zoom: map.getZoom?.() ?? null,
-      }));
-    };
-
-    const doInvalidate = () => {
-      try {
-        map.invalidateSize();
-      } catch {}
-      updateSize();
-    };
-
-    doInvalidate();
-    const t1 = setTimeout(doInvalidate, 0);
-    const t2 = setTimeout(doInvalidate, 250);
-    const t3 = setTimeout(doInvalidate, 1000);
-
-    let ro = null;
-    try {
-      ro = new ResizeObserver(() => doInvalidate());
-      ro.observe(container);
-    } catch {}
-
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      try {
-        ro?.disconnect?.();
-      } catch {}
-    };
-  }, [map, setDiag]);
-
-  return null;
-}
-
-function shouldFitToBounds(map, bounds) {
-  try {
-    if (!map || !bounds?.isValid?.()) return false;
-    const view = map.getBounds?.();
-    if (!view?.isValid?.()) return true;
-    return !view.intersects(bounds.pad(0.05));
-  } catch {
-    return true;
-  }
-}
-
 function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
@@ -328,7 +240,7 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
 }
 
 function pickGeometry(row) {
-  return row?.geojson ?? row?.geom ?? row?.polygon ?? row?.geometry ?? null;
+  return row?.geojson ?? row?.polygon ?? row?.geometry ?? null;
 }
 
 function inferCircleFromRow(row) {
@@ -648,6 +560,105 @@ function AnimatedTrackerDot({
   );
 }
 
+const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
+  return (
+    <>
+      {layerItems.map((it) => {
+        if (it.type === "polygon") {
+          return (
+            <Polygon
+              key={`p-${it.geofenceId}-${it.idx}`}
+              positions={it.positions}
+              pathOptions={{ color: "#2563eb", weight: 4, opacity: 1, fillOpacity: 0.18 }}
+            >
+              <Tooltip sticky>{it.name}</Tooltip>
+            </Polygon>
+          );
+        }
+        if (it.type === "circle") {
+          return (
+            <Circle
+              key={`c-${it.geofenceId}-${it.idx}`}
+              center={it.center}
+              radius={it.radius_m}
+              pathOptions={{ color: "#2563eb", weight: 3, opacity: 1, fillOpacity: 0.12 }}
+            >
+              <Tooltip sticky>
+                {t("trackerDashboard.map.circleLabel", {
+                  name: it.name,
+                  defaultValue: `${it.name} (circle)`,
+                })}
+              </Tooltip>
+            </Circle>
+          );
+        }
+        return null;
+      })}
+    </>
+  );
+});
+
+const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, personalById, personalByUserId, tOr, selectedTrackerId }) {
+  return (
+    <>
+      {Array.from(pointsByTracker.entries()).map(([trackerId, entry], idx) => {
+        const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
+        const positions = Array.isArray(entry.positions) ? entry.positions : [];
+        const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
+        if (!latest) return null;
+
+        const latlngs = positions
+          .map((p) => [Number(p?.lat), Number(p?.lng)])
+          .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+
+        const personalId = latest.personal_id || entry.personal_id || null;
+        const person = personalId ? personalById.get(String(personalId)) : null;
+        const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
+        const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
+        const shouldRenderPolyline = selectedTrackerId !== "all" && trackerId === selectedTrackerId && latlngs.length > 1;
+
+        return (
+          <React.Fragment key={trackerId}>
+            {shouldRenderPolyline && <Polyline positions={latlngs} pathOptions={{ color, weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
+            <AnimatedTrackerDot
+              center={[latest.lat, latest.lng]}
+              color={color}
+              radius={7}
+            >
+              <Tooltip direction="top">
+                <div className="text-xs">
+                  <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latest.recorded_at)}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latest.lat.toFixed(6)}</div>
+                  <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latest.lng.toFixed(6)}</div>
+                  {latest.accuracy !== null && latest.accuracy !== undefined && (
+                    <div>
+                      <b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>{": "}
+                      {Number(latest.accuracy).toFixed?.(0) ?? String(latest.accuracy)} m
+                    </div>
+                  )}
+                  {latest.speed !== null && latest.speed !== undefined && (
+                    <div>
+                      <b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>{": "}
+                      {Number(latest.speed).toFixed?.(1) ?? String(latest.speed)}
+                    </div>
+                  )}
+                  {latest.source && (
+                    <div>
+                      <b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>{": "}
+                      {String(latest.source)}
+                    </div>
+                  )}
+                </div>
+              </Tooltip>
+            </AnimatedTrackerDot>
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+});
+
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
@@ -907,7 +918,7 @@ export default function TrackerDashboard() {
 
     let q = supabase
       .from("geofences")
-      .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
+      .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
       .eq("org_id", safeOrgId)
       .eq("active", true);
 
@@ -944,7 +955,7 @@ export default function TrackerDashboard() {
     if (assignedIds.length === 0 && rows.length === 0) {
       const fb = await supabase
         .from("geofences")
-        .select("id, org_id, name, geojson, geom, lat, lng, radius_m, active, is_default")
+        .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
         .eq("org_id", safeOrgId)
         .eq("active", true)
         .order("updated_at", { ascending: false })
@@ -964,7 +975,6 @@ export default function TrackerDashboard() {
         org_id: r.org_id,
         name: r.name || r.id,
         geojson: r.geojson,
-        geom: r.geom,
         lat: r.lat,
         lng: r.lng,
         radius_m: r.radius_m,
@@ -1094,88 +1104,6 @@ export default function TrackerDashboard() {
     },
     [assignmentTrackers, timeWindowId]
   );
-
-  async function loadLatestPositions(currentOrgId) {
-    const safeOrgId = normalizeUuid(currentOrgId);
-    if (!safeOrgId) {
-      console.warn("[tracker-dashboard] org_id missing, skip tracker_latest query", currentOrgId);
-      return { rows: [], error: null };
-    }
-
-    console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
-
-    const { data, error } = await supabase
-      .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts")
-      .eq("org_id", safeOrgId)
-      .not("lat", "is", null)
-      .not("lng", "is", null);
-
-    if (error) {
-      console.warn("tracker_latest error:", error);
-      return { rows: [], error };
-    }
-
-    const rows = Array.isArray(data) ? data.map(mapTrackerLatestRow).filter(Boolean) : [];
-
-    return { rows, error: null };
-  }
-
-  async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
-    const safeOrgId = normalizeUuid(currentOrgId);
-    if (!safeOrgId) {
-      console.warn("[tracker-dashboard] org_id missing, skip positions query", currentOrgId);
-      return [];
-    }
-
-    const fromIso = new Date(Date.now() - Number(hoursBack || 6) * 60 * 60 * 1000).toISOString();
-    console.log("[tracker-dashboard] positions query org:", safeOrgId);
-
-    let query = supabase
-      .from("positions")
-      .select("id, user_id, lat, lng, accuracy, recorded_at, created_at")
-      .eq("org_id", safeOrgId)
-      .gte("recorded_at", fromIso)
-      .order("recorded_at", { ascending: false, nullsFirst: false })
-      .limit(500);
-
-    if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-      const allowedUserIds = assignmentTrackers
-        .map((x) => normalizeUuid(x?.user_id))
-        .filter(Boolean);
-      if (allowedUserIds.length) query = query.in("user_id", allowedUserIds);
-    }
-
-    const { data, error } = await query;
-    if (error) {
-      console.warn("positions live fallback error:", error);
-      return [];
-    }
-
-    const mappedRows = Array.isArray(data)
-      ? data.map((p) => ({
-          id: p.id,
-          user_id: String(p.user_id),
-          lat: Number(p.lat),
-          lng: Number(p.lng),
-          accuracy: p.accuracy ?? null,
-          recorded_at: p.recorded_at ?? p.created_at ?? null,
-          source: "positions",
-        }))
-      : [];
-
-    const latestByUser = new Map();
-    for (const row of mappedRows) {
-      if (!row?.user_id) continue;
-      const key = String(row.user_id);
-      const currentTs = row.recorded_at ? Date.parse(row.recorded_at) : 0;
-      const previous = latestByUser.get(key);
-      const previousTs = previous?.recorded_at ? Date.parse(previous.recorded_at) : 0;
-      if (!previous || currentTs >= previousTs) latestByUser.set(key, row);
-    }
-
-    return Array.from(latestByUser.values());
-  }
 
   async function loadLatestPositionsSafe(currentOrgId) {
     const safeOrgId = normalizeUuid(currentOrgId);
@@ -1957,91 +1885,15 @@ export default function TrackerDashboard() {
                     attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
                   />
 
-                  {layerItems.map((it) => {
-                    if (it.type === "polygon") {
-                      return (
-                        <Polygon
-                          key={`p-${it.geofenceId}-${it.idx}`}
-                          positions={it.positions}
-                          pathOptions={{ color: "#2563eb", weight: 4, opacity: 1, fillOpacity: 0.18 }}
-                        >
-                          <Tooltip sticky>{it.name}</Tooltip>
-                        </Polygon>
-                      );
-                    }
-                    if (it.type === "circle") {
-                      return (
-                        <Circle
-                          key={`c-${it.geofenceId}-${it.idx}`}
-                          center={it.center}
-                          radius={it.radius_m}
-                          pathOptions={{ color: "#2563eb", weight: 3, opacity: 1, fillOpacity: 0.12 }}
-                        >
-                          <Tooltip sticky>
-                            {t("trackerDashboard.map.circleLabel", {
-                              name: it.name,
-                              defaultValue: `${it.name} (circle)`,
-                            })}
-                          </Tooltip>
-                        </Circle>
-                      );
-                    }
-                    return null;
-                  })}
+                  <GeofenceLayers layerItems={layerItems} t={t} />
 
-                  {Array.from(pointsByTracker.entries()).map(([trackerId, entry], idx) => {
-                    const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
-                    const positions = Array.isArray(entry.positions) ? entry.positions : [];
-                    const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
-                    if (!latest) return null;
-
-                    const latlngs = positions
-                      .map((p) => [Number(p?.lat), Number(p?.lng)])
-                      .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
-
-                    const personalId = latest.personal_id || entry.personal_id || null;
-                    const person = personalId ? personalById.get(String(personalId)) : null;
-                    const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-                    const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
-
-                    return (
-                      <React.Fragment key={trackerId}>
-                        {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color, weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
-                        <AnimatedTrackerDot
-                          center={[latest.lat, latest.lng]}
-                          color={color}
-                          radius={7}
-                        >
-                          <Tooltip direction="top">
-                            <div className="text-xs">
-                              <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
-                              <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {formatTime(latest.recorded_at)}</div>
-                              <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latest.lat.toFixed(6)}</div>
-                              <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latest.lng.toFixed(6)}</div>
-                              {latest.accuracy !== null && latest.accuracy !== undefined && (
-                                <div>
-                                  <b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>:{" "}
-                                  {Number(latest.accuracy).toFixed?.(0) ?? String(latest.accuracy)} m
-                                </div>
-                              )}
-                              {latest.speed !== null && latest.speed !== undefined && (
-                                <div>
-                                  <b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>:{" "}
-                                  {Number(latest.speed).toFixed?.(1) ?? String(latest.speed)}
-                                </div>
-                              )}
-                              {latest.source && (
-                                <div>
-                                  <b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>:{" "}
-                                  {String(latest.source)}
-                                </div>
-                              )}
-                            </div>
-                          </Tooltip>
-                        </AnimatedTrackerDot>
-                      </React.Fragment>
-                    );
-                  })}
+                  <TrackerLayers
+                    pointsByTracker={pointsByTracker}
+                    personalById={personalById}
+                    personalByUserId={personalByUserId}
+                    tOr={tOr}
+                    selectedTrackerId={selectedTrackerId}
+                  />
                 </MapContainer>
               </div>
             </div>
