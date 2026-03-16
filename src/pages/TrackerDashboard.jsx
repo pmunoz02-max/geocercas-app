@@ -1852,8 +1852,6 @@ export default function TrackerDashboard() {
                     } catch {}
                   }}
                 >
-                  <MapDiagnostics setDiag={setDiag} />
-
                   <FitIfOutOfView
                     layerItems={layerItems}
                     fitSignal={fitSignal}
