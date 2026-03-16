@@ -182,10 +182,25 @@ serve(async (req) => {
         created_at,
       };
 
-      const { data: insertedPos, error } = await admin.from("positions").insert(row).select("id").single();
-      if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
+      const source = row.source ?? null;
+      const { data: insertedPos, error: posError } = await admin.from("positions").insert(row).select("id").single();
+      if (posError) {
+        console.error("[send_position] positions_insert_failed", {
+          org_id,
+          user_id: String(user_id),
+          error: posError?.message ?? posError,
+        });
+        return json({ ok: false, build_tag, error: posError.message }, 500, CORS);
+      }
 
       console.log("[send_position] inserted into positions", insertedPos?.id);
+      console.log("[send_position] positions_insert_ok", {
+        org_id,
+        user_id: String(user_id),
+        recorded_at: recorded_at ?? null,
+        source: source ?? null,
+        inserted_id: insertedPos?.id ?? null,
+      });
       console.log("[send_position] tracker_latest sync handled by DB trigger");
 
       return json({ ok: true, build_tag, mode: "proxy_hmac" }, 200, CORS);
@@ -232,10 +247,25 @@ serve(async (req) => {
       created_at,
     };
 
-    const { data: insertedPos, error } = await admin.from("positions").insert(row).select("id").single();
-    if (error) return json({ ok: false, build_tag, error: error.message }, 500, CORS);
+    const source = row.source ?? null;
+    const { data: insertedPos, error: posError } = await admin.from("positions").insert(row).select("id").single();
+    if (posError) {
+      console.error("[send_position] positions_insert_failed", {
+        org_id,
+        user_id: String(user_id),
+        error: posError?.message ?? posError,
+      });
+      return json({ ok: false, build_tag, error: posError.message }, 500, CORS);
+    }
 
     console.log("[send_position] inserted into positions", insertedPos?.id);
+    console.log("[send_position] positions_insert_ok", {
+      org_id,
+      user_id: String(user_id),
+      recorded_at: recorded_at ?? null,
+      source: source ?? null,
+      inserted_id: insertedPos?.id ?? null,
+    });
     console.log("[send_position] tracker_latest sync handled by DB trigger");
 
     return json({ ok: true, build_tag, mode: "web_auth" }, 200, CORS);

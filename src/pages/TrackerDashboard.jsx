@@ -145,6 +145,14 @@ function isPreviewLikeHost() {
   return host.includes("preview") || host === "localhost" || host === "127.0.0.1";
 }
 
+function logLiveMetric(label, payload = {}) {
+  if (!isPreviewLikeHost()) return;
+  console.log(`[tracker-live] ${label}`, {
+    at: new Date().toISOString(),
+    ...payload,
+  });
+}
+
 // GeoJSON is [lng,lat] => Leaflet [lat,lng]
 function toLatLngStrict(coord) {
   if (!coord || !Array.isArray(coord) || coord.length < 2) return null;
@@ -708,6 +716,11 @@ export default function TrackerDashboard() {
     positionsRef.current = Array.isArray(positions) ? positions : [];
   }, [positions]);
 
+  useEffect(() => {
+    if (!resolvedOrgId) return;
+    logLiveMetric("org_resolved", { orgId: resolvedOrgId });
+  }, [resolvedOrgId]);
+
   const DEMO_ORG_ID = "f0f185ae-e6d1-4045-9e4b-372a5b7b471a";
   const isDemoOrg = resolvedOrgId === DEMO_ORG_ID;
 
@@ -1047,9 +1060,20 @@ export default function TrackerDashboard() {
         let source = "tracker_latest";
         let finalRows = latestRows;
 
+        if (latestRows.length > 0) {
+          logLiveMetric("tracker_latest_used", {
+            orgId: safeOrgId,
+            rows: latestRows.length,
+          });
+        }
+
         if (latestRows.length === 0) {
           const fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours)
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
+          logLiveMetric("fallback_positions_used", {
+            orgId: safeOrgId,
+            rows: fallbackRows.length,
+          });
           source = "positions";
           finalRows = fallbackRows;
         }
@@ -1341,9 +1365,20 @@ export default function TrackerDashboard() {
         let source = "tracker_latest";
         let finalRows = latestRows;
 
+        if (latestRows.length > 0) {
+          logLiveMetric("tracker_latest_used", {
+            orgId: resolvedOrgId,
+            rows: latestRows.length,
+          });
+        }
+
         if (latestRows.length === 0) {
           const fallbackRows = await loadPositionsFallbackSafe(resolvedOrgId, selectedWindowHours);
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
+          logLiveMetric("fallback_positions_used", {
+            orgId: resolvedOrgId,
+            rows: fallbackRows.length,
+          });
           source = "positions";
           finalRows = fallbackRows;
         }
@@ -1388,10 +1423,30 @@ export default function TrackerDashboard() {
         (payload) => {
           if (!payload || (payload.eventType !== "INSERT" && payload.eventType !== "UPDATE")) return;
 
-          const mappedRow = mapTrackerLatestRow(payload.new);
+          const eventType = payload.eventType;
+          const row = payload.new;
+          const mappedRow = mapTrackerLatestRow(row);
           if (!mappedRow) return;
 
-          const nextRows = replacePositionByUserId(positionsRef.current, mappedRow);
+          logLiveMetric("realtime_event", {
+            eventType,
+            orgId: resolvedOrgId,
+            userId: String(row.user_id),
+            ts: row.ts,
+            source: "tracker_latest",
+          });
+
+          const prevRows = Array.isArray(positionsRef.current) ? positionsRef.current : [];
+          const source = "tracker_latest";
+          const nextRows = replacePositionByUserId(prevRows, mappedRow);
+
+          logLiveMetric("state_merge", {
+            source,
+            rowsBefore: prevRows.length,
+            rowsAfter: nextRows.length,
+            userId: String(row.user_id),
+          });
+
           positionsRef.current = nextRows;
           setPositions(nextRows);
           setDiag((d) => ({
@@ -1403,8 +1458,11 @@ export default function TrackerDashboard() {
       )
       .subscribe();
 
+    logLiveMetric("subscription_created", { orgId: resolvedOrgId });
+
     return () => {
       try {
+        logLiveMetric("subscription_removed", { orgId: resolvedOrgId });
         if (typeof supabase.removeChannel === "function") supabase.removeChannel(channel);
         else if (typeof channel.unsubscribe === "function") channel.unsubscribe();
       } catch {}
