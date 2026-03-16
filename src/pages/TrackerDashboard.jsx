@@ -1447,9 +1447,43 @@ export default function TrackerDashboard() {
   const visiblePositions = useMemo(() => {
     if (!positions?.length) return [];
 
-    const base = positions || [];
-    const filtered = selectedTrackerId === "all" ? base : base.filter((p) => getTrackerKey(p) === selectedTrackerId);
-    return filtered;
+    // MODE 1: All trackers → only latest position per tracker
+    if (selectedTrackerId === "all") {
+      const latestByTracker = new Map();
+
+      for (const p of positions) {
+        const key = getTrackerKey(p);
+        if (!key) continue;
+
+        const ts = p.recorded_at
+          ? Date.parse(p.recorded_at)
+          : p.created_at
+          ? Date.parse(p.created_at)
+          : 0;
+
+        const existing = latestByTracker.get(key);
+
+        if (!existing) {
+          latestByTracker.set(key, p);
+          continue;
+        }
+
+        const ets = existing.recorded_at
+          ? Date.parse(existing.recorded_at)
+          : existing.created_at
+          ? Date.parse(existing.created_at)
+          : 0;
+
+        if (ts > ets) {
+          latestByTracker.set(key, p);
+        }
+      }
+
+      return Array.from(latestByTracker.values());
+    }
+
+    // MODE 2: Single tracker → full history
+    return positions.filter((p) => getTrackerKey(p) === selectedTrackerId);
   }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
