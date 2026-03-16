@@ -482,87 +482,112 @@ const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
   );
 });
 
-const TrackerLayers = React.memo(function TrackerLayers({ pointsByTracker, personalById, personalByUserId, tOr, selectedTrackerId }) {
-  return (
-    <>
-      {Array.from(pointsByTracker.entries()).map(([trackerId, entry], idx) => {
-        const color = TRACKER_COLORS[idx % TRACKER_COLORS.length];
-        const positions = Array.isArray(entry.positions) ? entry.positions : [];
-        const latest = entry.latest || (positions.length ? positions[positions.length - 1] : null);
-        if (!latest) return null;
+const TrackerLayers = React.memo(function TrackerLayers({
+  allTrackerMarkers,
+  selectedTrackerPath,
+  personalById,
+  personalByUserId,
+  tOr,
+  selectedTrackerId,
+}) {
+  const renderTrackerTooltip = (trackerLabel, personalId, latest, latestLat, latestLng) => {
+    const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
+    const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
 
-        const latlngs = Array.isArray(entry.latlngs) ? entry.latlngs : [];
+    const latestTimeRaw =
+      latest?.recorded_at ??
+      latest?.tracker_latest_at ??
+      latest?.position_at ??
+      latest?.created_at ??
+      null;
+    const latestTimeText = latestTimeRaw ? formatTime(latestTimeRaw) : "—";
 
-        // Compute safe values for coordinates
-        const latestLat = Number(latest?.lat);
-        const latestLng = Number(latest?.lng);
-        if (!isValidLatLng(latestLat, latestLng)) return null;
+    const accuracyNum = Number(latest?.accuracy);
+    const accuracyText =
+      latest?.accuracy !== null && latest?.accuracy !== undefined && Number.isFinite(accuracyNum)
+        ? `${accuracyNum.toFixed(0)} m`
+        : null;
 
-        // Compute safe display values for coordinates
-        const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
-        const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
+    const speedNum = Number(latest?.speed);
+    const speedText =
+      latest?.speed !== null && latest?.speed !== undefined && Number.isFinite(speedNum)
+        ? speedNum.toFixed(1)
+        : null;
 
-        // Compute safe value for time with fallback chain
-        const latestTimeRaw =
-          latest?.recorded_at ??
-          latest?.tracker_latest_at ??
-          latest?.position_at ??
-          latest?.created_at ??
-          null;
-        const latestTimeText = latestTimeRaw ? formatTime(latestTimeRaw) : "—";
+    return (
+      <Tooltip direction="top" offset={[0, -8]} opacity={1}>
+        <div className="text-xs">
+          <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
+          {personalId && (
+            <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(personalId)}</div>
+          )}
+          <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {latestTimeText}</div>
+          <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
+          <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLngText}</div>
+          {accuracyText && (
+            <div><b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>: {accuracyText}</div>
+          )}
+          {speedText && (
+            <div><b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>: {speedText}</div>
+          )}
+          {latest?.source && (
+            <div><b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>: {String(latest.source)}</div>
+          )}
+        </div>
+      </Tooltip>
+    );
+  };
 
-        // Compute safe value for accuracy
-        const accuracyNum = Number(latest?.accuracy);
-        const accuracyText =
-          latest?.accuracy !== null && latest?.accuracy !== undefined && Number.isFinite(accuracyNum)
-            ? `${accuracyNum.toFixed(0)} m`
-            : null;
+  if (selectedTrackerId === "all") {
+    return (
+      <>
+        {(allTrackerMarkers || []).map((item) => {
+          const latest = item?.latest || null;
+          if (!latest) return null;
 
-        // Compute safe value for speed
-        const speedNum = Number(latest?.speed);
-        const speedText =
-          latest?.speed !== null && latest?.speed !== undefined && Number.isFinite(speedNum)
-            ? speedNum.toFixed(1)
-            : null;
+          const latestLat = Number(item?.lat);
+          const latestLng = Number(item?.lng);
+          if (!isValidLatLng(latestLat, latestLng)) return null;
 
-        const personalId = latest.personal_id || entry.personal_id || null;
-        const person = personalId ? personalById.get(String(personalId)) : null;
-        const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-        const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
-        const shouldRenderPolyline = selectedTrackerId !== "all" && trackerId === selectedTrackerId && latlngs.length > 1;
-
-        return (
-          <React.Fragment key={trackerId}>
-            {shouldRenderPolyline && <Polyline positions={latlngs} pathOptions={{ color, weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
+          return (
             <AnimatedTrackerDot
+              key={item.key}
               center={[latestLat, latestLng]}
-              color={color}
+              color={item.color}
               radius={7}
             >
-              <Tooltip direction="top" offset={[0, -8]} opacity={1}>
-                <div className="text-xs">
-                  <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
-                  {personalId && (
-                    <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(personalId)}</div>
-                  )}
-                  <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {latestTimeText}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
-                  <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLngText}</div>
-                  {accuracyText && (
-                    <div><b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>: {accuracyText}</div>
-                  )}
-                  {speedText && (
-                    <div><b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>: {speedText}</div>
-                  )}
-                  {latest?.source && (
-                    <div><b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>: {String(latest.source)}</div>
-                  )}
-                </div>
-              </Tooltip>
+              {renderTrackerTooltip(item.trackerLabel || item.key, item.personalId, latest, latestLat, latestLng)}
             </AnimatedTrackerDot>
-          </React.Fragment>
-        );
-      })}
+          );
+        })}
+      </>
+    );
+  }
+
+  const latest = selectedTrackerPath?.latest || null;
+  if (!latest) return null;
+
+  const trackerId = getTrackerKey(latest);
+  const latestLat = Number(latest?.lat);
+  const latestLng = Number(latest?.lng);
+  if (!isValidLatLng(latestLat, latestLng)) return null;
+
+  const personalId = latest.personal_id || null;
+  const person = personalId ? personalById.get(String(personalId)) : null;
+  const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
+  const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
+  const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
+
+  return (
+    <>
+      {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color: TRACKER_COLORS[0], weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
+      <AnimatedTrackerDot
+        center={[latestLat, latestLng]}
+        color={TRACKER_COLORS[0]}
+        radius={7}
+      >
+        {renderTrackerTooltip(trackerLabel, personalId, latest, latestLat, latestLng)}
+      </AnimatedTrackerDot>
     </>
   );
 });
@@ -1540,6 +1565,51 @@ export default function TrackerDashboard() {
     return sorted;
   }, [visiblePositions]);
 
+  const allTrackerMarkers = useMemo(() => {
+    if (selectedTrackerId !== "all") return [];
+
+    return (visiblePositions || []).reduce((acc, row, idx) => {
+      const key = getTrackerKey(row);
+      if (!key) return acc;
+
+      const lat = Number(row?.lat);
+      const lng = Number(row?.lng);
+      if (!isValidLatLng(lat, lng)) return acc;
+
+      const personalId = row?.personal_id || null;
+      const person = personalId ? personalById.get(String(personalId)) : null;
+      const byUser = row?.user_id ? personalByUserId.get(String(row.user_id)) : null;
+      const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || key;
+
+      acc.push({
+        key,
+        latest: row,
+        lat,
+        lng,
+        personalId,
+        trackerLabel,
+        color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
+      });
+
+      return acc;
+    }, []);
+  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
+
+  const selectedTrackerPath = useMemo(() => {
+    if (selectedTrackerId === "all") return null;
+
+    const trackerPositions = Array.isArray(visiblePositions) ? visiblePositions : [];
+    const latlngs = trackerPositions
+      .map((p) => [Number(p?.lat), Number(p?.lng)])
+      .filter(([lat, lng]) => isValidLatLng(lat, lng));
+
+    return {
+      positions: trackerPositions,
+      latlngs,
+      latest: trackerPositions[trackerPositions.length - 1] || null,
+    };
+  }, [selectedTrackerId, visiblePositions]);
+
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
   const mapCenter = useMemo(() => {
@@ -1908,7 +1978,8 @@ export default function TrackerDashboard() {
                   <GeofenceLayers layerItems={layerItems} t={t} />
 
                   <TrackerLayers
-                    pointsByTracker={pointsByTracker}
+                    allTrackerMarkers={allTrackerMarkers}
+                    selectedTrackerPath={selectedTrackerPath}
                     personalById={personalById}
                     personalByUserId={personalByUserId}
                     tOr={tOr}
