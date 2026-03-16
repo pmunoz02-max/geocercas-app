@@ -1025,23 +1025,29 @@ export default function TrackerDashboard() {
     const { data, error } = await supabase
       .from("tracker_latest")
       .select("user_id, org_id, lat, lng, accuracy, ts")
-      .eq("org_id", currentOrgId);
+      .eq("org_id", currentOrgId)
+      .not("lat", "is", null)
+      .not("lng", "is", null);
 
     if (error) {
       console.warn("tracker_latest error:", error);
-      return [];
+      return { rows: [], error };
     }
 
-    if (!data) return [];
+    const rows = Array.isArray(data)
+      ? data
+          .filter((p) => p && p.lat != null && p.lng != null)
+          .map((p) => ({
+            user_id: String(p.user_id),
+            lat: Number(p.lat),
+            lng: Number(p.lng),
+            accuracy: p.accuracy ?? null,
+            recorded_at: p.ts ?? null,
+            source: "tracker_latest",
+          }))
+      : [];
 
-    return data.map((p) => ({
-      user_id: p.user_id,
-      lat: p.lat,
-      lng: p.lng,
-      accuracy: p.accuracy,
-      recorded_at: p.ts,
-      source: "tracker_latest",
-    }));
+    return { rows, error: null };
   }
 
   const fetchPositions = useCallback(
@@ -1081,81 +1087,52 @@ export default function TrackerDashboard() {
           return await q;
         };
 
-        // NUEVO: cargar estado LIVE primero
-        let latest = await loadLatestPositions(currentOrgId);
+        // 1️⃣ Intentar cargar estado LIVE
+        const latestRes = await loadLatestPositions(currentOrgId);
+        const latestRows = latestRes?.rows || [];
 
-        if (latest && latest.length > 0) {
-          setPositions(latest);
-          setDiag((d) => ({ ...d, positionsFound: latest.length, positionsSource: "tracker_latest" }));
-          return;
+        let finalRows = [];
+        let tableUsed = "tracker_latest";
+
+        if (latestRows.length > 0) {
+          finalRows = latestRows;
+        } else {
+          // 2️⃣ Fallback a tabla positions
+          tableUsed = "positions";
+          let res = await queryTable("positions");
+
+          const shouldFallbackToLegacy =
+            !!res.error ||
+            !Array.isArray(res.data) ||
+            res.data.length === 0;
+
+          if (shouldFallbackToLegacy) {
+            // 3️⃣ Fallback final a tracker_positions
+            const res2 = await queryTable("tracker_positions");
+            tableUsed = "tracker_positions";
+            res = res2;
+          }
+
+          if (!res.error && Array.isArray(res.data)) {
+            finalRows = res.data.map((p) => ({
+              ...p,
+              user_id: p.user_id ? String(p.user_id) : p.user_id,
+              recorded_at: p.recorded_at ?? p.ts ?? p.created_at ?? null,
+            }));
+          }
         }
 
-        // fallback al comportamiento anterior
-        let tableUsed = "positions";
-        let res = await queryTable("positions");
+        // Log para diagnóstico en preview
+        console.log("[tracker-dashboard] source:", tableUsed, "rows:", finalRows.length);
 
-        const shouldFallback =
-          !!res.error ||
-          (Array.isArray(res.data) && res.data.length === 0);
-
-        if (shouldFallback) {
-          const res2 = await queryTable("tracker_positions");
-          tableUsed = "tracker_positions";
-          res = res2;
-        }
-
-        if (!res.error && Array.isArray(res.data)) {
-          setPositions(res.data);
-        }
-
-        const { data, error } = res;
-
-        if (error) {
-          setDiag((d) => ({
-            ...d,
-            lastPositionsError: error.message || String(error),
-            positionsFound: 0,
-            positionsSource: tableUsed,
-          }));
-          setPositions([]);
-          setErrorMsg(tOr("trackerDashboard.messages.loadPositionsError", "Error loading positions."));
-          return;
-        }
-
-        const normalized = (data || [])
-          .map((r) => {
-            const lat = toNum(r.lat);
-            const lng = toNum(r.lng);
-            const ts = r.recorded_at || r.created_at || null;
-            return {
-              id: r.id,
-              org_id: r.org_id ? String(r.org_id) : null,
-              user_id: r.user_id ? String(r.user_id) : null,
-              personal_id: r.personal_id ? String(r.personal_id) : null,
-              asignacion_id: r.asignacion_id ? String(r.asignacion_id) : null,
-              lat,
-              lng,
-              recorded_at: ts,
-              created_at: r.created_at || null,
-              accuracy: r.accuracy ?? null,
-              speed: r.speed ?? null,
-              heading: r.heading ?? null,
-              battery: r.battery ?? null,
-              is_mock: r.is_mock ?? null,
-              source: r.source ?? null,
-              tracker_key: getTrackerKey(r),
-              _valid: isValidLatLng(lat, lng),
-            };
-          })
-          .filter((p) => p._valid);
-
-        setPositions(normalized);
-        setDiag((d) => ({ ...d, positionsFound: normalized.length, positionsSource: tableUsed }));
+        // Renderizar posiciones
+        setPositions(finalRows);
+        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: tableUsed }));
       } finally {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, timeWindowId, tOr, loadLatestPositions]
+    [assignmentTrackers, timeWindowId]
   );
 
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
