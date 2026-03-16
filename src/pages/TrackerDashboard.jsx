@@ -975,105 +975,38 @@ export default function TrackerDashboard() {
         setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
         setErrorMsg("");
 
-        const queryLatestTable = async (tableName) => {
-          let q = supabase
-            .from(tableName)
-            .select("user_id, org_id, lat, lng, accuracy, ts")
-            .eq("org_id", currentOrgId)
-            .order("ts", { ascending: false })
-            .limit(500);
+        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+        const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
-          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-            const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
-            if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
-          }
+        const latestRes = await loadLatestPositions(currentOrgId);
+        const latestRows = latestRes?.rows || [];
+        console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
 
-          return await q;
-        };
+        let source = "tracker_latest";
+        let finalRows = latestRows;
 
-        let tableUsed = "tracker_latest";
-        let res = await queryLatestTable("tracker_latest");
-
-        if (res.error) {
-          let fbQuery = supabase
-            .from("tracker_positions")
-            .select("user_id, org_id, lat, lng, accuracy, recorded_at, created_at")
-            .eq("org_id", currentOrgId)
-            .order("recorded_at", { ascending: false, nullsFirst: false })
-            .order("created_at", { ascending: false })
-            .limit(500);
-
-          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-            const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
-            if (allowedUserIds.length) fbQuery = fbQuery.in("user_id", allowedUserIds);
-          }
-
-          const fb = await fbQuery;
-
-          if (!fb.error) {
-            tableUsed = "tracker_positions";
-            res = {
-              data: (fb.data || []).map((r) => ({
-                user_id: r.user_id,
-                org_id: r.org_id,
-                lat: r.lat,
-                lng: r.lng,
-                accuracy: r.accuracy,
-                ts: r.recorded_at || r.created_at || null,
-              })),
-              error: null,
-            };
-          }
+        if (latestRows.length === 0) {
+          const fallbackRows = await loadLivePositionsFromPositions(currentOrgId, selectedWindowHours);
+          console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
+          source = "positions";
+          finalRows = fallbackRows;
         }
 
-        const { data, error } = res;
-        if (error) {
-          setDiag((d) => ({
-            ...d,
-            lastPositionsError: error.message || String(error),
-            positionsFound: 0,
-            positionsSource: tableUsed,
-          }));
-          setPositions([]);
-          setErrorMsg(tOr("trackerDashboard.messages.loadPositionsError", "Error loading positions."));
-          return;
-        }
+        finalRows = (finalRows || []).filter((p) => {
+          const lat = Number(p?.lat);
+          const lng = Number(p?.lng);
+          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
+        });
 
-        const normalized = (data || [])
-          .map((r) => {
-            const lat = toNum(r.lat);
-            const lng = toNum(r.lng);
-            if (!isValidLatLng(lat, lng)) return null;
-            return {
-              user_id: r.user_id ? String(r.user_id) : null,
-              lat,
-              lng,
-              accuracy: r.accuracy ?? null,
-              recorded_at: r.ts || null,
-              source: tableUsed === "tracker_latest" ? "tracker_latest" : "tracker_positions",
-            };
-          })
-          .filter(Boolean);
+        console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
 
-        const latestByUser = new Map();
-        for (const row of normalized) {
-          if (!row?.user_id) continue;
-          const key = String(row.user_id);
-          const currTs = row.recorded_at ? Date.parse(row.recorded_at) : 0;
-          const prev = latestByUser.get(key);
-          const prevTs = prev?.recorded_at ? Date.parse(prev.recorded_at) : 0;
-          if (!prev || currTs >= prevTs) latestByUser.set(key, row);
-        }
-
-        const latestNormalized = latestByUser.size ? Array.from(latestByUser.values()) : normalized;
-
-        setPositions(latestNormalized);
-        setDiag((d) => ({ ...d, positionsFound: latestNormalized.length, positionsSource: tableUsed }));
+        setPositions(finalRows);
+        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
       } finally {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, tOr]
+    [assignmentTrackers, timeWindowId]
   );
 
   async function loadLatestPositions(currentOrgId) {
@@ -1103,6 +1036,54 @@ export default function TrackerDashboard() {
       : [];
 
     return { rows, error: null };
+  }
+
+  async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
+    const fromIso = new Date(Date.now() - Number(hoursBack || 6) * 60 * 60 * 1000).toISOString();
+
+    let query = supabase
+      .from("positions")
+      .select("id, user_id, lat, lng, accuracy, recorded_at, created_at")
+      .eq("org_id", currentOrgId)
+      .gte("recorded_at", fromIso)
+      .order("recorded_at", { ascending: false, nullsFirst: false })
+      .limit(500);
+
+    if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
+      const allowedUserIds = assignmentTrackers.map((x) => x.user_id).filter(Boolean);
+      if (allowedUserIds.length) query = query.in("user_id", allowedUserIds);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.warn("positions live fallback error:", error);
+      return [];
+    }
+
+    const mappedRows = Array.isArray(data)
+      ? data.map((p) => ({
+          id: p.id,
+          user_id: String(p.user_id),
+          lat: Number(p.lat),
+          lng: Number(p.lng),
+          accuracy: p.accuracy ?? null,
+          recorded_at: p.recorded_at ?? p.created_at ?? null,
+          source: "positions",
+        }))
+      : [];
+
+    const latestByUser = new Map();
+    for (const row of mappedRows) {
+      if (!row?.user_id) continue;
+      const key = String(row.user_id);
+      const currentTs = row.recorded_at ? Date.parse(row.recorded_at) : 0;
+      const previous = latestByUser.get(key);
+      const previousTs = previous?.recorded_at ? Date.parse(previous.recorded_at) : 0;
+      if (!previous || currentTs >= previousTs) latestByUser.set(key, row);
+    }
+
+    return Array.from(latestByUser.values());
   }
 
   const fetchPositions = useCallback(
