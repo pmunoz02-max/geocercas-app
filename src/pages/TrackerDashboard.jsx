@@ -157,6 +157,46 @@ function resolveTrackerAuthIdFromPersonal(row) {
   return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
+function resolveAssignedTrackerKey(userId, assignmentMap) {
+  if (userId === null || userId === undefined) return null;
+  const normalizedUserId = String(userId);
+  if (!normalizedUserId) return null;
+  return assignmentMap?.get(normalizedUserId) ?? normalizedUserId;
+}
+
+function resolveTrackerDisplayLabel({ row, trackerKey, trackerUiMap, personalById, personalByUserId }) {
+  const trackerUi = trackerKey ? trackerUiMap?.get(String(trackerKey)) : null;
+  const personalId = row?.personal_id || null;
+  const person = personalId ? personalById?.get(String(personalId)) : null;
+  const byUser = row?.user_id ? personalByUserId?.get(String(row.user_id)) : null;
+  const firstName = person?.first_name || byUser?.first_name || row?.first_name || null;
+  const lastName = person?.last_name || byUser?.last_name || row?.last_name || null;
+  const fullName =
+    trackerUi?.fullName ||
+    person?.full_name ||
+    person?.nombre ||
+    byUser?.full_name ||
+    byUser?.nombre ||
+    row?.full_name ||
+    [firstName, lastName].filter(Boolean).join(" ") ||
+    null;
+  const email = trackerUi?.email || person?.email || byUser?.email || row?.email || null;
+
+  return (
+    trackerUi?.baseLabel ||
+    trackerUi?.trackerLabel ||
+    trackerUi?.label ||
+    row?.tracker_label ||
+    row?.tracker_name ||
+    row?.name ||
+    fullName ||
+    email ||
+    (row?.user_id != null ? String(row.user_id) : null) ||
+    (trackerKey != null ? String(trackerKey) : null) ||
+    "Sin nombre"
+  );
+}
+
 
 function isPreviewLikeHost() {
   if (typeof window === "undefined") return false;
@@ -621,16 +661,11 @@ const TrackerLayers = React.memo(function TrackerLayers({
           const markerStyle = getMarkerStyleByStatus(live.status, item.color);
           const trackerDisplayName =
             item?.trackerLabel ||
+            latest?.trackerLabel ||
             latest?.tracker_label ||
             latest?.name ||
             latest?.tracker_name ||
             item?.key;
-
-          console.log("LIVE MARKER latest:", latest);
-          console.log("LIVE MARKER latest.user_id:", latest?.user_id);
-          console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
-          console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
-          console.log("LIVE MARKER latest.name:", latest?.name);
 
           return (
             <AnimatedTrackerDot
@@ -658,28 +693,16 @@ const TrackerLayers = React.memo(function TrackerLayers({
   if (!isValidLatLng(latestLat, latestLng)) return null;
 
   const personalId = latest.personal_id || null;
-  const person = personalId ? personalById.get(String(personalId)) : null;
-  const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-  console.log("DEBUG LATEST:", latest);
-  console.log("DEBUG latest.tracker_label:", latest?.tracker_label);
   const trackerLabel =
+    selectedTrackerPath?.trackerLabel ||
+    latest?.trackerLabel ||
     latest?.tracker_label ||
     latest?.tracker_name ||
     latest?.name ||
-    person?.nombre ||
-    person?.email ||
-    byUser?.nombre ||
-    byUser?.email ||
     trackerId;
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
-
-  console.log("LIVE MARKER latest:", latest);
-  console.log("LIVE MARKER latest.user_id:", latest?.user_id);
-  console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
-  console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
-  console.log("LIVE MARKER latest.name:", latest?.name);
 
   return (
     <>
@@ -1670,23 +1693,32 @@ export default function TrackerDashboard() {
     for (const a of assignments || []) {
       if (!a) continue;
 
-      if (a.user_id && a.tracker_key) {
-        m.set(String(a.user_id), String(a.tracker_key));
-      }
+      const userId =
+        a?.user_id != null ? String(a.user_id) :
+        a?.tracker_user_id != null ? String(a.tracker_user_id) :
+        null;
+      const trackerKey =
+        a?.tracker_key != null ? String(a.tracker_key) :
+        a?.tracker_user_id != null ? String(a.tracker_user_id) :
+        a?.user_id != null ? String(a.user_id) :
+        null;
+
+      if (!userId || !trackerKey) continue;
+      m.set(userId, trackerKey);
     }
 
     return m;
   }, [assignments]);
 
-  const trackerMap = useMemo(() => {
+  const trackerUiMap = useMemo(() => {
     const m = new Map();
 
     for (const t of trackersUi || []) {
       if (!t) continue;
 
-      if (t.tracker_key) m.set(String(t.tracker_key), t);
-      if (t.user_id) m.set(String(t.user_id), t);
-      if (t.id) m.set(String(t.id), t);
+      if (t.tracker_key != null) m.set(String(t.tracker_key), t);
+      if (t.user_id != null && !m.has(String(t.user_id))) m.set(String(t.user_id), t);
+      if (t.id != null && !m.has(String(t.id))) m.set(String(t.id), t);
     }
 
     return m;
@@ -1806,13 +1838,18 @@ export default function TrackerDashboard() {
       const lastName = source?.last_name || row?.last_name || null;
       const fullName = source?.full_name || source?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
       const email = source?.email || row?.email || null;
-      const trackerLabel =
-        fullName || email ||
-        row?.tracker_label || row?.name || row?.tracker_name ||
-        key;
+      const resolvedTrackerKey = resolveAssignedTrackerKey(row?.user_id, assignmentMap) || key;
+      const trackerLabel = resolveTrackerDisplayLabel({
+        row,
+        trackerKey: resolvedTrackerKey,
+        trackerUiMap,
+        personalById,
+        personalByUserId,
+      });
 
       acc.push({
         key,
+        tracker_key: resolvedTrackerKey,
         latest: row,
         lat,
         lng,
@@ -1828,7 +1865,7 @@ export default function TrackerDashboard() {
 
       return acc;
     }, []);
-  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
+  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId, assignmentMap, trackerUiMap]);
 
   const filteredAllTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return allTrackerMarkers;
@@ -1866,13 +1903,27 @@ export default function TrackerDashboard() {
       .map((p) => [Number(p?.lat), Number(p?.lng)])
       .filter(([lat, lng]) => isValidLatLng(lat, lng));
 
+    const latest = trackerPositions[trackerPositions.length - 1] || null;
+    const trackerKey = resolveAssignedTrackerKey(latest?.user_id, assignmentMap) || selectedTrackerId;
+    const trackerLabel = latest
+      ? resolveTrackerDisplayLabel({
+          row: latest,
+          trackerKey,
+          trackerUiMap,
+          personalById,
+          personalByUserId,
+        })
+      : selectedTrackerId;
+
     return {
       positions: trackerPositions,
       latlngs,
-      latest: trackerPositions[trackerPositions.length - 1] || null,
-      live: getTrackerLiveStatus(trackerPositions[trackerPositions.length - 1] || null),
+      latest,
+      tracker_key: trackerKey,
+      trackerLabel,
+      live: getTrackerLiveStatus(latest),
     };
-  }, [selectedTrackerId, visiblePositions]);
+  }, [selectedTrackerId, visiblePositions, assignmentMap, trackerUiMap, personalById, personalByUserId]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
@@ -2337,30 +2388,14 @@ export default function TrackerDashboard() {
                     </thead>
                     <tbody>
                       {geofenceEvents.slice(0, 20).map((evt) => {
-                        const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
-                        const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
-                        const trackerKeyFromAssignment = assignmentMap.get(String(evt.user_id));
-
-                        const trackerFromUi = (trackersUi || []).find((t) =>
-                          String(t.tracker_key) === String(trackerKeyFromAssignment)
-                        );
-
-                        console.log("DEBUG TOOLTIP EVT:", evt);
-                        console.log("DEBUG tracker_label:", evt?.tracker_label);
-                        console.log("DEBUG tracker_name:", evt?.tracker_name);
-                        console.log("DEBUG name:", evt?.name);
-                        console.log("DEBUG user_id:", evt?.user_id);
-                        const trackerLabel =
-                          trackerFromUi?.label ??
-                          trackerFromUi?.baseLabel ??
-                          evt?.tracker_label ??
-                          evt?.tracker_name ??
-                          evt?.name ??
-                          person?.nombre ??
-                          person?.email ??
-                          byUser?.nombre ??
-                          byUser?.email ??
-                          String(evt.user_id ?? "—");
+                        const trackerKeyFromAssignment = resolveAssignedTrackerKey(evt?.user_id, assignmentMap);
+                        const trackerLabel = resolveTrackerDisplayLabel({
+                          row: evt,
+                          trackerKey: trackerKeyFromAssignment,
+                          trackerUiMap,
+                          personalById,
+                          personalByUserId,
+                        });
 
                         const eventColor = evt.event_type === 'ENTER' ? 'text-green-700' : 'text-red-700';
                         const eventBg = evt.event_type === 'ENTER' ? 'bg-green-50' : 'bg-red-50';
