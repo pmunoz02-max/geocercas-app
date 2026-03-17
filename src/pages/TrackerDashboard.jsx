@@ -1653,6 +1653,24 @@ export default function TrackerDashboard() {
     });
   }, [allTrackerMarkers, selectedTrackerId, statusFilter]);
 
+  const trackerStatusSummary = useMemo(() => {
+    let total = 0;
+    let online = 0;
+    let stale = 0;
+    let offline = 0;
+
+    for (const item of allTrackerMarkers || []) {
+      total += 1;
+      const live = getTrackerLiveStatus(item?.latest);
+
+      if (live.status === "online") online += 1;
+      else if (live.status === "stale") stale += 1;
+      else offline += 1;
+    }
+
+    return { total, online, stale, offline };
+  }, [allTrackerMarkers]);
+
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
 
@@ -2006,6 +2024,13 @@ export default function TrackerDashboard() {
                     <span>{tOr("trackerDashboard.map.initializing", "Initializing map…")}</span>
                   )}
                 </div>
+              </div>
+
+              <div className="px-4 py-2 border-b border-gray-200 flex flex-wrap items-center gap-2">
+                <Badge>{tOr("trackerDashboard.labels.total", "Total")}: {trackerStatusSummary.total}</Badge>
+                <Badge>{tOr("trackerDashboard.status.online", "Online")}: {trackerStatusSummary.online}</Badge>
+                <Badge>{tOr("trackerDashboard.status.stale", "Stale")}: {trackerStatusSummary.stale}</Badge>
+                <Badge>{tOr("trackerDashboard.status.offline", "Offline")}: {trackerStatusSummary.offline}</Badge>
               </div>
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
