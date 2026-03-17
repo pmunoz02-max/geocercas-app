@@ -2321,6 +2321,20 @@ export default function TrackerDashboard() {
                     <div className="space-y-0.5 text-xs text-gray-700">
                       <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
                       <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
+                      {cursorCoords?.scaleLabel && (
+                        <div className="pt-1.5 mt-1.5 border-t border-gray-300">
+                          <div
+                            style={{
+                              width: cursorCoords.scaleWidthPx,
+                              height: 3,
+                              background: "#111",
+                              borderRadius: 1,
+                              marginBottom: 4,
+                            }}
+                          />
+                          <div className="text-xs text-gray-700">{cursorCoords.scaleLabel}</div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
