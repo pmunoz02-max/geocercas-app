@@ -2228,16 +2228,7 @@ export default function TrackerDashboard() {
                   <div><b>{tOr("trackerDashboard.badges.selected", "selected")}</b>: {diag.selectedGeofences}</div>
                 </div>
 
-                <div className="mt-2 text-[11px] text-gray-600 space-y-1">
-                  <div>
-                    <b>{tOr("trackerDashboard.badges.bounds", "bounds")}</b>{" "}
-                    <span className="font-mono">{geofenceBoundsText}</span>
-                  </div>
-                  <div>
-                    <b>{tOr("trackerDashboard.badges.intersects", "intersects")}</b>{" "}
-                    <span className="font-mono">{intersectsText}</span>
-                  </div>
-                </div>
+
               </div>
             </div>
           </aside>
@@ -2267,30 +2258,30 @@ export default function TrackerDashboard() {
               </div>
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
-                <div className="pointer-events-none absolute top-3 left-16 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                  <div className="text-[11px] font-semibold text-gray-900 mb-1">Coordenadas</div>
-                  <div className="space-y-0.5 text-xs text-gray-700">
-                    <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
-                    <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
-                  </div>
-                </div>
-
-                <div className="absolute top-3 right-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                  <div className="text-[11px] font-semibold text-gray-900 mb-2">
-                    {tOr("trackerDashboard.sections.legend", "Legend")}
-                  </div>
-                  <div className="space-y-1.5 text-xs text-gray-700">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
-                      <span>{tOr("trackerDashboard.status.online", "Online")}</span>
+                <div className="pointer-events-none absolute top-3 right-3 z-[1000] flex flex-col items-end gap-2">
+                  <div className="pointer-events-auto rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                    <div className="text-[11px] font-semibold text-gray-900 mb-2">
+                      {tOr("trackerDashboard.sections.legend", "Legend")}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
-                      <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
+                    <div className="space-y-1.5 text-xs text-gray-700">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
+                        <span>{tOr("trackerDashboard.status.online", "Online")}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
+                        <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
+                        <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
-                      <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                    <div className="space-y-0.5 text-xs text-gray-700">
+                      <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
+                      <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
                     </div>
                   </div>
                 </div>
@@ -2343,7 +2334,7 @@ export default function TrackerDashboard() {
                     selectedTrackerId={selectedTrackerId}
                   />
 
-                  <ScaleControl position="bottomleft" />
+                  <ScaleControl position="bottomleft" imperial={false} />
                 </MapContainer>
               </div>
             </div>
