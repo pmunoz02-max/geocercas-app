@@ -622,6 +622,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
 
           const live = item?.live || getTrackerLiveStatus(latest);
           const markerStyle = getMarkerStyleByStatus(live.status, item.color);
+          const trackerDisplayLabel = item?.trackerLabel || latest?.tracker_label || item?.key;
 
           return (
             <AnimatedTrackerDot
@@ -632,7 +633,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
               fillOpacity={markerStyle.fillOpacity}
               strokeOpacity={markerStyle.strokeOpacity}
             >
-              {renderTrackerTooltip(item.trackerLabel || item.key, item.personalId, latest, latestLat, latestLng, live)}
+              {renderTrackerTooltip(trackerDisplayLabel, item.personalId, latest, latestLat, latestLng, live)}
             </AnimatedTrackerDot>
           );
         })}
@@ -652,6 +653,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const person = personalId ? personalById.get(String(personalId)) : null;
   const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
   const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
+  const trackerDisplayLabel = trackerLabel || latest?.tracker_label || selectedTrackerPath?.trackerLabel || trackerId;
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
@@ -666,7 +668,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
         fillOpacity={markerStyle.fillOpacity}
         strokeOpacity={markerStyle.strokeOpacity}
       >
-        {renderTrackerTooltip(trackerLabel, personalId, latest, latestLat, latestLng, live)}
+        {renderTrackerTooltip(trackerDisplayLabel, personalId, latest, latestLat, latestLng, live)}
       </AnimatedTrackerDot>
     </>
   );
