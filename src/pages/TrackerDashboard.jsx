@@ -2307,7 +2307,7 @@ export default function TrackerDashboard() {
                         const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
                         const trackerFromUi = trackerMap.get(evt.user_id);
                         const trackerLabel =
-                          trackerFromUi?.trackerLabel ||
+                          trackerFromUi?.label ||
                           trackerFromUi?.baseLabel ||
                           evt?.tracker_label ||
                           evt?.tracker_name ||
