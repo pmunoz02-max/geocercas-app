@@ -2357,6 +2357,9 @@ export default function TrackerDashboard() {
                   <div className="space-y-0.5 text-xs text-gray-700">
                     <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
                     <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
+                    {/* Barra de escala */}
+                    <div className="mt-1 h-0.5 w-16 rounded bg-gray-800" />
+                    {/* Texto de escala */}
                     <div>{scaleLabel}</div>
                   </div>
                 </div>
