@@ -2343,6 +2343,113 @@ export default function TrackerDashboard() {
             </div>
           </section>
 
+          {selectedTrackerId === "all" && (
+            <section className="lg:col-span-12">
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {tOr("trackerDashboard.sections.trackerTable", "Trackers")}
+                  </div>
+                </div>
+
+                {filteredAllTrackerMarkers.length === 0 ? (
+                  <div className="px-4 py-8 text-center text-sm text-gray-500">
+                    {tOr("trackerDashboard.trackerTable.empty", "No trackers visible")}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">
+                            {tOr("trackerDashboard.trackerTable.tracker", "Tracker")}
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">
+                            {tOr("trackerDashboard.trackerTable.status", "Status")}
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">
+                            {tOr("trackerDashboard.trackerTable.lastUpdate", "Última actualización")}
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700 hidden sm:table-cell">
+                            {tOr("trackerDashboard.trackerTable.accuracy", "Accuracy")}
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700 hidden md:table-cell">
+                            {tOr("trackerDashboard.trackerTable.coords", "Coordinates")}
+                          </th>
+                          <th className="px-4 py-2 text-left font-medium text-gray-700">
+                            {tOr("trackerDashboard.trackerTable.action", "Action")}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAllTrackerMarkers.map((item) => {
+                          const live = item.live || getTrackerLiveStatus(item.latest);
+                          const status = live.status;
+                          const accuracyNum = Number(item.latest?.accuracy);
+                          const accuracyText =
+                            item.latest?.accuracy != null && Number.isFinite(accuracyNum)
+                              ? `${accuracyNum.toFixed(0)} m`
+                              : "—";
+                          const tsStr =
+                            item.latest?.recorded_at ??
+                            item.latest?.ts ??
+                            item.latest?.created_at ??
+                            null;
+                          const timeText = formatTime(tsStr);
+                          const ageText = formatAgeShort(live.ageSec);
+                          const dotColor = status === "offline" ? "#6b7280" : item.color;
+                          const dotOpacity = status === "stale" ? 0.4 : status === "offline" ? 0.6 : 1;
+                          const statusLabel =
+                            status === "online"
+                              ? tOr("trackerDashboard.status.online", "Online")
+                              : status === "stale"
+                              ? tOr("trackerDashboard.status.stale", "Stale")
+                              : tOr("trackerDashboard.status.offline", "Offline");
+                          return (
+                            <tr key={item.key} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+                              <td className="px-4 py-2 text-gray-900 font-medium max-w-[160px] truncate">
+                                {item.trackerLabel}
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span
+                                    className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0"
+                                    style={{ background: dotColor, opacity: dotOpacity }}
+                                  />
+                                  <span className="text-gray-700">{statusLabel}</span>
+                                  {live.ageSec != null && (
+                                    <span className="text-gray-400 text-xs">({ageText})</span>
+                                  )}
+                                </span>
+                              </td>
+                              <td className="px-4 py-2 text-gray-600">{timeText}</td>
+                              <td className="px-4 py-2 text-gray-600 hidden sm:table-cell">{accuracyText}</td>
+                              <td className="px-4 py-2 text-gray-600 font-mono text-xs hidden md:table-cell">
+                                {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
+                              </td>
+                              <td className="px-4 py-2">
+                                <button
+                                  type="button"
+                                  className="border border-gray-300 bg-white text-gray-700 rounded-md px-2.5 py-1 text-xs hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  onClick={() => {
+                                    try {
+                                      mapRef.current?.setView([item.lat, item.lng], 16);
+                                    } catch {}
+                                  }}
+                                >
+                                  {tOr("trackerDashboard.trackerTable.center", "Centrar")}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
           {previewUiEnabled && isDemoOrg && geofenceEvents.length > 0 && (
             <section className="lg:col-span-8 xl:col-span-9">
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
