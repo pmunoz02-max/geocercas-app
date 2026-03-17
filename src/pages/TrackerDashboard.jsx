@@ -24,6 +24,7 @@ import {
   Polygon,
   Circle,
   useMap,
+  useMapEvents,
 } from "react-leaflet";
 
 import L from "leaflet";
@@ -181,6 +182,57 @@ function logLiveMetric(label, payload = {}) {
   });
 }
 
+
+function MapCursorCoords({ onChange }) {
+  const map = useMapEvents({
+    mousemove(e) {
+      try {
+        const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
+        onChange?.({
+          lat: e?.latlng?.lat ?? null,
+          lng: e?.latlng?.lng ?? null,
+          zoom,
+        });
+      } catch {}
+    },
+    zoomend() {
+      try {
+        const center = typeof map.getCenter === "function" ? map.getCenter() : null;
+        const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
+        onChange?.({
+          lat: center?.lat ?? null,
+          lng: center?.lng ?? null,
+          zoom,
+        });
+      } catch {}
+    },
+    moveend() {
+      try {
+        const center = typeof map.getCenter === "function" ? map.getCenter() : null;
+        const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
+        onChange?.({
+          lat: center?.lat ?? null,
+          lng: center?.lng ?? null,
+          zoom,
+        });
+      } catch {}
+    },
+  });
+
+  useEffect(() => {
+    try {
+      const center = typeof map.getCenter === "function" ? map.getCenter() : null;
+      const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
+      onChange?.({
+        lat: center?.lat ?? null,
+        lng: center?.lng ?? null,
+        zoom,
+      });
+    } catch {}
+  }, [map, onChange]);
+
+  return null;
+}
 
 function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
@@ -765,6 +817,7 @@ export default function TrackerDashboard() {
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
   const [viewportText, setViewportText] = useState("—");
+  const [mapCursorInfo, setMapCursorInfo] = useState({ lat: null, lng: null, zoom: null });
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
@@ -2304,6 +2357,17 @@ export default function TrackerDashboard() {
                   </div>
                 </div>
 
+                <div className="absolute top-3 left-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                  <div className="text-[11px] font-semibold text-gray-900 mb-1">
+                    {tOr("trackerDashboard.map.coords", "Coordenadas")}
+                  </div>
+                  <div className="text-xs text-gray-700 font-mono leading-5">
+                    <div>Lat: {Number.isFinite(mapCursorInfo?.lat) ? Number(mapCursorInfo.lat).toFixed(6) : "—"}</div>
+                    <div>Lng: {Number.isFinite(mapCursorInfo?.lng) ? Number(mapCursorInfo.lng).toFixed(6) : "—"}</div>
+                    <div>Zoom: {Number.isFinite(mapCursorInfo?.zoom) ? mapCursorInfo.zoom : "—"}</div>
+                  </div>
+                </div>
+
                 <MapContainer
                   center={mapCenter}
                   zoom={mapZoom}
@@ -2341,6 +2405,8 @@ export default function TrackerDashboard() {
                       }
                     }}
                   />
+
+                  <MapCursorCoords onChange={setMapCursorInfo} />
 
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
