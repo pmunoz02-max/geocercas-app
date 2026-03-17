@@ -824,6 +824,16 @@ const TrackerLayers = React.memo(function TrackerLayers({
 export default function TrackerDashboard() {
   const { t } = useTranslation();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
+  const getStatusLabel = (status) => {
+    try {
+      const safeStatus = status || "offline";
+      return typeof t === "function"
+        ? t(`status.${safeStatus}`)
+        : safeStatus;
+    } catch {
+      return status || "offline";
+    }
+  };
 
   const {
     loading: entitlementsLoading,
@@ -2459,7 +2469,7 @@ export default function TrackerDashboard() {
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-900">{t?.baseLabel || t?.trackerLabel || t?.label || "—"}</td>
-                            <td className="px-4 py-2 text-gray-700">{t(`status.${live?.status || "offline"}`)}</td>
+                            <td className="px-4 py-2 text-gray-700">{getStatusLabel(live?.status)}</td>
                             <td className="px-4 py-2 text-gray-700">
                               {Number.isFinite(lat) && Number.isFinite(lng)
                                 ? `${lat.toFixed(6)}, ${lng.toFixed(6)}`
