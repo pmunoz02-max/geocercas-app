@@ -2311,11 +2311,11 @@ export default function TrackerDashboard() {
                       {geofenceEvents.slice(0, 20).map((evt) => {
                         const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
                         const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
-                        console.log("trackerFromUi", evt.user_id, trackerMap.get(evt.user_id));
-                        const trackerFromUi =
-                          trackerMap.get(String(evt.user_id)) ||
-                          trackerMap.get(String(evt.tracker_id)) ||
-                          trackerMap.get(String(evt.id));
+                        const trackerFromUi = (trackersUi || []).find((t) =>
+                          String(t?.tracker_key) === String(evt?.user_id) ||
+                          String(t?.user_id) === String(evt?.user_id) ||
+                          String(t?.id) === String(evt?.user_id)
+                        );
 
                         const trackerLabel =
                           trackerFromUi?.label ??
