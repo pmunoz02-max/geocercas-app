@@ -2240,7 +2240,7 @@ export default function TrackerDashboard() {
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     value={trackerSearch}
                     onChange={(e) => setTrackerSearch(e.target.value)}
-                    placeholder={tOr("trackerDashboard.labels.searchTracker", "Search tracker")}
+                    placeholder={t("common.search")}
                     disabled={!orgId}
                   />
                   <select
@@ -2444,10 +2444,10 @@ export default function TrackerDashboard() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-y border-gray-200">
                       <tr>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.tracker", "Nombre")}</th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.status", "Estado")}</th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.lastPosition", "Última posición")}</th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.lastSend", "Último envío")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{t("table.name")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{t("table.status")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{t("table.lastPosition")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{t("table.lastUpdate")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2459,7 +2459,7 @@ export default function TrackerDashboard() {
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-900">{t?.baseLabel || t?.trackerLabel || t?.label || "—"}</td>
-                            <td className="px-4 py-2 text-gray-700">{live?.status || "offline"}</td>
+                            <td className="px-4 py-2 text-gray-700">{t(`status.${live?.status || "offline"}`)}</td>
                             <td className="px-4 py-2 text-gray-700">
                               {Number.isFinite(lat) && Number.isFinite(lng)
                                 ? `${lat.toFixed(6)}, ${lng.toFixed(6)}`
