@@ -25,7 +25,6 @@ import {
   Circle,
   useMap,
   useMapEvents,
-  ScaleControl,
 } from "react-leaflet";
 
 import L from "leaflet";
@@ -224,60 +223,38 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
 
 
 function CursorCoordinatesOverlay({ onChange }) {
-  const map = useMap();
-
-  const getScaleInfo = useCallback(() => {
-    try {
-      const size = map?.getSize?.();
-      if (!size) return { scaleLabel: null, scaleWidthPx: 96 };
-      const y = Math.max(24, Math.round(size.y / 2));
-      const p1 = map.containerPointToLatLng([24, y]);
-      const p2 = map.containerPointToLatLng([120, y]);
-      const meters = map.distance(p1, p2);
-      if (!Number.isFinite(meters) || meters <= 0) return { scaleLabel: null, scaleWidthPx: 96 };
-      const niceSteps = [1, 2, 5];
-      const magnitude = Math.pow(10, Math.floor(Math.log10(meters)));
-      let niceMeters = magnitude;
-      for (const step of niceSteps) {
-        const candidate = step * magnitude;
-        if (candidate <= meters) niceMeters = candidate;
-      }
-      const scaleWidthPx = Math.max(40, Math.round((niceMeters / meters) * 96));
-      const scaleLabel = niceMeters >= 1000
-        ? `${(niceMeters / 1000).toFixed(niceMeters >= 5000 ? 0 : 1).replace(/\.0$/, "")} km`
-        : `${Math.round(niceMeters)} m`;
-      return { scaleLabel, scaleWidthPx };
-    } catch {
-      return { scaleLabel: null, scaleWidthPx: 96 };
-    }
-  }, [map]);
-
-  const emit = useCallback((lat, lng) => {
-    try {
-      const zoom = map?.getZoom?.() ?? null;
-      const { scaleLabel, scaleWidthPx } = getScaleInfo();
-      onChange?.({ lat, lng, zoom, scaleLabel, scaleWidthPx });
-    } catch {}
-  }, [getScaleInfo, map, onChange]);
-
-  useMapEvents({
+  const map = useMapEvents({
     mousemove(e) {
-      emit(e?.latlng?.lat ?? null, e?.latlng?.lng ?? null);
+      try {
+        const lat = e?.latlng?.lat;
+        const lng = e?.latlng?.lng;
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat, lng, zoom });
+      } catch {}
     },
     zoomend() {
-      const center = map?.getCenter?.();
-      emit(center?.lat ?? null, center?.lng ?? null);
+      try {
+        const center = map?.getCenter?.();
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+      } catch {}
     },
     moveend() {
-      const center = map?.getCenter?.();
-      emit(center?.lat ?? null, center?.lng ?? null);
+      try {
+        const center = map?.getCenter?.();
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+      } catch {}
     },
   });
 
   useEffect(() => {
-    const center = map?.getCenter?.();
-    emit(center?.lat ?? null, center?.lng ?? null);
-  }, [emit, map]);
+    try {
+      const center = map?.getCenter?.();
+      const zoom = map?.getZoom?.() ?? null;
+      onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+    } catch {}
+  }, [map, onChange]);
 
   return null;
 }
@@ -818,7 +795,7 @@ export default function TrackerDashboard() {
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
   const [intersectsText, setIntersectsText] = useState("—");
-  const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null, scaleLabel: null, scaleWidthPx: 96 });
+  const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null });
   const [fitSignal, setFitSignal] = useState(0);
 
   const resolvedOrgId = normalizeUuid(orgId);
@@ -1920,23 +1897,6 @@ export default function TrackerDashboard() {
     return { total, online, stale, offline };
   }, [allTrackerMarkers]);
 
-  const trackerTableRows = useMemo(() => {
-    return (filteredAllTrackerMarkers || []).map((item) => {
-      const latest = item?.latest || null;
-      const live = item?.live || getTrackerLiveStatus(latest);
-      return {
-        id: String(item?.user_id ?? item?.trackerKey ?? item?.trackerLabel ?? Math.random()),
-        trackerLabel: item?.trackerLabel ?? item?.fullName ?? item?.email ?? String(item?.user_id ?? "—"),
-        status: live?.status ?? "offline",
-        ts: latest?.ts ?? latest?.created_at ?? latest?.recorded_at ?? null,
-        accuracy: latest?.accuracy ?? null,
-        lat: latest?.lat ?? null,
-        lng: latest?.lng ?? null,
-        latest,
-      };
-    });
-  }, [filteredAllTrackerMarkers]);
-
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
 
@@ -2267,7 +2227,16 @@ export default function TrackerDashboard() {
                   <div><b>{tOr("trackerDashboard.badges.selected", "selected")}</b>: {diag.selectedGeofences}</div>
                 </div>
 
-
+                <div className="mt-2 text-[11px] text-gray-600 space-y-1">
+                  <div>
+                    <b>{tOr("trackerDashboard.badges.bounds", "bounds")}</b>{" "}
+                    <span className="font-mono">{geofenceBoundsText}</span>
+                  </div>
+                  <div>
+                    <b>{tOr("trackerDashboard.badges.intersects", "intersects")}</b>{" "}
+                    <span className="font-mono">{intersectsText}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </aside>
@@ -2297,44 +2266,31 @@ export default function TrackerDashboard() {
               </div>
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
-                <div className="pointer-events-none absolute top-3 right-3 z-[1000] flex flex-col items-end gap-2">
-                  <div className="pointer-events-auto rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                    <div className="text-[11px] font-semibold text-gray-900 mb-2">
-                      {tOr("trackerDashboard.sections.legend", "Legend")}
-                    </div>
-                    <div className="space-y-1.5 text-xs text-gray-700">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
-                        <span>{tOr("trackerDashboard.status.online", "Online")}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
-                        <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
-                        <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
-                      </div>
-                    </div>
+                <div className="pointer-events-none absolute top-3 left-16 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                  <div className="text-[11px] font-semibold text-gray-900 mb-1">Coordenadas</div>
+                  <div className="space-y-0.5 text-xs text-gray-700">
+                    <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
+                    <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
+                    <div>Zoom: {cursorCoords?.zoom == null ? "—" : cursorCoords.zoom}</div>
                   </div>
-                  <div className="rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                    <div className="space-y-0.5 text-xs text-gray-700">
-                      <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
-                      <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
-                      {cursorCoords?.scaleLabel && (
-                        <div className="pt-1.5 mt-1.5 border-t border-gray-300">
-                          <div
-                            style={{
-                              width: cursorCoords.scaleWidthPx,
-                              height: 3,
-                              background: "#111",
-                              borderRadius: 1,
-                              marginBottom: 4,
-                            }}
-                          />
-                          <div className="text-xs text-gray-700">{cursorCoords.scaleLabel}</div>
-                        </div>
-                      )}
+                </div>
+
+                <div className="absolute top-3 right-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                  <div className="text-[11px] font-semibold text-gray-900 mb-2">
+                    {tOr("trackerDashboard.sections.legend", "Legend")}
+                  </div>
+                  <div className="space-y-1.5 text-xs text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
+                      <span>{tOr("trackerDashboard.status.online", "Online")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
+                      <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
+                      <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
                     </div>
                   </div>
                 </div>
@@ -2386,45 +2342,7 @@ export default function TrackerDashboard() {
                     tOr={tOr}
                     selectedTrackerId={selectedTrackerId}
                   />
-
-                  <ScaleControl position="bottomleft" imperial={false} />
                 </MapContainer>
-              </div>
-            </div>
-          </section>
-
-          <section className="lg:col-span-8 xl:col-span-9">
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200">
-                <div className="text-sm font-semibold text-gray-900">Trackers visibles</div>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Tracker</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Status</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Último envío</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Accuracy</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Coordenadas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trackerTableRows.length ? trackerTableRows.map((row) => (
-                      <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-900">{row.trackerLabel}</td>
-                        <td className="px-4 py-2 capitalize text-gray-700">{row.status}</td>
-                        <td className="px-4 py-2 text-gray-600">{row.ts ? new Date(row.ts).toLocaleString() : "—"}</td>
-                        <td className="px-4 py-2 text-gray-600">{row.accuracy == null ? "—" : `${Math.round(Number(row.accuracy))} m`}</td>
-                        <td className="px-4 py-2 text-gray-600">{(Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lng))) ? `${Number(row.lat).toFixed(5)}, ${Number(row.lng).toFixed(5)}` : "—"}</td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-6 text-center text-gray-500">No hay trackers visibles</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
               </div>
             </div>
           </section>
