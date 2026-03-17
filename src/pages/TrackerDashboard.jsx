@@ -122,42 +122,19 @@ function normalizeSearchText(value) {
 
 function buildTrackerSearchText(item) {
   return [
+    item?.label,
     item?.trackerLabel,
-    item?.key,
     item?.tracker_key,
+    item?.trackerId,
+    item?.value,
     item?.personalId,
-    item?.personal_id,
     item?.firstName,
     item?.lastName,
     item?.fullName,
     item?.email,
-    item?.baseLabel,
     item?.latest?.tracker_label,
-    item?.latest?.personal_id,
-    item?.latest?.first_name,
-    item?.latest?.last_name,
-    item?.latest?.full_name,
-    item?.latest?.email,
-  ]
-    .filter(Boolean)
-    .map((v) => String(v).trim().toLowerCase())
-    .join(" ");
-}
-
-function buildTrackerOptionSearchText(option) {
-  return [
-    option?.label,
-    option?.trackerLabel,
-    option?.key,
-    option?.value,
-    option?.personalId,
-    option?.firstName,
-    option?.lastName,
-    option?.fullName,
-    option?.email,
-    option?.latest?.tracker_label,
-    option?.latest?.tracker_name,
-    option?.latest?.name,
+    item?.latest?.tracker_name,
+    item?.latest?.name,
   ]
     .filter(Boolean)
     .map((v) => String(v).trim().toLowerCase())
@@ -677,8 +654,15 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const personalId = latest.personal_id || null;
   const person = personalId ? personalById.get(String(personalId)) : null;
   const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-  const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || trackerId;
-  const trackerDisplayLabel = trackerLabel || latest?.tracker_label || selectedTrackerPath?.trackerLabel || trackerId;
+  const trackerLabel =
+    latest?.tracker_label ||
+    latest?.tracker_name ||
+    latest?.name ||
+    person?.nombre ||
+    person?.email ||
+    byUser?.nombre ||
+    byUser?.email ||
+    trackerId;
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
@@ -693,7 +677,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
         fillOpacity={markerStyle.fillOpacity}
         strokeOpacity={markerStyle.strokeOpacity}
       >
-        {renderTrackerTooltip(trackerDisplayLabel, personalId, latest, latestLat, latestLng, live)}
+        {renderTrackerTooltip(trackerLabel, personalId, latest, latestLat, latestLng, live)}
       </AnimatedTrackerDot>
     </>
   );
@@ -1654,11 +1638,17 @@ export default function TrackerDashboard() {
     if (!searchNeedle) return trackersUi;
 
     return (trackersUi || []).filter((option) => {
-      if (option?.value === "all") return true;
-      if (selectedTrackerId !== "all" && option?.tracker_key === selectedTrackerId) return true;
-      return buildTrackerOptionSearchText(option).includes(searchNeedle);
+      if (
+        option?.value === "all" ||
+        option?.tracker_key === "all" ||
+        option?.trackerId === "all"
+      ) {
+        return true;
+      }
+
+      return buildTrackerSearchText(option).includes(searchNeedle);
     });
-  }, [trackersUi, searchNeedle, selectedTrackerId]);
+  }, [trackersUi, searchNeedle]);
 
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
