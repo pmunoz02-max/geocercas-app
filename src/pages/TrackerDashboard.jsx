@@ -654,6 +654,8 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const personalId = latest.personal_id || null;
   const person = personalId ? personalById.get(String(personalId)) : null;
   const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
+  console.log("DEBUG LATEST:", latest);
+  console.log("DEBUG latest.tracker_label:", latest?.tracker_label);
   const trackerLabel =
     latest?.tracker_label ||
     latest?.tracker_name ||
@@ -2331,6 +2333,11 @@ export default function TrackerDashboard() {
                           String(t.tracker_key) === String(trackerKeyFromAssignment)
                         );
 
+                        console.log("DEBUG TOOLTIP EVT:", evt);
+                        console.log("DEBUG tracker_label:", evt?.tracker_label);
+                        console.log("DEBUG tracker_name:", evt?.tracker_name);
+                        console.log("DEBUG name:", evt?.name);
+                        console.log("DEBUG user_id:", evt?.user_id);
                         const trackerLabel =
                           trackerFromUi?.label ??
                           trackerFromUi?.baseLabel ??
