@@ -2381,15 +2381,15 @@ export default function TrackerDashboard() {
                   <div className="space-y-1.5 text-xs text-gray-700">
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
-                      <span>{tOr("trackerDashboard.status.online", "Online")}</span>
+                      <span>{t("status.online")}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
-                      <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
+                      <span>{t("status.stale")}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
-                      <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
+                      <span>{t("status.offline")}</span>
                     </div>
                   </div>
                 </div>
