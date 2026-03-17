@@ -110,6 +110,12 @@ function formatAgeShort(ageSec) {
   return `${hr}h`;
 }
 
+function getTrackerStatusPriority(status) {
+  if (status === "offline") return 0;
+  if (status === "stale") return 1;
+  return 2;
+}
+
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
   if (v === "pro") return "PRO";
@@ -1490,13 +1496,37 @@ export default function TrackerDashboard() {
       const person = row.personal_id ? personalById.get(String(row.personal_id)) : null;
       const byUser = row.user_id ? personalByUserId.get(String(row.user_id)) : null;
       const p = person || byUser || null;
+      const latestTs = getPositionTs(row);
 
       if (!map.has(trackerKey)) {
+        const live = getTrackerLiveStatus(row);
+        const baseLabel = p?.nombre || p?.email || trackerKey;
         map.set(trackerKey, {
           tracker_key: trackerKey,
           user_id: row.user_id || null,
           personal_id: row.personal_id || null,
-          label: p?.nombre || p?.email || trackerKey,
+          label: `[${String(live.status || "online").toUpperCase()}] ${baseLabel}`,
+          baseLabel,
+          live,
+          latestTs,
+          statusPriority: getTrackerStatusPriority(live.status),
+        });
+        continue;
+      }
+
+      const existing = map.get(trackerKey);
+      if (latestTs > (existing?.latestTs ?? 0)) {
+        const live = getTrackerLiveStatus(row);
+        const baseLabel = p?.nombre || p?.email || trackerKey;
+        map.set(trackerKey, {
+          ...existing,
+          user_id: row.user_id || existing.user_id || null,
+          personal_id: row.personal_id || existing.personal_id || null,
+          label: `[${String(live.status || "online").toUpperCase()}] ${baseLabel}`,
+          baseLabel,
+          live,
+          latestTs,
+          statusPriority: getTrackerStatusPriority(live.status),
         });
       }
     }
@@ -1509,12 +1539,24 @@ export default function TrackerDashboard() {
           tracker_key: user_id,
           user_id,
           personal_id: null,
-          label: p?.nombre || p?.email || user_id,
+          label: `[OFFLINE] ${p?.nombre || p?.email || user_id}`,
+          baseLabel: p?.nombre || p?.email || user_id,
+          live: { status: "offline", ageSec: null },
+          latestTs: 0,
+          statusPriority: getTrackerStatusPriority("offline"),
         });
       }
     }
 
-    return Array.from(map.values()).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+    return Array.from(map.values()).sort((a, b) => {
+      const priorityDelta = (a.statusPriority ?? 2) - (b.statusPriority ?? 2);
+      if (priorityDelta !== 0) return priorityDelta;
+
+      const ageDelta = (b.live?.ageSec ?? -1) - (a.live?.ageSec ?? -1);
+      if (ageDelta !== 0) return ageDelta;
+
+      return String(a.baseLabel || a.label || "").localeCompare(String(b.baseLabel || b.label || ""));
+    });
   }, [positions, assignmentTrackers, personalById, personalByUserId]);
 
   const filteredGeofenceRows = useMemo(() => {
