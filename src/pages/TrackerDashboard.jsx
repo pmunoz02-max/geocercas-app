@@ -1652,9 +1652,15 @@ export default function TrackerDashboard() {
 
   const trackerMap = useMemo(() => {
     const m = new Map();
-    for (const tr of trackersUi || []) {
-      m.set(tr.tracker_key, tr);
+
+    for (const t of trackersUi || []) {
+      if (!t) continue;
+
+      if (t.tracker_key) m.set(String(t.tracker_key), t);
+      if (t.user_id) m.set(String(t.user_id), t);
+      if (t.id) m.set(String(t.id), t);
     }
+
     return m;
   }, [trackersUi]);
 
@@ -2306,7 +2312,10 @@ export default function TrackerDashboard() {
                         const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
                         const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
                         console.log("trackerFromUi", evt.user_id, trackerMap.get(evt.user_id));
-                        const trackerFromUi = trackerMap.get(evt.user_id);
+                        const trackerFromUi =
+                          trackerMap.get(String(evt.user_id)) ||
+                          trackerMap.get(String(evt.tracker_id)) ||
+                          trackerMap.get(String(evt.id));
 
                         const trackerLabel =
                           trackerFromUi?.label ??
