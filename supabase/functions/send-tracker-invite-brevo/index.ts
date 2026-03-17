@@ -479,12 +479,41 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
+    console.log("[invite] auth_check_query", {
+      query_org_id: org_id,
+      query_user_id: callerUserId,
+      user_email: email,
+      query_error: ownerErr?.message || null,
+      row_found: !!ownerRow,
+      user_role_raw: ownerRow?.role ?? null,
+      user_revoked_at: ownerRow?.revoked_at ?? null,
+    });
+
     if (ownerErr) {
+      console.log("[invite] auth_check_failed_db_error", { msg: ownerErr.message });
       return jsonResponse(500, { ok: false, error: "DB error checking owner", detail: ownerErr.message, build_tag: BUILD_TAG });
     }
 
     const roleNorm = normRole(ownerRow?.role);
-    if (!ownerRow || roleNorm !== "owner") {
+    let failureReason = null;
+    if (!ownerRow) {
+      failureReason = "NO_MEMBERSHIP_FOUND_FOR_USER_IN_ORG";
+    } else if (ownerRow.revoked_at !== null) {
+      failureReason = "MEMBERSHIP_REVOKED";
+    } else if (roleNorm !== "owner") {
+      failureReason = `NOT_OWNER_ROLE_IS_${roleNorm.toUpperCase()}`;
+    }
+
+    if (failureReason) {
+      console.log("[invite] auth_check_failed_access_denied", {
+        callerUserId,
+        org_id,
+        user_email: email,
+        failure_reason: failureReason,
+        role_raw: ownerRow?.role ?? null,
+        role_norm: roleNorm || null,
+        revoked_at: ownerRow?.revoked_at ?? null,
+      });
       return jsonResponse(403, {
         ok: false,
         error: "Not allowed (must be owner of org)",
@@ -492,9 +521,11 @@ serve(async (req) => {
         diag: {
           callerUserId,
           org_id,
+          user_email: email,
           role_raw: ownerRow?.role ?? null,
           role_norm: roleNorm || null,
           revoked_at: ownerRow?.revoked_at ?? null,
+          failure_reason: failureReason,
         },
       });
     }
