@@ -2363,10 +2363,10 @@ export default function TrackerDashboard() {
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
                 <div className="pointer-events-none absolute top-3 left-16 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                  <div className="text-[11px] font-semibold text-gray-900 mb-1">Coordenadas</div>
+                  <div className="text-[11px] font-semibold text-gray-900 mb-1">{t("map.coordinates")}</div>
                   <div className="space-y-0.5 text-xs text-gray-700">
-                    <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
-                    <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
+                    <div>{t("map.lat")}: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
+                    <div>{t("map.lng")}: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
                     {/* Barra de escala */}
                     <div className="mt-1 h-0.5 w-16 rounded bg-gray-800" />
                     {/* Texto de escala */}
@@ -2376,7 +2376,7 @@ export default function TrackerDashboard() {
 
                 <div className="absolute top-3 right-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
                   <div className="text-[11px] font-semibold text-gray-900 mb-2">
-                    {tOr("trackerDashboard.sections.legend", "Legend")}
+                    {t("map.legend")}
                   </div>
                   <div className="space-y-1.5 text-xs text-gray-700">
                     <div className="flex items-center gap-2">
@@ -2447,7 +2447,7 @@ export default function TrackerDashboard() {
               <div className="border-t border-gray-200">
                 <div className="px-4 py-3">
                   <div className="text-sm font-semibold text-gray-900">
-                    {tOr("trackerDashboard.sections.trackers", "Trackers")}
+                    {t("tracker.title")}
                   </div>
                 </div>
                 <div className="overflow-x-auto">

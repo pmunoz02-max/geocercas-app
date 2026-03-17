@@ -336,6 +336,7 @@
     "delete": "Eliminar",
     "edit": "Editar",
     "loading": "Cargando",
+    "search": "Buscar",
     "noResults": "Sin resultados",
     "separator": "—",
     "zoom": "Zoom",
@@ -1169,6 +1170,23 @@
       "title": "Últimas posiciones"
     },
     "title": "Tracker GPS"
+  },
+  "table": {
+    "name": "Nombre",
+    "status": "Estado",
+    "lastPosition": "Última posición",
+    "lastUpdate": "Última actualización"
+  },
+  "status": {
+    "online": "En línea",
+    "stale": "Desactualizado",
+    "offline": "Sin conexión"
+  },
+  "map": {
+    "coordinates": "Coordenadas",
+    "lat": "Lat",
+    "lng": "Lng",
+    "legend": "Leyenda"
   },
   "trackerDashboard": {
     "title": "Tracker Dashboard",

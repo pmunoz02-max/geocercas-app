@@ -31,7 +31,9 @@
     "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
     "refreshContext": "Actualiser le contexte",
     "select": "— Sélectionner —",
-    "sending": "Envoi..."
+    "sending": "Envoi...",
+    "loading": "Chargement",
+    "search": "Rechercher"
   },
   "app": {
     "brand": "App Geocercas",
@@ -726,6 +728,23 @@
       "noResults": "Aucune position n'a été enregistrée."
     },
     "errorLoad": "Erreur de chargement des positions du tracker."
+  },
+  "table": {
+    "name": "Nom",
+    "status": "Statut",
+    "lastPosition": "Dernière position",
+    "lastUpdate": "Dernière mise à jour"
+  },
+  "status": {
+    "online": "En ligne",
+    "stale": "Non actualisé",
+    "offline": "Hors ligne"
+  },
+  "map": {
+    "coordinates": "Coordonnées",
+    "lat": "Lat",
+    "lng": "Lng",
+    "legend": "Légende"
   },
   "trackerDashboard": {
     "title": "Tracker Dashboard",

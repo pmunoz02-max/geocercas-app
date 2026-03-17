@@ -39,6 +39,7 @@
     "delete": "Delete",
     "edit": "Edit",
     "loading": "Loading",
+    "search": "Search",
     "noResults": "No results",
     "separator": "—",
     "zoom": "Zoom",
@@ -851,6 +852,23 @@
       "noResults": "No positions recorded."
     },
     "errorLoad": "Error loading tracker positions."
+  },
+  "table": {
+    "name": "Name",
+    "status": "Status",
+    "lastPosition": "Last position",
+    "lastUpdate": "Last update"
+  },
+  "status": {
+    "online": "Online",
+    "stale": "Stale",
+    "offline": "Offline"
+  },
+  "map": {
+    "coordinates": "Coordinates",
+    "lat": "Lat",
+    "lng": "Lng",
+    "legend": "Legend"
   },
   "trackerDashboard": {
     "title": "Tracker Dashboard",
