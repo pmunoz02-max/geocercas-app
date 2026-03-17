@@ -25,6 +25,7 @@ import {
   Circle,
   useMap,
   useMapEvents,
+  ScaleControl,
 } from "react-leaflet";
 
 import L from "leaflet";
@@ -2271,7 +2272,6 @@ export default function TrackerDashboard() {
                   <div className="space-y-0.5 text-xs text-gray-700">
                     <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
                     <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
-                    <div>Zoom: {cursorCoords?.zoom == null ? "—" : cursorCoords.zoom}</div>
                   </div>
                 </div>
 
@@ -2342,6 +2342,8 @@ export default function TrackerDashboard() {
                     tOr={tOr}
                     selectedTrackerId={selectedTrackerId}
                   />
+
+                  <ScaleControl position="bottomleft" />
                 </MapContainer>
               </div>
             </div>
