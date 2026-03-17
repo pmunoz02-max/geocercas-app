@@ -58,7 +58,7 @@ async function hmacHex(secret: string, msg: string) {
 }
 
 serve(async (req) => {
-  const build_tag = "accept-tracker-invite-v9_memberships_canonical_20260305";
+  const build_tag = "accept-tracker-invite-v10_tracker_identity_link_20260317";
 
   try {
     if (req.method === "OPTIONS") {
@@ -118,6 +118,7 @@ serve(async (req) => {
     const org_id = body?.org_id;
     const user_id = body?.user_id;
     const email = body?.email;
+    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
 
     if (!org_id) {
       return json(req, 400, {
@@ -182,6 +183,132 @@ serve(async (req) => {
       });
     }
 
+    // 1.1) TRACKER ORG LINK (canónico para trackers)
+    let trackerOrgUserOk = false;
+    let trackerOrgUserError: string | null = null;
+
+    try {
+      const nowIso = new Date().toISOString();
+
+      const { error } = await admin
+        .from("tracker_org_users")
+        .upsert(
+          {
+            org_id,
+            tracker_user_id: resolvedUserId,
+            created_at: nowIso,
+            updated_at: nowIso,
+          },
+          { onConflict: "org_id,tracker_user_id" },
+        );
+
+      if (error) {
+        trackerOrgUserError = error.message;
+      } else {
+        trackerOrgUserOk = true;
+      }
+    } catch (e: any) {
+      trackerOrgUserError = e?.message ?? String(e);
+    }
+
+    if (!trackerOrgUserOk) {
+      return json(req, 500, {
+        ok: false,
+        build_tag,
+        error: "Upsert tracker_org_users failed",
+        detail: trackerOrgUserError,
+      });
+    }
+
+    // 1.2) PREVIEW: enlazar personal.user_id por org_id + email (fatal)
+    let personalLinkOk = false;
+    let personalLinkCount = 0;
+    let personalLinkSkipped = false;
+    let personalLinkError: string | null = null;
+
+    if (!normalizedEmail) {
+      personalLinkSkipped = true;
+      personalLinkOk = true;
+    } else {
+      try {
+        const { data: personalRows, error: personalSelectErr } = await admin
+          .from("personal")
+          .select("id,user_id,is_deleted,email")
+          .eq("org_id", org_id)
+          .ilike("email", normalizedEmail);
+
+        if (personalSelectErr) {
+          personalLinkError = personalSelectErr.message;
+          return json(req, 500, {
+            ok: false,
+            build_tag,
+            error: "Select personal failed",
+            detail: personalSelectErr.message,
+            tracker_org_user_ok: trackerOrgUserOk,
+            tracker_org_user_error: trackerOrgUserError,
+            personal_link_ok: personalLinkOk,
+            personal_link_count: personalLinkCount,
+            personal_link_skipped: personalLinkSkipped,
+            personal_link_error: personalLinkError,
+          });
+        }
+
+        const updatablePersonalIds = (personalRows ?? [])
+          .filter((row: any) => {
+            const isDeleted = row?.is_deleted ?? false;
+            const currentUserId = row?.user_id ?? null;
+            return !isDeleted && (currentUserId === null || currentUserId === resolvedUserId);
+          })
+          .map((row: any) => row?.id)
+          .filter((id: unknown): id is string => typeof id === "string" && id.length > 0);
+
+        if (updatablePersonalIds.length > 0) {
+          const personalUpdateTs = new Date().toISOString();
+          const { error: personalUpdateErr } = await admin
+            .from("personal")
+            .update({
+              user_id: resolvedUserId,
+              updated_at: personalUpdateTs,
+            })
+            .in("id", updatablePersonalIds);
+
+          if (personalUpdateErr) {
+            personalLinkError = personalUpdateErr.message;
+            return json(req, 500, {
+              ok: false,
+              build_tag,
+              error: "Update personal failed",
+              detail: personalUpdateErr.message,
+              tracker_org_user_ok: trackerOrgUserOk,
+              tracker_org_user_error: trackerOrgUserError,
+              personal_link_ok: personalLinkOk,
+              personal_link_count: personalLinkCount,
+              personal_link_skipped: personalLinkSkipped,
+              personal_link_error: personalLinkError,
+            });
+          }
+
+          personalLinkCount = updatablePersonalIds.length;
+        }
+
+        personalLinkOk = true;
+      } catch (e: any) {
+        personalLinkError = e?.message ?? String(e);
+        return json(req, 500, {
+          ok: false,
+          build_tag,
+          error: "Personal link failed",
+          detail: personalLinkError,
+          tracker_org_user_ok: trackerOrgUserOk,
+          tracker_org_user_error: trackerOrgUserError,
+          personal_link_ok: personalLinkOk,
+          personal_link_count: personalLinkCount,
+          personal_link_skipped: personalLinkSkipped,
+          personal_link_error: personalLinkError,
+        });
+      }
+    }
+
     // 2) ORG ACTIVA persistente (best-effort, no fatal)
     let setOrgOk = false;
     let setOrgError: string | null = null;
@@ -228,6 +355,12 @@ serve(async (req) => {
       user_id: resolvedUserId,
       org_id,
       canonical_membership: true,
+      tracker_org_user_ok: trackerOrgUserOk,
+      tracker_org_user_error: trackerOrgUserError,
+      personal_link_ok: personalLinkOk,
+      personal_link_count: personalLinkCount,
+      personal_link_skipped: personalLinkSkipped,
+      personal_link_error: personalLinkError,
       current_org_persisted: setOrgOk,
       current_org_error: setOrgError,
       legacy_user_organizations_ok: legacyOk,
