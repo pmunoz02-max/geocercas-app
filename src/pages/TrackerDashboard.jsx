@@ -116,6 +116,10 @@ function getTrackerStatusPriority(status) {
   return 2;
 }
 
+function normalizeSearchText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
   if (v === "pro") return "PRO";
@@ -670,6 +674,7 @@ export default function TrackerDashboard() {
   const [isHistoryRequested, setIsHistoryRequested] = useState(false);
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [trackerSearch, setTrackerSearch] = useState("");
 
   const [assignments, setAssignments] = useState([]);
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
@@ -1559,6 +1564,21 @@ export default function TrackerDashboard() {
     });
   }, [positions, assignmentTrackers, personalById, personalByUserId]);
 
+  const filteredTrackersUi = useMemo(() => {
+    const query = normalizeSearchText(trackerSearch);
+    if (!query) return trackersUi;
+
+    return (trackersUi || []).filter((item) => {
+      const label = normalizeSearchText(item?.baseLabel || item?.label);
+      const trackerKey = normalizeSearchText(item?.tracker_key);
+      const personalId = normalizeSearchText(item?.personal_id);
+      const matches = label.includes(query) || trackerKey.includes(query) || personalId.includes(query);
+
+      if (matches) return true;
+      return selectedTrackerId !== "all" && item?.tracker_key === selectedTrackerId;
+    });
+  }, [trackersUi, trackerSearch, selectedTrackerId]);
+
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
     if (!all.length) return [];
@@ -1685,15 +1705,29 @@ export default function TrackerDashboard() {
     }, []);
   }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
 
-  const filteredAllTrackerMarkers = useMemo(() => {
+  const searchedAllTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return allTrackerMarkers;
-    if (statusFilter === "all") return allTrackerMarkers;
+
+    const query = normalizeSearchText(trackerSearch);
+    if (!query) return allTrackerMarkers;
 
     return (allTrackerMarkers || []).filter((item) => {
+      const label = normalizeSearchText(item?.trackerLabel);
+      const trackerKey = normalizeSearchText(item?.key);
+      const personalId = normalizeSearchText(item?.personalId);
+      return label.includes(query) || trackerKey.includes(query) || personalId.includes(query);
+    });
+  }, [allTrackerMarkers, selectedTrackerId, trackerSearch]);
+
+  const filteredAllTrackerMarkers = useMemo(() => {
+    if (selectedTrackerId !== "all") return searchedAllTrackerMarkers;
+    if (statusFilter === "all") return searchedAllTrackerMarkers;
+
+    return (searchedAllTrackerMarkers || []).filter((item) => {
       const live = item?.live || getTrackerLiveStatus(item?.latest);
       return live.status === statusFilter;
     });
-  }, [allTrackerMarkers, selectedTrackerId, statusFilter]);
+  }, [searchedAllTrackerMarkers, selectedTrackerId, statusFilter]);
 
   const trackerStatusSummary = useMemo(() => {
     let total = 0;
@@ -1964,6 +1998,15 @@ export default function TrackerDashboard() {
                   <span className="block text-sm font-medium text-gray-900 mb-1">
                     {tOr("trackerDashboard.labels.tracker", "Tracker")}
                   </span>
+                  <input
+                    type="text"
+                    className="mb-2 w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={trackerSearch}
+                    onChange={(e) => setTrackerSearch(e.target.value)}
+                    placeholder={tOr("trackerDashboard.labels.searchTracker", "Search tracker")}
+                    disabled={!orgId}
+                  />
                   <select
                     className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1972,7 +2015,7 @@ export default function TrackerDashboard() {
                     disabled={!orgId}
                   >
                     <option value="all">{tOr("trackerDashboard.labels.all", "All")}</option>
-                    {trackersUi.map((x) => (
+                    {filteredTrackersUi.map((x) => (
                       <option key={x.tracker_key} value={x.tracker_key}>
                         {x.label}
                       </option>
