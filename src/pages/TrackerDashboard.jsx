@@ -626,6 +626,12 @@ const TrackerLayers = React.memo(function TrackerLayers({
             latest?.tracker_name ||
             item?.key;
 
+          console.log("LIVE MARKER latest:", latest);
+          console.log("LIVE MARKER latest.user_id:", latest?.user_id);
+          console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
+          console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
+          console.log("LIVE MARKER latest.name:", latest?.name);
+
           return (
             <AnimatedTrackerDot
               key={item.key}
@@ -668,6 +674,12 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
+
+  console.log("LIVE MARKER latest:", latest);
+  console.log("LIVE MARKER latest.user_id:", latest?.user_id);
+  console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
+  console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
+  console.log("LIVE MARKER latest.name:", latest?.name);
 
   return (
     <>
