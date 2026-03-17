@@ -112,35 +112,6 @@ function formatAgeShort(ageSec) {
   return `${hr}h`;
 }
 
-function formatDateTime(dtString) {
-  if (!dtString) return "—";
-  try {
-    return new Date(dtString).toLocaleString();
-  } catch {
-    return dtString;
-  }
-}
-
-function getNiceScaleDistance(rawMeters) {
-  if (!Number.isFinite(rawMeters) || rawMeters <= 0) return 0;
-  const exponent = Math.floor(Math.log10(rawMeters));
-  const magnitude = Math.pow(10, exponent);
-  const normalized = rawMeters / magnitude;
-  let niceNormalized = 1;
-  if (normalized >= 5) niceNormalized = 5;
-  else if (normalized >= 2) niceNormalized = 2;
-  return niceNormalized * magnitude;
-}
-
-function formatScaleLabel(meters) {
-  if (!Number.isFinite(meters) || meters <= 0) return "—";
-  if (meters >= 1000) {
-    const km = meters / 1000;
-    return Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`;
-  }
-  return `${Math.round(meters)} m`;
-}
-
 function getTrackerStatusPriority(status) {
   if (status === "offline") return 0;
   if (status === "stale") return 1;
@@ -253,65 +224,337 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
 
 
 function CursorCoordinatesOverlay({ onChange }) {
-  const map = useMapEvents({
+  const map = useMap();
+
+  const getScaleInfo = useCallback(() => {
+    try {
+      const size = map?.getSize?.();
+      if (!size) return { scaleLabel: null, scaleWidthPx: 96 };
+      const y = Math.max(24, Math.round(size.y / 2));
+      const p1 = map.containerPointToLatLng([24, y]);
+      const p2 = map.containerPointToLatLng([120, y]);
+      const meters = map.distance(p1, p2);
+      if (!Number.isFinite(meters) || meters <= 0) return { scaleLabel: null, scaleWidthPx: 96 };
+      const niceSteps = [1, 2, 5];
+      const magnitude = Math.pow(10, Math.floor(Math.log10(meters)));
+      let niceMeters = magnitude;
+      for (const step of niceSteps) {
+        const candidate = step * magnitude;
+        if (candidate <= meters) niceMeters = candidate;
+      }
+      const scaleWidthPx = Math.max(40, Math.round((niceMeters / meters) * 96));
+      const scaleLabel = niceMeters >= 1000
+        ? `${(niceMeters / 1000).toFixed(niceMeters >= 5000 ? 0 : 1).replace(/\.0$/, "")} km`
+        : `${Math.round(niceMeters)} m`;
+      return { scaleLabel, scaleWidthPx };
+    } catch {
+      return { scaleLabel: null, scaleWidthPx: 96 };
+    }
+  }, [map]);
+
+  const emit = useCallback((lat, lng) => {
+    try {
+      const zoom = map?.getZoom?.() ?? null;
+      const { scaleLabel, scaleWidthPx } = getScaleInfo();
+      onChange?.({ lat, lng, zoom, scaleLabel, scaleWidthPx });
+    } catch {}
+  }, [getScaleInfo, map, onChange]);
+
+  useMapEvents({
     mousemove(e) {
-      try {
-        const zoom = map?.getZoom?.() ?? null;
-        onChange?.({
-          lat: e?.latlng?.lat ?? null,
-          lng: e?.latlng?.lng ?? null,
-          zoom,
-          ...computeScaleState(map),
-        });
-      } catch {}
+      emit(e?.latlng?.lat ?? null, e?.latlng?.lng ?? null);
     },
     zoomend() {
-      emitState();
+      const center = map?.getCenter?.();
+      emit(center?.lat ?? null, center?.lng ?? null);
     },
     moveend() {
-      emitState();
+      const center = map?.getCenter?.();
+      emit(center?.lat ?? null, center?.lng ?? null);
     },
   });
 
-  const computeScaleState = useCallback((leafletMap) => {
-    try {
-      const size = leafletMap?.getSize?.();
-      if (!size?.x || !size?.y) return { scaleLabel: "—", scalePx: 72 };
-      const y = Math.max(0, Math.round(size.y / 2));
-      const leftPoint = L.point(24, y);
-      const rightPoint = L.point(124, y);
-      const leftLatLng = leafletMap.containerPointToLatLng(leftPoint);
-      const rightLatLng = leafletMap.containerPointToLatLng(rightPoint);
-      const metersFor100Px = leftLatLng.distanceTo(rightLatLng);
-      const niceMeters = getNiceScaleDistance(metersFor100Px);
-      if (!(niceMeters > 0) || !(metersFor100Px > 0)) return { scaleLabel: "—", scalePx: 72 };
-      return {
-        scaleLabel: formatScaleLabel(niceMeters),
-        scalePx: Math.max(36, Math.min(100, (niceMeters / metersFor100Px) * 100)),
-      };
-    } catch {
-      return { scaleLabel: "—", scalePx: 72 };
-    }
-  }, []);
-
-  const emitState = useCallback(() => {
-    try {
-      const center = map?.getCenter?.();
-      const zoom = map?.getZoom?.() ?? null;
-      onChange?.({
-        lat: center?.lat ?? null,
-        lng: center?.lng ?? null,
-        zoom,
-        ...computeScaleState(map),
-      });
-    } catch {}
-  }, [map, onChange, computeScaleState]);
-
   useEffect(() => {
-    emitState();
-  }, [emitState]);
+    const center = map?.getCenter?.();
+    emit(center?.lat ?? null, center?.lng ?? null);
+  }, [emit, map]);
 
   return null;
+}
+
+function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
+  const { t } = useTranslation();
+  const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
+
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const rootRef = useRef(null);
+
+  const selectedSet = useMemo(() => new Set((selectedIds || []).map(String)), [selectedIds]);
+
+  const filtered = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    const rows = Array.isArray(geofences) ? geofences : [];
+    if (!qq) return rows;
+    return rows.filter((g) => {
+      const name = String(g?.name || "").toLowerCase();
+      const id = String(g?.id || "").toLowerCase();
+      return name.includes(qq) || id.includes(qq);
+    });
+  }, [geofences, q]);
+
+  const isNoneMode = useMemo(
+    () => Array.isArray(selectedIds) && selectedIds.length === 1 && selectedIds[0] === "__none__",
+    [selectedIds]
+  );
+
+  const effectiveSelectedCount = useMemo(() => {
+    if (!geofences?.length) return 0;
+    if (isNoneMode) return 0;
+    return selectedIds?.length ? selectedIds.length : geofences.length;
+  }, [geofences, selectedIds, isNoneMode]);
+
+  const label = useMemo(() => {
+    if (!geofences?.length) return tOr("trackerDashboard.multiGeofence.labelBase", "Geofences");
+    if (isNoneMode) return tOr("trackerDashboard.multiGeofence.labelNone", "Geofences: None");
+    if (!selectedIds?.length) {
+      return t("trackerDashboard.multiGeofence.labelAll", {
+        count: geofences.length,
+        defaultValue: `Geofences: All (${geofences.length})`,
+      });
+    }
+    return t("trackerDashboard.multiGeofence.labelSelected", {
+      count: effectiveSelectedCount,
+      defaultValue: `Geofences: ${effectiveSelectedCount}`,
+    });
+  }, [geofences, selectedIds, effectiveSelectedCount, isNoneMode, t, tOr]);
+
+  const toggle = (id) => {
+    const sid = String(id);
+    setSelectedIds((prev) => {
+      const arr = Array.isArray(prev) ? prev.map(String) : [];
+      if (arr.length === 1 && arr[0] === "__none__") return [sid];
+      if (arr.length === 0) {
+        const all = (geofences || []).map((g) => String(g.id));
+        return all.filter((x) => x !== sid);
+      }
+      const set = new Set(arr);
+      if (set.has(sid)) set.delete(sid);
+      else set.add(sid);
+      const next = Array.from(set);
+      return next.length ? next : [];
+    });
+  };
+
+  const setAll = () => setSelectedIds([]);
+  const setNone = () => setSelectedIds(["__none__"]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => {
+      const el = rootRef.current;
+      if (!el) return;
+      if (!el.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const isChecked = (id) => {
+    if (isNoneMode) return false;
+    if (!selectedIds?.length) return true;
+    return selectedSet.has(String(id));
+  };
+
+  const countText = useMemo(() => {
+    if (!geofences?.length) return "0";
+    if (isNoneMode) return "0";
+    if (!selectedIds?.length) return String(geofences.length);
+    return String(selectedIds.length);
+  }, [geofences, selectedIds, isNoneMode]);
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        className={[
+          "w-full",
+          "bg-white text-gray-900",
+          "border border-gray-300 rounded-md",
+          "px-3 py-2 text-sm",
+          "flex items-center justify-between gap-2",
+          "hover:bg-gray-50",
+          "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+          disabled ? "opacity-60 cursor-not-allowed" : "",
+        ].join(" ")}
+        onClick={() => !disabled && setOpen((v) => !v)}
+        disabled={disabled}
+      >
+        <span className="truncate">{label}</span>
+        <span className="text-gray-500 text-xs">
+          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 border border-gray-200">
+            {countText}
+          </span>
+        </span>
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute left-0 mt-2 w-[360px] max-w-[92vw] bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-[9999]">
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={tOr("trackerDashboard.multiGeofence.searchPlaceholder", "Search geofence…")}
+              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              type="button"
+              className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onClick={setAll}
+            >
+              {tOr("trackerDashboard.multiGeofence.showAll", "Show all")}
+            </button>
+            <button
+              type="button"
+              className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onClick={setNone}
+            >
+              {tOr("trackerDashboard.multiGeofence.hideAll", "Hide all")}
+            </button>
+          </div>
+
+          <div className="max-h-[280px] overflow-auto border border-gray-200 rounded-lg">
+            {filtered.map((g) => (
+              <label
+                key={g.id}
+                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+              >
+                <input type="checkbox" className="h-4 w-4" checked={isChecked(g.id)} onChange={() => toggle(g.id)} />
+                <span className="truncate text-gray-900">{g.name || g.id}</span>
+              </label>
+            ))}
+            {!filtered.length && (
+              <div className="p-3 text-sm text-gray-500">
+                {tOr("trackerDashboard.multiGeofence.noResults", "No results…")}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end mt-3">
+            <button
+              type="button"
+              className="border border-gray-300 bg-white text-gray-900 rounded-md px-3 py-2 text-sm hover:bg-gray-50
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onClick={() => setOpen(false)}
+            >
+              {tOr("trackerDashboard.multiGeofence.close", "Close")}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AnimatedTrackerDot({
+  center,
+  color,
+  radius = 7,
+  duration = TRACKER_ANIMATION_MS,
+  fillOpacity = 0.9,
+  strokeOpacity = 1,
+  children,
+}) {
+  const markerRef = useRef(null);
+  const frameRef = useRef(null);
+  const lastCenterRef = useRef(center);
+
+  useEffect(() => {
+    const layer = markerRef.current?.instance || markerRef.current;
+    if (!layer || typeof layer.setLatLng !== "function") return;
+    if (!Array.isArray(center) || center.length !== 2) return;
+
+    const next = [Number(center[0]), Number(center[1])];
+    if (!Number.isFinite(next[0]) || !Number.isFinite(next[1])) return;
+
+    const previous =
+      Array.isArray(lastCenterRef.current) && lastCenterRef.current.length === 2
+        ? [Number(lastCenterRef.current[0]), Number(lastCenterRef.current[1])]
+        : next;
+
+    if (!Number.isFinite(previous[0]) || !Number.isFinite(previous[1])) {
+      layer.setLatLng(next);
+      lastCenterRef.current = next;
+      return;
+    }
+
+    const jumpMeters = distanceMeters(previous, next);
+    const samePoint = previous[0] === next[0] && previous[1] === next[1];
+
+    if (samePoint || !Number.isFinite(jumpMeters) || jumpMeters > LARGE_JUMP_METERS) {
+      layer.setLatLng(next);
+      lastCenterRef.current = next;
+      return;
+    }
+
+    if (frameRef.current) {
+      cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+
+    const startTime = performance.now();
+
+    const animate = (now) => {
+      const rawT = Math.min(1, (now - startTime) / duration);
+      const t = easeOutCubic(rawT);
+
+      const lat = previous[0] + (next[0] - previous[0]) * t;
+      const lng = previous[1] + (next[1] - previous[1]) * t;
+
+      layer.setLatLng([lat, lng]);
+
+      if (rawT < 1) {
+        frameRef.current = requestAnimationFrame(animate);
+      } else {
+        frameRef.current = null;
+        lastCenterRef.current = next;
+      }
+    };
+
+    frameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+    };
+  }, [center, duration]);
+
+  useEffect(() => {
+    return () => {
+      if (frameRef.current) {
+        cancelAnimationFrame(frameRef.current);
+      }
+    };
+  }, []);
+
+  return (
+    <CircleMarker
+      ref={markerRef}
+      center={center}
+      radius={radius}
+      pathOptions={{ color, fillColor: color, fillOpacity, opacity: strokeOpacity, weight: 2 }}
+    >
+      {children}
+    </CircleMarker>
+  );
 }
 
 const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
@@ -575,7 +818,7 @@ export default function TrackerDashboard() {
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
   const [intersectsText, setIntersectsText] = useState("—");
-  const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null, scaleLabel: "—", scalePx: 72 });
+  const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null, scaleLabel: null, scaleWidthPx: 96 });
   const [fitSignal, setFitSignal] = useState(0);
 
   const resolvedOrgId = normalizeUuid(orgId);
@@ -1677,6 +1920,23 @@ export default function TrackerDashboard() {
     return { total, online, stale, offline };
   }, [allTrackerMarkers]);
 
+  const trackerTableRows = useMemo(() => {
+    return (filteredAllTrackerMarkers || []).map((item) => {
+      const latest = item?.latest || null;
+      const live = item?.live || getTrackerLiveStatus(latest);
+      return {
+        id: String(item?.user_id ?? item?.trackerKey ?? item?.trackerLabel ?? Math.random()),
+        trackerLabel: item?.trackerLabel ?? item?.fullName ?? item?.email ?? String(item?.user_id ?? "—"),
+        status: live?.status ?? "offline",
+        ts: latest?.ts ?? latest?.created_at ?? latest?.recorded_at ?? null,
+        accuracy: latest?.accuracy ?? null,
+        lat: latest?.lat ?? null,
+        lng: latest?.lng ?? null,
+        latest,
+      };
+    });
+  }, [filteredAllTrackerMarkers]);
+
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
 
@@ -1692,51 +1952,6 @@ export default function TrackerDashboard() {
       live: getTrackerLiveStatus(trackerPositions[trackerPositions.length - 1] || null),
     };
   }, [selectedTrackerId, visiblePositions]);
-
-  const trackerTableRows = useMemo(() => {
-    if (selectedTrackerId === "all") {
-      return (filteredAllTrackerMarkers || []).map((item) => ({
-        trackerId: item?.key || String(item?.latest?.user_id || ""),
-        trackerLabel: item?.trackerLabel || item?.fullName || item?.email || String(item?.key || "—"),
-        live: item?.live || getTrackerLiveStatus(item?.latest),
-        lastTs: getPositionTs(item?.latest),
-        accuracy: item?.latest?.accuracy,
-        lat: item?.lat,
-        lng: item?.lng,
-      }));
-    }
-
-    const latest = selectedTrackerPath?.latest;
-    if (!latest) return [];
-
-    const key = getTrackerKey(latest) || String(latest?.user_id || "");
-    const person = latest?.personal_id ? personalById.get(String(latest.personal_id)) : null;
-    const byUser = latest?.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-    const source = person || byUser || null;
-    const fullName = source?.full_name || source?.nombre || [source?.first_name, source?.last_name].filter(Boolean).join(" ") || null;
-    const trackerLabel = fullName || source?.email || latest?.tracker_label || latest?.name || latest?.tracker_name || key;
-
-    return [{
-      trackerId: key,
-      trackerLabel,
-      live: selectedTrackerPath?.live || getTrackerLiveStatus(latest),
-      lastTs: getPositionTs(latest),
-      accuracy: latest?.accuracy,
-      lat: Number(latest?.lat),
-      lng: Number(latest?.lng),
-    }];
-  }, [selectedTrackerId, filteredAllTrackerMarkers, selectedTrackerPath, personalById, personalByUserId]);
-
-  const centerTrackerOnMap = useCallback((row) => {
-    try {
-      if (!mapRef.current) return;
-      const lat = Number(row?.lat);
-      const lng = Number(row?.lng);
-      if (!isValidLatLng(lat, lng)) return;
-      const currentZoom = mapRef.current.getZoom?.() ?? mapZoom;
-      mapRef.current.setView([lat, lng], Math.max(currentZoom, 15), { animate: true });
-    } catch {}
-  }, [mapZoom]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
@@ -2102,15 +2317,10 @@ export default function TrackerDashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm min-w-[148px]">
-                    <div className="mb-1.5 text-sm font-semibold text-gray-900">Coordenadas</div>
+                  <div className="rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
                     <div className="space-y-0.5 text-xs text-gray-700">
                       <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
                       <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-600">
-                      <span className="inline-block h-[3px] rounded-full bg-gray-800" style={{ width: `${Math.round(cursorCoords?.scalePx || 72)}px` }} />
-                      <span>{cursorCoords?.scaleLabel || "—"}</span>
                     </div>
                   </div>
                 </div>
@@ -2131,7 +2341,17 @@ export default function TrackerDashboard() {
                     layerItems={layerItems}
                     fitSignal={fitSignal}
                     isDemoOrg={isDemoOrg}
-                    onBoundsComputed={() => {}}
+                    onBoundsComputed={(b) => {
+                      try {
+                        const sw = b.getSouthWest();
+                        const ne = b.getNorthEast();
+                        setGeofenceBoundsText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
+                        const v = mapRef.current?.getBounds?.();
+                        if (v?.isValid?.()) setIntersectsText(String(v.intersects(b.pad(0.05))));
+                      } catch {
+                        setGeofenceBoundsText("—");
+                      }
+                    }}
                     onViewportComputed={() => {}}
                   />
 
@@ -2157,53 +2377,37 @@ export default function TrackerDashboard() {
                 </MapContainer>
               </div>
             </div>
+          </section>
 
-            <div className="mt-4 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <section className="lg:col-span-8 xl:col-span-9">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-200">
-                <div className="text-sm font-semibold text-gray-900">
-                  {tOr("trackerDashboard.sections.trackersTable", "Trackers")}
-                </div>
+                <div className="text-sm font-semibold text-gray-900">Trackers visibles</div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.tracker", "Tracker")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.labels.status", "Status")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.labels.lastSend", "Último envío")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Tracker</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Status</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Último envío</th>
                       <th className="px-4 py-2 text-left font-medium text-gray-700">Accuracy</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Coordinates</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.labels.action", "Acción")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Coordenadas</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {trackerTableRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
-                          {tOr("trackerDashboard.states.noTrackers", "No hay trackers visibles")}
-                        </td>
+                    {trackerTableRows.length ? trackerTableRows.map((row) => (
+                      <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="px-4 py-2 text-gray-900">{row.trackerLabel}</td>
+                        <td className="px-4 py-2 capitalize text-gray-700">{row.status}</td>
+                        <td className="px-4 py-2 text-gray-600">{row.ts ? new Date(row.ts).toLocaleString() : "—"}</td>
+                        <td className="px-4 py-2 text-gray-600">{row.accuracy == null ? "—" : `${Math.round(Number(row.accuracy))} m`}</td>
+                        <td className="px-4 py-2 text-gray-600">{(Number.isFinite(Number(row.lat)) && Number.isFinite(Number(row.lng))) ? `${Number(row.lat).toFixed(5)}, ${Number(row.lng).toFixed(5)}` : "—"}</td>
                       </tr>
-                    ) : (
-                      trackerTableRows.map((row) => (
-                        <tr key={row.trackerId} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-2 text-gray-900">{row.trackerLabel}</td>
-                          <td className="px-4 py-2 text-gray-700">{row.live?.status || "—"}</td>
-                          <td className="px-4 py-2 text-gray-700">{formatDateTime(row.lastTs)}</td>
-                          <td className="px-4 py-2 text-gray-700">{row.accuracy == null ? "—" : `${Math.round(Number(row.accuracy))} m`}</td>
-                          <td className="px-4 py-2 text-gray-700">
-                            {isValidLatLng(row.lat, row.lng) ? `${Number(row.lat).toFixed(5)}, ${Number(row.lng).toFixed(5)}` : "—"}
-                          </td>
-                          <td className="px-4 py-2">
-                            <button
-                              type="button"
-                              onClick={() => centerTrackerOnMap(row)}
-                              className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-3 py-1.5 text-xs font-medium border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              {tOr("trackerDashboard.actions.center", "Centrar")}
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-6 text-center text-gray-500">No hay trackers visibles</td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
