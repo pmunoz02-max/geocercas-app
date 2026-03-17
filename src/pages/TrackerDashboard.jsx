@@ -2076,6 +2076,26 @@ export default function TrackerDashboard() {
               </div>
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
+                <div className="absolute top-3 right-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                  <div className="text-[11px] font-semibold text-gray-900 mb-2">
+                    {tOr("trackerDashboard.sections.legend", "Legend")}
+                  </div>
+                  <div className="space-y-1.5 text-xs text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
+                      <span>{tOr("trackerDashboard.status.online", "Online")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
+                      <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
+                      <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <MapContainer
                   center={mapCenter}
                   zoom={mapZoom}
