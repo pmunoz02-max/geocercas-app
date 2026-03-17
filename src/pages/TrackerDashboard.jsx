@@ -90,6 +90,15 @@ function formatTime(dtString) {
   }
 }
 
+function formatDateTime(dtString) {
+  if (!dtString) return "-";
+  try {
+    return new Date(dtString).toLocaleString();
+  } catch {
+    return dtString;
+  }
+}
+
 function getTrackerLiveStatus(row) {
   const ts = getPositionTs(row);
   if (!ts) return { status: "offline", ageSec: null };
@@ -108,42 +117,6 @@ function formatAgeShort(ageSec) {
   if (min < 60) return `${min}m`;
   const hr = Math.floor(min / 60);
   return `${hr}h`;
-}
-
-
-function MapCursorTracker({ onCursorChange, onZoomChange }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!map) return;
-
-    const updateZoom = () => {
-      try {
-        onZoomChange?.(map.getZoom?.() ?? null);
-      } catch {
-        onZoomChange?.(null);
-      }
-    };
-
-    const handleMove = (e) => onCursorChange?.(e?.latlng ?? null);
-    const handleOut = () => onCursorChange?.(null);
-
-    map.on("mousemove", handleMove);
-    map.on("mouseout", handleOut);
-    map.on("zoomend", updateZoom);
-    map.on("moveend", updateZoom);
-
-    updateZoom();
-
-    return () => {
-      map.off("mousemove", handleMove);
-      map.off("mouseout", handleOut);
-      map.off("zoomend", updateZoom);
-      map.off("moveend", updateZoom);
-    };
-  }, [map, onCursorChange, onZoomChange]);
-
-  return null;
 }
 
 function getTrackerStatusPriority(status) {
@@ -794,9 +767,6 @@ export default function TrackerDashboard() {
   const [viewportText, setViewportText] = useState("—");
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
-
-  const [cursorLatLng, setCursorLatLng] = useState(null);
-  const [liveMapZoom, setLiveMapZoom] = useState(null);
 
   const resolvedOrgId = normalizeUuid(orgId);
 
@@ -1937,6 +1907,51 @@ export default function TrackerDashboard() {
     return [-0.22985, -78.52495];
   }, [visiblePositions, positions, layerItems]);
 
+  const trackerTableRows = useMemo(() => {
+    if (selectedTrackerId === "all") {
+      return (filteredAllTrackerMarkers || []).map((item) => ({
+        key: item?.key || "",
+        trackerLabel: item?.trackerLabel || item?.fullName || item?.email || item?.key || "—",
+        live: item?.live || getTrackerLiveStatus(item?.latest),
+        latest: item?.latest || null,
+        lat: Number(item?.lat),
+        lng: Number(item?.lng),
+        accuracy: Number(item?.latest?.accuracy),
+      }));
+    }
+
+    const latest = selectedTrackerPath?.latest || null;
+    if (!latest) return [];
+
+    const key = getTrackerKey(latest);
+    const personalId = latest?.personal_id || null;
+    const person = personalId ? personalById.get(String(personalId)) : null;
+    const byUser = latest?.user_id ? personalByUserId.get(String(latest.user_id)) : null;
+    const source = person || byUser || null;
+    const firstName = source?.first_name || latest?.first_name || null;
+    const lastName = source?.last_name || latest?.last_name || null;
+    const fullName = source?.full_name || source?.nombre || latest?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
+    const email = source?.email || latest?.email || null;
+    const trackerLabel = fullName || email || latest?.tracker_label || latest?.name || latest?.tracker_name || key || "—";
+
+    return [{
+      key: key || "",
+      trackerLabel,
+      live: selectedTrackerPath?.live || getTrackerLiveStatus(latest),
+      latest,
+      lat: Number(latest?.lat),
+      lng: Number(latest?.lng),
+      accuracy: Number(latest?.accuracy),
+    }];
+  }, [selectedTrackerId, filteredAllTrackerMarkers, selectedTrackerPath, personalById, personalByUserId]);
+
+  const focusTrackerOnMap = useCallback((lat, lng) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    try {
+      mapRef.current?.setView?.([lat, lng], Math.max(mapRef.current?.getZoom?.() || mapZoom, 15), { animate: true });
+    } catch {}
+  }, [mapZoom]);
+
   const Badge = ({ children }) => (
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
   );
@@ -2289,25 +2304,6 @@ export default function TrackerDashboard() {
                   </div>
                 </div>
 
-                <div className="absolute left-3 bottom-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                  <div className="text-[11px] text-gray-700">
-                    <span className="text-gray-500">{tOr("trackerDashboard.tooltip.lat", "Lat")} </span>
-                    <span className="font-semibold text-gray-900">
-                      {Number.isFinite(cursorLatLng?.lat) ? cursorLatLng.lat.toFixed(6) : "—"}
-                    </span>
-                    <span className="mx-2 text-gray-400">|</span>
-                    <span className="text-gray-500">{tOr("trackerDashboard.tooltip.lng", "Lng")} </span>
-                    <span className="font-semibold text-gray-900">
-                      {Number.isFinite(cursorLatLng?.lng) ? cursorLatLng.lng.toFixed(6) : "—"}
-                    </span>
-                    <span className="mx-2 text-gray-400">|</span>
-                    <span className="text-gray-500">Zoom </span>
-                    <span className="font-semibold text-gray-900">
-                      {Number.isFinite(liveMapZoom) ? String(liveMapZoom) : "—"}
-                    </span>
-                  </div>
-                </div>
-
                 <MapContainer
                   center={mapCenter}
                   zoom={mapZoom}
@@ -2351,8 +2347,6 @@ export default function TrackerDashboard() {
                     attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
                   />
 
-                  <MapCursorTracker onCursorChange={setCursorLatLng} onZoomChange={setLiveMapZoom} />
-
                   <GeofenceLayers layerItems={layerItems} t={t} />
 
                   <TrackerLayers
@@ -2364,6 +2358,75 @@ export default function TrackerDashboard() {
                     selectedTrackerId={selectedTrackerId}
                   />
                 </MapContainer>
+              </div>
+            </div>
+          </section>
+
+          <section className="lg:col-span-8 xl:col-span-9">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200">
+                <div className="text-sm font-semibold text-gray-900">
+                  {tOr("trackerDashboard.sections.trackersTable", "Trackers") }
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.tracker", "Tracker")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.status", "Status")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.lastSent", "Último envío")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.accuracy", "Accuracy")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.coordinates", "Coordinates")}</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.action", "Action")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {trackerTableRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
+                          {tOr("trackerDashboard.table.empty", "No hay trackers para mostrar.")}
+                        </td>
+                      </tr>
+                    ) : trackerTableRows.map((row) => {
+                      const status = row?.live?.status || "offline";
+                      const badgeClass = status === "online"
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : status === "stale"
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-gray-100 text-gray-700 border-gray-200";
+                      const tsValue = row?.latest?.ts || row?.latest?.recorded_at || row?.latest?.created_at || null;
+                      const coordsText = Number.isFinite(row?.lat) && Number.isFinite(row?.lng)
+                        ? `${row.lat.toFixed(6)}, ${row.lng.toFixed(6)}`
+                        : "—";
+                      const accuracyText = Number.isFinite(row?.accuracy) ? `${Math.round(row.accuracy)} m` : "—";
+
+                      return (
+                        <tr key={row.key || coordsText} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="px-4 py-2 text-gray-900">{row?.trackerLabel || "—"}</td>
+                          <td className="px-4 py-2">
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
+                              {status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(tsValue)}</td>
+                          <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{accuracyText}</td>
+                          <td className="px-4 py-2 text-gray-700 font-mono text-xs whitespace-nowrap">{coordsText}</td>
+                          <td className="px-4 py-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                              onClick={() => focusTrackerOnMap(row?.lat, row?.lng)}
+                            >
+                              {tOr("trackerDashboard.table.center", "Centrar")}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </section>
@@ -2428,7 +2491,7 @@ export default function TrackerDashboard() {
                         return (
                           <tr key={evt.id} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-600">
-                              {evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : '—'}
+                              {formatDateTime(evt.created_at)}
                             </td>
                             <td className="px-4 py-2 text-gray-900">
                               <span className="truncate">{trackerLabel}</span>
