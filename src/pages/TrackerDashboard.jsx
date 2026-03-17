@@ -152,6 +152,15 @@ function normalizePlanLabel(planCode) {
   return v ? v.toUpperCase() : "—";
 }
 
+
+function getTrackerFilterId(row) {
+  if (!row) return null;
+  const userId = row?.user_id != null ? String(row.user_id).trim() : "";
+  if (userId) return userId;
+  const fallback = getTrackerKey(row);
+  return fallback != null && String(fallback).trim() ? String(fallback).trim() : null;
+}
+
 function resolveTrackerAuthIdFromPersonal(row) {
   if (!row) return null;
   return row.user_id || null;
@@ -675,7 +684,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const latest = selectedTrackerPath?.latest || null;
   if (!latest) return null;
 
-  const trackerId = getTrackerKey(latest);
+  const trackerId = getTrackerFilterId(latest);
   const latestLat = Number(latest?.lat);
   const latestLng = Number(latest?.lng);
   if (!isValidLatLng(latestLat, latestLng)) return null;
@@ -1557,7 +1566,7 @@ export default function TrackerDashboard() {
     const map = new Map();
 
     for (const row of positions || []) {
-      const trackerKey = getTrackerKey(row);
+      const trackerKey = getTrackerFilterId(row);
       const person = row.personal_id ? personalById.get(String(row.personal_id)) : null;
       const byUser = row.user_id ? personalByUserId.get(String(row.user_id)) : null;
       const p = person || byUser || null;
@@ -1725,7 +1734,7 @@ export default function TrackerDashboard() {
       const latestByTracker = new Map();
 
       for (const p of positions) {
-        const key = getTrackerKey(p);
+        const key = getTrackerFilterId(p);
         if (!key) continue;
 
         const ts = getPositionTs(p);
@@ -1749,7 +1758,7 @@ export default function TrackerDashboard() {
 
     // MODE 2: Single tracker → most recent bounded history
     return positions
-      .filter((p) => getTrackerKey(p) === selectedTrackerId)
+            .filter((p) => getTrackerFilterId(p) === selectedTrackerId)
       .sort((a, b) => getPositionTs(a) - getPositionTs(b))
       .slice(-MAX_HISTORY_PER_TRACKER);
   }, [positions, selectedTrackerId]);
@@ -1757,7 +1766,7 @@ export default function TrackerDashboard() {
   const pointsByTracker = useMemo(() => {
     const grouped = new Map();
     for (const p of visiblePositions || []) {
-      const key = getTrackerKey(p);
+      const key = getTrackerFilterId(p);
       if (!key) continue;
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key).push(p);
@@ -1788,7 +1797,7 @@ export default function TrackerDashboard() {
     if (selectedTrackerId !== "all") return [];
 
     return (visiblePositions || []).reduce((acc, row, idx) => {
-      const key = getTrackerKey(row);
+      const key = getTrackerFilterId(row);
       if (!key) return acc;
 
       const lat = Number(row?.lat);
