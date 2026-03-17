@@ -91,15 +91,6 @@ function formatTime(dtString) {
   }
 }
 
-function formatDateTime(dtString) {
-  if (!dtString) return "-";
-  try {
-    return new Date(dtString).toLocaleString();
-  } catch {
-    return dtString;
-  }
-}
-
 function getTrackerLiveStatus(row) {
   const ts = getPositionTs(row);
   if (!ts) return { status: "offline", ageSec: null };
@@ -183,57 +174,6 @@ function logLiveMetric(label, payload = {}) {
 }
 
 
-function MapCursorCoords({ onChange }) {
-  const map = useMapEvents({
-    mousemove(e) {
-      try {
-        const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
-        onChange?.({
-          lat: e?.latlng?.lat ?? null,
-          lng: e?.latlng?.lng ?? null,
-          zoom,
-        });
-      } catch {}
-    },
-    zoomend() {
-      try {
-        const center = typeof map.getCenter === "function" ? map.getCenter() : null;
-        const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
-        onChange?.({
-          lat: center?.lat ?? null,
-          lng: center?.lng ?? null,
-          zoom,
-        });
-      } catch {}
-    },
-    moveend() {
-      try {
-        const center = typeof map.getCenter === "function" ? map.getCenter() : null;
-        const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
-        onChange?.({
-          lat: center?.lat ?? null,
-          lng: center?.lng ?? null,
-          zoom,
-        });
-      } catch {}
-    },
-  });
-
-  useEffect(() => {
-    try {
-      const center = typeof map.getCenter === "function" ? map.getCenter() : null;
-      const zoom = typeof map.getZoom === "function" ? map.getZoom() : null;
-      onChange?.({
-        lat: center?.lat ?? null,
-        lng: center?.lng ?? null,
-        zoom,
-      });
-    } catch {}
-  }, [map, onChange]);
-
-  return null;
-}
-
 function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
@@ -280,6 +220,44 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
   return null;
 }
 
+
+
+function CursorCoordinatesOverlay({ onChange }) {
+  const map = useMapEvents({
+    mousemove(e) {
+      try {
+        const lat = e?.latlng?.lat;
+        const lng = e?.latlng?.lng;
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat, lng, zoom });
+      } catch {}
+    },
+    zoomend() {
+      try {
+        const center = map?.getCenter?.();
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+      } catch {}
+    },
+    moveend() {
+      try {
+        const center = map?.getCenter?.();
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+      } catch {}
+    },
+  });
+
+  useEffect(() => {
+    try {
+      const center = map?.getCenter?.();
+      const zoom = map?.getZoom?.() ?? null;
+      onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+    } catch {}
+  }, [map, onChange]);
+
+  return null;
+}
 
 function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled }) {
   const { t } = useTranslation();
@@ -816,9 +794,8 @@ export default function TrackerDashboard() {
   });
 
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
-  const [viewportText, setViewportText] = useState("—");
-  const [mapCursorInfo, setMapCursorInfo] = useState({ lat: null, lng: null, zoom: null });
   const [intersectsText, setIntersectsText] = useState("—");
+  const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null });
   const [fitSignal, setFitSignal] = useState(0);
 
   const resolvedOrgId = normalizeUuid(orgId);
@@ -1960,51 +1937,6 @@ export default function TrackerDashboard() {
     return [-0.22985, -78.52495];
   }, [visiblePositions, positions, layerItems]);
 
-  const trackerTableRows = useMemo(() => {
-    if (selectedTrackerId === "all") {
-      return (filteredAllTrackerMarkers || []).map((item) => ({
-        key: item?.key || "",
-        trackerLabel: item?.trackerLabel || item?.fullName || item?.email || item?.key || "—",
-        live: item?.live || getTrackerLiveStatus(item?.latest),
-        latest: item?.latest || null,
-        lat: Number(item?.lat),
-        lng: Number(item?.lng),
-        accuracy: Number(item?.latest?.accuracy),
-      }));
-    }
-
-    const latest = selectedTrackerPath?.latest || null;
-    if (!latest) return [];
-
-    const key = getTrackerKey(latest);
-    const personalId = latest?.personal_id || null;
-    const person = personalId ? personalById.get(String(personalId)) : null;
-    const byUser = latest?.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-    const source = person || byUser || null;
-    const firstName = source?.first_name || latest?.first_name || null;
-    const lastName = source?.last_name || latest?.last_name || null;
-    const fullName = source?.full_name || source?.nombre || latest?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
-    const email = source?.email || latest?.email || null;
-    const trackerLabel = fullName || email || latest?.tracker_label || latest?.name || latest?.tracker_name || key || "—";
-
-    return [{
-      key: key || "",
-      trackerLabel,
-      live: selectedTrackerPath?.live || getTrackerLiveStatus(latest),
-      latest,
-      lat: Number(latest?.lat),
-      lng: Number(latest?.lng),
-      accuracy: Number(latest?.accuracy),
-    }];
-  }, [selectedTrackerId, filteredAllTrackerMarkers, selectedTrackerPath, personalById, personalByUserId]);
-
-  const focusTrackerOnMap = useCallback((lat, lng) => {
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-    try {
-      mapRef.current?.setView?.([lat, lng], Math.max(mapRef.current?.getZoom?.() || mapZoom, 15), { animate: true });
-    } catch {}
-  }, [mapZoom]);
-
   const Badge = ({ children }) => (
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
   );
@@ -2301,9 +2233,6 @@ export default function TrackerDashboard() {
                     <span className="font-mono">{geofenceBoundsText}</span>
                   </div>
                   <div>
-                    <b>{tOr("trackerDashboard.badges.viewport", "viewport")}</b>{" "}
-                    <span className="font-mono">{viewportText}</span>
-                    {" | "}
                     <b>{tOr("trackerDashboard.badges.intersects", "intersects")}</b>{" "}
                     <span className="font-mono">{intersectsText}</span>
                   </div>
@@ -2337,6 +2266,15 @@ export default function TrackerDashboard() {
               </div>
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
+                <div className="pointer-events-none absolute top-3 left-16 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                  <div className="text-[11px] font-semibold text-gray-900 mb-1">Coordenadas</div>
+                  <div className="space-y-0.5 text-xs text-gray-700">
+                    <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
+                    <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
+                    <div>Zoom: {cursorCoords?.zoom == null ? "—" : cursorCoords.zoom}</div>
+                  </div>
+                </div>
+
                 <div className="absolute top-3 right-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
                   <div className="text-[11px] font-semibold text-gray-900 mb-2">
                     {tOr("trackerDashboard.sections.legend", "Legend")}
@@ -2354,17 +2292,6 @@ export default function TrackerDashboard() {
                       <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
                       <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
                     </div>
-                  </div>
-                </div>
-
-                <div className="pointer-events-none absolute right-3 top-3 z-[500] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
-                  <div className="text-[11px] font-semibold text-gray-900 mb-1">
-                    {tOr("trackerDashboard.map.coords", "Coordenadas")}
-                  </div>
-                  <div className="text-xs text-gray-700 font-mono leading-5">
-                    <div>Lat: {Number.isFinite(mapCursorInfo?.lat) ? Number(mapCursorInfo.lat).toFixed(6) : "—"}</div>
-                    <div>Lng: {Number.isFinite(mapCursorInfo?.lng) ? Number(mapCursorInfo.lng).toFixed(6) : "—"}</div>
-                    <div>Zoom: {Number.isFinite(mapCursorInfo?.zoom) ? mapCursorInfo.zoom : "—"}</div>
                   </div>
                 </div>
 
@@ -2395,18 +2322,10 @@ export default function TrackerDashboard() {
                         setGeofenceBoundsText("—");
                       }
                     }}
-                    onViewportComputed={(v) => {
-                      try {
-                        const sw = v.getSouthWest();
-                        const ne = v.getNorthEast();
-                        setViewportText(`SW(${sw.lat.toFixed(5)},${sw.lng.toFixed(5)}) NE(${ne.lat.toFixed(5)},${ne.lng.toFixed(5)})`);
-                      } catch {
-                        setViewportText("—");
-                      }
-                    }}
+                    onViewportComputed={() => {}}
                   />
 
-                  <MapCursorCoords onChange={setMapCursorInfo} />
+                  <CursorCoordinatesOverlay onChange={setCursorCoords} />
 
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -2424,75 +2343,6 @@ export default function TrackerDashboard() {
                     selectedTrackerId={selectedTrackerId}
                   />
                 </MapContainer>
-              </div>
-            </div>
-          </section>
-
-          <section className="lg:col-span-8 xl:col-span-9">
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200">
-                <div className="text-sm font-semibold text-gray-900">
-                  {tOr("trackerDashboard.sections.trackersTable", "Trackers") }
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.tracker", "Tracker")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.status", "Status")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.lastSent", "Último envío")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.accuracy", "Accuracy")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.coordinates", "Coordinates")}</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.table.action", "Action")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trackerTableRows.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
-                          {tOr("trackerDashboard.table.empty", "No hay trackers para mostrar.")}
-                        </td>
-                      </tr>
-                    ) : trackerTableRows.map((row) => {
-                      const status = row?.live?.status || "offline";
-                      const badgeClass = status === "online"
-                        ? "bg-green-50 text-green-700 border-green-200"
-                        : status === "stale"
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-gray-100 text-gray-700 border-gray-200";
-                      const tsValue = row?.latest?.ts || row?.latest?.recorded_at || row?.latest?.created_at || null;
-                      const coordsText = Number.isFinite(row?.lat) && Number.isFinite(row?.lng)
-                        ? `${row.lat.toFixed(6)}, ${row.lng.toFixed(6)}`
-                        : "—";
-                      const accuracyText = Number.isFinite(row?.accuracy) ? `${Math.round(row.accuracy)} m` : "—";
-
-                      return (
-                        <tr key={row.key || coordsText} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-4 py-2 text-gray-900">{row?.trackerLabel || "—"}</td>
-                          <td className="px-4 py-2">
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${badgeClass}`}>
-                              {status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{formatDateTime(tsValue)}</td>
-                          <td className="px-4 py-2 text-gray-700 whitespace-nowrap">{accuracyText}</td>
-                          <td className="px-4 py-2 text-gray-700 font-mono text-xs whitespace-nowrap">{coordsText}</td>
-                          <td className="px-4 py-2">
-                            <button
-                              type="button"
-                              className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                              onClick={() => focusTrackerOnMap(row?.lat, row?.lng)}
-                            >
-                              {tOr("trackerDashboard.table.center", "Centrar")}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             </div>
           </section>
@@ -2557,7 +2407,7 @@ export default function TrackerDashboard() {
                         return (
                           <tr key={evt.id} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-600">
-                              {formatDateTime(evt.created_at)}
+                              {evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : '—'}
                             </td>
                             <td className="px-4 py-2 text-gray-900">
                               <span className="truncate">{trackerLabel}</span>
