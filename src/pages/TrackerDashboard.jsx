@@ -1650,6 +1650,14 @@ export default function TrackerDashboard() {
     });
   }, [trackersUi, searchNeedle]);
 
+  const trackerMap = useMemo(() => {
+    const m = new Map();
+    for (const tr of trackersUi || []) {
+      m.set(tr.tracker_key, tr);
+    }
+    return m;
+  }, [trackersUi]);
+
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
     if (!all.length) return [];
@@ -2297,7 +2305,18 @@ export default function TrackerDashboard() {
                       {geofenceEvents.slice(0, 20).map((evt) => {
                         const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
                         const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
-                        const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || evt.user_id;
+                        const trackerFromUi = trackerMap.get(evt.user_id);
+                        const trackerLabel =
+                          trackerFromUi?.trackerLabel ||
+                          trackerFromUi?.baseLabel ||
+                          evt?.tracker_label ||
+                          evt?.tracker_name ||
+                          evt?.name ||
+                          person?.nombre ||
+                          person?.email ||
+                          byUser?.nombre ||
+                          byUser?.email ||
+                          evt.user_id;
 
                         const eventColor = evt.event_type === 'ENTER' ? 'text-green-700' : 'text-red-700';
                         const eventBg = evt.event_type === 'ENTER' ? 'bg-green-50' : 'bg-red-50';
