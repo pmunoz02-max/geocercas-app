@@ -1,4 +1,5 @@
 // src/pages/TrackerDashboard.jsx
+//...
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
