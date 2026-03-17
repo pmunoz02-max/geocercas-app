@@ -577,7 +577,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
       return { color: "#6b7280", radius: 6, fillOpacity: 0.45, strokeOpacity: 0.65 };
     }
     if (status === "stale") {
-      return { color: baseColor, radius: 6, fillOpacity: 0.65, strokeOpacity: 0.8 };
+      return { color: baseColor, radius: 6, fillOpacity: 0.45, strokeOpacity: 0.65 };
     }
     return { color: baseColor, radius: 7, fillOpacity: 0.9, strokeOpacity: 1 };
   };
@@ -2271,16 +2271,16 @@ export default function TrackerDashboard() {
                   </div>
                   <div className="space-y-1.5 text-xs text-gray-700">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
-                      <span>{tOr("trackerDashboard.status.online", "Online")}</span>
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-current" style={{ background: "currentColor", opacity: 1 }} />
+                      <span>{tOr("trackerDashboard.status.online", "Online")} — {tOr("trackerDashboard.legend.solidColor", "tracker color")}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
-                      <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-current opacity-40" style={{ background: "currentColor" }} />
+                      <span>{tOr("trackerDashboard.status.stale", "Stale")} — {tOr("trackerDashboard.legend.fadedColor", "faded color")}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
-                      <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
+                      <span>{tOr("trackerDashboard.status.offline", "Offline")} — {tOr("trackerDashboard.legend.gray", "gray")}</span>
                     </div>
                   </div>
                 </div>
