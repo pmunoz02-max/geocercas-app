@@ -154,7 +154,7 @@ function normalizePlanLabel(planCode) {
 
 function resolveTrackerAuthIdFromPersonal(row) {
   if (!row) return null;
-  return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
+  return row.user_id || null;
 }
 
 function resolveAssignedTrackerKey(userId, assignmentMap) {
@@ -164,35 +164,23 @@ function resolveAssignedTrackerKey(userId, assignmentMap) {
   return assignmentMap?.get(normalizedUserId) ?? normalizedUserId;
 }
 
-function resolveTrackerDisplayLabel({ row, trackerKey, trackerUiMap, personalById, personalByUserId }) {
-  const trackerUi = trackerKey ? trackerUiMap?.get(String(trackerKey)) : null;
+function resolveTrackerDisplayLabel({ row, personalById, personalByUserId }) {
   const personalId = row?.personal_id || null;
   const person = personalId ? personalById?.get(String(personalId)) : null;
   const byUser = row?.user_id ? personalByUserId?.get(String(row.user_id)) : null;
-  const firstName = person?.first_name || byUser?.first_name || row?.first_name || null;
-  const lastName = person?.last_name || byUser?.last_name || row?.last_name || null;
-  const fullName =
-    trackerUi?.fullName ||
-    person?.full_name ||
-    person?.nombre ||
-    byUser?.full_name ||
-    byUser?.nombre ||
-    row?.full_name ||
-    [firstName, lastName].filter(Boolean).join(" ") ||
-    null;
-  const email = trackerUi?.email || person?.email || byUser?.email || row?.email || null;
+  const source = byUser || person || null;
+  const fullName = [source?.nombre, source?.apellido].filter(Boolean).join(" ").trim() || null;
+  const nombre = source?.nombre || null;
+  const email = source?.email || null;
 
   return (
-    trackerUi?.baseLabel ||
-    trackerUi?.trackerLabel ||
-    trackerUi?.label ||
-    row?.tracker_label ||
-    row?.tracker_name ||
-    row?.name ||
     fullName ||
+    nombre ||
     email ||
+    row?.tracker_label ||
+    row?.name ||
+    row?.tracker_name ||
     (row?.user_id != null ? String(row.user_id) : null) ||
-    (trackerKey != null ? String(trackerKey) : null) ||
     "Sin nombre"
   );
 }
@@ -1693,36 +1681,13 @@ export default function TrackerDashboard() {
     for (const a of assignments || []) {
       if (!a) continue;
 
-      const userId =
-        a?.user_id != null ? String(a.user_id) :
-        a?.tracker_user_id != null ? String(a.tracker_user_id) :
-        null;
-      const trackerKey =
-        a?.tracker_key != null ? String(a.tracker_key) :
-        a?.tracker_user_id != null ? String(a.tracker_user_id) :
-        a?.user_id != null ? String(a.user_id) :
-        null;
-
-      if (!userId || !trackerKey) continue;
-      m.set(userId, trackerKey);
+      const trackerUserId = a?.tracker_user_id != null ? String(a.tracker_user_id) : null;
+      if (!trackerUserId) continue;
+      m.set(trackerUserId, trackerUserId);
     }
 
     return m;
   }, [assignments]);
-
-  const trackerUiMap = useMemo(() => {
-    const m = new Map();
-
-    for (const t of trackersUi || []) {
-      if (!t) continue;
-
-      if (t.tracker_key != null) m.set(String(t.tracker_key), t);
-      if (t.user_id != null && !m.has(String(t.user_id))) m.set(String(t.user_id), t);
-      if (t.id != null && !m.has(String(t.id))) m.set(String(t.id), t);
-    }
-
-    return m;
-  }, [trackersUi]);
 
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
@@ -1841,8 +1806,6 @@ export default function TrackerDashboard() {
       const resolvedTrackerKey = resolveAssignedTrackerKey(row?.user_id, assignmentMap) || key;
       const trackerLabel = resolveTrackerDisplayLabel({
         row,
-        trackerKey: resolvedTrackerKey,
-        trackerUiMap,
         personalById,
         personalByUserId,
       });
@@ -1865,7 +1828,7 @@ export default function TrackerDashboard() {
 
       return acc;
     }, []);
-  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId, assignmentMap, trackerUiMap]);
+  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId, assignmentMap]);
 
   const filteredAllTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return allTrackerMarkers;
@@ -1908,8 +1871,6 @@ export default function TrackerDashboard() {
     const trackerLabel = latest
       ? resolveTrackerDisplayLabel({
           row: latest,
-          trackerKey,
-          trackerUiMap,
           personalById,
           personalByUserId,
         })
@@ -1923,7 +1884,7 @@ export default function TrackerDashboard() {
       trackerLabel,
       live: getTrackerLiveStatus(latest),
     };
-  }, [selectedTrackerId, visiblePositions, assignmentMap, trackerUiMap, personalById, personalByUserId]);
+  }, [selectedTrackerId, visiblePositions, assignmentMap, personalById, personalByUserId]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
@@ -2388,11 +2349,8 @@ export default function TrackerDashboard() {
                     </thead>
                     <tbody>
                       {geofenceEvents.slice(0, 20).map((evt) => {
-                        const trackerKeyFromAssignment = resolveAssignedTrackerKey(evt?.user_id, assignmentMap);
                         const trackerLabel = resolveTrackerDisplayLabel({
                           row: evt,
-                          trackerKey: trackerKeyFromAssignment,
-                          trackerUiMap,
                           personalById,
                           personalByUserId,
                         });
