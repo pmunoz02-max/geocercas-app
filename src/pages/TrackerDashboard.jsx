@@ -1768,24 +1768,15 @@ export default function TrackerDashboard() {
     }, []);
   }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
 
-  const searchedAllTrackerMarkers = useMemo(() => {
-    if (selectedTrackerId !== "all") return allTrackerMarkers;
-
-    const query = normalizeSearchText(trackerSearch);
-    if (!query) return allTrackerMarkers;
-
-    return (allTrackerMarkers || []).filter((item) => buildTrackerSearchText(item).includes(query));
-  }, [allTrackerMarkers, selectedTrackerId, trackerSearch]);
-
   const filteredAllTrackerMarkers = useMemo(() => {
-    if (selectedTrackerId !== "all") return searchedAllTrackerMarkers;
-    if (statusFilter === "all") return searchedAllTrackerMarkers;
+    if (selectedTrackerId !== "all") return allTrackerMarkers;
+    if (statusFilter === "all") return allTrackerMarkers;
 
-    return (searchedAllTrackerMarkers || []).filter((item) => {
+    return (allTrackerMarkers || []).filter((item) => {
       const live = item?.live || getTrackerLiveStatus(item?.latest);
       return live.status === statusFilter;
     });
-  }, [searchedAllTrackerMarkers, selectedTrackerId, statusFilter]);
+  }, [allTrackerMarkers, selectedTrackerId, statusFilter]);
 
   const trackerStatusSummary = useMemo(() => {
     let total = 0;
