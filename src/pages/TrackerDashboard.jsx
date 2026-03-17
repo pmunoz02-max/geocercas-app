@@ -120,6 +120,30 @@ function normalizeSearchText(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function buildTrackerSearchText(item) {
+  return [
+    item?.trackerLabel,
+    item?.key,
+    item?.tracker_key,
+    item?.personalId,
+    item?.personal_id,
+    item?.firstName,
+    item?.lastName,
+    item?.fullName,
+    item?.email,
+    item?.baseLabel,
+    item?.latest?.tracker_label,
+    item?.latest?.personal_id,
+    item?.latest?.first_name,
+    item?.latest?.last_name,
+    item?.latest?.full_name,
+    item?.latest?.email,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).trim().toLowerCase())
+    .join(" ");
+}
+
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
   if (v === "pro") return "PRO";
@@ -1502,16 +1526,29 @@ export default function TrackerDashboard() {
       const byUser = row.user_id ? personalByUserId.get(String(row.user_id)) : null;
       const p = person || byUser || null;
       const latestTs = getPositionTs(row);
+      const personalId = row.personal_id || null;
+      const firstName = p?.first_name || row?.first_name || null;
+      const lastName = p?.last_name || row?.last_name || null;
+      const fullName = p?.full_name || p?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
+      const email = p?.email || row?.email || null;
+      const baseLabel = fullName || email || trackerKey;
 
       if (!map.has(trackerKey)) {
         const live = getTrackerLiveStatus(row);
-        const baseLabel = p?.nombre || p?.email || trackerKey;
         map.set(trackerKey, {
+          key: trackerKey,
           tracker_key: trackerKey,
           user_id: row.user_id || null,
-          personal_id: row.personal_id || null,
+          personal_id: personalId,
+          personalId,
           label: `[${String(live.status || "online").toUpperCase()}] ${baseLabel}`,
           baseLabel,
+          trackerLabel: baseLabel,
+          firstName,
+          lastName,
+          fullName,
+          email,
+          latest: row,
           live,
           latestTs,
           statusPriority: getTrackerStatusPriority(live.status),
@@ -1522,13 +1559,20 @@ export default function TrackerDashboard() {
       const existing = map.get(trackerKey);
       if (latestTs > (existing?.latestTs ?? 0)) {
         const live = getTrackerLiveStatus(row);
-        const baseLabel = p?.nombre || p?.email || trackerKey;
         map.set(trackerKey, {
           ...existing,
+          key: trackerKey,
           user_id: row.user_id || existing.user_id || null,
-          personal_id: row.personal_id || existing.personal_id || null,
+          personal_id: personalId || existing.personal_id || null,
+          personalId: personalId || existing.personalId || null,
           label: `[${String(live.status || "online").toUpperCase()}] ${baseLabel}`,
           baseLabel,
+          trackerLabel: baseLabel,
+          firstName,
+          lastName,
+          fullName,
+          email,
+          latest: row,
           live,
           latestTs,
           statusPriority: getTrackerStatusPriority(live.status),
@@ -1540,12 +1584,25 @@ export default function TrackerDashboard() {
       for (const tRow of assignmentTrackers || []) {
         const user_id = String(tRow.user_id);
         const p = personalByUserId.get(user_id) || null;
+        const firstName = p?.first_name || null;
+        const lastName = p?.last_name || null;
+        const fullName = p?.full_name || p?.nombre || [firstName, lastName].filter(Boolean).join(" ") || null;
+        const email = p?.email || null;
+        const baseLabel = fullName || email || user_id;
         map.set(user_id, {
+          key: user_id,
           tracker_key: user_id,
           user_id,
           personal_id: null,
-          label: `[OFFLINE] ${p?.nombre || p?.email || user_id}`,
-          baseLabel: p?.nombre || p?.email || user_id,
+          personalId: null,
+          label: `[OFFLINE] ${baseLabel}`,
+          baseLabel,
+          trackerLabel: baseLabel,
+          firstName,
+          lastName,
+          fullName,
+          email,
+          latest: null,
           live: { status: "offline", ageSec: null },
           latestTs: 0,
           statusPriority: getTrackerStatusPriority("offline"),
@@ -1569,10 +1626,7 @@ export default function TrackerDashboard() {
     if (!query) return trackersUi;
 
     return (trackersUi || []).filter((item) => {
-      const label = normalizeSearchText(item?.baseLabel || item?.label);
-      const trackerKey = normalizeSearchText(item?.tracker_key);
-      const personalId = normalizeSearchText(item?.personal_id);
-      const matches = label.includes(query) || trackerKey.includes(query) || personalId.includes(query);
+      const matches = buildTrackerSearchText(item).includes(query);
 
       if (matches) return true;
       return selectedTrackerId !== "all" && item?.tracker_key === selectedTrackerId;
@@ -1688,7 +1742,12 @@ export default function TrackerDashboard() {
       const personalId = row?.personal_id || null;
       const person = personalId ? personalById.get(String(personalId)) : null;
       const byUser = row?.user_id ? personalByUserId.get(String(row.user_id)) : null;
-      const trackerLabel = person?.nombre || person?.email || byUser?.nombre || byUser?.email || key;
+      const source = person || byUser || null;
+      const firstName = source?.first_name || row?.first_name || null;
+      const lastName = source?.last_name || row?.last_name || null;
+      const fullName = source?.full_name || source?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
+      const email = source?.email || row?.email || null;
+      const trackerLabel = fullName || email || key;
 
       acc.push({
         key,
@@ -1696,6 +1755,10 @@ export default function TrackerDashboard() {
         lat,
         lng,
         personalId,
+        firstName,
+        lastName,
+        fullName,
+        email,
         trackerLabel,
         color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
         live: getTrackerLiveStatus(row),
@@ -1711,12 +1774,7 @@ export default function TrackerDashboard() {
     const query = normalizeSearchText(trackerSearch);
     if (!query) return allTrackerMarkers;
 
-    return (allTrackerMarkers || []).filter((item) => {
-      const label = normalizeSearchText(item?.trackerLabel);
-      const trackerKey = normalizeSearchText(item?.key);
-      const personalId = normalizeSearchText(item?.personalId);
-      return label.includes(query) || trackerKey.includes(query) || personalId.includes(query);
-    });
+    return (allTrackerMarkers || []).filter((item) => buildTrackerSearchText(item).includes(query));
   }, [allTrackerMarkers, selectedTrackerId, trackerSearch]);
 
   const filteredAllTrackerMarkers = useMemo(() => {
