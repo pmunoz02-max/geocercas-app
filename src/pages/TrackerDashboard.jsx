@@ -1,5 +1,4 @@
 // src/pages/TrackerDashboard.jsx
-//...
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
@@ -111,6 +110,42 @@ function formatAgeShort(ageSec) {
   return `${hr}h`;
 }
 
+
+function MapCursorTracker({ onCursorChange, onZoomChange }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map) return;
+
+    const updateZoom = () => {
+      try {
+        onZoomChange?.(map.getZoom?.() ?? null);
+      } catch {
+        onZoomChange?.(null);
+      }
+    };
+
+    const handleMove = (e) => onCursorChange?.(e?.latlng ?? null);
+    const handleOut = () => onCursorChange?.(null);
+
+    map.on("mousemove", handleMove);
+    map.on("mouseout", handleOut);
+    map.on("zoomend", updateZoom);
+    map.on("moveend", updateZoom);
+
+    updateZoom();
+
+    return () => {
+      map.off("mousemove", handleMove);
+      map.off("mouseout", handleOut);
+      map.off("zoomend", updateZoom);
+      map.off("moveend", updateZoom);
+    };
+  }, [map, onCursorChange, onZoomChange]);
+
+  return null;
+}
+
 function getTrackerStatusPriority(status) {
   if (status === "offline") return 0;
   if (status === "stale") return 1;
@@ -155,35 +190,7 @@ function normalizePlanLabel(planCode) {
 
 function resolveTrackerAuthIdFromPersonal(row) {
   if (!row) return null;
-  return row.user_id || null;
-}
-
-function resolveAssignedTrackerKey(userId, assignmentMap) {
-  if (userId === null || userId === undefined) return null;
-  const normalizedUserId = String(userId);
-  if (!normalizedUserId) return null;
-  return assignmentMap?.get(normalizedUserId) ?? normalizedUserId;
-}
-
-function resolveTrackerDisplayLabel({ row, personalById, personalByUserId }) {
-  const personalId = row?.personal_id || null;
-  const person = personalId ? personalById?.get(String(personalId)) : null;
-  const byUser = row?.user_id ? personalByUserId?.get(String(row.user_id)) : null;
-  const source = byUser || person || null;
-  const fullName = [source?.nombre, source?.apellido].filter(Boolean).join(" ").trim() || null;
-  const nombre = source?.nombre || null;
-  const email = source?.email || null;
-
-  return (
-    fullName ||
-    nombre ||
-    email ||
-    row?.tracker_label ||
-    row?.name ||
-    row?.tracker_name ||
-    (row?.user_id != null ? String(row.user_id) : null) ||
-    "Sin nombre"
-  );
+  return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
 }
 
 
@@ -577,7 +584,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
       return { color: "#6b7280", radius: 6, fillOpacity: 0.45, strokeOpacity: 0.65 };
     }
     if (status === "stale") {
-      return { color: baseColor, radius: 6, fillOpacity: 0.45, strokeOpacity: 0.65 };
+      return { color: baseColor, radius: 6, fillOpacity: 0.65, strokeOpacity: 0.8 };
     }
     return { color: baseColor, radius: 7, fillOpacity: 0.9, strokeOpacity: 1 };
   };
@@ -650,11 +657,16 @@ const TrackerLayers = React.memo(function TrackerLayers({
           const markerStyle = getMarkerStyleByStatus(live.status, item.color);
           const trackerDisplayName =
             item?.trackerLabel ||
-            latest?.trackerLabel ||
             latest?.tracker_label ||
             latest?.name ||
             latest?.tracker_name ||
             item?.key;
+
+          console.log("LIVE MARKER latest:", latest);
+          console.log("LIVE MARKER latest.user_id:", latest?.user_id);
+          console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
+          console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
+          console.log("LIVE MARKER latest.name:", latest?.name);
 
           return (
             <AnimatedTrackerDot
@@ -682,16 +694,28 @@ const TrackerLayers = React.memo(function TrackerLayers({
   if (!isValidLatLng(latestLat, latestLng)) return null;
 
   const personalId = latest.personal_id || null;
+  const person = personalId ? personalById.get(String(personalId)) : null;
+  const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
+  console.log("DEBUG LATEST:", latest);
+  console.log("DEBUG latest.tracker_label:", latest?.tracker_label);
   const trackerLabel =
-    selectedTrackerPath?.trackerLabel ||
-    latest?.trackerLabel ||
     latest?.tracker_label ||
     latest?.tracker_name ||
     latest?.name ||
+    person?.nombre ||
+    person?.email ||
+    byUser?.nombre ||
+    byUser?.email ||
     trackerId;
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
+
+  console.log("LIVE MARKER latest:", latest);
+  console.log("LIVE MARKER latest.user_id:", latest?.user_id);
+  console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
+  console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
+  console.log("LIVE MARKER latest.name:", latest?.name);
 
   return (
     <>
@@ -770,6 +794,9 @@ export default function TrackerDashboard() {
   const [viewportText, setViewportText] = useState("—");
   const [intersectsText, setIntersectsText] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
+
+  const [cursorLatLng, setCursorLatLng] = useState(null);
+  const [liveMapZoom, setLiveMapZoom] = useState(null);
 
   const resolvedOrgId = normalizeUuid(orgId);
 
@@ -1676,32 +1703,33 @@ export default function TrackerDashboard() {
     });
   }, [trackersUi, searchNeedle]);
 
-  const visibleTrackerKeysFromSearch = useMemo(() => {
-    if (!searchNeedle) return null;
-
-    const keys = new Set();
-    for (const option of filteredTrackerOptions || []) {
-      const key = option?.tracker_key ?? option?.trackerId ?? option?.value ?? null;
-      if (!key || key === "all") continue;
-      keys.add(String(key));
-    }
-
-    return keys;
-  }, [filteredTrackerOptions, searchNeedle]);
-
   const assignmentMap = useMemo(() => {
     const m = new Map();
 
     for (const a of assignments || []) {
       if (!a) continue;
 
-      const trackerUserId = a?.tracker_user_id != null ? String(a.tracker_user_id) : null;
-      if (!trackerUserId) continue;
-      m.set(trackerUserId, trackerUserId);
+      if (a.user_id && a.tracker_key) {
+        m.set(String(a.user_id), String(a.tracker_key));
+      }
     }
 
     return m;
   }, [assignments]);
+
+  const trackerMap = useMemo(() => {
+    const m = new Map();
+
+    for (const t of trackersUi || []) {
+      if (!t) continue;
+
+      if (t.tracker_key) m.set(String(t.tracker_key), t);
+      if (t.user_id) m.set(String(t.user_id), t);
+      if (t.id) m.set(String(t.id), t);
+    }
+
+    return m;
+  }, [trackersUi]);
 
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
@@ -1734,20 +1762,11 @@ export default function TrackerDashboard() {
   const visiblePositions = useMemo(() => {
     if (!positions?.length) return [];
 
-    const searchFilteredPositions = visibleTrackerKeysFromSearch
-      ? positions.filter((p) => {
-          const key = getTrackerKey(p);
-          return key ? visibleTrackerKeysFromSearch.has(String(key)) : false;
-        })
-      : positions;
-
-    if (!searchFilteredPositions.length) return [];
-
     // MODE 1: All trackers → only latest position per tracker
     if (selectedTrackerId === "all") {
       const latestByTracker = new Map();
 
-      for (const p of searchFilteredPositions) {
+      for (const p of positions) {
         const key = getTrackerKey(p);
         if (!key) continue;
 
@@ -1771,11 +1790,11 @@ export default function TrackerDashboard() {
     }
 
     // MODE 2: Single tracker → most recent bounded history
-    return searchFilteredPositions
+    return positions
       .filter((p) => getTrackerKey(p) === selectedTrackerId)
       .sort((a, b) => getPositionTs(a) - getPositionTs(b))
       .slice(-MAX_HISTORY_PER_TRACKER);
-  }, [positions, selectedTrackerId, visibleTrackerKeysFromSearch]);
+  }, [positions, selectedTrackerId]);
 
   const pointsByTracker = useMemo(() => {
     const grouped = new Map();
@@ -1826,16 +1845,13 @@ export default function TrackerDashboard() {
       const lastName = source?.last_name || row?.last_name || null;
       const fullName = source?.full_name || source?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
       const email = source?.email || row?.email || null;
-      const resolvedTrackerKey = resolveAssignedTrackerKey(row?.user_id, assignmentMap) || key;
-      const trackerLabel = resolveTrackerDisplayLabel({
-        row,
-        personalById,
-        personalByUserId,
-      });
+      const trackerLabel =
+        fullName || email ||
+        row?.tracker_label || row?.name || row?.tracker_name ||
+        key;
 
       acc.push({
         key,
-        tracker_key: resolvedTrackerKey,
         latest: row,
         lat,
         lng,
@@ -1851,7 +1867,7 @@ export default function TrackerDashboard() {
 
       return acc;
     }, []);
-  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId, assignmentMap]);
+  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
 
   const filteredAllTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return allTrackerMarkers;
@@ -1889,25 +1905,13 @@ export default function TrackerDashboard() {
       .map((p) => [Number(p?.lat), Number(p?.lng)])
       .filter(([lat, lng]) => isValidLatLng(lat, lng));
 
-    const latest = trackerPositions[trackerPositions.length - 1] || null;
-    const trackerKey = resolveAssignedTrackerKey(latest?.user_id, assignmentMap) || selectedTrackerId;
-    const trackerLabel = latest
-      ? resolveTrackerDisplayLabel({
-          row: latest,
-          personalById,
-          personalByUserId,
-        })
-      : selectedTrackerId;
-
     return {
       positions: trackerPositions,
       latlngs,
-      latest,
-      tracker_key: trackerKey,
-      trackerLabel,
-      live: getTrackerLiveStatus(latest),
+      latest: trackerPositions[trackerPositions.length - 1] || null,
+      live: getTrackerLiveStatus(trackerPositions[trackerPositions.length - 1] || null),
     };
-  }, [selectedTrackerId, visiblePositions, assignmentMap, personalById, personalByUserId]);
+  }, [selectedTrackerId, visiblePositions]);
 
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
@@ -2271,17 +2275,36 @@ export default function TrackerDashboard() {
                   </div>
                   <div className="space-y-1.5 text-xs text-gray-700">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-current" style={{ background: "currentColor", opacity: 1 }} />
-                      <span>{tOr("trackerDashboard.status.online", "Online")} — {tOr("trackerDashboard.legend.solidColor", "tracker color")}</span>
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
+                      <span>{tOr("trackerDashboard.status.online", "Online")}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-current opacity-40" style={{ background: "currentColor" }} />
-                      <span>{tOr("trackerDashboard.status.stale", "Stale")} — {tOr("trackerDashboard.legend.fadedColor", "faded color")}</span>
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
+                      <span>{tOr("trackerDashboard.status.stale", "Stale")}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
-                      <span>{tOr("trackerDashboard.status.offline", "Offline")} — {tOr("trackerDashboard.legend.gray", "gray")}</span>
+                      <span>{tOr("trackerDashboard.status.offline", "Offline")}</span>
                     </div>
+                  </div>
+                </div>
+
+                <div className="absolute left-3 bottom-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                  <div className="text-[11px] text-gray-700">
+                    <span className="text-gray-500">{tOr("trackerDashboard.tooltip.lat", "Lat")} </span>
+                    <span className="font-semibold text-gray-900">
+                      {Number.isFinite(cursorLatLng?.lat) ? cursorLatLng.lat.toFixed(6) : "—"}
+                    </span>
+                    <span className="mx-2 text-gray-400">|</span>
+                    <span className="text-gray-500">{tOr("trackerDashboard.tooltip.lng", "Lng")} </span>
+                    <span className="font-semibold text-gray-900">
+                      {Number.isFinite(cursorLatLng?.lng) ? cursorLatLng.lng.toFixed(6) : "—"}
+                    </span>
+                    <span className="mx-2 text-gray-400">|</span>
+                    <span className="text-gray-500">Zoom </span>
+                    <span className="font-semibold text-gray-900">
+                      {Number.isFinite(liveMapZoom) ? String(liveMapZoom) : "—"}
+                    </span>
                   </div>
                 </div>
 
@@ -2328,6 +2351,8 @@ export default function TrackerDashboard() {
                     attribution='&copy; <a href="https://www.openstreetmap.org">OpenStreetMap</a>'
                   />
 
+                  <MapCursorTracker onCursorChange={setCursorLatLng} onZoomChange={setLiveMapZoom} />
+
                   <GeofenceLayers layerItems={layerItems} t={t} />
 
                   <TrackerLayers
@@ -2343,113 +2368,6 @@ export default function TrackerDashboard() {
             </div>
           </section>
 
-          {selectedTrackerId === "all" && (
-            <section className="lg:col-span-12">
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200">
-                  <div className="text-sm font-semibold text-gray-900">
-                    {tOr("trackerDashboard.sections.trackerTable", "Trackers")}
-                  </div>
-                </div>
-
-                {filteredAllTrackerMarkers.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-gray-500">
-                    {tOr("trackerDashboard.trackerTable.empty", "No trackers visible")}
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">
-                            {tOr("trackerDashboard.trackerTable.tracker", "Tracker")}
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">
-                            {tOr("trackerDashboard.trackerTable.status", "Status")}
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">
-                            {tOr("trackerDashboard.trackerTable.lastUpdate", "Última actualización")}
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700 hidden sm:table-cell">
-                            {tOr("trackerDashboard.trackerTable.accuracy", "Accuracy")}
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700 hidden md:table-cell">
-                            {tOr("trackerDashboard.trackerTable.coords", "Coordinates")}
-                          </th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">
-                            {tOr("trackerDashboard.trackerTable.action", "Action")}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredAllTrackerMarkers.map((item) => {
-                          const live = item.live || getTrackerLiveStatus(item.latest);
-                          const status = live.status;
-                          const accuracyNum = Number(item.latest?.accuracy);
-                          const accuracyText =
-                            item.latest?.accuracy != null && Number.isFinite(accuracyNum)
-                              ? `${accuracyNum.toFixed(0)} m`
-                              : "—";
-                          const tsStr =
-                            item.latest?.recorded_at ??
-                            item.latest?.ts ??
-                            item.latest?.created_at ??
-                            null;
-                          const timeText = formatTime(tsStr);
-                          const ageText = formatAgeShort(live.ageSec);
-                          const dotColor = status === "offline" ? "#6b7280" : item.color;
-                          const dotOpacity = status === "stale" ? 0.4 : status === "offline" ? 0.6 : 1;
-                          const statusLabel =
-                            status === "online"
-                              ? tOr("trackerDashboard.status.online", "Online")
-                              : status === "stale"
-                              ? tOr("trackerDashboard.status.stale", "Stale")
-                              : tOr("trackerDashboard.status.offline", "Offline");
-                          return (
-                            <tr key={item.key} className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
-                              <td className="px-4 py-2 text-gray-900 font-medium max-w-[160px] truncate">
-                                {item.trackerLabel}
-                              </td>
-                              <td className="px-4 py-2">
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span
-                                    className="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0"
-                                    style={{ background: dotColor, opacity: dotOpacity }}
-                                  />
-                                  <span className="text-gray-700">{statusLabel}</span>
-                                  {live.ageSec != null && (
-                                    <span className="text-gray-400 text-xs">({ageText})</span>
-                                  )}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-gray-600">{timeText}</td>
-                              <td className="px-4 py-2 text-gray-600 hidden sm:table-cell">{accuracyText}</td>
-                              <td className="px-4 py-2 text-gray-600 font-mono text-xs hidden md:table-cell">
-                                {item.lat.toFixed(5)}, {item.lng.toFixed(5)}
-                              </td>
-                              <td className="px-4 py-2">
-                                <button
-                                  type="button"
-                                  className="border border-gray-300 bg-white text-gray-700 rounded-md px-2.5 py-1 text-xs hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  onClick={() => {
-                                    try {
-                                      mapRef.current?.setView([item.lat, item.lng], 16);
-                                    } catch {}
-                                  }}
-                                >
-                                  {tOr("trackerDashboard.trackerTable.center", "Centrar")}
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
           {previewUiEnabled && isDemoOrg && geofenceEvents.length > 0 && (
             <section className="lg:col-span-8 xl:col-span-9">
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -2479,11 +2397,30 @@ export default function TrackerDashboard() {
                     </thead>
                     <tbody>
                       {geofenceEvents.slice(0, 20).map((evt) => {
-                        const trackerLabel = resolveTrackerDisplayLabel({
-                          row: evt,
-                          personalById,
-                          personalByUserId,
-                        });
+                        const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
+                        const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
+                        const trackerKeyFromAssignment = assignmentMap.get(String(evt.user_id));
+
+                        const trackerFromUi = (trackersUi || []).find((t) =>
+                          String(t.tracker_key) === String(trackerKeyFromAssignment)
+                        );
+
+                        console.log("DEBUG TOOLTIP EVT:", evt);
+                        console.log("DEBUG tracker_label:", evt?.tracker_label);
+                        console.log("DEBUG tracker_name:", evt?.tracker_name);
+                        console.log("DEBUG name:", evt?.name);
+                        console.log("DEBUG user_id:", evt?.user_id);
+                        const trackerLabel =
+                          trackerFromUi?.label ??
+                          trackerFromUi?.baseLabel ??
+                          evt?.tracker_label ??
+                          evt?.tracker_name ??
+                          evt?.name ??
+                          person?.nombre ??
+                          person?.email ??
+                          byUser?.nombre ??
+                          byUser?.email ??
+                          String(evt.user_id ?? "—");
 
                         const eventColor = evt.event_type === 'ENTER' ? 'text-green-700' : 'text-red-700';
                         const eventBg = evt.event_type === 'ENTER' ? 'bg-green-50' : 'bg-red-50';
