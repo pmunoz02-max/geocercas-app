@@ -144,6 +144,26 @@ function buildTrackerSearchText(item) {
     .join(" ");
 }
 
+function buildTrackerOptionSearchText(option) {
+  return [
+    option?.label,
+    option?.trackerLabel,
+    option?.key,
+    option?.value,
+    option?.personalId,
+    option?.firstName,
+    option?.lastName,
+    option?.fullName,
+    option?.email,
+    option?.latest?.tracker_label,
+    option?.latest?.tracker_name,
+    option?.latest?.name,
+  ]
+    .filter(Boolean)
+    .map((v) => String(v).trim().toLowerCase())
+    .join(" ");
+}
+
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
   if (v === "pro") return "PRO";
@@ -622,7 +642,12 @@ const TrackerLayers = React.memo(function TrackerLayers({
 
           const live = item?.live || getTrackerLiveStatus(latest);
           const markerStyle = getMarkerStyleByStatus(live.status, item.color);
-          const trackerDisplayLabel = item?.trackerLabel || latest?.tracker_label || item?.key;
+          const trackerDisplayName =
+            item?.trackerLabel ||
+            latest?.tracker_label ||
+            latest?.name ||
+            latest?.tracker_name ||
+            item?.key;
 
           return (
             <AnimatedTrackerDot
@@ -633,7 +658,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
               fillOpacity={markerStyle.fillOpacity}
               strokeOpacity={markerStyle.strokeOpacity}
             >
-              {renderTrackerTooltip(trackerDisplayLabel, item.personalId, latest, latestLat, latestLng, live)}
+              {renderTrackerTooltip(trackerDisplayName, item.personalId, latest, latestLat, latestLng, live)}
             </AnimatedTrackerDot>
           );
         })}
@@ -1623,17 +1648,17 @@ export default function TrackerDashboard() {
     });
   }, [positions, assignmentTrackers, personalById, personalByUserId]);
 
-  const filteredTrackersUi = useMemo(() => {
-    const query = normalizeSearchText(trackerSearch);
-    if (!query) return trackersUi;
+  const searchNeedle = normalizeSearchText(trackerSearch);
 
-    return (trackersUi || []).filter((item) => {
-      const matches = buildTrackerSearchText(item).includes(query);
+  const filteredTrackerOptions = useMemo(() => {
+    if (!searchNeedle) return trackersUi;
 
-      if (matches) return true;
-      return selectedTrackerId !== "all" && item?.tracker_key === selectedTrackerId;
+    return (trackersUi || []).filter((option) => {
+      if (option?.value === "all") return true;
+      if (selectedTrackerId !== "all" && option?.tracker_key === selectedTrackerId) return true;
+      return buildTrackerOptionSearchText(option).includes(searchNeedle);
     });
-  }, [trackersUi, trackerSearch, selectedTrackerId]);
+  }, [trackersUi, searchNeedle, selectedTrackerId]);
 
   const filteredGeofenceRows = useMemo(() => {
     const all = Array.isArray(geofenceRows) ? geofenceRows : [];
@@ -1749,7 +1774,10 @@ export default function TrackerDashboard() {
       const lastName = source?.last_name || row?.last_name || null;
       const fullName = source?.full_name || source?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
       const email = source?.email || row?.email || null;
-      const trackerLabel = fullName || email || key;
+      const trackerLabel =
+        fullName || email ||
+        row?.tracker_label || row?.name || row?.tracker_name ||
+        key;
 
       acc.push({
         key,
@@ -2066,7 +2094,7 @@ export default function TrackerDashboard() {
                     disabled={!orgId}
                   >
                     <option value="all">{tOr("trackerDashboard.labels.all", "All")}</option>
-                    {filteredTrackersUi.map((x) => (
+                    {filteredTrackerOptions.map((x) => (
                       <option key={x.tracker_key} value={x.tracker_key}>
                         {x.label}
                       </option>
