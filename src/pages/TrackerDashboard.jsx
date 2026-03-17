@@ -222,28 +222,89 @@ function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportCom
 
 
 
-function CursorCoordinatesOverlay({ onChange }) {
+function CursorCoordinatesOverlay({ onChange, onScaleChange }) {
   const map = useMapEvents({
+    zoomend() {
+      try {
+        const size = map?.getSize?.();
+        if (!size) {
+          onScaleChange?.("—");
+          return;
+        }
+
+        const y = Math.round(size.y / 2);
+        const start = map.containerPointToLatLng([Math.round(size.x / 2), y]);
+        const end = map.containerPointToLatLng([Math.round(size.x / 2) + 100, y]);
+        const rawMeters = start.distanceTo(end);
+
+        if (!Number.isFinite(rawMeters) || rawMeters <= 0) {
+          onScaleChange?.("—");
+          return;
+        }
+
+        const niceSteps = [1, 2, 5];
+        const magnitude = Math.pow(10, Math.floor(Math.log10(rawMeters)));
+        let niceMeters = magnitude;
+        for (const step of niceSteps) {
+          const candidate = step * magnitude;
+          if (candidate <= rawMeters) niceMeters = candidate;
+        }
+
+        const label = niceMeters >= 1000
+          ? `${niceMeters % 1000 === 0 ? Math.round(niceMeters / 1000) : (niceMeters / 1000).toFixed(1)} km`
+          : `${Math.round(niceMeters)} m`;
+
+        onScaleChange?.(label.replace(/\.0\s+km$/, " km"));
+      } catch {
+        onScaleChange?.("—");
+      }
+    },
+    moveend() {
+      try {
+        const size = map?.getSize?.();
+        if (!size) {
+          onScaleChange?.("—");
+          return;
+        }
+
+        const y = Math.round(size.y / 2);
+        const start = map.containerPointToLatLng([Math.round(size.x / 2), y]);
+        const end = map.containerPointToLatLng([Math.round(size.x / 2) + 100, y]);
+        const rawMeters = start.distanceTo(end);
+
+        if (!Number.isFinite(rawMeters) || rawMeters <= 0) {
+          onScaleChange?.("—");
+          return;
+        }
+
+        const niceSteps = [1, 2, 5];
+        const magnitude = Math.pow(10, Math.floor(Math.log10(rawMeters)));
+        let niceMeters = magnitude;
+        for (const step of niceSteps) {
+          const candidate = step * magnitude;
+          if (candidate <= rawMeters) niceMeters = candidate;
+        }
+
+        const label = niceMeters >= 1000
+          ? `${niceMeters % 1000 === 0 ? Math.round(niceMeters / 1000) : (niceMeters / 1000).toFixed(1)} km`
+          : `${Math.round(niceMeters)} m`;
+
+        onScaleChange?.(label.replace(/\.0\s+km$/, " km"));
+      } catch {
+        onScaleChange?.("—");
+      }
+      try {
+        const center = map?.getCenter?.();
+        const zoom = map?.getZoom?.() ?? null;
+        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+      } catch {}
+    },
     mousemove(e) {
       try {
         const lat = e?.latlng?.lat;
         const lng = e?.latlng?.lng;
         const zoom = map?.getZoom?.() ?? null;
         onChange?.({ lat, lng, zoom });
-      } catch {}
-    },
-    zoomend() {
-      try {
-        const center = map?.getCenter?.();
-        const zoom = map?.getZoom?.() ?? null;
-        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
-      } catch {}
-    },
-    moveend() {
-      try {
-        const center = map?.getCenter?.();
-        const zoom = map?.getZoom?.() ?? null;
-        onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
       } catch {}
     },
   });
@@ -253,8 +314,32 @@ function CursorCoordinatesOverlay({ onChange }) {
       const center = map?.getCenter?.();
       const zoom = map?.getZoom?.() ?? null;
       onChange?.({ lat: center?.lat ?? null, lng: center?.lng ?? null, zoom });
+      const size = map?.getSize?.();
+      if (!size) {
+        onScaleChange?.("—");
+        return;
+      }
+      const y = Math.round(size.y / 2);
+      const start = map.containerPointToLatLng([Math.round(size.x / 2), y]);
+      const end = map.containerPointToLatLng([Math.round(size.x / 2) + 100, y]);
+      const rawMeters = start.distanceTo(end);
+      if (!Number.isFinite(rawMeters) || rawMeters <= 0) {
+        onScaleChange?.("—");
+        return;
+      }
+      const niceSteps = [1, 2, 5];
+      const magnitude = Math.pow(10, Math.floor(Math.log10(rawMeters)));
+      let niceMeters = magnitude;
+      for (const step of niceSteps) {
+        const candidate = step * magnitude;
+        if (candidate <= rawMeters) niceMeters = candidate;
+      }
+      const label = niceMeters >= 1000
+        ? `${niceMeters % 1000 === 0 ? Math.round(niceMeters / 1000) : (niceMeters / 1000).toFixed(1)} km`
+        : `${Math.round(niceMeters)} m`;
+      onScaleChange?.(label.replace(/\.0\s+km$/, " km"));
     } catch {}
-  }, [map, onChange]);
+  }, [map, onChange, onScaleChange]);
 
   return null;
 }
@@ -796,6 +881,7 @@ export default function TrackerDashboard() {
   const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
   const [intersectsText, setIntersectsText] = useState("—");
   const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null });
+  const [scaleLabel, setScaleLabel] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
   const resolvedOrgId = normalizeUuid(orgId);
@@ -2271,7 +2357,7 @@ export default function TrackerDashboard() {
                   <div className="space-y-0.5 text-xs text-gray-700">
                     <div>Lat: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
                     <div>Lng: {cursorCoords?.lng == null ? "—" : Number(cursorCoords.lng).toFixed(6)}</div>
-                    <div>Zoom: {cursorCoords?.zoom == null ? "—" : cursorCoords.zoom}</div>
+                    <div>{scaleLabel}</div>
                   </div>
                 </div>
 
@@ -2325,7 +2411,7 @@ export default function TrackerDashboard() {
                     onViewportComputed={() => {}}
                   />
 
-                  <CursorCoordinatesOverlay onChange={setCursorCoords} />
+                  <CursorCoordinatesOverlay onChange={setCursorCoords} onScaleChange={setScaleLabel} />
 
                   <TileLayer
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -2343,6 +2429,46 @@ export default function TrackerDashboard() {
                     selectedTrackerId={selectedTrackerId}
                   />
                 </MapContainer>
+              </div>
+
+              <div className="border-t border-gray-200">
+                <div className="px-4 py-3">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {tOr("trackerDashboard.sections.trackers", "Trackers")}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-y border-gray-200">
+                      <tr>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.tracker", "Nombre")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.status", "Estado")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.lastPosition", "Última posición")}</th>
+                        <th className="px-4 py-2 text-left font-medium text-gray-700">{tOr("trackerDashboard.events.lastSend", "Último envío")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(trackersUi || []).map((t) => {
+                        const live = t?.live || getTrackerLiveStatus(t?.latest);
+                        const lat = Number(t?.latest?.lat);
+                        const lng = Number(t?.latest?.lng);
+                        const ts = getPositionTs(t?.latest);
+                        return (
+                          <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-2 text-gray-900">{t?.baseLabel || t?.trackerLabel || t?.label || "—"}</td>
+                            <td className="px-4 py-2 text-gray-700">{live?.status || "offline"}</td>
+                            <td className="px-4 py-2 text-gray-700">
+                              {Number.isFinite(lat) && Number.isFinite(lng)
+                                ? `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+                                : "—"}
+                            </td>
+                            <td className="px-4 py-2 text-gray-700">{ts ? new Date(ts).toLocaleString() : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </section>
