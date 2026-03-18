@@ -87,6 +87,19 @@ export default function TrackerGpsPage() {
     }
   }, [location.search]);
 
+  const showTrackerDebug = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(location.search || "");
+      const debugQ = String(sp.get("debug") || "").trim().toLowerCase();
+      const debugByQuery = debugQ === "1" || debugQ === "true";
+      const debugByEnv =
+        String(import.meta.env.VITE_TRACKER_DEBUG_UI || "").trim().toLowerCase() === "true";
+      return debugByQuery || debugByEnv;
+    } catch {
+      return String(import.meta.env.VITE_TRACKER_DEBUG_UI || "").trim().toLowerCase() === "true";
+    }
+  }, [location.search]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -704,64 +717,68 @@ export default function TrackerGpsPage() {
 
         {trackerReady && hasSession && (
           <>
-            <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
-              <div>
-                {tt("trackerGps.lastSend", "Last send")}: {formattedLastSend}
-              </div>
+            {showTrackerDebug && (
+              <>
+                <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
+                  <div>
+                    {tt("trackerGps.lastSend", "Last send")}: {formattedLastSend}
+                  </div>
 
-              <div className="mt-2 text-[11px] text-slate-400 break-all">
-                {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt ({debug.send_fn})
-              </div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">
-                {tt("trackerGps.debugLabels.accept", "accept")}: proxy ({debug.accept_fn})
-              </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt ({debug.send_fn})
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    {tt("trackerGps.debugLabels.accept", "accept")}: proxy ({debug.accept_fn})
+                  </div>
 
-              <div className="mt-2 text-[11px] text-slate-400 break-all">
-                {tt("trackerGps.debugLabels.orgId", "org_id")}: {orgId || "—"}
-              </div>
-              <div className="mt-2 text-[11px] text-slate-400 break-all">
-                {tt("trackerGps.debugLabels.membership", "membership")}: {membershipStatus}
-              </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    {tt("trackerGps.debugLabels.orgId", "org_id")}: {orgId || "—"}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    {tt("trackerGps.debugLabels.membership", "membership")}: {membershipStatus}
+                  </div>
 
-              {tokenIss ? (
-                <div className="mt-2 text-[11px] text-slate-400 break-all">
-                  {tt("trackerGps.debugLabels.tokenIss", "token_iss")}: {tokenIss}
+                  {tokenIss ? (
+                    <div className="mt-2 text-[11px] text-slate-400 break-all">
+                      {tt("trackerGps.debugLabels.tokenIss", "token_iss")}: {tokenIss}
+                    </div>
+                  ) : null}
+
+                  {debug.last_token_ttl_sec != null ? (
+                    <div className="mt-2 text-[11px] text-slate-400 break-all">
+                      {tt("trackerGps.debugLabels.tokenTtlSec", "token_ttl_sec")}: {debug.last_token_ttl_sec}
+                    </div>
+                  ) : null}
+
+                  {debug.last_http_status != null ? (
+                    <div className="mt-2 text-[11px] text-slate-400 break-all">
+                      {tt("trackerGps.debugLabels.lastHttpStatus", "last_http_status")}: {debug.last_http_status}
+                    </div>
+                  ) : null}
+
+                  {coords ? (
+                    <div className="mt-2 text-xs text-slate-300">
+                      {tt("trackerGps.debugLabels.lat", "lat")}: {coords.lat?.toFixed?.(6)} |{" "}
+                      {tt("trackerGps.debugLabels.lng", "lng")}: {coords.lng?.toFixed?.(6)} |{" "}
+                      {tt("trackerGps.debugLabels.acc", "acc")}: {coords.accuracy ?? "—"}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-slate-400">
+                      {tt("trackerGps.waitingCoords", "Waiting for coordinates…")}
+                    </div>
+                  )}
                 </div>
-              ) : null}
 
-              {debug.last_token_ttl_sec != null ? (
-                <div className="mt-2 text-[11px] text-slate-400 break-all">
-                  {tt("trackerGps.debugLabels.tokenTtlSec", "token_ttl_sec")}: {debug.last_token_ttl_sec}
-                </div>
-              ) : null}
-
-              {debug.last_http_status != null ? (
-                <div className="mt-2 text-[11px] text-slate-400 break-all">
-                  {tt("trackerGps.debugLabels.lastHttpStatus", "last_http_status")}: {debug.last_http_status}
-                </div>
-              ) : null}
-
-              {coords ? (
-                <div className="mt-2 text-xs text-slate-300">
-                  {tt("trackerGps.debugLabels.lat", "lat")}: {coords.lat?.toFixed?.(6)} |{" "}
-                  {tt("trackerGps.debugLabels.lng", "lng")}: {coords.lng?.toFixed?.(6)} |{" "}
-                  {tt("trackerGps.debugLabels.acc", "acc")}: {coords.accuracy ?? "—"}
-                </div>
-              ) : (
-                <div className="mt-2 text-xs text-slate-400">
-                  {tt("trackerGps.waitingCoords", "Waiting for coordinates…")}
-                </div>
-              )}
-            </div>
-
-            <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
-              <summary className="cursor-pointer text-sm text-slate-200">
-                {tt("trackerGps.debugCopyPaste", "Debug (copy/paste)")}
-              </summary>
-              <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">
-                {JSON.stringify(debug, null, 2)}
-              </pre>
-            </details>
+                <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
+                  <summary className="cursor-pointer text-sm text-slate-200">
+                    {tt("trackerGps.debugCopyPaste", "Debug (copy/paste)")}
+                  </summary>
+                  <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">
+                    {JSON.stringify(debug, null, 2)}
+                  </pre>
+                </details>
+              </>
+            )}
 
             <div className="mt-3 text-xs">
               {tt("trackerGps.stateLabel", "Status")}:{" "}
