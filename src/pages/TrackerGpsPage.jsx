@@ -548,11 +548,7 @@ export default function TrackerGpsPage() {
       const withTimeout = (promise, ms = 4000) =>
         Promise.race([
           promise,
-          new Promise((resolve) => {
-            window.setTimeout(() => {
-              resolve("__timeout__");
-            }, ms);
-          }),
+          new Promise((resolve) => setTimeout(() => resolve("__timeout__"), ms)),
         ]);
 
       let clearedLoading = false;
@@ -566,6 +562,7 @@ export default function TrackerGpsPage() {
         const checkingMessage = tt("trackerGps.membership.checking", "Checking membership…");
         setMembershipStatus("pending");
         setMembershipDetail(checkingMessage);
+        setStatus(checkingMessage);
 
         const { data: sData } = await PRIMARY.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
