@@ -37,8 +37,21 @@ function normalizeDefault(orgs) {
   const defaults = orgs.filter((o) => !!o.is_default);
   if (defaults.length === 1) return { orgs, defaultOrg: defaults[0] };
 
-  // Si hay 0 o >1 defaults, escogemos el primero como default "de salida"
-  const chosen = orgs[0];
+  // Si hay 0 o >1 defaults, aplicar jerarquía: owner > admin > tracker (nunca tracker si hay superior)
+  const roleHierarchy = ['owner', 'admin', 'tracker'];
+  let chosen = null;
+
+  for (const role of roleHierarchy) {
+    const candidate = orgs.find((o) => String(o?.role || '').toLowerCase() === role);
+    if (candidate) {
+      chosen = candidate;
+      break;
+    }
+  }
+
+  // Fallback: primer org si no coincide ningún rol esperado
+  if (!chosen) chosen = orgs[0];
+
   const fixed = orgs.map((o) => ({ ...o, is_default: o.id === chosen.id }));
   return { orgs: fixed, defaultOrg: chosen };
 }
