@@ -40,6 +40,8 @@ Implementación:
 
 Regla:
 - Solo owner de esa org puede invitar tracker.
+- Invitar tracker no cambia la identidad del owner (la autorización se mantiene con JWT del owner).
+- El owner puede ejecutar invitaciones consecutivas; en mismo `org_id + email` el envío aplica cooldown de entrega.
 
 ## Flujo 3: Aceptación de invitación tracker
 
@@ -63,7 +65,7 @@ Implementación:
 /api/auth/session
   -> memberships activas del usuario
   -> get_current_org_id (si existe)
-  -> fallback a org por defecto
+  -> fallback a org por defecto (jerarquía owner > admin > tracker)
   -> AuthContext.currentOrg
   -> activeOrgId = currentOrg.id
 ```
@@ -76,6 +78,7 @@ Source of truth:
 Same-org (`org_id` igual):
 - Se aplica precedencia `owner > admin > tracker`.
 - No se permite downgrade automatico; se mantiene el rol mayor.
+- Trigger DB `trg_prevent_membership_role_downgrade` bloquea downgrade en la misma org como capa adicional.
 
 Cross-org (`org_id` distinto):
 - Los memberships son independientes.
@@ -86,3 +89,4 @@ Cross-org (`org_id` distinto):
 1. Upsert directo a `memberships` con `role='tracker'`.
 2. Overwrite de rol en same-org al aceptar invitación.
 3. Mostrar selector de org a usuario normal de una sola org.
+4. Usar cliente principal para callbacks/páginas tracker (`AuthCallback` y `TrackerGpsPage` deben usar cliente tracker en flujo tracker).

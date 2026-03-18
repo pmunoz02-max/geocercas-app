@@ -417,8 +417,6 @@ serve(async (req) => {
 
     const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com").replace(/\/$/, "");
 
-    console.log("[invite] start", { build: BUILD_TAG, ms0: Date.now() - t0 });
-
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return jsonResponse(500, { ok: false, error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY", build_tag: BUILD_TAG });
     }
@@ -439,18 +437,12 @@ serve(async (req) => {
       return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status, build_tag: BUILD_TAG });
     }
     const callerUserId = u.user_id;
-    console.log("[invite][debug] auth user resolved", { auth_user_id: callerUserId });
 
     const body = await req.json().catch(() => ({} as any));
-    console.log("[invite][debug] request body received", { body });
     const org_id = String(body?.org_id || "").trim();
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
     const assignment_id = String(body?.assignment_id || "").trim();
-    console.log("[invite][debug] parsed input fields", {
-      email_received: email || null,
-      org_id_received: org_id || null,
-    });
 
     let lang = "es";
     const bodyLangRaw = body?.lang;
@@ -470,12 +462,7 @@ serve(async (req) => {
       return jsonResponse(400, { ok: false, error: "Invalid assignment_id", build_tag: BUILD_TAG });
     }
 
-    console.log("[invite] input", { org_id, lang, assignment_id: assignment_id || null });
-
     const authOrgId = org_id;
-    console.log("[invite][debug] org id final used for authorization", {
-      org_id_final_for_authorization: authOrgId || null,
-    });
 
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
@@ -486,24 +473,19 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    console.log("[invite][debug] memberships query result", {
-      memberships_query_data: ownerRow ?? null,
-      memberships_query_error: ownerErr
-        ? { message: ownerErr.message, code: (ownerErr as any).code ?? null, details: (ownerErr as any).details ?? null }
-        : null,
-    });
-
     if (ownerErr) {
-      console.log("[invite] auth_check_failed_db_error", { msg: ownerErr.message });
+      console.error("[invite] auth_check_failed_db_error", {
+        build_tag: BUILD_TAG,
+        org_id: authOrgId,
+        caller_user_id: callerUserId,
+        message: ownerErr.message,
+        code: (ownerErr as any).code ?? null,
+        details: (ownerErr as any).details ?? null,
+      });
       return jsonResponse(500, { ok: false, error: "DB error checking owner", detail: ownerErr.message, build_tag: BUILD_TAG });
     }
 
     const roleNorm = normRole(ownerRow?.role);
-    console.log("[invite][debug] membership auth fields", {
-      role_found: ownerRow?.role ?? null,
-      role_normalized: roleNorm || null,
-      revoked_at_found: ownerRow?.revoked_at ?? null,
-    });
     let failureReason = null;
     if (!ownerRow) {
       failureReason = "NO_MEMBERSHIP_FOUND_FOR_USER_IN_ORG";
@@ -514,14 +496,6 @@ serve(async (req) => {
     }
 
     if (failureReason) {
-      console.warn("[invite][debug] returning 403 not owner", {
-        auth_user_id: callerUserId,
-        org_id_final_for_authorization: authOrgId,
-        email_received: email,
-        failure_reason: failureReason,
-        membership_row: ownerRow ?? null,
-      });
-      console.warn("[invite] access_denied", { org_id, failure_reason: failureReason });
       return jsonResponse(403, {
         ok: false,
         error: "Not allowed (must be owner of org)",
@@ -630,14 +604,18 @@ serve(async (req) => {
     const actionLink = String(linkData.properties.action_link);
 
     if (withinCooldown) {
-      console.log("[invite] cooldown", { secondsAgo: Math.round(sentSecondsAgo), remaining: cooldownRemaining, inviteId: trackerInviteId });
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {
           brevo_last_status: "cooldown",
           brevo_last_event_at: nowIso,
         });
       } catch (e) {
-        console.log("[invite] cooldown state update failed", { msg: String((e as any)?.message || e) });
+        console.error("[invite] invite_state_update_failed", {
+          build_tag: BUILD_TAG,
+          stage: "cooldown",
+          tracker_invite_id: trackerInviteId,
+          message: String((e as any)?.message || e),
+        });
       }
       return jsonResponse(200, {
         ok: true,
@@ -657,7 +635,6 @@ serve(async (req) => {
     }
 
     if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
-      console.log("[invite] brevo disabled (missing env)", { hasBrevoKey: !!BREVO_API_KEY, hasSender: !!BREVO_SENDER_EMAIL });
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {
           brevo_last_status: "disabled",
@@ -665,7 +642,12 @@ serve(async (req) => {
           brevo_last_error: "BREVO_DISABLED_MISSING_ENV",
         });
       } catch (e) {
-        console.log("[invite] brevo disabled state update failed", { msg: String((e as any)?.message || e) });
+        console.error("[invite] invite_state_update_failed", {
+          build_tag: BUILD_TAG,
+          stage: "brevo_disabled",
+          tracker_invite_id: trackerInviteId,
+          message: String((e as any)?.message || e),
+        });
       }
       return jsonResponse(200, {
         ok: true,
@@ -732,8 +714,6 @@ serve(async (req) => {
       `${actionLink}\n\n` +
       `${copy.footer2}\n`;
 
-    console.log("[invite] brevo send start", { to: email, subject });
-
     let brevoResp = "";
     let brevoMessageId = "";
     try {
@@ -750,7 +730,6 @@ serve(async (req) => {
         replyToName: BREVO_SENDER_NAME,
       });
       brevoMessageId = extractBrevoMessageId(brevoResp);
-      console.log("[invite] brevo send ok", { messageId: brevoMessageId || null });
 
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {
@@ -762,10 +741,21 @@ serve(async (req) => {
           brevo_last_error: null,
         });
       } catch (e) {
-        console.log("[invite] brevo state update failed", { msg: String((e as any)?.message || e) });
+        console.error("[invite] invite_state_update_failed", {
+          build_tag: BUILD_TAG,
+          stage: "brevo_sent",
+          tracker_invite_id: trackerInviteId,
+          message: String((e as any)?.message || e),
+        });
       }
     } catch (e) {
-      console.log("[invite] brevo send error", { msg: String((e as any)?.message || e) });
+      console.error("[invite] brevo_send_error", {
+        build_tag: BUILD_TAG,
+        tracker_invite_id: trackerInviteId,
+        org_id,
+        email,
+        message: String((e as any)?.message || e),
+      });
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {
           brevo_sent_at: nowIso,
@@ -774,7 +764,12 @@ serve(async (req) => {
           brevo_last_error: String((e as any)?.message || e).slice(0, 500),
         });
       } catch (e2) {
-        console.log("[invite] brevo error state update failed", { msg: String((e2 as any)?.message || e2) });
+        console.error("[invite] invite_state_update_failed", {
+          build_tag: BUILD_TAG,
+          stage: "brevo_send_error",
+          tracker_invite_id: trackerInviteId,
+          message: String((e2 as any)?.message || e2),
+        });
       }
       return jsonResponse(200, {
         ok: true,
@@ -809,7 +804,10 @@ serve(async (req) => {
       brevo: { ok: true, messageId: brevoMessageId || null, sample: String(brevoResp).slice(0, 160) },
     });
   } catch (e) {
-    console.log("[invite] error", { msg: String((e as any)?.message || e) });
+    console.error("[invite] unhandled_error", {
+      build_tag: BUILD_TAG,
+      message: String((e as any)?.message || e),
+    });
     return jsonResponse(500, { ok: false, error: String((e as any)?.message || e), build_tag: BUILD_TAG });
   }
 });

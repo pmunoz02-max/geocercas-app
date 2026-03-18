@@ -23,6 +23,7 @@ Proyección en frontend:
 Regla práctica:
 - No tomar `activeOrgId` desde query params ni estado local de página como fuente principal.
 - El estado local solo puede ser auxiliar; la sesión canónica manda.
+- En fallback de org por defecto se aplica jerarquía de rol: `owner > admin > tracker`.
 
 ## Bootstrap owner (alta inicial)
 
@@ -48,6 +49,8 @@ Path:
 Regla de autorización:
 - El emisor debe ser `owner` activo en esa `org_id`.
 - Si no es owner, responde forbidden.
+- La identidad del owner se valida con su JWT (`x-user-jwt`) y no se sustituye por identidad tracker en este flujo.
+- El owner puede emitir invitaciones consecutivas; para el mismo `org_id + email` se mantiene cooldown de entrega sin cambiar identidad.
 
 ### Aceptación de invitación tracker
 
@@ -92,3 +95,4 @@ Comportamiento explícito:
 
 - Capa runtime (principal): `safeUpsertMembership` y flows proxy/edge.
 - Capa DB adicional (segun despliegue): RPC `set_member_role` y `accept_invitation` con logica de no degradación en same-org (`supabase/migrations/20260317000100_*`, `20260317000300_*`).
+- Capa DB (preview hardening): trigger `trg_prevent_membership_role_downgrade` en `memberships` bloquea downgrade en misma org (`owner/admin -> tracker`) como defensa en profundidad.
