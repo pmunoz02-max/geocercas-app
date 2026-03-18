@@ -122,6 +122,8 @@ export default function TrackerGpsPage() {
   const [membershipStatus, setMembershipStatus] = useState("pending");
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
+  const [isActivating, setIsActivating] = useState(false);
+  const [activationStatus, setActivationStatus] = useState("");
 
   const [disclosureAccepted, setDisclosureAccepted] = useState(false);
 
@@ -251,6 +253,16 @@ export default function TrackerGpsPage() {
       }
     })();
   }, [trackerReady, PRIMARY, lang]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      console.warn("[activation-ui] forced unblock");
+      setIsActivating(false);
+      setActivationStatus("");
+    }, 1500);
+
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     if (!trackerReady || !PRIMARY) return;
@@ -552,24 +564,21 @@ export default function TrackerGpsPage() {
     onboardingLockRef.current = true;
 
     (async () => {
-      let clearedLoading = false;
-      const setLoading = (isLoading) => {
-        if (isLoading) {
-          setMembershipStatus("pending");
-          setMembershipDetail("");
-          return;
-        }
-
+      let unblocked = false;
+      const unblock = () => {
+        if (unblocked) return;
+        unblocked = true;
+        console.log("[activation-ui] unblock");
+        setIsActivating(false);
+        setActivationStatus("");
         setMembershipStatus("ok");
         setMembershipDetail("");
       };
-      const finishActivation = () => {
-        clearedLoading = true;
-        setLoading(false);
-      };
 
       try {
-        setLoading(true);
+        console.log("[activation-ui] start");
+        setIsActivating(true);
+        setActivationStatus("Activating tracker in the org...");
         setStatus("Activating tracker in the org...");
 
         const { data: sData } = await PRIMARY.auth.getSession();
@@ -585,12 +594,12 @@ export default function TrackerGpsPage() {
         } else {
           console.warn("[activation] missing session or org_id");
         }
+
+        unblock();
       } catch (e) {
         console.error("[activation] failed", e);
       } finally {
-        if (!clearedLoading) {
-          finishActivation();
-        }
+        unblock();
         onboardingLockRef.current = false;
       }
     })();
@@ -895,7 +904,7 @@ export default function TrackerGpsPage() {
 
             <div className="mt-3 text-xs">
               {tt("trackerGps.stateLabel", "Status")}:{" "}
-              <span className="text-slate-100">{status}</span>
+              <span className="text-slate-100">{isActivating ? activationStatus : status}</span>
             </div>
 
             {membershipDetail ? (
