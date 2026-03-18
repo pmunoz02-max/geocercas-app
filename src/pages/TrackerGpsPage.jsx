@@ -570,63 +570,110 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     let interval;
     let timeout;
+    let pollSuccess = false;
 
-    async function tryAccept() {
+    const tryAcceptInvite = async (reason = "unknown") => {
       try {
-        const { data } = await supabaseTracker.auth.getSession();
-        const user = data?.session?.user;
-
-        if (!user) return;
-
-        const user_id = user.id;
-        const user_email = user.email;
-
         const params = new URLSearchParams(window.location.search);
+        const urlOrgId = params.get("org_id");
+
+        if (urlOrgId) {
+          localStorage.setItem("geocercas_tracker_org_id", urlOrgId);
+          sessionStorage.setItem("geocercas_tracker_org_id", urlOrgId);
+        }
+
         const org_id =
-          params.get("org_id") ||
+          urlOrgId ||
           localStorage.getItem("geocercas_tracker_org_id") ||
           sessionStorage.getItem("geocercas_tracker_org_id") ||
           "";
 
-        if (!org_id || !user_id) return;
+        const { data } = await supabaseTracker.auth.getSession();
+        const userId = data?.session?.user?.id;
 
-        const key = "accept_invite_" + org_id + "_" + user_id;
+        console.log("[accept-invite] start", { reason, org_id, userId });
 
-        if (localStorage.getItem(key)) {
-          clearInterval(interval);
-          clearTimeout(timeout);
-          return;
+        if (!org_id) {
+          console.warn("[accept-invite] skipped: missing org_id");
+          return false;
         }
 
-        const res = await fetch("/api/accept-tracker-invite", {
+        if (!userId) {
+          console.warn("[accept-invite] skipped: missing userId");
+          return false;
+        }
+
+        const dedupeKey = "accept_invite_" + org_id + "_" + userId;
+        if (localStorage.getItem(dedupeKey)) {
+          console.log("[accept-invite] skipped: deduped", { dedupeKey });
+          return true;
+        }
+
+        const response = await fetch("/api/accept-tracker-invite", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            org_id,
-            user_id,
-            email: user_email,
-          }),
+          body: JSON.stringify({ org_id }),
         });
 
-        if (res.ok) {
-          localStorage.setItem(key, "1");
-          clearInterval(interval);
-          clearTimeout(timeout);
+        const bodyText = await response.text();
+        console.log("[accept-invite] response", {
+          status: response.status,
+          bodyText,
+        });
+
+        if (!response.ok) {
+          return false;
         }
-      } catch (_) {
-        // silent
+
+        localStorage.setItem(dedupeKey, "1");
+        console.log("[accept-invite] success", { dedupeKey });
+        return true;
+      } catch (error) {
+        console.error("[accept-invite] failed", error);
+        return false;
+      }
+    };
+
+    // 1. Init on mount
+    tryAcceptInvite("mount");
+
+    // 2. Reactivo: listener de auth state change
+    const { data: sub } = supabaseTracker.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session?.user) {
+          const success = await tryAcceptInvite("auth-change");
+          if (success) {
+            pollSuccess = true;
+          }
+        }
+      }
+    );
+
+    // 3. Fallback polling
+    async function tryPoll() {
+      if (pollSuccess) {
+        clearInterval(interval);
+        clearTimeout(timeout);
+        return;
+      }
+      const success = await tryAcceptInvite("polling");
+      if (success) {
+        pollSuccess = true;
+        clearInterval(interval);
+        clearTimeout(timeout);
       }
     }
 
-    interval = setInterval(tryAccept, 1000);
+    interval = setInterval(tryPoll, 1000);
 
     timeout = setTimeout(() => {
       clearInterval(interval);
     }, 15000);
 
     return () => {
+      sub?.subscription?.unsubscribe();
       clearInterval(interval);
       clearTimeout(timeout);
     };
