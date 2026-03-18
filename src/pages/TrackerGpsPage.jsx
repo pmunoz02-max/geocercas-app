@@ -525,26 +525,19 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!trackerReady || !hasSession || !PRIMARY) return;
 
+    const params = new URLSearchParams(window.location.search);
+    const urlOrgId = params.get("org_id") || "";
+
+    if (urlOrgId) {
+      localStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
+      sessionStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
+    }
+
     const resolvedOrgId = String(
-      (() => {
-        try {
-          const params = new URLSearchParams(window.location.search);
-          return (
-            params.get("org_id") ||
-            localStorage.getItem(LS_TRACKER_ORG_KEY) ||
-            sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
-            orgId ||
-            ""
-          );
-        } catch {
-          return (
-            localStorage.getItem(LS_TRACKER_ORG_KEY) ||
-            sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
-            orgId ||
-            ""
-          );
-        }
-      })()
+      urlOrgId ||
+        localStorage.getItem(LS_TRACKER_ORG_KEY) ||
+        sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
+        ""
     ).trim();
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) return;
@@ -570,12 +563,14 @@ export default function TrackerGpsPage() {
       };
 
       try {
+        const checkingMessage = tt("trackerGps.membership.checking", "Checking membership…");
         setMembershipStatus("pending");
-        setMembershipDetail(tt("trackerGps.membership.checking", "Checking membership…"));
+        setMembershipDetail(checkingMessage);
 
         const { data: sData } = await PRIMARY.auth.getSession();
         const tokenB = sData?.session?.access_token || "";
-        const userId = sData?.session?.user?.id || "";
+        const sessionUser = sData?.session?.user || null;
+        const userId = sessionUser?.id || "";
 
         console.log("[tracker-membership] start", { orgId: resolvedOrgId, userId });
 
@@ -583,33 +578,39 @@ export default function TrackerGpsPage() {
           await tryAcceptInvite("activation");
         }
 
-        if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
-          console.warn("[tracker-membership] failed", { orgId: resolvedOrgId, userId });
-          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
-          finishActivation("failed", "");
-          return;
-        }
+        const checkMembership = async () => {
+          if (!tokenB || !looksLikeJwt(tokenB) || !userId) return null;
 
-        const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${resolvedOrgId}`;
-        try {
-          if (sessionStorage.getItem(ssKey) === "1") {
-            console.log("[tracker-membership] ok", { orgId: resolvedOrgId, userId });
-            finishActivation(
-              "ok",
-              tt("trackerGps.membership.okSessionCache", "Membership OK (session cache).")
-            );
-            return;
-          }
-        } catch {}
+          const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${resolvedOrgId}`;
+          try {
+            if (sessionStorage.getItem(ssKey) === "1") {
+              return { role: "cached", cached: true };
+            }
+          } catch {}
 
-        const membershipResult = await withTimeout(
-          PRIMARY.from("memberships")
+          const { data: mRows, error: mErr } = await PRIMARY.from("memberships")
             .select("role, revoked_at, org_id, user_id")
             .eq("org_id", resolvedOrgId)
             .eq("user_id", userId)
-            .limit(1),
-          4000
-        );
+            .limit(1);
+
+          if (mErr) {
+            throw mErr;
+          }
+
+          const membership = (mRows || [])[0];
+          if (!membership || membership.revoked_at) {
+            return null;
+          }
+
+          try {
+            sessionStorage.setItem(ssKey, "1");
+          } catch {}
+
+          return membership;
+        };
+
+        const membershipResult = await withTimeout(checkMembership(), 4000);
 
         if (membershipResult === "__timeout__") {
           console.warn("[tracker-membership] timeout", { orgId: resolvedOrgId, userId });
@@ -619,45 +620,27 @@ export default function TrackerGpsPage() {
         }
 
         if (!membershipResult) {
-          console.warn("[tracker-membership] failed", { orgId: resolvedOrgId, userId });
+          console.warn("[tracker-membership] missing", { orgId: resolvedOrgId, userId });
           console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
           finishActivation("failed", "");
           return;
         }
 
-        const { data: mRows, error: mErr } = membershipResult;
-
-        if (mErr) {
-          console.warn("[tracker-membership] failed", {
-            orgId: resolvedOrgId,
-            userId,
-            message: mErr.message,
-          });
-          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
-          finishActivation("failed", "");
-          return;
-        }
-
-        const m = (mRows || [])[0];
-        if (m && !m.revoked_at) {
-          console.log("[tracker-membership] ok", { orgId: resolvedOrgId, userId, role: m.role });
-          finishActivation(
-            "ok",
-            tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
-              role: m.role,
-            })
-          );
-          try {
-            sessionStorage.setItem(ssKey, "1");
-          } catch {}
-          return;
-        }
-
-        console.warn("[tracker-membership] missing", { orgId: resolvedOrgId, userId });
-        console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
-        finishActivation("failed", "");
+        console.log("[tracker-membership] ok", {
+          orgId: resolvedOrgId,
+          userId,
+          role: membershipResult.role,
+        });
+        finishActivation(
+          "ok",
+          membershipResult.cached
+            ? tt("trackerGps.membership.okSessionCache", "Membership OK (session cache).")
+            : tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
+                role: membershipResult.role,
+              })
+        );
       } catch (e) {
-        console.warn("[tracker-membership] failed", {
+        console.error("[tracker-membership] failed", {
           orgId: resolvedOrgId,
           message: String(e?.message || e),
         });
