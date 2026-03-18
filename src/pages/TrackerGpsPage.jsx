@@ -155,6 +155,7 @@ export default function TrackerGpsPage() {
   const onboardingLockRef = useRef(false);
   const didHashSessionRef = useRef(false);
   const acceptInFlightRef = useRef(new Set());
+  const blockingUiLoggedRef = useRef(false);
 
   const PRIMARY = supabaseTracker;
 
@@ -257,6 +258,13 @@ export default function TrackerGpsPage() {
     console.log("[activation-gate] disabled");
     console.log("[activation-gate] source=TrackerGpsPage");
   }, []);
+
+  useEffect(() => {
+    if (!isActivationBgRunning) return;
+    if (blockingUiLoggedRef.current) return;
+    console.warn("[tracker-blocking-ui] disabled", { source: "TrackerGpsPage" });
+    blockingUiLoggedRef.current = true;
+  }, [isActivationBgRunning]);
 
   useEffect(() => {
     if (!trackerReady || !PRIMARY) return;
@@ -677,7 +685,7 @@ export default function TrackerGpsPage() {
       if (membershipStatus === "ok") {
         setStatus(tt("trackerGps.status.active", "Tracker active"));
       } else if (membershipStatus === "pending") {
-        setStatus(tt("trackerGps.status.activating", "Activating tracker in the org…"));
+        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
       } else {
         setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
       }
