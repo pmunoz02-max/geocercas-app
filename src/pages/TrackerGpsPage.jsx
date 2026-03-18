@@ -453,7 +453,18 @@ export default function TrackerGpsPage() {
     onboardingLockRef.current = true;
 
     (async () => {
+      const withTimeout = (promise, label) =>
+        Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            window.setTimeout(() => {
+              reject(new Error(`${label} timed out after 4000ms`));
+            }, 4000);
+          }),
+        ]);
+
       try {
+        console.log("[tracker-membership] start", { orgId });
         setMembershipStatus("pending");
         setMembershipDetail(tt("trackerGps.membership.checking", "Checking membership…"));
 
@@ -462,16 +473,16 @@ export default function TrackerGpsPage() {
         const userId = sData?.session?.user?.id || "";
 
         if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
+          console.warn("[tracker-membership] fail-open: missing token/user", { orgId, userId });
           setMembershipStatus("failed");
-          setMembershipDetail(
-            tt("trackerGps.membership.noValidTokenUser", "No valid token/user in /tracker-gps.")
-          );
+          setMembershipDetail("");
           return;
         }
 
         const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${orgId}`;
         try {
           if (sessionStorage.getItem(ssKey) === "1") {
+            console.log("[tracker-membership] ok: session cache", { orgId, userId });
             setMembershipStatus("ok");
             setMembershipDetail(
               tt("trackerGps.membership.okSessionCache", "Membership OK (session cache).")
@@ -480,23 +491,29 @@ export default function TrackerGpsPage() {
           }
         } catch {}
 
-        const { data: mRows, error: mErr } = await PRIMARY
-          .from("memberships")
-          .select("role, revoked_at, org_id, user_id")
-          .eq("org_id", orgId)
-          .eq("user_id", userId)
-          .limit(1);
+        const { data: mRows, error: mErr } = await withTimeout(
+          PRIMARY.from("memberships")
+            .select("role, revoked_at, org_id, user_id")
+            .eq("org_id", orgId)
+            .eq("user_id", userId)
+            .limit(1),
+          "membership lookup"
+        );
 
         if (mErr) {
+          console.warn("[tracker-membership] fail-open: lookup error", {
+            orgId,
+            userId,
+            message: mErr.message,
+          });
           setMembershipStatus("failed");
-          setMembershipDetail(
-            `${tt("trackerGps.membership.membershipsSelectError", "memberships select error:")} ${mErr.message}`
-          );
+          setMembershipDetail("");
           return;
         }
 
         const m = (mRows || [])[0];
         if (m && !m.revoked_at) {
+          console.log("[tracker-membership] confirmed", { orgId, userId, role: m.role });
           setMembershipStatus("ok");
           setMembershipDetail(
             tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
@@ -509,58 +526,16 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        setMembershipDetail(
-          tt("trackerGps.membership.runningAccept", "No membership. Running accept-tracker-invite")
-        );
-
-        try {
-          await invokeAcceptTrackerInvite({ org_id: orgId });
-        } catch (e) {
-          setMembershipStatus("failed");
-          setMembershipDetail(
-            `${tt("trackerGps.membership.acceptError", "accept-tracker-invite error:")} ${String(e?.message || e)}`
-          );
-          return;
-        }
-
-        const { data: mRows2, error: mErr2 } = await PRIMARY
-          .from("memberships")
-          .select("role, revoked_at, org_id, user_id")
-          .eq("org_id", orgId)
-          .eq("user_id", userId)
-          .limit(1);
-
-        if (mErr2) {
-          setMembershipStatus("failed");
-          setMembershipDetail(
-            `${tt("trackerGps.membership.membershipsRecheckError", "memberships recheck error:")} ${mErr2.message}`
-          );
-          return;
-        }
-
-        const m2 = (mRows2 || [])[0];
-        if (!m2 || m2.revoked_at) {
-          setMembershipStatus("failed");
-          setMembershipDetail(
-            tt(
-              "trackerGps.membership.acceptReturnedButNotCreated",
-              "accept-tracker-invite returned OK but membership was not created."
-            )
-          );
-          return;
-        }
-
-        setMembershipStatus("ok");
-        setMembershipDetail(tt("trackerGps.membership.acceptOk", "accept-tracker-invite OK."));
-
-        try {
-          sessionStorage.setItem(ssKey, "1");
-        } catch {}
-      } catch (e) {
+        console.warn("[tracker-membership] fail-open: membership missing", { orgId, userId });
         setMembershipStatus("failed");
-        setMembershipDetail(
-          `${tt("trackerGps.membership.onboardingException", "onboarding exception:")} ${String(e?.message || e)}`
-        );
+        setMembershipDetail("");
+      } catch (e) {
+        console.warn("[tracker-membership] fail-open: exception", {
+          orgId,
+          message: String(e?.message || e),
+        });
+        setMembershipStatus("failed");
+        setMembershipDetail("");
       } finally {
         onboardingLockRef.current = false;
       }
@@ -568,6 +543,8 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
 
   useEffect(() => {
+    if (!trackerReady) return;
+
     let interval;
     let timeout;
     let pollSuccess = false;
@@ -636,8 +613,16 @@ export default function TrackerGpsPage() {
       }
     };
 
-    // 1. Init on mount
-    tryAcceptInvite("mount");
+    // 1. As soon as session + org_id are available
+    if (hasSession && orgId) {
+      tryAcceptInvite("post-auth").then((success) => {
+        if (success) {
+          pollSuccess = true;
+        }
+      });
+    } else {
+      tryAcceptInvite("mount");
+    }
 
     // 2. Reactivo: listener de auth state change
     const { data: sub } = supabaseTracker.auth.onAuthStateChange(
@@ -677,7 +662,7 @@ export default function TrackerGpsPage() {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, []);
+  }, [trackerReady, hasSession, orgId]);
 
   useEffect(() => {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
@@ -706,7 +691,7 @@ export default function TrackerGpsPage() {
       } else if (membershipStatus === "pending") {
         setStatus(tt("trackerGps.status.activating", "Activating tracker in the org…"));
       } else {
-        setStatus(tt("trackerGps.status.noPermission", "Tracker without permission / onboarding"));
+        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
       }
     };
 
