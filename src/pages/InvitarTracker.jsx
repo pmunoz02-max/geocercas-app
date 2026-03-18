@@ -466,19 +466,45 @@ export default function InvitarTracker() {
             .trim()
         : "";
 
+      // [DEBUG TEMP] – loguear justo antes de invocar la edge function
+      const __debugPayload = {
+        email: cleanEmail,
+        org_id: orgId,
+        role: "tracker",
+        lang,
+        name,
+        caller_jwt,
+        assignment_id: selectedAssignmentId,
+      };
+
+      let __sessionUserId = "";
+      let __sessionUserEmail = "";
+      try {
+        const { data: __sessionData } = await supabase.auth.getSession();
+        __sessionUserId = String(__sessionData?.session?.user?.id || "").trim();
+        __sessionUserEmail = String(__sessionData?.session?.user?.email || "").trim();
+      } catch {
+        // debug only
+      }
+
+      console.debug("[InvitarTracker] PRE-FETCH debug", {
+        emailDestino: cleanEmail,
+        orgIdEnviado: orgId,
+        authUserIdReal: String(auth?.user?.id || "").trim() || "(empty)",
+        sessionUserId: __sessionUserId || "(empty)",
+        authUserEmail: String(auth?.user?.email || "").trim() || __sessionUserEmail || "(empty)",
+        activeOrgIdAuthContext:
+          auth?.activeOrgId ?? auth?.orgId ?? auth?.currentOrgId ?? "(no field)",
+        currentRole: auth?.currentRole ?? auth?.role ?? "(no field)",
+        payloadFinal: __debugPayload,
+      });
+      // [/DEBUG TEMP]
+
       const res = await fetch("/api/invite-tracker", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          email: cleanEmail,
-          org_id: orgId,
-          role: "tracker",
-          lang,
-          name,
-          caller_jwt,
-          assignment_id: selectedAssignmentId,
-        }),
+        body: JSON.stringify(__debugPayload),
       });
 
       const text = await res.text().catch(() => "");
@@ -488,6 +514,13 @@ export default function InvitarTracker() {
       } catch {
         body = { raw: text };
       }
+
+      // [DEBUG TEMP] – loguear justo después de la respuesta
+      console.debug("[InvitarTracker] POST-FETCH debug", {
+        httpStatus: res.status,
+        ...(res.ok ? {} : { errorBody: body }),
+      });
+      // [/DEBUG TEMP]
 
       if (!res.ok) {
         const msg = body?.error || body?.message || body?.raw || `HTTP ${res.status}`;

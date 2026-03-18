@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 function getQueryParam(search: string, key: string) {
   const v = new URLSearchParams(search).get(key);
@@ -113,6 +114,8 @@ export default function AuthCallback() {
     return safeNextPath(n || "/inicio");
   }, [location.search]);
 
+  const isTrackerFlow = useMemo(() => next.startsWith("/tracker-gps"), [next]);
+
   useEffect(() => {
     let alive = true;
 
@@ -144,9 +147,11 @@ export default function AuthCallback() {
         const token_hash = getQueryParam(location.search, "token_hash");
         const type = normalizeOtpType(getQueryParam(location.search, "type"));
 
+        const authClient = isTrackerFlow ? supabaseTracker : supabase;
+
         if (token_hash) {
           setStatus("Confirmando sesión (token_hash)…");
-          const { error: vErr } = await supabase.auth.verifyOtp({
+          const { error: vErr } = await authClient.auth.verifyOtp({
             type: type as any,
             token_hash,
           });
@@ -156,7 +161,7 @@ export default function AuthCallback() {
           const code = getQueryParam(location.search, "code");
           if (code) {
             setStatus("Confirmando sesión (code)…");
-            const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+            const { error: exErr } = await authClient.auth.exchangeCodeForSession(code);
             if (exErr) throw exErr;
           } else {
             // 3) Implicit: #access_token=...&refresh_token=...
@@ -165,7 +170,7 @@ export default function AuthCallback() {
 
             if (access_token && refresh_token) {
               setStatus("Confirmando sesión (token)…");
-              const { error: ssErr } = await supabase.auth.setSession({
+              const { error: ssErr } = await authClient.auth.setSession({
                 access_token,
                 refresh_token,
               });
@@ -178,7 +183,7 @@ export default function AuthCallback() {
         }
 
         // 5) Obtener sesión desde el cliente
-        const { data } = await supabase.auth.getSession();
+        const { data } = await authClient.auth.getSession();
         const session = data?.session;
 
         if (!session?.access_token || !session?.refresh_token) {
@@ -186,12 +191,14 @@ export default function AuthCallback() {
         }
 
         // 6) Bootstrap cookies (tg_at/tg_rt)
-        setStatus("Creando cookies seguras…");
-        await bootstrapCookie(
-          session.access_token,
-          session.refresh_token,
-          typeof session.expires_in === "number" ? session.expires_in : undefined
-        );
+        if (!isTrackerFlow) {
+          setStatus("Creando cookies seguras…");
+          await bootstrapCookie(
+            session.access_token,
+            session.refresh_token,
+            typeof session.expires_in === "number" ? session.expires_in : undefined
+          );
+        }
 
         // 7) Redirigir al panel (hard redirect)
         setStatus("Entrando…");
@@ -212,7 +219,7 @@ export default function AuthCallback() {
     return () => {
       alive = false;
     };
-  }, [location.search, next]);
+  }, [isTrackerFlow, location.search, next]);
 
   const onGoLogin = () => {
     window.location.assign(`/login?next=${encodeURIComponent(next)}`);

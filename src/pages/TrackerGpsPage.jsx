@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
+import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
@@ -141,7 +142,7 @@ export default function TrackerGpsPage() {
   const onboardingLockRef = useRef(false);
   const didHashSessionRef = useRef(false);
 
-  const PRIMARY = supabase;
+  const PRIMARY = supabaseTracker || supabase;
 
   useEffect(() => {
     setStatus(tt("trackerGps.status.initializing", "Starting tracker…"));

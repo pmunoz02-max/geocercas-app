@@ -439,12 +439,18 @@ serve(async (req) => {
       return jsonResponse(401, { ok: false, error: "Invalid JWT", detail: u.body, status: u.status, build_tag: BUILD_TAG });
     }
     const callerUserId = u.user_id;
+    console.log("[invite][debug] auth user resolved", { auth_user_id: callerUserId });
 
     const body = await req.json().catch(() => ({} as any));
+    console.log("[invite][debug] request body received", { body });
     const org_id = String(body?.org_id || "").trim();
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
     const assignment_id = String(body?.assignment_id || "").trim();
+    console.log("[invite][debug] parsed input fields", {
+      email_received: email || null,
+      org_id_received: org_id || null,
+    });
 
     let lang = "es";
     const bodyLangRaw = body?.lang;
@@ -466,14 +472,26 @@ serve(async (req) => {
 
     console.log("[invite] input", { org_id, lang, assignment_id: assignment_id || null });
 
+    const authOrgId = org_id;
+    console.log("[invite][debug] org id final used for authorization", {
+      org_id_final_for_authorization: authOrgId || null,
+    });
+
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
       .select("role, revoked_at")
-      .eq("org_id", org_id)
+      .eq("org_id", authOrgId)
       .eq("user_id", callerUserId)
       .is("revoked_at", null)
       .limit(1)
       .maybeSingle();
+
+    console.log("[invite][debug] memberships query result", {
+      memberships_query_data: ownerRow ?? null,
+      memberships_query_error: ownerErr
+        ? { message: ownerErr.message, code: (ownerErr as any).code ?? null, details: (ownerErr as any).details ?? null }
+        : null,
+    });
 
     if (ownerErr) {
       console.log("[invite] auth_check_failed_db_error", { msg: ownerErr.message });
@@ -481,6 +499,11 @@ serve(async (req) => {
     }
 
     const roleNorm = normRole(ownerRow?.role);
+    console.log("[invite][debug] membership auth fields", {
+      role_found: ownerRow?.role ?? null,
+      role_normalized: roleNorm || null,
+      revoked_at_found: ownerRow?.revoked_at ?? null,
+    });
     let failureReason = null;
     if (!ownerRow) {
       failureReason = "NO_MEMBERSHIP_FOUND_FOR_USER_IN_ORG";
@@ -491,6 +514,13 @@ serve(async (req) => {
     }
 
     if (failureReason) {
+      console.warn("[invite][debug] returning 403 not owner", {
+        auth_user_id: callerUserId,
+        org_id_final_for_authorization: authOrgId,
+        email_received: email,
+        failure_reason: failureReason,
+        membership_row: ownerRow ?? null,
+      });
       console.warn("[invite] access_denied", { org_id, failure_reason: failureReason });
       return jsonResponse(403, {
         ok: false,
