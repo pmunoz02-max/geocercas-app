@@ -582,7 +582,11 @@ export default function TrackerGpsPage() {
         const user_email = user.email;
 
         const params = new URLSearchParams(window.location.search);
-        const org_id = params.get("org_id");
+        const org_id =
+          params.get("org_id") ||
+          localStorage.getItem("geocercas_tracker_org_id") ||
+          sessionStorage.getItem("geocercas_tracker_org_id") ||
+          "";
 
         if (!org_id || !user_id) return;
 
