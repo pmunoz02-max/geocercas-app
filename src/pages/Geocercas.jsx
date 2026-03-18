@@ -10,16 +10,13 @@ import { listGeocercas } from "@/lib/geocercasApi";
 const DBG = "[GEOCERCAS_PAGE_DBG_v2]";
 
 export default function GeocercasPage() {
-  const { user, role, currentOrg, orgs, loading } = useAuth();
+  const { user, role, currentOrg, activeOrgId, organizations, loading } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
   const canEdit = role === "owner" || role === "admin";
 
-  const orgId = useMemo(
-    () => currentOrg?.org_id ?? currentOrg?.id ?? null,
-    [currentOrg]
-  );
+  const orgId = useMemo(() => activeOrgId || null, [activeOrgId]);
 
   const [geocercas, setGeocercas] = useState([]);
   const [loadingGeocercas, setLoadingGeocercas] = useState(false);
@@ -44,7 +41,7 @@ export default function GeocercasPage() {
       try {
         setLoadingGeocercas(true);
 
-        const rows = await listGeocercas({ onlyActive: true, limit: 2000 });
+        const rows = await listGeocercas({ orgId, onlyActive: true, limit: 2000 });
 
         if (cancelled) return;
 
@@ -109,7 +106,7 @@ export default function GeocercasPage() {
   const currentOrgName =
     currentOrg?.name ||
     currentOrg?.org_name ||
-    orgs?.find((o) => o.id === orgId)?.name ||
+    organizations?.find((o) => o.id === orgId)?.name ||
     "Sin nombre";
 
   const geocercasForMap =

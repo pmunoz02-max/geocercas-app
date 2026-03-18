@@ -102,11 +102,13 @@ export async function listPersonal({
   q = "",
   onlyActive = true,
   limit = 500,
+  orgId = null,
 } = {}) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   params.set("onlyActive", onlyActive ? "1" : "0");
   params.set("limit", String(limit));
+  if (orgId) params.set("org_id", String(orgId));
 
   const data = await request("GET", `?${params.toString()}`);
   return data.items || [];

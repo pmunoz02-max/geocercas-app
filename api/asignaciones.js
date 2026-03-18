@@ -130,7 +130,7 @@ function isExclusionConstraintError(err) {
    Context Resolver
 ========================= */
 
-async function resolveContext(req) {
+async function resolveContext(req, { requestedOrgId = null } = {}) {
   const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
   const SUPABASE_ANON_KEY = getEnv([
     "SUPABASE_ANON_KEY",
@@ -178,16 +178,62 @@ async function resolveContext(req) {
 
   const sbDb = sbSrv || sbUser;
 
-  const { data: mRow, error: mErr } = await sbDb
-    .from("memberships")
-    .select("org_id, role, is_default, revoked_at")
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .order("is_default", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const loadMembershipForOrg = async (orgId) => {
+    if (!orgId) return null;
+    const { data, error } = await sbDb
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (error) return null;
+    return data?.org_id ? data : null;
+  };
 
-  if (mErr) return { ok: false, status: 500, error: "Membership lookup failed", details: mErr.message };
+  const loadCurrentOrgFromUserCurrentOrg = async () => {
+    const { data, error } = await sbDb
+      .from("user_current_org")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) return null;
+    return data?.org_id ? String(data.org_id) : null;
+  };
+
+  const loadDefaultMembership = async () => {
+    const { data, error } = await sbDb
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .is("revoked_at", null)
+      .order("is_default", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) return { data: null, error };
+    return { data, error: null };
+  };
+
+  let mRow = null;
+
+  if (requestedOrgId) {
+    mRow = await loadMembershipForOrg(String(requestedOrgId));
+    if (!mRow) {
+      return { ok: false, status: 403, error: "Requested org is not available for current user" };
+    }
+  }
+
+  if (!mRow) {
+    const currentOrgId = await loadCurrentOrgFromUserCurrentOrg();
+    if (currentOrgId) mRow = await loadMembershipForOrg(currentOrgId);
+  }
+
+  if (!mRow) {
+    const { data, error } = await loadDefaultMembership();
+    if (error) return { ok: false, status: 500, error: "Membership lookup failed", details: error.message };
+    mRow = data || null;
+  }
+
   if (!mRow?.org_id) return { ok: false, status: 403, error: "No membership" };
 
   return { ok: true, ctx: { org_id: String(mRow.org_id) }, user, sbDb };
@@ -369,8 +415,9 @@ export default async function handler(req, res) {
 
     const q = getQuery(req);
     const action = String(q.action || "bundle");
+    const requestedOrgId = q?.org_id || q?.orgId || null;
 
-    const rc = await resolveContext(req);
+    const rc = await resolveContext(req, { requestedOrgId });
     if (!rc.ok) return send(res, rc.status || 500, { ok: false, error: rc.error, details: rc.details });
 
     const orgId = rc.ctx.org_id;

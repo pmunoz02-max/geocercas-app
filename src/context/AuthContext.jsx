@@ -95,6 +95,14 @@ function normalizeRole(v) {
   return String(v).trim().toLowerCase();
 }
 
+function toBoolLoose(v) {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v === 1;
+  if (typeof v !== "string") return false;
+  const s = v.trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "on";
+}
+
 function extractServerOrgId(data) {
   return (
     data?.current_org_id ??
@@ -139,6 +147,30 @@ function extractOrganizations(data) {
     .filter(Boolean);
 }
 
+function extractCanSwitchOrganizations(data) {
+  const direct =
+    data?.can_switch_orgs ??
+    data?.canSwitchOrgs ??
+    data?.can_switch_organizations ??
+    data?.canSwitchOrganizations ??
+    data?.internal_multi_org_admin ??
+    data?.is_internal_multi_org_admin ??
+    null;
+
+  if (toBoolLoose(direct)) return true;
+
+  const user = data?.user || null;
+  const appMeta = user?.app_metadata || {};
+  const userMeta = user?.user_metadata || {};
+
+  return toBoolLoose(
+    appMeta?.can_switch_orgs ||
+      appMeta?.internal_multi_org_admin ||
+      userMeta?.can_switch_orgs ||
+      userMeta?.internal_multi_org_admin
+  );
+}
+
 function isNonTrackerRole(role) {
   const r = normalizeRole(role);
   return r && r !== "tracker";
@@ -161,6 +193,22 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
   return found.id;
 }
 
+async function persistCurrentOrgServer(orgIdToSelect) {
+  if (!orgIdToSelect) return false;
+
+  try {
+    const { error } = await supabase.rpc("set_current_org", { p_org: orgIdToSelect });
+    if (!error) return true;
+  } catch {}
+
+  try {
+    const { error } = await supabase.rpc("rpc_set_current_org", { p_org_id: orgIdToSelect });
+    if (!error) return true;
+  } catch {}
+
+  return false;
+}
+
 /* =========================
    PROVIDER
 ========================= */
@@ -172,6 +220,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
+  const [canSwitchOrganizations, setCanSwitchOrganizations] = useState(false);
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
@@ -217,6 +266,7 @@ export function AuthProvider({ children }) {
     (data) => {
       setUser(data?.user ?? null);
       setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
+      setCanSwitchOrganizations(extractCanSwitchOrganizations(data));
 
       const serverOrgId = extractServerOrgId(data);
       const orgs = extractOrganizations(data);
@@ -254,6 +304,10 @@ export function AuthProvider({ children }) {
 
         setCurrentOrg(orgObj || null);
 
+        if (orgs.length === 1 && pickedId && serverOrgId !== pickedId) {
+          void persistCurrentOrgServer(pickedId);
+        }
+
         // Persistir SOLO si NO tracker y NO estamos en UI tracker
         if (pickedId && isNonTrackerRole(orgObj?.role) && !isTrackerUiPath(path)) {
           try {
@@ -281,21 +335,42 @@ export function AuthProvider({ children }) {
   );
 
   const applyEnsureContext = useCallback((payload) => {
-    const org_id = payload?.data?.org_id ?? payload?.org_id ?? null;
-    const roleRaw = payload?.data?.role ?? payload?.role ?? null;
+    const data = payload?.data ?? payload ?? {};
+    const org_id = data?.current_org_id ?? data?.active_org_id ?? data?.org_id ?? null;
+    const roleRaw = data?.current_role ?? data?.role ?? null;
     const roleNorm = normalizeRole(roleRaw);
+    const orgs = extractOrganizations(data);
+    const currentOrgPayload = data?.current_org || data?.currentOrg || null;
+
+    if (orgs.length > 0) {
+      setOrganizations(orgs);
+    }
 
     if (org_id) {
-      setCurrentOrg({ id: org_id });
-      setOrganizations((prev) => {
-        if (prev.some((o) => o?.id === org_id)) return prev;
-        return [{ id: org_id }, ...prev];
+      const normalizedCurrentOrgId = currentOrgPayload?.id ?? currentOrgPayload?.org_id ?? org_id;
+      const orgFromList = orgs.find((org) => org?.id === normalizedCurrentOrgId) || null;
+
+      setCurrentOrg((prev) => {
+        if (orgFromList) return orgFromList;
+        return {
+          ...(prev?.id === normalizedCurrentOrgId ? prev : {}),
+          ...(currentOrgPayload || {}),
+          id: normalizedCurrentOrgId,
+          role: normalizeRole(currentOrgPayload?.role) || roleNorm || prev?.role || null,
+        };
       });
+
+      if (orgs.length === 0) {
+        setOrganizations((prev) => {
+          if (prev.some((o) => o?.id === normalizedCurrentOrgId)) return prev;
+          return [{ id: normalizedCurrentOrgId }, ...prev];
+        });
+      }
 
       // Persistencia SOLO si NO tracker y NO estamos en UI tracker
       if (isNonTrackerRole(roleNorm) && !isTrackerUiPath(path)) {
         try {
-          localStorage.setItem(LS_ORG_KEY, org_id);
+          localStorage.setItem(LS_ORG_KEY, normalizedCurrentOrgId);
         } catch {}
       }
     }
@@ -312,6 +387,10 @@ export function AuthProvider({ children }) {
   const selectOrg = useCallback(
     async (orgIdToSelect) => {
       if (!orgIdToSelect) return;
+
+      if (!canSwitchOrganizations && currentOrg?.id && currentOrg.id !== orgIdToSelect) {
+        return;
+      }
 
       const found = organizations.find((o) => o?.id === orgIdToSelect);
 
@@ -335,19 +414,7 @@ export function AuthProvider({ children }) {
       setSwitchingOrg(true);
 
       try {
-        let persisted = false;
-
-        try {
-          const { error } = await supabase.rpc("set_current_org", { p_org: orgIdToSelect });
-          if (!error) persisted = true;
-        } catch {}
-
-        if (!persisted) {
-          try {
-            const { error } = await supabase.rpc("rpc_set_current_org", { p_org_id: orgIdToSelect });
-            if (!error) persisted = true;
-          } catch {}
-        }
+        await persistCurrentOrgServer(orgIdToSelect);
 
         const s1 = await fetchSession();
         if (s1.ok && s1.data?.authenticated === true) {
@@ -357,7 +424,7 @@ export function AuthProvider({ children }) {
         setSwitchingOrg(false);
       }
     },
-    [applySessionData, currentRole, organizations]
+    [applySessionData, canSwitchOrganizations, currentOrg?.id, currentRole, organizations]
   );
 
   const bootstrap = useCallback(async () => {
@@ -380,6 +447,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         setCurrentRole(null);
         setIsAppRoot(false);
+        setCanSwitchOrganizations(false);
         setOrganizations([]);
         setCurrentOrg(null);
         return;
@@ -436,6 +504,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setCurrentRole(null);
     setIsAppRoot(false);
+    setCanSwitchOrganizations(false);
     setOrganizations([]);
     setCurrentOrg(null);
 
@@ -445,6 +514,8 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => {
       const isAuthenticated = Boolean(user?.id);
+      const r = normalizeRole(currentRole);
+      const isAdmin = r === "owner" || r === "admin" || isAppRoot;
 
       return {
       loading,
@@ -456,12 +527,15 @@ export function AuthProvider({ children }) {
 
       currentRole,
       isAppRoot,
+      isAdmin,
+      canSwitchOrganizations,
       organizations,
       currentOrg,
       switchingOrg,
       selectOrg,
 
       role: currentRole,
+      activeOrgId: currentOrg?.id || null,
       currentOrgId: currentOrg?.id || null,
       orgId: currentOrg?.id || null,
 
@@ -475,6 +549,7 @@ export function AuthProvider({ children }) {
       user,
       currentRole,
       isAppRoot,
+      canSwitchOrganizations,
       organizations,
       currentOrg,
       switchingOrg,
@@ -501,12 +576,15 @@ const SAFE_FALLBACK = {
 
   currentRole: null,
   isAppRoot: false,
+  isAdmin: false,
+  canSwitchOrganizations: false,
   organizations: [],
   currentOrg: null,
   switchingOrg: false,
   selectOrg: () => {},
 
   role: null,
+  activeOrgId: null,
   currentOrgId: null,
   orgId: null,
 

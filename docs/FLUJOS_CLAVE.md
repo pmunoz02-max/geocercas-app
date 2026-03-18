@@ -1,66 +1,88 @@
 # Flujos Clave del Sistema
 
-> Database tables referenced in these flows are documented in
-> **[DB_SCHEMA_MAP.md](./DB_SCHEMA_MAP.md)**
+## Modelo operativo de organizaciones y roles
 
-## Registro de usuario
+Un usuario normal pertenece operativamente a una sola organización propia al crear su cuenta.
+El rol tracker solo se adquiere por invitación de una organización específica.
+Los roles son por organización, no globales.
+Nunca se permite degradación automática de rol dentro de la misma organización.
 
-```
-Usuario crea cuenta
-  ↓
-Supabase Auth crea usuario
-  ↓
-Se crea organización inicial
-  ↓
-Se asigna rol owner
-```
+## Flujo 1: Bootstrap owner (usuario nuevo)
 
-## Invitación de usuario
-
-```
-Admin invita usuario a organización
-  ↓
-Se envía magic link
-  ↓
-Usuario acepta invitación
-  ↓
-Se crea o actualiza membership
-  ↓
-Rol no puede degradarse en la misma org
+```text
+Login exitoso
+  -> GET /api/auth/session
+  -> Si falta contexto: POST /api/auth/ensure-context
+  -> ensure-context crea/recupera org propia y membership owner
+  -> set_current_org + membresía por defecto
+  -> GET /api/auth/session (refresh)
+  -> AuthContext publica activeOrgId
 ```
 
-**Nota de Integridad:** Si el usuario ya es `owner` en la org, no puede ser degradado a `tracker` 
-incluso si acepta una invitación con rol inferior. El rol existente prevalece.
+Implementación:
+- `server/auth/_session.js`
+- `server/auth/_ensure-context.js`
+- `src/context/AuthContext.jsx`
 
-Ver: `docs/ARCHITECTURE_MEMBERSHIPS.md` § 3 "The Universal Integrity Rule"
+## Flujo 2: Invitación tracker (owner de org)
 
-## Registro de posición GPS
-
-```
-App móvil envía posición
-  ↓
-API recibe posición
-  ↓
-Se guarda en tracker_positions
-  ↓
-Dashboard actualiza mapa
+```text
+UI owner -> POST /api/invite-tracker
+  -> Proxy firma request
+  -> Edge send-tracker-invite-brevo
+  -> valida caller con JWT y membership owner activa en org
+  -> crea/actualiza tracker_invites + magic link
 ```
 
-## Creación de geocerca
+Implementación:
+- `api/invite-tracker.js`
+- `supabase/functions/send-tracker-invite-brevo/index.ts`
 
-```
-Usuario abre mapa
-  ↓
-Dibuja polígono
-  ↓
-Se guarda en geofences
+Regla:
+- Solo owner de esa org puede invitar tracker.
+
+## Flujo 3: Aceptación de invitación tracker
+
+```text
+Tracker autenticado -> POST /api/accept-tracker-invite
+  -> Proxy valida JWT usuario y firma HMAC
+  -> Edge accept-tracker-invite valida HMAC
+  -> safeUpsertMembership(org_id, user_id, new_role='tracker')
+  -> upsert tracker_org_users
+  -> set_current_org (best-effort)
 ```
 
-## Visualización de tracker
+Implementación:
+- `api/accept-tracker-invite.js`
+- `supabase/functions/accept-tracker-invite/index.ts`
+- `supabase/functions/_shared/safeMembership.ts`
 
+## Flujo 4: Resolución de activeOrgId
+
+```text
+/api/auth/session
+  -> memberships activas del usuario
+  -> get_current_org_id (si existe)
+  -> fallback a org por defecto
+  -> AuthContext.currentOrg
+  -> activeOrgId = currentOrg.id
 ```
-Dashboard consulta:
-  - tracker_positions
-  ↓
-Muestra posiciones en mapa
-```
+
+Source of truth:
+- `activeOrgId` operativo se toma de `AuthContext` alimentado por `/api/auth/session`.
+
+## Misma org vs org distinta
+
+Same-org (`org_id` igual):
+- Se aplica precedencia `owner > admin > tracker`.
+- No se permite downgrade automatico; se mantiene el rol mayor.
+
+Cross-org (`org_id` distinto):
+- Los memberships son independientes.
+- Un usuario puede ser `owner` en org A y `tracker` en org B sin conflicto.
+
+## Anti-patrones
+
+1. Upsert directo a `memberships` con `role='tracker'`.
+2. Overwrite de rol en same-org al aceptar invitación.
+3. Mostrar selector de org a usuario normal de una sola org.

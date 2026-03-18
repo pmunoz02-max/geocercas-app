@@ -54,7 +54,7 @@ function formatMoney(amount, currency) {
 }
 
 export default function ActividadesPage() {
-  const { ready, currentOrg, role, currentRole } = useAuth();
+  const { ready, currentOrg, activeOrgId, role, currentRole } = useAuth();
   const { t } = useTranslation();
 
   const effectiveRole = (currentRole || role || "").toLowerCase();
@@ -72,6 +72,12 @@ export default function ActividadesPage() {
   const [currency, setCurrency] = useState("USD");
   const [hourlyRate, setHourlyRate] = useState("");
 
+  useEffect(() => {
+    setActividades([]);
+    setErrorMsg("");
+    resetForm();
+  }, [activeOrgId]);
+
   // ✅ Estilos de inputs con alto contraste (universal dentro de esta pantalla)
   const inputClass =
     "border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
@@ -79,10 +85,16 @@ export default function ActividadesPage() {
     "border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   async function loadActividades() {
+    if (!activeOrgId) {
+      setActividades([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setErrorMsg("");
     try {
-      const data = await listActividades({ includeInactive: true });
+      const data = await listActividades({ includeInactive: true, orgId: activeOrgId });
       setActividades(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("[ActividadesPage] load error:", err);
@@ -92,9 +104,9 @@ export default function ActividadesPage() {
   }
 
   useEffect(() => {
-    if (ready && currentOrg) loadActividades();
+    if (ready && activeOrgId) loadActividades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, currentOrg?.id]);
+  }, [ready, activeOrgId]);
 
   function resetForm() {
     setFormMode("create");
@@ -137,14 +149,14 @@ export default function ActividadesPage() {
           active: true,
           currency_code: currency,
           hourly_rate: Number(hourlyRate),
-        });
+        }, { orgId: activeOrgId });
       } else if (editingId) {
         await updateActividad(editingId, {
           name: nombre.trim(),
           description: descripcion.trim() || null,
           currency_code: currency,
           hourly_rate: Number(hourlyRate),
-        });
+        }, { orgId: activeOrgId });
       }
 
       resetForm();
@@ -178,7 +190,7 @@ export default function ActividadesPage() {
     );
   }
 
-  if (!currentOrg) {
+  if (!activeOrgId) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
         <div className="border rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">

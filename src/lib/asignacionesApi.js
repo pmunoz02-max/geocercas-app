@@ -27,8 +27,20 @@ async function apiFetch(method, body) {
   return { data: payload?.data ?? null, error: null };
 }
 
-export async function getAsignacionesBundle() {
-  return apiFetch("GET");
+export async function getAsignacionesBundle(orgId = null) {
+  const query = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
+  const res = await fetch(`/api/asignaciones${query}`, {
+    method: "GET",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+  });
+
+  const payload = await parseJsonSafe(res);
+  if (!res.ok || payload?.ok === false) {
+    const msg = payload?.error || `HTTP ${res.status} ${res.statusText}` || "Request failed";
+    return { data: null, error: { message: msg } };
+  }
+  return { data: payload?.data ?? null, error: null };
 }
 
 export async function createAsignacion(payload) {

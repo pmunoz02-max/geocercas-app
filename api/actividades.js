@@ -97,7 +97,7 @@ function buildSupabaseForUser(accessToken) {
    Context resolver
 ========================= */
 
-async function resolveContext(req) {
+async function resolveContext(req, { requestedOrgId = null } = {}) {
   const accessToken = getCookie(req, "tg_at");
   if (!accessToken) return { ok: false, status: 401, error: "No session cookie (tg_at)" };
 
@@ -109,17 +109,61 @@ async function resolveContext(req) {
 
   const user = userData.user;
 
-  // Resolver org/role desde memberships (default si existe)
-  const { data: mRow, error: mErr } = await supabase
-    .from("memberships")
-    .select("org_id, role, is_default, revoked_at")
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .order("is_default", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const loadMembershipForOrg = async (orgId) => {
+    if (!orgId) return null;
+    const { data, error } = await supabase
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (error) return null;
+    return data?.org_id ? data : null;
+  };
 
-  if (mErr) return { ok: false, status: 500, error: mErr.message || "memberships lookup failed" };
+  const loadCurrentOrgFromUserCurrentOrg = async () => {
+    const { data, error } = await supabase
+      .from("user_current_org")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) return null;
+    return data?.org_id ? String(data.org_id) : null;
+  };
+
+  const loadDefaultMembership = async () => {
+    const { data, error } = await supabase
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .is("revoked_at", null)
+      .order("is_default", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) return { data: null, error };
+    return { data, error: null };
+  };
+
+  let mRow = null;
+
+  if (requestedOrgId) {
+    mRow = await loadMembershipForOrg(String(requestedOrgId));
+    if (!mRow) {
+      return { ok: false, status: 403, error: "Requested org is not available for current user" };
+    }
+  }
+
+  if (!mRow) {
+    const currentOrgId = await loadCurrentOrgFromUserCurrentOrg();
+    if (currentOrgId) mRow = await loadMembershipForOrg(currentOrgId);
+  }
+
+  if (!mRow) {
+    const { data, error } = await loadDefaultMembership();
+    if (error) return { ok: false, status: 500, error: error.message || "memberships lookup failed" };
+    mRow = data || null;
+  }
 
   const orgId = mRow?.org_id || null;
   const role = normalizeRole(mRow?.role);
@@ -144,7 +188,8 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const ctx = await resolveContext(req);
+    const requestedOrgId = req.query?.org_id || req.query?.orgId || null;
+    const ctx = await resolveContext(req, { requestedOrgId });
     if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
 
     const { supabase, orgId } = ctx;

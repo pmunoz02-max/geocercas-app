@@ -46,7 +46,7 @@ function upsertIntoList(list, item) {
 
 export default function Personal() {
   const { t } = useTranslation();
-  const { loading, ready, isLoggedIn, currentOrg, currentRole } = useAuth();
+  const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
 
   const role = String(currentRole || "").toLowerCase();
   const canEdit = role === "owner" || role === "admin";
@@ -67,8 +67,14 @@ export default function Personal() {
     vigente: true,
   });
 
+  useEffect(() => {
+    setItems([]);
+    setMsg("");
+    setOpenNew(false);
+  }, [activeOrgId]);
+
   async function load({ qOverride, onlyActiveOverride } = {}) {
-    if (!isLoggedIn || !currentOrg?.id) return;
+    if (!isLoggedIn || !activeOrgId) return;
     setBusy(true);
     setMsg("");
     try {
@@ -76,7 +82,12 @@ export default function Personal() {
       const onlyActiveToUse =
         typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
 
-      const rows = await listPersonal({ q: qToUse, onlyActive: onlyActiveToUse, limit: 500 });
+      const rows = await listPersonal({
+        q: qToUse,
+        onlyActive: onlyActiveToUse,
+        limit: 500,
+        orgId: activeOrgId,
+      });
       setItems(Array.isArray(rows) ? rows : []);
     } catch (e) {
       setItems([]);
@@ -90,9 +101,9 @@ export default function Personal() {
   }
 
   useEffect(() => {
-    if (!loading && ready && isLoggedIn && currentOrg?.id) load();
+    if (!loading && ready && isLoggedIn && activeOrgId) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, ready, isLoggedIn, currentOrg?.id]);
+  }, [loading, ready, isLoggedIn, activeOrgId]);
 
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -264,7 +275,7 @@ export default function Personal() {
       </div>
     );
 
-  if (!currentOrg?.id)
+  if (!activeOrgId)
     return (
       <div className="p-6 text-red-400">
         {t("personal.errorMissingTenant", { defaultValue: "No organization selected." })}
@@ -281,7 +292,7 @@ export default function Personal() {
           <div className="text-sm text-gray-300">
             {t("personal.roleLabel", { defaultValue: "Role:" })}{" "}
             <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{" "}
-            <span className="font-mono">{currentOrg.id}</span>
+            <span className="font-mono">{activeOrgId}</span>
           </div>
         </div>
 

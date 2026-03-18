@@ -26,7 +26,14 @@ function safeText(v, fallback = "") {
 }
 
 export default function OrgSelector({ className = "" }) {
-  const { organizations, currentOrg, selectOrg, isAdmin, loading } = useAuth();
+  const {
+    organizations,
+    currentOrg,
+    selectOrg,
+    canSwitchOrganizations,
+    switchingOrg,
+    loading,
+  } = useAuth();
 
   const orgOptions = useMemo(() => {
     const arr = Array.isArray(organizations) ? organizations : [];
@@ -52,8 +59,8 @@ export default function OrgSelector({ className = "" }) {
     );
   }
 
-  // Solo visible para owner/admin/root
-  if (!isAdmin) return null;
+  // Multi-org switching is reserved for special internal admins only.
+  if (!canSwitchOrganizations || orgOptions.length <= 1) return null;
 
   return (
     <div className={safeText(className)}>
@@ -61,6 +68,7 @@ export default function OrgSelector({ className = "" }) {
         className="border rounded px-2 py-1 text-xs"
         value={value}
         onChange={(e) => selectOrg(e.target.value)}
+        disabled={switchingOrg}
       >
         {orgOptions.length === 0 ? (
           <option value="">OrganizaciÃ³n</option>

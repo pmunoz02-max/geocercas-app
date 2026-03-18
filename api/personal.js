@@ -100,7 +100,7 @@ function isUuid(v) {
    Context Resolver (UNIVERSAL)
 ========================= */
 
-async function resolveContext(req) {
+async function resolveContext(req, { requestedOrgId = null } = {}) {
   const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
   const SUPABASE_ANON_KEY = getEnv([
     "SUPABASE_ANON_KEY",
@@ -154,6 +154,10 @@ async function resolveContext(req) {
     if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
   } catch {}
 
+  if (requestedOrgId && isUuid(requestedOrgId)) {
+    currentOrgId = String(requestedOrgId);
+  }
+
   // 2) membership en org activa
   let mRow = null;
 
@@ -171,6 +175,14 @@ async function resolveContext(req) {
 
   // 3) fallback default/primera
   if (!mRow) {
+    if (requestedOrgId) {
+      return {
+        ok: false,
+        status: 403,
+        error: "Requested org is not available for current user",
+      };
+    }
+
     let r = await supaSrv
       .from("memberships")
       .select("org_id, role, is_default, revoked_at, created_at")
@@ -272,12 +284,14 @@ async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePerso
 ========================= */
 
 async function handleList(req, res) {
-  const ctxRes = await resolveContext(req);
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const requestedOrgId = url.searchParams.get("org_id") || url.searchParams.get("orgId") || null;
+
+  const ctxRes = await resolveContext(req, { requestedOrgId });
   if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, supaSrv } = ctxRes;
 
-  const url = new URL(req.url, `http://${req.headers.host}`);
   const q = (url.searchParams.get("q") || "").trim();
   const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
   const limit = Math.min(Number(url.searchParams.get("limit") || 500), 2000);

@@ -1,6 +1,7 @@
 // src/pages/TrackerDashboard.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
@@ -823,6 +824,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
 
 export default function TrackerDashboard() {
   const { t } = useTranslation();
+  const { activeOrgId, refreshSession } = useAuth();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
   const getStatusLabel = (status) => {
     try {
@@ -842,9 +844,12 @@ export default function TrackerDashboard() {
     isFree,
   } = useOrgEntitlements();
 
-  const [orgId, setOrgId] = useState(null);
-  const [orgIdSource, setOrgIdSource] = useState("—");
-  const [orgResolveError, setOrgResolveError] = useState("");
+  const orgId = activeOrgId || null;
+  const orgIdSource = "auth.activeOrgId";
+  const orgResolveError =
+    orgId && !normalizeUuid(orgId)
+      ? tOr("trackerDashboard.messages.invalidOrgInSession", "Invalid active organization in session.")
+      : "";
 
   const mapRef = useRef(null);
   const positionsRef = useRef([]);
@@ -903,6 +908,38 @@ export default function TrackerDashboard() {
   }, [positions]);
 
   useEffect(() => {
+    setAssignments([]);
+    setAssignmentTrackers([]);
+    setPersonalRows([]);
+    setPositions([]);
+    positionsRef.current = [];
+    setGeofenceEvents([]);
+    setGeofenceRows([]);
+    setSelectedGeofenceIds([]);
+    setSelectedTrackerId("all");
+    setTrackerSearch("");
+    setStatusFilter("all");
+    setInfoMsg("");
+    setErrorMsg("");
+    setDiag((d) => ({
+      ...d,
+      assignmentsRows: 0,
+      trackersFound: 0,
+      geofencesFound: 0,
+      geofencePolys: 0,
+      geofenceCircles: 0,
+      positionsFound: 0,
+      positionsSource: null,
+      lastAssignmentsError: null,
+      lastGeofencesError: null,
+      lastPositionsError: null,
+      assignedGeofenceIds: 0,
+      skippedZeroZero: 0,
+      selectedGeofences: 0,
+    }));
+  }, [resolvedOrgId]);
+
+  useEffect(() => {
     if (!resolvedOrgId) return;
     logLiveMetric("org_resolved", { orgId: resolvedOrgId });
   }, [resolvedOrgId]);
@@ -922,47 +959,6 @@ export default function TrackerDashboard() {
     const dd = String(d.getUTCDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }, []);
-
-  const resolveOrgId = useCallback(async () => {
-    setOrgResolveError("");
-    setErrorMsg("");
-    setInfoMsg("");
-
-    try {
-      const r1 = await supabase.rpc("resolve_org_for_tracker_dashboard");
-      if (r1?.error) throw new Error(`resolve_org_for_tracker_dashboard(): ${r1.error.message || String(r1.error)}`);
-      if (r1?.data) {
-        const v = normalizeUuid(r1.data);
-        if (v) {
-          setOrgId(v);
-          setOrgIdSource("rpc:resolve_org_for_tracker_dashboard");
-          return v;
-        }
-      }
-
-      const r2 = await supabase.rpc("get_current_org_id");
-      if (r2?.error) throw new Error(`get_current_org_id(): ${r2.error.message || String(r2.error)}`);
-      if (!r2?.data) throw new Error("RPC returned null (no org).");
-
-      const v = normalizeUuid(r2.data);
-      if (!v) throw new Error("RPC returned invalid org id.");
-      setOrgId(v);
-      setOrgIdSource("rpc:get_current_org_id");
-      return v;
-    } catch (e) {
-      const msg = e?.message || String(e);
-      setOrgId(null);
-      setOrgIdSource("error");
-      setOrgResolveError(msg);
-      return null;
-    }
-  }, []);
-
-  useEffect(() => {
-    resolveOrgId();
-  }, [resolveOrgId]);
-
-
 
   const fetchAssignments = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
@@ -2155,11 +2151,11 @@ export default function TrackerDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => resolveOrgId()}
+              onClick={() => refreshSession()}
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             >
-              {tOr("trackerDashboard.actions.resolveOrgAgain", "Resolve org again (RPC)")}
+              {tOr("trackerDashboard.actions.refreshSessionOrg", "Refresh session org")}
             </button>
 
             <button

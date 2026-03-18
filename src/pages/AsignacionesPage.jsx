@@ -156,8 +156,8 @@ export default function AsignacionesPage() {
   const tt = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { ready, isAuthenticated, currentOrg, currentOrgId } = useAuth();
-  const orgId = currentOrgId || currentOrg?.id || null;
+  const { ready, isAuthenticated, currentOrg, activeOrgId } = useAuth();
+  const orgId = activeOrgId || null;
 
   const [asignaciones, setAsignaciones] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -183,6 +183,20 @@ export default function AsignacionesPage() {
 
   const [showForm, setShowForm] = useState(true);
 
+  useEffect(() => {
+    setAsignaciones([]);
+    setPersonalOptions([]);
+    setGeocercaOptions([]);
+    setActivityOptions([]);
+    setCatalogOrgId(null);
+    setSelectedPersonalId("");
+    setSelectedGeocercaId("");
+    setSelectedActivityId("");
+    setEditingId(null);
+    setError(null);
+    setSuccessMessage(null);
+  }, [orgId]);
+
   function keepIfSameOrgOrUnknown(row) {
     if (!row) return false;
     if (!orgId) return true;
@@ -207,13 +221,15 @@ export default function AsignacionesPage() {
       return;
     }
 
-    const rP = await fetchJsonSafe("/api/personal?onlyActive=1&limit=500");
+    const params = new URLSearchParams({ onlyActive: "1", limit: "500", org_id: String(orgId) });
+    const rP = await fetchJsonSafe(`/api/personal?${params.toString()}`);
     const personalRaw = extractArray(rP.payload);
     const personalNorm = personalRaw
       .map(normalizePersonRow)
       .filter((p) => p.id);
 
-    const rG = await fetchJsonSafe("/api/geofences?action=list&onlyActive=true");
+    const geofenceParams = new URLSearchParams({ action: "list", onlyActive: "true", org_id: String(orgId) });
+    const rG = await fetchJsonSafe(`/api/geofences?${geofenceParams.toString()}`);
     const geofencesRaw = extractArray(rG.payload);
     const geofencesNorm = geofencesRaw
       .map(normalizeGeofenceRow)
@@ -253,7 +269,7 @@ export default function AsignacionesPage() {
       setCatalogOrgId(null);
     }
 
-    const { data, error: bundleError } = await getAsignacionesBundle();
+    const { data, error: bundleError } = await getAsignacionesBundle(orgId);
 
     if (bundleError) {
       console.error("[AsignacionesPage] bundle error:", bundleError);

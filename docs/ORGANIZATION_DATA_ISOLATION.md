@@ -1,337 +1,77 @@
-ORGANIZATION_DATA_ISOLATION.md
-# ORGANIZATION_DATA_ISOLATION
+# ORGANIZATION DATA ISOLATION
 
-Este documento define la estrategia oficial de aislamiento de datos por organización en **App Geocercas**.
+## Objetivo
+Definir el aislamiento multi-tenant por `org_id` y su relacion con memberships/roles en los flujos reales.
 
-El objetivo es garantizar que el sistema funcione como una plataforma **multi-tenant segura**, evitando que datos de una organización puedan ser accedidos por otra.
+## Modelo operativo de organizaciones y roles
 
-Este documento aplica a:
+Un usuario normal pertenece operativamente a una sola organización propia al crear su cuenta.
+El rol tracker solo se adquiere por invitación de una organización específica.
+Los roles son por organización, no globales.
+Nunca se permite degradación automática de rol dentro de la misma organización.
 
-- consultas SQL
-- políticas RLS
-- backend services
-- endpoints
-- llamadas Supabase
-- lógica generada por IA o Copilot
+## Tenant boundary
 
----
+Clave de aislamiento:
+- `org_id` en tablas operativas.
 
-# Principio Fundamental
+Control de acceso:
+- Membresías activas por `(org_id, user_id)`.
+- Roles evaluados por org, no globalmente.
 
-Cada registro del sistema pertenece a una organización.
+## Source of truth de organizacion activa
 
-La organización propietaria se identifica mediante:
+- Backend: `/api/auth/session` devuelve `current_org_id` desde contexto persistido (`get_current_org_id`) o fallback por default membership.
+- Frontend: `AuthContext` proyecta `activeOrgId = currentOrg.id`.
 
-org_id
+Principio:
+- Queries y mutaciones deben ejecutarse con el `org_id` de sesión activa.
 
-Esto permite que múltiples organizaciones compartan la misma infraestructura sin acceder a los datos de otras.
+## Bootstrap owner y aislamiento inicial
 
----
+`/api/auth/ensure-context` garantiza que un usuario sin membresía quede con:
+- org propia resuelta/creada,
+- membership `owner`,
+- org activa persistida.
 
-# Modelo Multi-Tenant
+Esto evita usuarios autenticados sin tenant operativo.
 
-La arquitectura del sistema es **shared database, shared schema**.
+## Tracker invite y aislamiento
 
-Todas las organizaciones utilizan:
+Emisión:
+- Solo owner activo de una org puede invitar tracker para esa org.
 
-- la misma base de datos
-- las mismas tablas
-- el mismo backend
+Aceptación:
+- `accept-tracker-invite` escribe membresía canónica con `safeUpsertMembership` y enlaza `tracker_org_users`.
 
-El aislamiento se logra mediante:
+Efecto de aislamiento:
+- Same-org: mantiene rol mayor existente (sin degradar).
+- Cross-org: crea/actualiza membresía solo en org invitante.
 
-- org_id
-- memberships
-- Row Level Security (RLS)
+## Comportamiento same-org vs cross-org
 
----
+Same-org:
+- `owner/admin` no se degradan a `tracker` por aceptar invitación.
 
-# Identificación de Organización
+Cross-org:
+- Roles independientes por fila `(org_id, user_id)`.
+- Ser `owner` en org A no concede ni bloquea rol en org B.
 
-Cada entidad que representa datos operativos debe incluir:
+## Selector de organización
 
-org_id
+Regla UX alineada al modelo:
+- No exponer selector de org a usuario normal con una sola org operativa.
 
-Ejemplos de tablas que deben incluir org_id:
+Implementación observada:
+- `OrgSelector` no renderiza selector si no hay capacidad de cambio o hay <=1 org.
+- `AuthContext.selectOrg` bloquea cambios cuando `canSwitchOrganizations` es falso.
 
-- geofences
-- positions
-- tracker_assignments
-- tracker_latest
-- tracker_geofence_events
-- activities
-- activity_assignments
-- personal
-- org_people
+## Anti-patrones prohibidos
 
-Esto permite aplicar políticas de acceso seguras.
+1. `upsert` directo a `memberships` con `role='tracker'`.
+2. Sobrescribir rol en same-org al aceptar invitación.
+3. Exponer selector de org a usuarios normales de una sola org.
 
----
+## Nota de arquitectura
 
-# Tabla de Membresías
-
-El acceso de usuarios a organizaciones se controla mediante:
-
-memberships
-
-Esta tabla define:
-
-- qué usuario pertenece a qué organización
-- qué rol tiene dentro de esa organización
-
-Ejemplo conceptual:
-
-user_id  
-org_id  
-role
-
----
-
-# Regla de Integridad de Rol
-
-**Dentro de la misma organización, un rol nunca puede degradarse.**
-
-La jerarquía de roles es:
-
-```
-owner  (nivel máximo)
-  ↓
-admin
-  ↓
-tracker (nivel mínimo)
-```
-
-**Regla:** Si un usuario es `owner` en org A, no puede ser degradado a `tracker` en la misma org A, incluso si recibe una invitación como `tracker`. El rol existente prevalece.
-
-**Aplicable a:**
-
-- Invitaciones tracker (accept-tracker-invite)
-- Invitaciones de usuario (cambios de rol)
-- Reactivación de membresías revocadas
-
-**Ejemplo válido:**
-
-- Usuario es `owner` en org A → recibe invite como `tracker` en org A → **se mantiene como `owner`** ✓
-- Usuario es `owner` en org A → recibe invite como `tracker` en org B → **se convierte en `tracker` en org B** ✓ (orgs diferentes, roles independientes)
-
-**Consulta:** Ver `docs/ARCHITECTURE_MEMBERSHIPS.md` para detalles técnicos e implementación.
-
----
-
-# Principio de Acceso
-
-Un usuario puede acceder únicamente a los datos de organizaciones donde tenga membresía.
-
-Regla conceptual:
-
-row.org_id ∈ user's memberships
-
-Esto se implementa mediante políticas de seguridad en la base de datos.
-
----
-
-# Row Level Security (RLS)
-
-PostgreSQL permite aplicar políticas de acceso a nivel de fila.
-
-Esto garantiza que incluso si una query intenta acceder a datos de otra organización, la base de datos los bloqueará.
-
-Las tablas críticas deben tener RLS habilitado.
-
-Ejemplo conceptual:
-
-ALTER TABLE geofences ENABLE ROW LEVEL SECURITY;
-
----
-
-# Ejemplo de Política RLS
-
-Una política típica podría verse conceptualmente así:
-
-```sql
-CREATE POLICY org_isolation_policy
-ON geofences
-FOR SELECT
-USING (
-  org_id IN (
-    SELECT org_id
-    FROM memberships
-    WHERE user_id = auth.uid()
-  )
-);
-
-Esto garantiza que el usuario solo vea geocercas de organizaciones donde pertenece.
-
-Aislamiento en Consultas
-
-Las consultas deben diseñarse asumiendo el modelo multi-tenant.
-
-Incluso cuando RLS está activo, las consultas deben respetar el contexto de organización.
-
-Ejemplo conceptual:
-
-SELECT id, name
-FROM geofences
-WHERE org_id = :org_id;
-
-Esto mejora claridad y rendimiento.
-
-Aislamiento en Backend
-
-Los servicios backend deben operar siempre dentro del contexto de una organización.
-
-Esto implica que cada operación debe tener conocimiento de:
-
-org_id
-
-El backend nunca debe ejecutar consultas globales sin justificación administrativa.
-
-Aislamiento en Frontend
-
-El frontend puede mantener el contexto de organización activa para la experiencia del usuario.
-
-Ejemplo:
-
-organización seleccionada en la UI.
-
-Sin embargo, el frontend no es responsable de la seguridad real.
-
-La seguridad debe garantizarse en:
-
-RLS
-
-backend
-
-políticas de base de datos
-
-Aislamiento en Tracking
-
-El pipeline de tracking también debe respetar el aislamiento por organización.
-
-Tablas críticas:
-
-positions
-tracker_latest
-tracker_geofence_events
-
-Cada registro debe incluir:
-
-org_id
-
-Esto garantiza que los eventos y posiciones no se mezclen entre organizaciones.
-
-Aislamiento en Geocercas
-
-Las geocercas pertenecen a una organización específica.
-
-Consultas espaciales deben filtrar primero por:
-
-org_id
-
-Esto evita evaluar geocercas de otras organizaciones.
-
-Aislamiento en Eventos
-
-Eventos ENTER / EXIT deben registrarse dentro del contexto de la organización.
-
-Tabla:
-
-tracker_geofence_events
-
-Esto garantiza que reportes y dashboards no mezclen datos.
-
-Aislamiento en Analytics
-
-Reportes y dashboards deben ejecutarse dentro del contexto de una organización.
-
-Nunca se deben generar dashboards globales accesibles a usuarios normales.
-
-Solo roles administrativos del sistema podrían tener acceso cross-organization.
-
-Roles y Permisos
-
-El acceso dentro de una organización puede depender del rol.
-
-Ejemplos:
-
-admin
-manager
-viewer
-
-Sin embargo, incluso los roles más altos solo deben ver datos de su organización.
-
-Casos Especiales
-
-Existen situaciones donde el sistema puede requerir acceso cross-organization:
-
-mantenimiento del sistema
-
-soporte técnico
-
-analytics globales
-
-Estos accesos deben estar limitados a roles administrativos del sistema.
-
-Reglas para IA y Copilot
-
-IA assistants no deben:
-
-generar consultas sin considerar org_id
-
-crear endpoints que devuelvan datos globales
-
-ignorar RLS
-
-deshabilitar políticas de seguridad
-
-asumir acceso cross-organization
-
-Antes de generar queries, la IA debe preguntarse:
-
-¿Qué organización es dueña de estos datos?
-
-¿Existe una membresía válida?
-
-¿La consulta respeta el aislamiento multi-tenant?
-
-Anti-Patterns Prohibidos
-
-Quedan prohibidos estos patrones:
-
-consultas globales sin filtro de organización
-
-deshabilitar RLS temporalmente
-
-resolver seguridad con filtros de frontend
-
-joins que ignoran org_id
-
-endpoints administrativos accesibles a usuarios normales
-
-Auditoría de Seguridad
-
-El sistema debe poder auditar:
-
-accesos a datos
-
-operaciones críticas
-
-cambios en membresías
-
-acciones administrativas
-
-Esto ayuda a detectar problemas de aislamiento.
-
-Objetivo Final
-
-El sistema debe garantizar que cada organización opere dentro de su propio espacio de datos.
-
-La arquitectura debe permitir escalar a:
-
-miles de organizaciones
-
-millones de registros
-
-múltiples usuarios por organización
-
-manteniendo siempre aislamiento completo entre clientes.
+RLS y filtros por `org_id` son obligatorios, pero la integridad de rol same-org se protege ademas en el path de escritura de memberships (`safeUpsertMembership` y RPCs de membresías, segun despliegue).

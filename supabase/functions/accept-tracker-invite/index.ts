@@ -59,7 +59,7 @@ async function hmacHex(secret: string, msg: string) {
 }
 
 serve(async (req) => {
-  const build_tag = "accept-tracker-invite-v10_tracker_identity_link_20260317";
+  const build_tag = "accept-tracker-invite-v11_role_integrity_20260318";
 
   try {
     if (req.method === "OPTIONS") {
@@ -177,6 +177,10 @@ serve(async (req) => {
         membership_action: membershipWrite.action,
       });
     }
+
+    // Success actions from safeUpsertMembership are constrained to:
+    // inserted | upgraded | kept.
+    const membership_action = membershipWrite.action;
 
     // 1.1) TRACKER ORG LINK (canónico para trackers)
     let trackerOrgUserOk = false;
@@ -320,6 +324,7 @@ serve(async (req) => {
     }
 
     // 3) LEGACY COMPAT: user_organizations (best-effort, no fatal)
+    // Conflict path MUST never downgrade role: keep existing row as-is.
     let legacyOk = false;
     let legacyError: string | null = null;
 
@@ -332,7 +337,7 @@ serve(async (req) => {
             org_id,
             role: "tracker",
           },
-          { onConflict: "org_id,user_id" },
+          { onConflict: "org_id,user_id", ignoreDuplicates: true },
         );
 
       if (error) {
@@ -350,7 +355,7 @@ serve(async (req) => {
       user_id: resolvedUserId,
       org_id,
       canonical_membership: true,
-      membership_action: membershipWrite.action,
+      membership_action,
       membership_role_applied: membershipWrite.role_applied,
       membership_role_existing: membershipWrite.role_existing,
       tracker_org_user_ok: trackerOrgUserOk,

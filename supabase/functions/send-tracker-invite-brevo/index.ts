@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-v28_ASSIGNMENT_DETAILS_20260311";
+const BUILD_TAG = "send-tracker-invite-brevo-v29_ACCEPTANCE_PROMPT_20260317";
 const SEND_COOLDOWN_SECONDS = 180;
 
 const corsHeaders: Record<string, string> = {
@@ -62,6 +62,7 @@ type EmailCopy = {
   title: string;
   intro1: string;
   intro2: string;
+  acceptPrompt: string;
   expires: string;
   cta: string;
   copyLink: string;
@@ -81,6 +82,7 @@ function defaultEmailCopy(lang: string): EmailCopy {
       title: "Invitation to GPS Tracker",
       intro1: "You have been invited to use the GPS Tracker for App Geofences.",
       intro2: "This link will open the Tracker in the correct organization.",
+      acceptPrompt: "To accept this invitation, click the button below and sign in with this email.",
       expires: "This link expires in 7 days.",
       cta: "Open GPS Tracker",
       copyLink: "If you can't click, copy and paste this link:",
@@ -101,6 +103,7 @@ function defaultEmailCopy(lang: string): EmailCopy {
       title: "Invitation au GPS Tracker",
       intro1: "Vous avez été invité à utiliser le GPS Tracker d’App Geocercas.",
       intro2: "Ce lien ouvrira le Tracker dans la bonne organisation.",
+      acceptPrompt: "Pour accepter cette invitation, cliquez sur le bouton ci-dessous et connectez-vous avec cet e-mail.",
       expires: "Ce lien expire dans 7 jours.",
       cta: "Ouvrir le GPS Tracker",
       copyLink: "Si vous ne pouvez pas cliquer, copiez et collez ce lien :",
@@ -120,6 +123,7 @@ function defaultEmailCopy(lang: string): EmailCopy {
     title: "Invitación a Tracker GPS",
     intro1: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
     intro2: "Este enlace abrirá el Tracker en la organización correcta.",
+    acceptPrompt: "Para aceptar esta invitación, haz clic en el botón de abajo e inicia sesión con este correo.",
     expires: "Este enlace expira en 7 días.",
     cta: "Abrir Tracker GPS",
     copyLink: "Si no puedes hacer clic, copia y pega este enlace:",
@@ -662,6 +666,8 @@ serve(async (req) => {
           <span style="color:#6b7280;font-size:12px">${escHtml(copy.expires)}</span>
         </p>
 
+        <p style="margin:0 0 14px 0;font-weight:600">${escHtml(copy.acceptPrompt)}</p>
+
         <div style="margin:0 0 16px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc">
           <div style="font-weight:700;margin:0 0 8px 0">${escHtml(copy.detailsTitle)}</div>
           <div style="margin:0 0 6px 0"><b>${escHtml(copy.assignedWindowLabel)}:</b> ${escHtml(assignmentDetails.timeWindow)}</div>
@@ -687,6 +693,7 @@ serve(async (req) => {
       `${copy.title}\n\n` +
       `${copy.intro1}\n` +
       `${copy.intro2}\n` +
+      `${copy.acceptPrompt}\n` +
       `${copy.expires}\n\n` +
       `${copy.detailsTitle}\n` +
       `${copy.assignedWindowLabel}: ${assignmentDetails.timeWindow}\n` +
