@@ -122,8 +122,7 @@ export default function TrackerGpsPage() {
   const [membershipStatus, setMembershipStatus] = useState("pending");
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
-  const [isActivating, setIsActivating] = useState(false);
-  const [activationStatus, setActivationStatus] = useState("");
+  const [isActivationBgRunning, setIsActivationBgRunning] = useState(false);
 
   const [disclosureAccepted, setDisclosureAccepted] = useState(false);
 
@@ -255,13 +254,7 @@ export default function TrackerGpsPage() {
   }, [trackerReady, PRIMARY, lang]);
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      console.warn("[activation-ui] forced unblock");
-      setIsActivating(false);
-      setActivationStatus("");
-    }, 1500);
-
-    return () => clearTimeout(t);
+    console.log("[activation-gate] disabled");
   }, []);
 
   useEffect(() => {
@@ -563,46 +556,41 @@ export default function TrackerGpsPage() {
     if (onboardingLockRef.current) return;
     onboardingLockRef.current = true;
 
-    (async () => {
-      let unblocked = false;
-      const unblock = () => {
-        if (unblocked) return;
-        unblocked = true;
-        console.log("[activation-ui] unblock");
-        setIsActivating(false);
-        setActivationStatus("");
-        setMembershipStatus("ok");
-        setMembershipDetail("");
-      };
+    let cancelled = false;
 
+    (async () => {
       try {
-        console.log("[activation-ui] start");
-        setIsActivating(true);
-        setActivationStatus("Activating tracker in the org...");
-        setStatus("Activating tracker in the org...");
+        console.log("[activation-bg] start");
+        setIsActivationBgRunning(true);
 
         const { data: sData } = await PRIMARY.auth.getSession();
         const sessionUser = sData?.session?.user || null;
         const userId = sessionUser?.id || "";
 
-        console.log("[activation] org_id", resolvedOrgId);
-
         if (userId && resolvedOrgId) {
-          tryAcceptInvite("fire-and-forget").catch((err) =>
-            console.error("[accept-invite] async failed", err)
-          );
+          await tryAcceptInvite("background");
         } else {
           console.warn("[activation] missing session or org_id");
         }
 
-        unblock();
+        if (!cancelled) {
+          console.log("[activation-bg] done");
+        }
       } catch (e) {
-        console.error("[activation] failed", e);
+        console.error("[activation-bg] failed", e);
       } finally {
-        unblock();
+        if (!cancelled) {
+          setIsActivationBgRunning(false);
+          setMembershipStatus("ok");
+          setMembershipDetail("");
+        }
         onboardingLockRef.current = false;
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
 
   useEffect(() => {
@@ -904,8 +892,12 @@ export default function TrackerGpsPage() {
 
             <div className="mt-3 text-xs">
               {tt("trackerGps.stateLabel", "Status")}:{" "}
-              <span className="text-slate-100">{isActivating ? activationStatus : status}</span>
+              <span className="text-slate-100">{status}</span>
             </div>
+
+            {isActivationBgRunning ? (
+              <div className="mt-2 text-[11px] text-slate-300">Syncing org access...</div>
+            ) : null}
 
             {membershipDetail ? (
               <div className="mt-3 text-[11px] text-slate-200 bg-slate-800/40 border border-slate-700 rounded-xl p-3 whitespace-pre-wrap">
