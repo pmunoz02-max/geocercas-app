@@ -526,10 +526,25 @@ export default function TrackerGpsPage() {
     if (!trackerReady || !hasSession || !PRIMARY) return;
 
     const resolvedOrgId = String(
-      orgId ||
-        localStorage.getItem(LS_TRACKER_ORG_KEY) ||
-        sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
-        ""
+      (() => {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          return (
+            params.get("org_id") ||
+            localStorage.getItem(LS_TRACKER_ORG_KEY) ||
+            sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
+            orgId ||
+            ""
+          );
+        } catch {
+          return (
+            localStorage.getItem(LS_TRACKER_ORG_KEY) ||
+            sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
+            orgId ||
+            ""
+          );
+        }
+      })()
     ).trim();
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) return;
@@ -565,11 +580,12 @@ export default function TrackerGpsPage() {
         console.log("[tracker-membership] start", { orgId: resolvedOrgId, userId });
 
         if (userId && resolvedOrgId) {
-          void tryAcceptInvite("activation");
+          await tryAcceptInvite("activation");
         }
 
         if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
           console.warn("[tracker-membership] failed", { orgId: resolvedOrgId, userId });
+          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
           finishActivation("failed", "");
           return;
         }
@@ -597,12 +613,14 @@ export default function TrackerGpsPage() {
 
         if (membershipResult === "__timeout__") {
           console.warn("[tracker-membership] timeout", { orgId: resolvedOrgId, userId });
+          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
           finishActivation("failed", "");
           return;
         }
 
         if (!membershipResult) {
           console.warn("[tracker-membership] failed", { orgId: resolvedOrgId, userId });
+          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
           finishActivation("failed", "");
           return;
         }
@@ -615,6 +633,7 @@ export default function TrackerGpsPage() {
             userId,
             message: mErr.message,
           });
+          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
           finishActivation("failed", "");
           return;
         }
@@ -635,12 +654,14 @@ export default function TrackerGpsPage() {
         }
 
         console.warn("[tracker-membership] missing", { orgId: resolvedOrgId, userId });
+        console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
         finishActivation("failed", "");
       } catch (e) {
         console.warn("[tracker-membership] failed", {
           orgId: resolvedOrgId,
           message: String(e?.message || e),
         });
+        console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId });
         finishActivation("failed", "");
       } finally {
         if (!clearedLoading) {
