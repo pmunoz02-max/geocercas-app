@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../lib/supabaseClient";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
@@ -121,7 +120,7 @@ export default function TrackerGpsPage() {
     org_source: "none",
     router_search: "",
     path_orgId: "",
-    client_used: "supabase",
+    client_used: "supabase-tracker",
     supabase_url: "",
     send_mode: "send_position:fetch(anon)+x-user-jwt; accept:proxy",
     send_fn: "send_position",
@@ -142,7 +141,7 @@ export default function TrackerGpsPage() {
   const onboardingLockRef = useRef(false);
   const didHashSessionRef = useRef(false);
 
-  const PRIMARY = supabaseTracker || supabase;
+  const PRIMARY = supabaseTracker;
 
   useEffect(() => {
     setStatus(tt("trackerGps.status.initializing", "Starting tracker…"));
@@ -156,7 +155,7 @@ export default function TrackerGpsPage() {
         tt("trackerGps.errors.notConfigured", "Tracker is not configured in this deployment.")
       );
       setLastError(
-        tt("trackerGps.errors.noSupabaseClient", "Primary Supabase client not found.")
+        tt("trackerGps.errors.noSupabaseClient", "Tracker Supabase client not found.")
       );
       return;
     }
@@ -251,7 +250,7 @@ export default function TrackerGpsPage() {
         token_looks_jwt: looksLikeJwt(token),
         token_iss: payload?.iss ? String(payload.iss) : "",
         token_sub: payload?.sub ? String(payload.sub) : "",
-        client_used: "supabase",
+        client_used: "supabase-tracker",
       }));
       setTokenIss(payload?.iss ? String(payload.iss) : "");
     };
@@ -347,7 +346,7 @@ export default function TrackerGpsPage() {
       token_looks_jwt: looksLikeJwt(token),
       token_iss: payload?.iss ? String(payload.iss) : "",
       token_sub: payload?.sub ? String(payload.sub) : "",
-      client_used: "supabase",
+      client_used: "supabase-tracker",
     }));
 
     return token;

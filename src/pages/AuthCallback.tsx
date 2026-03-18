@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
+import { isTrackerCallbackNext } from "../lib/trackerFlow";
 
 function getQueryParam(search: string, key: string) {
   const v = new URLSearchParams(search).get(key);
@@ -114,7 +115,7 @@ export default function AuthCallback() {
     return safeNextPath(n || "/inicio");
   }, [location.search]);
 
-  const isTrackerFlow = useMemo(() => next.startsWith("/tracker-gps"), [next]);
+  const isTrackerFlow = useMemo(() => isTrackerCallbackNext(next), [next]);
 
   useEffect(() => {
     let alive = true;
@@ -148,6 +149,9 @@ export default function AuthCallback() {
         const type = normalizeOtpType(getQueryParam(location.search, "type"));
 
         const authClient = isTrackerFlow ? supabaseTracker : supabase;
+        if (isTrackerFlow && !authClient) {
+          throw new Error("Tracker auth client not available for tracker callback flow.");
+        }
 
         if (token_hash) {
           setStatus("Confirmando sesión (token_hash)…");

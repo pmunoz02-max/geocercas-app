@@ -9,6 +9,7 @@ import React, {
   useRef,
 } from "react";
 import { supabase } from "@/lib/supabaseClient.js";
+import { isTrackerGpsPath } from "@/lib/trackerFlow";
 
 /**
  * AuthContext UNIVERSAL (TWA/WebView safe)
@@ -52,7 +53,7 @@ function isPublicAuthPath(pathname) {
   if (p === "/login") return true;
   if (p === "/reset-password") return true;
   if (p.startsWith("/auth/")) return true;
-  if (p === "/tracker-gps" || p.startsWith("/tracker-gps")) return true;
+  if (isTrackerGpsPath(p)) return true;
 
   return false;
 }
