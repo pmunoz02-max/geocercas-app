@@ -91,6 +91,19 @@ async function readBody(req) {
   }
 }
 
+async function insertMetricsEventSilent(sbDb, { org_id, user_id, event_type, meta = {} }) {
+  try {
+    await sbDb.from("org_metrics_events").insert({
+      org_id,
+      user_id,
+      event_type,
+      meta,
+    });
+  } catch (_) {
+    // ignore metrics errors
+  }
+}
+
 /* =========================
    Sanitizers + Whitelist
 ========================= */
@@ -474,6 +487,16 @@ export default async function handler(req, res) {
         if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
 
         const arr = Array.isArray(data) ? data : data ? [data] : [];
+
+        await insertMetricsEventSilent(sbDb, {
+          org_id,
+          user_id,
+          event_type: "geofence_created",
+          meta: {
+            geofence_id: arr[0]?.id || null,
+          },
+        });
+
         return ok(res, { ok: true, saved: arr.length, items: arr, item: arr[0] || null });
       }
 

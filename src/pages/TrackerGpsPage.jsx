@@ -568,6 +568,46 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
 
   useEffect(() => {
+    if (!orgId || !hasSession || !PRIMARY) return;
+
+    async function acceptInviteOnce() {
+      let userId = "";
+      let userEmail = "";
+      try {
+        const { data: sData } = await PRIMARY.auth.getSession();
+        userId = String(sData?.session?.user?.id || "");
+        userEmail = String(sData?.session?.user?.email || "");
+      } catch (_) {
+        return;
+      }
+
+      if (!userId) return;
+
+      const key = `accept_invite_${orgId}_${userId}`;
+      if (localStorage.getItem(key)) return;
+
+      try {
+        const res = await fetch("/api/accept-tracker-invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            org_id: orgId,
+            user_id: userId,
+            email: userEmail,
+          }),
+        });
+        if (res.ok) {
+          localStorage.setItem(key, "1");
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    acceptInviteOnce();
+  }, [orgId, hasSession, PRIMARY]);
+
+  useEffect(() => {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
 
     if (!("geolocation" in navigator)) {
@@ -648,6 +688,32 @@ export default function TrackerGpsPage() {
         } catch (e) {
           setLastError(`send_position error: ${String(e?.message || e)}`);
           return;
+        }
+
+        const now = Date.now();
+        let trackerUserId = "";
+        try {
+          const { data: sData } = await PRIMARY.auth.getSession();
+          trackerUserId = String(sData?.session?.user?.id || "");
+        } catch {}
+
+        const org_id = String(orgId || "");
+        const user_id = trackerUserId;
+        const metricsKey = `tracker_ping_${org_id}_${user_id}`;
+        const last = Number(localStorage.getItem(metricsKey) || 0);
+
+        if (org_id && user_id && now - last > 5 * 60 * 1000) {
+          try {
+            await PRIMARY.from("org_metrics_events").insert({
+              org_id,
+              user_id,
+              event_type: "tracker_active_ping",
+              meta: { lat: c.lat, lng: c.lng },
+            });
+            localStorage.setItem(metricsKey, String(now));
+          } catch (_) {
+            // ignore metrics errors
+          }
         }
 
         lastSentAtRef.current = Date.now();

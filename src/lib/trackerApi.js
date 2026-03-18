@@ -10,6 +10,7 @@ import { supabase, getMemoryAccessToken } from "../lib/supabaseClient";
 
 // ✅ Tabla canónica única
 const POSITIONS_TABLE = "tracker_positions";
+const TRACKER_ACTIVE_PING_WINDOW_MS = 5 * 60 * 1000;
 
 // EDGE_URL puede venir como:
 // - URL completa a la function (recomendado): https://...supabase.co/functions/v1/send_position
@@ -31,6 +32,47 @@ function buildEdgeUrl(raw) {
 }
 
 const EDGE_URL = buildEdgeUrl(RAW_EDGE_URL);
+
+function getTrackerActivePingKey(orgId, userId) {
+  return `tracker_ping_${orgId}_${userId}`;
+}
+
+function getTrackerActivePingLastAt(key) {
+  if (typeof localStorage === "undefined") return 0;
+  return Number(localStorage.getItem(key) || 0);
+}
+
+function setTrackerActivePingLastAt(key, value) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(key, String(value));
+}
+
+function emitTrackerActivePing({ orgId, userId, lat, lng }) {
+  if (!orgId || !userId) return;
+
+  const key = getTrackerActivePingKey(orgId, userId);
+  const now = Date.now();
+  const lastPing = getTrackerActivePingLastAt(key);
+
+  if (now - lastPing <= TRACKER_ACTIVE_PING_WINDOW_MS) return;
+
+  setTrackerActivePingLastAt(key, now);
+
+  void supabase
+    .from("org_metrics_events")
+    .insert({
+      org_id: orgId,
+      user_id: userId,
+      event_type: "tracker_active_ping",
+      meta: {
+        lat,
+        lng,
+      },
+    })
+    .catch(() => {
+      // never block tracking
+    });
+}
 
 // ===================== Helpers de Auth =====================
 
@@ -136,8 +178,11 @@ export async function upsertPositionCompat(payload) {
   }
 
   try {
-    return await res.json();
+    const data = await res.json();
+    emitTrackerActivePing({ orgId, userId, lat, lng });
+    return data;
   } catch {
+    emitTrackerActivePing({ orgId, userId, lat, lng });
     return null;
   }
 }

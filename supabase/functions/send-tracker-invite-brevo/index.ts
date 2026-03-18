@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const BUILD_TAG = "send-tracker-invite-brevo-v29_ACCEPTANCE_PROMPT_20260317";
+const BUILD_TAG = "send-tracker-invite-brevo-v30_INVITE_SENT_METRICS_20260318";
 const SEND_COOLDOWN_SECONDS = 180;
 
 const corsHeaders: Record<string, string> = {
@@ -431,6 +431,7 @@ serve(async (req) => {
     const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+    const supabaseAdmin = sbAdmin;
 
     const u = await authUserIdFromJwt({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, jwt: userJwt });
     if (!u.ok) {
@@ -603,6 +604,18 @@ serve(async (req) => {
 
     const actionLink = String(linkData.properties.action_link);
 
+    try {
+      console.error('[metrics] invite_sent reached', { build_tag: BUILD_TAG, org_id, callerUserId, email });
+      await supabaseAdmin.from('org_metrics_events').insert({
+        org_id,
+        user_id: callerUserId,
+        event_type: 'invite_sent',
+        meta: { email },
+      });
+    } catch (_) {
+      // do not block main flow
+    }
+
     if (withinCooldown) {
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {
@@ -748,6 +761,7 @@ serve(async (req) => {
           message: String((e as any)?.message || e),
         });
       }
+
     } catch (e) {
       console.error("[invite] brevo_send_error", {
         build_tag: BUILD_TAG,

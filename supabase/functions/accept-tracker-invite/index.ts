@@ -1,6 +1,5 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "npm:@supabase/supabase-js@2";
-import { safeUpsertMembership } from "../_shared/safeMembership.ts";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -56,6 +55,164 @@ async function hmacHex(secret: string, msg: string) {
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+type MembershipRole = "owner" | "admin" | "tracker";
+
+const ROLE_PRIORITY: Record<MembershipRole, number> = {
+  owner: 3,
+  admin: 2,
+  tracker: 1,
+};
+
+function normRole(role: unknown): MembershipRole {
+  const raw = String(role ?? "").trim().toLowerCase();
+  if (raw === "owner" || raw === "admin" || raw === "tracker") return raw;
+  return "tracker";
+}
+
+async function safeUpsertMembership(
+  admin: SupabaseClient,
+  params: { org_id: string; user_id: string; new_role: unknown },
+) {
+  const newRole = normRole(params.new_role);
+
+  // First, try to find an active (non-revoked) membership
+  const { data: existing, error: existingErr } = await admin
+    .from("memberships")
+    .select("org_id, user_id, role, revoked_at")
+    .eq("org_id", params.org_id)
+    .eq("user_id", params.user_id)
+    .is("revoked_at", null)
+    .limit(1)
+    .maybeSingle();
+
+  if (existingErr) {
+    return {
+      ok: false as const,
+      action: "select_failed" as const,
+      error: existingErr,
+    };
+  }
+
+  if (!existing) {
+    // No active membership found. Check if a revoked membership exists
+    const { data: revoked, error: revokedErr } = await admin
+      .from("memberships")
+      .select("org_id, user_id, role, revoked_at")
+      .eq("org_id", params.org_id)
+      .eq("user_id", params.user_id)
+      .not("revoked_at", "is", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (revokedErr) {
+      return {
+        ok: false as const,
+        action: "select_failed" as const,
+        error: revokedErr,
+      };
+    }
+
+    if (revoked) {
+      // A revoked membership exists. Reactivate and upgrade if needed.
+      const revokedRole = normRole(revoked.role);
+      const shouldUpgrade = ROLE_PRIORITY[newRole] > ROLE_PRIORITY[revokedRole];
+
+      const roleToApply = shouldUpgrade ? newRole : revokedRole;
+
+      const { error: updateErr } = await admin
+        .from("memberships")
+        .update({
+          role: roleToApply,
+          is_default: true,
+          revoked_at: null,
+        })
+        .eq("org_id", params.org_id)
+        .eq("user_id", params.user_id)
+        .not("revoked_at", "is", null);
+
+      if (updateErr) {
+        return {
+          ok: false as const,
+          action: "reactivate_failed" as const,
+          error: updateErr,
+        };
+      }
+
+      return {
+        ok: true as const,
+        action: shouldUpgrade ? "upgraded" : "kept",
+        role_applied: roleToApply,
+        role_existing: revokedRole,
+      };
+    }
+
+    // No membership at all - insert a new one
+    const { error: insertErr } = await admin
+      .from("memberships")
+      .insert({
+        org_id: params.org_id,
+        user_id: params.user_id,
+        role: newRole,
+        is_default: true,
+        revoked_at: null,
+      });
+
+    if (insertErr) {
+      return {
+        ok: false as const,
+        action: "insert_failed" as const,
+        error: insertErr,
+      };
+    }
+
+    return {
+      ok: true as const,
+      action: "inserted" as const,
+      role_applied: newRole,
+      role_existing: null,
+    };
+  }
+
+  // Active membership exists - check upgrade logic
+  const currentRole = normRole(existing.role);
+  const shouldUpgrade = ROLE_PRIORITY[newRole] > ROLE_PRIORITY[currentRole];
+
+  if (!shouldUpgrade) {
+    return {
+      ok: true as const,
+      action: "kept" as const,
+      role_applied: currentRole,
+      role_existing: currentRole,
+    };
+  }
+
+  const { error: updateErr } = await admin
+    .from("memberships")
+    .update({
+      role: newRole,
+      is_default: true,
+      revoked_at: null,
+    })
+    .eq("org_id", params.org_id)
+    .eq("user_id", params.user_id)
+    .is("revoked_at", null);
+
+  if (updateErr) {
+    return {
+      ok: false as const,
+      action: "update_failed" as const,
+      error: updateErr,
+    };
+  }
+
+  return {
+    ok: true as const,
+    action: "upgraded" as const,
+    role_applied: newRole,
+    role_existing: currentRole,
+  };
 }
 
 serve(async (req) => {
@@ -119,6 +276,7 @@ serve(async (req) => {
     const org_id = body?.org_id;
     const user_id = body?.user_id;
     const email = body?.email;
+  const invite_id = body?.invite_id;
     const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
 
     if (!org_id) {
@@ -129,13 +287,13 @@ serve(async (req) => {
       });
     }
 
-    const admin = createClient(SB_URL, SB_SERVICE_ROLE);
+    const supabaseAdmin = createClient(SB_URL, SB_SERVICE_ROLE);
 
     let resolvedUserId = user_id ?? null;
 
     // Fallback por email si no vino user_id
     if (!resolvedUserId && email) {
-      const { data, error } = await admin
+      const { data, error } = await supabaseAdmin
         .from("profiles")
         .select("id")
         .eq("email", email)
@@ -161,10 +319,12 @@ serve(async (req) => {
       });
     }
 
+    const acceptedUserId = resolvedUserId;
+
     // 1) CANÓNICO: memberships (sin degradar rol dentro del mismo org)
-    const membershipWrite = await safeUpsertMembership(admin, {
+    const membershipWrite = await safeUpsertMembership(supabaseAdmin, {
       org_id,
-      user_id: resolvedUserId,
+      user_id: acceptedUserId,
       new_role: "tracker",
     });
 
@@ -189,12 +349,12 @@ serve(async (req) => {
     try {
       const nowIso = new Date().toISOString();
 
-      const { error } = await admin
+      const { error } = await supabaseAdmin
         .from("tracker_org_users")
         .upsert(
           {
             org_id,
-            tracker_user_id: resolvedUserId,
+            tracker_user_id: acceptedUserId,
             created_at: nowIso,
             updated_at: nowIso,
           },
@@ -230,7 +390,7 @@ serve(async (req) => {
       personalLinkOk = true;
     } else {
       try {
-        const { data: personalRows, error: personalSelectErr } = await admin
+        const { data: personalRows, error: personalSelectErr } = await supabaseAdmin
           .from("personal")
           .select("id,user_id,is_deleted,email")
           .eq("org_id", org_id)
@@ -263,10 +423,10 @@ serve(async (req) => {
 
         if (updatablePersonalIds.length > 0) {
           const personalUpdateTs = new Date().toISOString();
-          const { error: personalUpdateErr } = await admin
+          const { error: personalUpdateErr } = await supabaseAdmin
             .from("personal")
             .update({
-              user_id: resolvedUserId,
+              user_id: acceptedUserId,
               updated_at: personalUpdateTs,
             })
             .in("id", updatablePersonalIds);
@@ -313,7 +473,7 @@ serve(async (req) => {
     let setOrgError: string | null = null;
 
     try {
-      const { error } = await admin.rpc("set_current_org", { p_org_id: org_id });
+      const { error } = await supabaseAdmin.rpc("set_current_org", { p_org_id: org_id });
       if (error) {
         setOrgError = error.message;
       } else {
@@ -329,11 +489,11 @@ serve(async (req) => {
     let legacyError: string | null = null;
 
     try {
-      const { error } = await admin
+      const { error } = await supabaseAdmin
         .from("user_organizations")
         .upsert(
           {
-            user_id: resolvedUserId,
+            user_id: acceptedUserId,
             org_id,
             role: "tracker",
           },
@@ -349,10 +509,24 @@ serve(async (req) => {
       legacyError = e?.message ?? String(e);
     }
 
+    try {
+      await supabaseAdmin.from('org_metrics_events').insert({
+        org_id,
+        user_id: acceptedUserId,
+        event_type: 'invite_accepted',
+        meta: {
+          ...(normalizedEmail ? { email: normalizedEmail } : {}),
+          ...(invite_id ? { invite_id } : {}),
+        },
+      });
+    } catch (_) {
+      // ignore metrics errors
+    }
+
     return json(req, 200, {
       ok: true,
       build_tag,
-      user_id: resolvedUserId,
+      user_id: acceptedUserId,
       org_id,
       canonical_membership: true,
       membership_action,

@@ -1,7 +1,7 @@
 // api/asignaciones.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-api-v12-conflict-precheck-preview";
+const VERSION = "asignaciones-api-v13-metrics-events-preview";
 
 /* =========================
    Headers / Cookies / Query
@@ -124,6 +124,28 @@ function isExclusionConstraintError(err) {
   const code = String(err?.code || "");
   const msg = String(err?.message || "").toLowerCase();
   return code === "23P01" || msg.includes("exclusion constraint");
+}
+
+function normalizeAssignmentStatus(statusLike) {
+  return String(statusLike || "").trim().toLowerCase();
+}
+
+function isCompletedAssignmentStatus(statusLike) {
+  const s = normalizeAssignmentStatus(statusLike);
+  return s === "inactiva" || s === "completada" || s === "completed";
+}
+
+async function insertMetricsEventSilent(sbDb, { org_id, user_id, event_type, meta = {} }) {
+  try {
+    await sbDb.from("org_metrics_events").insert({
+      org_id,
+      user_id,
+      event_type,
+      meta,
+    });
+  } catch (_) {
+    // ignore
+  }
 }
 
 /* =========================
@@ -422,6 +444,7 @@ export default async function handler(req, res) {
 
     const orgId = rc.ctx.org_id;
     const sbDb = rc.sbDb;
+    const userId = rc?.user?.id || null;
 
     // GET bundle/list
     if (req.method === "GET" && (action === "bundle" || action === "list")) {
@@ -628,6 +651,15 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
       }
 
+      if (userId) {
+        await insertMetricsEventSilent(sbDb, {
+          org_id: orgId,
+          user_id: userId,
+          event_type: "assignment_created",
+          meta: {},
+        });
+      }
+
       return ok(res, { ok: true, data: r.data });
     }
 
@@ -657,8 +689,39 @@ export default async function handler(req, res) {
 
       stripUndefined(patch);
 
+      let shouldTrackCompleted = false;
+      const nextStatusFromPatch = normalizeAssignmentStatus(patch.status || patch.estado);
+      if (nextStatusFromPatch) {
+        try {
+          const beforeRes = await sbDb
+            .from("asignaciones")
+            .select("id,status,estado")
+            .eq("id", id)
+            .eq("org_id", orgId)
+            .maybeSingle();
+
+          const beforeStatus = normalizeAssignmentStatus(
+            beforeRes?.data?.status || beforeRes?.data?.estado
+          );
+          shouldTrackCompleted =
+            isCompletedAssignmentStatus(nextStatusFromPatch) &&
+            !isCompletedAssignmentStatus(beforeStatus);
+        } catch (_) {
+          // ignore
+        }
+      }
+
       const r = await sbDb.from("asignaciones").update(patch).eq("id", id).eq("org_id", orgId).select("*").single();
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+
+      if (shouldTrackCompleted && userId) {
+        await insertMetricsEventSilent(sbDb, {
+          org_id: orgId,
+          user_id: userId,
+          event_type: "assignment_completed",
+          meta: {},
+        });
+      }
 
       return ok(res, { ok: true, data: r.data });
     }
