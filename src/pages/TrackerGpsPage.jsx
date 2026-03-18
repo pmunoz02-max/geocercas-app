@@ -545,107 +545,43 @@ export default function TrackerGpsPage() {
     onboardingLockRef.current = true;
 
     (async () => {
-      const withTimeout = (promise, ms = 4000) =>
-        Promise.race([
-          promise,
-          new Promise((resolve) => setTimeout(() => resolve("__timeout__"), ms)),
-        ]);
-
       let clearedLoading = false;
-      const finishActivation = (status, detail = "") => {
+      const setLoading = (isLoading) => {
+        if (isLoading) {
+          setMembershipStatus("pending");
+          setMembershipDetail("");
+          return;
+        }
+
+        setMembershipStatus("ok");
+        setMembershipDetail("");
+      };
+      const finishActivation = () => {
         clearedLoading = true;
-        setMembershipStatus(status);
-        setMembershipDetail(detail);
+        setLoading(false);
       };
 
       try {
-        const checkingMessage = tt("trackerGps.membership.checking", "Checking membership…");
-        setMembershipStatus("pending");
-        setMembershipDetail(checkingMessage);
-        setStatus(checkingMessage);
+        setLoading(true);
+        setStatus("Activating tracker...");
 
         const { data: sData } = await PRIMARY.auth.getSession();
-        const tokenB = sData?.session?.access_token || "";
         const sessionUser = sData?.session?.user || null;
         const userId = sessionUser?.id || "";
 
-        console.log("[tracker-membership] start", { orgId: resolvedOrgId, userId });
+        console.log("[activation] org_id", resolvedOrgId);
 
         if (userId && resolvedOrgId) {
-          await tryAcceptInvite("activation");
+          console.log("[activation] calling accept invite");
+          await tryAcceptInvite("force-bypass");
+        } else {
+          console.warn("[activation] missing session or org_id");
         }
-
-        const checkMembership = async () => {
-          if (!tokenB || !looksLikeJwt(tokenB) || !userId) return null;
-
-          const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${resolvedOrgId}`;
-          try {
-            if (sessionStorage.getItem(ssKey) === "1") {
-              return { role: "cached", cached: true };
-            }
-          } catch {}
-
-          const { data: mRows, error: mErr } = await PRIMARY.from("memberships")
-            .select("role, revoked_at, org_id, user_id")
-            .eq("org_id", resolvedOrgId)
-            .eq("user_id", userId)
-            .limit(1);
-
-          if (mErr) {
-            throw mErr;
-          }
-
-          const membership = (mRows || [])[0];
-          if (!membership || membership.revoked_at) {
-            return null;
-          }
-
-          try {
-            sessionStorage.setItem(ssKey, "1");
-          } catch {}
-
-          return membership;
-        };
-
-        const membershipResult = await withTimeout(checkMembership(), 4000);
-
-        if (membershipResult === "__timeout__") {
-          console.warn("[tracker-membership] timeout", { orgId: resolvedOrgId, userId });
-          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
-          finishActivation("failed", "");
-          return;
-        }
-
-        if (!membershipResult) {
-          console.warn("[tracker-membership] missing", { orgId: resolvedOrgId, userId });
-          console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId, userId });
-          finishActivation("failed", "");
-          return;
-        }
-
-        console.log("[tracker-membership] ok", {
-          orgId: resolvedOrgId,
-          userId,
-          role: membershipResult.role,
-        });
-        finishActivation(
-          "ok",
-          membershipResult.cached
-            ? tt("trackerGps.membership.okSessionCache", "Membership OK (session cache).")
-            : tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
-                role: membershipResult.role,
-              })
-        );
       } catch (e) {
-        console.error("[tracker-membership] failed", {
-          orgId: resolvedOrgId,
-          message: String(e?.message || e),
-        });
-        console.warn("[tracker-membership] continue-fail-open", { orgId: resolvedOrgId });
-        finishActivation("failed", "");
+        console.error("[activation] failed", e);
       } finally {
         if (!clearedLoading) {
-          finishActivation("failed", "");
+          finishActivation();
         }
         onboardingLockRef.current = false;
       }
