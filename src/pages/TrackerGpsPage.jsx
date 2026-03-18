@@ -499,29 +499,26 @@ export default function TrackerGpsPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          signal: controller.signal,
           body: JSON.stringify({ org_id }),
+          signal: controller.signal,
         });
 
         const bodyText = await response.text();
-        console.log("[accept-invite] response", {
-          status: response.status,
-          bodyText,
-        });
+        console.log("[accept-invite] response", response.status, bodyText);
 
-        if (!response.ok) {
-          return false;
+        if (response.ok) {
+          localStorage.setItem(dedupeKey, "1");
+          return true;
         }
 
-        localStorage.setItem(dedupeKey, "1");
-        console.log("[accept-invite] success", { dedupeKey });
-        return true;
+        return false;
       } catch (error) {
         if (error?.name === "AbortError") {
-          console.warn("[accept-invite] timeout", { dedupeKey });
+          console.warn("[accept-invite] timeout");
           return false;
         }
-        throw error;
+        console.error("[accept-invite] failed", error);
+        return false;
       } finally {
         clearTimeout(timer);
         acceptInFlightRef.current.delete(dedupeKey);
