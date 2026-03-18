@@ -490,6 +490,8 @@ export default function TrackerGpsPage() {
       }
 
       acceptInFlightRef.current.add(dedupeKey);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
 
       try {
         const response = await fetch("/api/accept-tracker-invite", {
@@ -497,6 +499,7 @@ export default function TrackerGpsPage() {
           headers: {
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
           body: JSON.stringify({ org_id }),
         });
 
@@ -513,7 +516,14 @@ export default function TrackerGpsPage() {
         localStorage.setItem(dedupeKey, "1");
         console.log("[accept-invite] success", { dedupeKey });
         return true;
+      } catch (error) {
+        if (error?.name === "AbortError") {
+          console.warn("[accept-invite] timeout", { dedupeKey });
+          return false;
+        }
+        throw error;
       } finally {
+        clearTimeout(timer);
         acceptInFlightRef.current.delete(dedupeKey);
       }
     } catch (error) {
@@ -563,7 +573,7 @@ export default function TrackerGpsPage() {
 
       try {
         setLoading(true);
-        setStatus("Activating tracker...");
+        setStatus("Activating tracker in the org...");
 
         const { data: sData } = await PRIMARY.auth.getSession();
         const sessionUser = sData?.session?.user || null;
@@ -572,8 +582,9 @@ export default function TrackerGpsPage() {
         console.log("[activation] org_id", resolvedOrgId);
 
         if (userId && resolvedOrgId) {
-          console.log("[activation] calling accept invite");
-          await tryAcceptInvite("force-bypass");
+          tryAcceptInvite("fire-and-forget").catch((err) =>
+            console.error("[accept-invite] async failed", err)
+          );
         } else {
           console.warn("[activation] missing session or org_id");
         }
