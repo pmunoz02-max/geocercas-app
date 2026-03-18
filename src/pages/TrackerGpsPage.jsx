@@ -153,6 +153,7 @@ export default function TrackerGpsPage() {
   const lastSentAtRef = useRef(0);
   const onboardingLockRef = useRef(false);
   const didHashSessionRef = useRef(false);
+  const acceptInFlightRef = useRef(new Set());
 
   const PRIMARY = supabaseTracker;
 
@@ -446,146 +447,51 @@ export default function TrackerGpsPage() {
     return j;
   }
 
-  useEffect(() => {
-    if (!trackerReady || !hasSession || !PRIMARY) return;
-    if (!orgId || !isUuid(orgId)) return;
-    if (onboardingLockRef.current) return;
-    onboardingLockRef.current = true;
+  const tryAcceptInvite = async (reason = "unknown") => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlOrgId = params.get("org_id");
 
-    (async () => {
-      const withTimeout = (promise, label) =>
-        Promise.race([
-          promise,
-          new Promise((_, reject) => {
-            window.setTimeout(() => {
-              reject(new Error(`${label} timed out after 4000ms`));
-            }, 4000);
-          }),
-        ]);
-
-      try {
-        console.log("[tracker-membership] start", { orgId });
-        setMembershipStatus("pending");
-        setMembershipDetail(tt("trackerGps.membership.checking", "Checking membership…"));
-
-        const { data: sData } = await PRIMARY.auth.getSession();
-        const tokenB = sData?.session?.access_token || "";
-        const userId = sData?.session?.user?.id || "";
-
-        if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
-          console.warn("[tracker-membership] fail-open: missing token/user", { orgId, userId });
-          setMembershipStatus("failed");
-          setMembershipDetail("");
-          return;
-        }
-
-        const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${orgId}`;
-        try {
-          if (sessionStorage.getItem(ssKey) === "1") {
-            console.log("[tracker-membership] ok: session cache", { orgId, userId });
-            setMembershipStatus("ok");
-            setMembershipDetail(
-              tt("trackerGps.membership.okSessionCache", "Membership OK (session cache).")
-            );
-            return;
-          }
-        } catch {}
-
-        const { data: mRows, error: mErr } = await withTimeout(
-          PRIMARY.from("memberships")
-            .select("role, revoked_at, org_id, user_id")
-            .eq("org_id", orgId)
-            .eq("user_id", userId)
-            .limit(1),
-          "membership lookup"
-        );
-
-        if (mErr) {
-          console.warn("[tracker-membership] fail-open: lookup error", {
-            orgId,
-            userId,
-            message: mErr.message,
-          });
-          setMembershipStatus("failed");
-          setMembershipDetail("");
-          return;
-        }
-
-        const m = (mRows || [])[0];
-        if (m && !m.revoked_at) {
-          console.log("[tracker-membership] confirmed", { orgId, userId, role: m.role });
-          setMembershipStatus("ok");
-          setMembershipDetail(
-            tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
-              role: m.role,
-            })
-          );
-          try {
-            sessionStorage.setItem(ssKey, "1");
-          } catch {}
-          return;
-        }
-
-        console.warn("[tracker-membership] fail-open: membership missing", { orgId, userId });
-        setMembershipStatus("failed");
-        setMembershipDetail("");
-      } catch (e) {
-        console.warn("[tracker-membership] fail-open: exception", {
-          orgId,
-          message: String(e?.message || e),
-        });
-        setMembershipStatus("failed");
-        setMembershipDetail("");
-      } finally {
-        onboardingLockRef.current = false;
+      if (urlOrgId) {
+        localStorage.setItem("geocercas_tracker_org_id", urlOrgId);
+        sessionStorage.setItem("geocercas_tracker_org_id", urlOrgId);
       }
-    })();
-  }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
 
-  useEffect(() => {
-    if (!trackerReady) return;
+      const org_id =
+        urlOrgId ||
+        localStorage.getItem("geocercas_tracker_org_id") ||
+        sessionStorage.getItem("geocercas_tracker_org_id") ||
+        "";
 
-    let interval;
-    let timeout;
-    let pollSuccess = false;
+      const { data } = await supabaseTracker.auth.getSession();
+      const userId = data?.session?.user?.id;
 
-    const tryAcceptInvite = async (reason = "unknown") => {
+      console.log("[accept-invite] start", { reason, org_id, userId });
+
+      if (!org_id) {
+        console.warn("[accept-invite] skipped: missing org_id");
+        return false;
+      }
+
+      if (!userId) {
+        console.warn("[accept-invite] skipped: missing userId");
+        return false;
+      }
+
+      const dedupeKey = "accept_invite_" + org_id + "_" + userId;
+      if (localStorage.getItem(dedupeKey)) {
+        console.log("[accept-invite] skipped: deduped", { dedupeKey });
+        return true;
+      }
+
+      if (acceptInFlightRef.current.has(dedupeKey)) {
+        console.log("[accept-invite] skipped: in-flight", { dedupeKey });
+        return false;
+      }
+
+      acceptInFlightRef.current.add(dedupeKey);
+
       try {
-        const params = new URLSearchParams(window.location.search);
-        const urlOrgId = params.get("org_id");
-
-        if (urlOrgId) {
-          localStorage.setItem("geocercas_tracker_org_id", urlOrgId);
-          sessionStorage.setItem("geocercas_tracker_org_id", urlOrgId);
-        }
-
-        const org_id =
-          urlOrgId ||
-          localStorage.getItem("geocercas_tracker_org_id") ||
-          sessionStorage.getItem("geocercas_tracker_org_id") ||
-          "";
-
-        const { data } = await supabaseTracker.auth.getSession();
-        const userId = data?.session?.user?.id;
-
-        console.log("[accept-invite] start", { reason, org_id, userId });
-
-        if (!org_id) {
-          console.warn("[accept-invite] skipped: missing org_id");
-          return false;
-        }
-
-        if (!userId) {
-          console.warn("[accept-invite] skipped: missing userId");
-          return false;
-        }
-
-        const dedupeKey = "accept_invite_" + org_id + "_" + userId;
-        if (localStorage.getItem(dedupeKey)) {
-          console.log("[accept-invite] skipped: deduped", { dedupeKey });
-          return true;
-        }
-
         const response = await fetch("/api/accept-tracker-invite", {
           method: "POST",
           headers: {
@@ -607,15 +513,154 @@ export default function TrackerGpsPage() {
         localStorage.setItem(dedupeKey, "1");
         console.log("[accept-invite] success", { dedupeKey });
         return true;
-      } catch (error) {
-        console.error("[accept-invite] failed", error);
-        return false;
+      } finally {
+        acceptInFlightRef.current.delete(dedupeKey);
       }
-    };
+    } catch (error) {
+      console.error("[accept-invite] failed", error);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (!trackerReady || !hasSession || !PRIMARY) return;
+
+    const resolvedOrgId = String(
+      orgId ||
+        localStorage.getItem(LS_TRACKER_ORG_KEY) ||
+        sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
+        ""
+    ).trim();
+
+    if (!resolvedOrgId || !isUuid(resolvedOrgId)) return;
+    if (onboardingLockRef.current) return;
+    onboardingLockRef.current = true;
+
+    (async () => {
+      const withTimeout = (promise, ms = 4000) =>
+        Promise.race([
+          promise,
+          new Promise((resolve) => {
+            window.setTimeout(() => {
+              resolve("__timeout__");
+            }, ms);
+          }),
+        ]);
+
+      let clearedLoading = false;
+      const finishActivation = (status, detail = "") => {
+        clearedLoading = true;
+        setMembershipStatus(status);
+        setMembershipDetail(detail);
+      };
+
+      try {
+        setMembershipStatus("pending");
+        setMembershipDetail(tt("trackerGps.membership.checking", "Checking membership…"));
+
+        const { data: sData } = await PRIMARY.auth.getSession();
+        const tokenB = sData?.session?.access_token || "";
+        const userId = sData?.session?.user?.id || "";
+
+        console.log("[tracker-membership] start", { orgId: resolvedOrgId, userId });
+
+        if (userId && resolvedOrgId) {
+          void tryAcceptInvite("activation");
+        }
+
+        if (!tokenB || !looksLikeJwt(tokenB) || !userId) {
+          console.warn("[tracker-membership] failed", { orgId: resolvedOrgId, userId });
+          finishActivation("failed", "");
+          return;
+        }
+
+        const ssKey = `${SS_ACCEPTED_PREFIX}${userId}:${resolvedOrgId}`;
+        try {
+          if (sessionStorage.getItem(ssKey) === "1") {
+            console.log("[tracker-membership] ok", { orgId: resolvedOrgId, userId });
+            finishActivation(
+              "ok",
+              tt("trackerGps.membership.okSessionCache", "Membership OK (session cache).")
+            );
+            return;
+          }
+        } catch {}
+
+        const membershipResult = await withTimeout(
+          PRIMARY.from("memberships")
+            .select("role, revoked_at, org_id, user_id")
+            .eq("org_id", resolvedOrgId)
+            .eq("user_id", userId)
+            .limit(1),
+          4000
+        );
+
+        if (membershipResult === "__timeout__") {
+          console.warn("[tracker-membership] timeout", { orgId: resolvedOrgId, userId });
+          finishActivation("failed", "");
+          return;
+        }
+
+        if (!membershipResult) {
+          console.warn("[tracker-membership] failed", { orgId: resolvedOrgId, userId });
+          finishActivation("failed", "");
+          return;
+        }
+
+        const { data: mRows, error: mErr } = membershipResult;
+
+        if (mErr) {
+          console.warn("[tracker-membership] failed", {
+            orgId: resolvedOrgId,
+            userId,
+            message: mErr.message,
+          });
+          finishActivation("failed", "");
+          return;
+        }
+
+        const m = (mRows || [])[0];
+        if (m && !m.revoked_at) {
+          console.log("[tracker-membership] ok", { orgId: resolvedOrgId, userId, role: m.role });
+          finishActivation(
+            "ok",
+            tt("trackerGps.membership.alreadyExists", "Membership already exists: role={{role}}", {
+              role: m.role,
+            })
+          );
+          try {
+            sessionStorage.setItem(ssKey, "1");
+          } catch {}
+          return;
+        }
+
+        console.warn("[tracker-membership] missing", { orgId: resolvedOrgId, userId });
+        finishActivation("failed", "");
+      } catch (e) {
+        console.warn("[tracker-membership] failed", {
+          orgId: resolvedOrgId,
+          message: String(e?.message || e),
+        });
+        finishActivation("failed", "");
+      } finally {
+        if (!clearedLoading) {
+          finishActivation("failed", "");
+        }
+        onboardingLockRef.current = false;
+      }
+    })();
+  }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
+
+  useEffect(() => {
+    if (!trackerReady) return;
+
+    let interval;
+    let timeout;
+    let pollSuccess = false;
 
     // 1. As soon as session + org_id are available
     if (hasSession && orgId) {
-      tryAcceptInvite("post-auth").then((success) => {
+      tryAcceptInvite("activation").then((success) => {
         if (success) {
           pollSuccess = true;
         }
