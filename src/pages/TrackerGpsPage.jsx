@@ -568,44 +568,52 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
 
   useEffect(() => {
-    if (!orgId || !hasSession || !PRIMARY) return;
+    let interval;
 
-    async function acceptInviteOnce() {
-      let userId = "";
-      let userEmail = "";
+    async function tryAccept() {
       try {
-        const { data: sData } = await PRIMARY.auth.getSession();
-        userId = String(sData?.session?.user?.id || "");
-        userEmail = String(sData?.session?.user?.email || "");
-      } catch (_) {
-        return;
-      }
+        const { data } = await supabaseTracker.auth.getSession();
+        const user = data?.session?.user;
 
-      if (!userId) return;
+        if (!user) return;
 
-      const key = `accept_invite_${orgId}_${userId}`;
-      if (localStorage.getItem(key)) return;
+        const user_id = user.id;
+        const user_email = user.email;
 
-      try {
+        const params = new URLSearchParams(window.location.search);
+        const org_id = params.get("org_id");
+
+        if (!org_id || !user_id) return;
+
+        const key = "accept_invite_" + org_id + "_" + user_id;
+        if (localStorage.getItem(key)) {
+          clearInterval(interval);
+          return;
+        }
+
         const res = await fetch("/api/accept-tracker-invite", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            org_id: orgId,
-            user_id: userId,
-            email: userEmail,
+            org_id,
+            user_id,
+            email: user_email,
           }),
         });
+
         if (res.ok) {
           localStorage.setItem(key, "1");
+          clearInterval(interval);
         }
       } catch (_) {
         // ignore
       }
     }
 
-    acceptInviteOnce();
-  }, [orgId, hasSession, PRIMARY]);
+    interval = setInterval(tryAccept, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
