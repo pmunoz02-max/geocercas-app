@@ -1,6 +1,7 @@
-﻿import React, { useEffect } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
+import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 function FullScreenLoader({ text = "Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦" }) {
   return (
@@ -32,6 +33,38 @@ export default function RequireOrg({ children }) {
   } = useAuth();
 
   const location = useLocation();
+  const isTrackerGpsRoute =
+    location.pathname === "/tracker-gps" || location.pathname.startsWith("/tracker-gps/");
+  const bypassLoggedRef = useRef(false);
+  const [trackerBypass, setTrackerBypass] = useState(isTrackerGpsRoute);
+
+  useEffect(() => {
+    if (!isTrackerGpsRoute) {
+      setTrackerBypass(false);
+      return;
+    }
+
+    setTrackerBypass(true);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabaseTracker.auth.getSession();
+        if (cancelled) return;
+        if (data?.session?.user?.id) {
+          console.warn("[org-access-guard] bypass preview");
+          console.warn("[org-access-guard] source=RequireOrg");
+          bypassLoggedRef.current = true;
+        }
+      } catch {
+        // ignore session probe failures in preview bypass
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isTrackerGpsRoute]);
 
   // AutocuraciÃ³n: si estÃ¡ logueado y hay orgs pero falta currentOrg, selecciona la primera
   useEffect(() => {
@@ -43,6 +76,15 @@ export default function RequireOrg({ children }) {
       if (first) selectOrg(first);
     }
   }, [loading, ready, isLoggedIn, currentOrg?.id, organizations, selectOrg]);
+
+  if (isTrackerGpsRoute && trackerBypass) {
+    if (!bypassLoggedRef.current) {
+      console.warn("[org-access-guard] bypass preview");
+      console.warn("[org-access-guard] source=RequireOrg");
+      bypassLoggedRef.current = true;
+    }
+    return children;
+  }
 
   // 1) Mientras se hidrata el contexto
   if (loading || !ready) return <FullScreenLoader />;
