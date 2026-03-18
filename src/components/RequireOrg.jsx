@@ -49,6 +49,7 @@ export default function RequireOrg({ children }) {
 
     setTrackerBypass(true);
     if (!bypassLoggedRef.current) {
+      console.warn("[tracker-org-sync-gate] bypassed on tracker route");
       console.warn("[monetization-regression] source=RequireOrg");
       console.warn("[monetization-regression] tracker bypass applied");
       bypassLoggedRef.current = true;
@@ -87,6 +88,7 @@ export default function RequireOrg({ children }) {
 
   if (isTrackerRoute && trackerBypass) {
     if (!bypassLoggedRef.current) {
+      console.warn("[tracker-org-sync-gate] bypassed on tracker route");
       console.warn("[org-access-guard] bypass preview");
       console.warn("[org-access-guard] source=RequireOrg");
       console.warn("[monetization-regression] source=RequireOrg");
