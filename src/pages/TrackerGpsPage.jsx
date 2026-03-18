@@ -255,6 +255,7 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     console.log("[activation-gate] disabled");
+    console.log("[activation-gate] source=TrackerGpsPage");
   }, []);
 
   useEffect(() => {
