@@ -569,6 +569,7 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     let interval;
+    let timeout;
 
     async function tryAccept() {
       try {
@@ -586,14 +587,18 @@ export default function TrackerGpsPage() {
         if (!org_id || !user_id) return;
 
         const key = "accept_invite_" + org_id + "_" + user_id;
+
         if (localStorage.getItem(key)) {
           clearInterval(interval);
+          clearTimeout(timeout);
           return;
         }
 
         const res = await fetch("/api/accept-tracker-invite", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             org_id,
             user_id,
@@ -604,15 +609,23 @@ export default function TrackerGpsPage() {
         if (res.ok) {
           localStorage.setItem(key, "1");
           clearInterval(interval);
+          clearTimeout(timeout);
         }
       } catch (_) {
-        // ignore
+        // silent
       }
     }
 
     interval = setInterval(tryAccept, 1000);
 
-    return () => clearInterval(interval);
+    timeout = setTimeout(() => {
+      clearInterval(interval);
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
   }, []);
 
   useEffect(() => {
