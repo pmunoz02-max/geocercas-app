@@ -165,27 +165,61 @@ async function main() {
     console.log("Organización de prueba ya existe:", orgId);
   }
 
-  // 3) Asegurar memberships
+  // 3) Asegurar memberships usando safe role precedence logic
   assert(orgId, "orgId nulo");
 
-  const upsertMembership = async (userId: string, role: string, is_default: boolean) => {
-    const { error } = await serviceClient
-      .from("memberships")
-      .upsert({
-        org_id: orgId,
-        user_id: userId,
-        role,
-        is_default,
-      })
-      .eq("org_id", orgId)
-      .eq("user_id", userId);
-
-    assert(!error, `No se pudo upsert membership ${role} para ${userId}: ${error?.message}`);
+  // Define role priority (owner > admin > tracker)
+  const rolePriority: Record<string, number> = {
+    owner: 3,
+    admin: 2,
+    tracker: 1,
   };
 
-  await upsertMembership(owner.id!, "admin", true);
-  await upsertMembership(admin.id!, "admin", false);
-  await upsertMembership(tracker.id!, "tracker", false);
+  const ensureSafeMembership = async (userId: string, targetRole: string, is_default: boolean) => {
+    // Try to find existing active membership
+    const { data: existing, error: selectErr } = await serviceClient
+      .from("memberships")
+      .select("role, revoked_at")
+      .eq("org_id", orgId)
+      .eq("user_id", userId)
+      .is("revoked_at", null)
+      .maybeSingle();
+
+    assert(!selectErr, `Failed to query membership: ${selectErr?.message}`);
+
+    if (existing) {
+      // Member exists - only upgrade, never downgrade
+      const currentPriority = rolePriority[existing.role] || 1;
+      const newPriority = rolePriority[targetRole] || 1;
+      
+      if (newPriority > currentPriority) {
+        // Upgrade allowed
+        const { error: upgradeErr } = await serviceClient
+          .from("memberships")
+          .update({ role: targetRole, is_default })
+          .eq("org_id", orgId)
+          .eq("user_id", userId)
+          .is("revoked_at", null);
+        assert(!upgradeErr, `Failed to upgrade membership: ${upgradeErr?.message}`);
+      }
+      // If new role is equal or lower priority, keep existing role (no-op)
+    } else {
+      // No active membership - create new one
+      const { error: insertErr } = await serviceClient
+        .from("memberships")
+        .insert({
+          org_id: orgId,
+          user_id: userId,
+          role: targetRole,
+          is_default,
+        });
+      assert(!insertErr, `Failed to insert membership: ${insertErr?.message}`);
+    }
+  };
+
+  await ensureSafeMembership(owner.id!, "admin", true);
+  await ensureSafeMembership(admin.id!, "admin", false);
+  await ensureSafeMembership(tracker.id!, "tracker", false);
 
   console.log("Memberships aseguradas ✅");
 

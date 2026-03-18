@@ -87,6 +87,37 @@ role
 
 ---
 
+# Regla de Integridad de Rol
+
+**Dentro de la misma organización, un rol nunca puede degradarse.**
+
+La jerarquía de roles es:
+
+```
+owner  (nivel máximo)
+  ↓
+admin
+  ↓
+tracker (nivel mínimo)
+```
+
+**Regla:** Si un usuario es `owner` en org A, no puede ser degradado a `tracker` en la misma org A, incluso si recibe una invitación como `tracker`. El rol existente prevalece.
+
+**Aplicable a:**
+
+- Invitaciones tracker (accept-tracker-invite)
+- Invitaciones de usuario (cambios de rol)
+- Reactivación de membresías revocadas
+
+**Ejemplo válido:**
+
+- Usuario es `owner` en org A → recibe invite como `tracker` en org A → **se mantiene como `owner`** ✓
+- Usuario es `owner` en org A → recibe invite como `tracker` en org B → **se convierte en `tracker` en org B** ✓ (orgs diferentes, roles independientes)
+
+**Consulta:** Ver `docs/ARCHITECTURE_MEMBERSHIPS.md` para detalles técnicos e implementación.
+
+---
+
 # Principio de Acceso
 
 Un usuario puede acceder únicamente a los datos de organizaciones donde tenga membresía.

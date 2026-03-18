@@ -57,6 +57,16 @@ Documented signals:
 - `memberships` is the base access model per organization and role
 - schema map notes dominant security pattern based on membership by `org_id`
 
+**Role Integrity Rule:**
+
+Within the same `(org_id, user_id)` pair, a user's role cannot be downgraded. The role hierarchy is `owner > admin > tracker`. If an existing membership has a higher or equal priority role, any incoming role assignment (via invite or direct upsert) must preserve the existing role or upgrade it only if the new role is strictly higher. This rule applies regardless of membership active/revoked status and is enforced by the `safeUpsertMembership` function in `supabase/functions/_shared/safeMembership.ts`.
+
+**Cross-org independence:**
+
+Different organizations are completely independent. A user can be `owner` in org A and `tracker` in org B simultaneously. The integrity rule is strictly per-org.
+
+Reference: `docs/ARCHITECTURE_MEMBERSHIPS.md` § 3 "The Universal Integrity Rule: No Role Downgrade Within an Org"
+
 `INFERRED_SECURITY_MODEL`:
 
 - exact RLS SQL conditions for each identity table are not enumerated in documentation

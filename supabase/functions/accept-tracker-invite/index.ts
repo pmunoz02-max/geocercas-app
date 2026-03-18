@@ -1,5 +1,6 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { safeUpsertMembership } from "../_shared/safeMembership.ts";
 
 function getCorsHeaders(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -160,26 +161,20 @@ serve(async (req) => {
       });
     }
 
-    // 1) CANÓNICO: memberships
-    // PK real: (org_id, user_id)
-    const membershipRow = {
+    // 1) CANÓNICO: memberships (sin degradar rol dentro del mismo org)
+    const membershipWrite = await safeUpsertMembership(admin, {
       org_id,
       user_id: resolvedUserId,
-      role: "tracker",
-      is_default: true,
-      revoked_at: null,
-    };
+      new_role: "tracker",
+    });
 
-    const { error: membershipsErr } = await admin
-      .from("memberships")
-      .upsert(membershipRow, { onConflict: "org_id,user_id" });
-
-    if (membershipsErr) {
+    if (!membershipWrite.ok) {
       return json(req, 500, {
         ok: false,
         build_tag,
-        error: "Upsert memberships failed",
-        detail: membershipsErr.message,
+        error: "Write memberships failed",
+        detail: membershipWrite.error?.message,
+        membership_action: membershipWrite.action,
       });
     }
 
@@ -355,6 +350,9 @@ serve(async (req) => {
       user_id: resolvedUserId,
       org_id,
       canonical_membership: true,
+      membership_action: membershipWrite.action,
+      membership_role_applied: membershipWrite.role_applied,
+      membership_role_existing: membershipWrite.role_existing,
       tracker_org_user_ok: trackerOrgUserOk,
       tracker_org_user_error: trackerOrgUserError,
       personal_link_ok: personalLinkOk,

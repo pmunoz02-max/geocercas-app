@@ -460,15 +460,7 @@ serve(async (req) => {
       return jsonResponse(400, { ok: false, error: "Invalid assignment_id", build_tag: BUILD_TAG });
     }
 
-    console.log("[invite] input", {
-      org_id,
-      email,
-      lang,
-      callerUserId,
-      assignment_id: assignment_id || null,
-      hasBrevoKey: !!BREVO_API_KEY,
-      hasSender: !!BREVO_SENDER_EMAIL,
-    });
+    console.log("[invite] input", { org_id, lang, assignment_id: assignment_id || null });
 
     const { data: ownerRow, error: ownerErr } = await sbAdmin
       .from("memberships")
@@ -478,16 +470,6 @@ serve(async (req) => {
       .is("revoked_at", null)
       .limit(1)
       .maybeSingle();
-
-    console.log("[invite] auth_check_query", {
-      query_org_id: org_id,
-      query_user_id: callerUserId,
-      user_email: email,
-      query_error: ownerErr?.message || null,
-      row_found: !!ownerRow,
-      user_role_raw: ownerRow?.role ?? null,
-      user_revoked_at: ownerRow?.revoked_at ?? null,
-    });
 
     if (ownerErr) {
       console.log("[invite] auth_check_failed_db_error", { msg: ownerErr.message });
@@ -505,15 +487,7 @@ serve(async (req) => {
     }
 
     if (failureReason) {
-      console.log("[invite] auth_check_failed_access_denied", {
-        callerUserId,
-        org_id,
-        user_email: email,
-        failure_reason: failureReason,
-        role_raw: ownerRow?.role ?? null,
-        role_norm: roleNorm || null,
-        revoked_at: ownerRow?.revoked_at ?? null,
-      });
+      console.warn("[invite] access_denied", { org_id, failure_reason: failureReason });
       return jsonResponse(403, {
         ok: false,
         error: "Not allowed (must be owner of org)",
@@ -549,7 +523,6 @@ serve(async (req) => {
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
     const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang);
-    console.log("[invite] redirect", { redirectTo });
 
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
@@ -740,7 +713,7 @@ serve(async (req) => {
         replyToName: BREVO_SENDER_NAME,
       });
       brevoMessageId = extractBrevoMessageId(brevoResp);
-      console.log("[invite] brevo send ok", { messageId: brevoMessageId || null, sample: String(brevoResp).slice(0, 120) });
+      console.log("[invite] brevo send ok", { messageId: brevoMessageId || null });
 
       try {
         await updateInviteBrevoState(sbAdmin, trackerInviteId, {

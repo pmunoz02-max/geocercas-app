@@ -18,14 +18,21 @@ Se asigna rol owner
 ## Invitación de usuario
 
 ```
-Admin invita usuario
+Admin invita usuario a organización
   ↓
 Se envía magic link
   ↓
-Usuario acepta
+Usuario acepta invitación
   ↓
-Se crea membership
+Se crea o actualiza membership
+  ↓
+Rol no puede degradarse en la misma org
 ```
+
+**Nota de Integridad:** Si el usuario ya es `owner` en la org, no puede ser degradado a `tracker` 
+incluso si acepta una invitación con rol inferior. El rol existente prevalece.
+
+Ver: `docs/ARCHITECTURE_MEMBERSHIPS.md` § 3 "The Universal Integrity Rule"
 
 ## Registro de posición GPS
 

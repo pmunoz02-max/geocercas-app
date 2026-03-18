@@ -97,12 +97,12 @@ export async function setMemberRole(orgId: string, userId: string, role: Role) {
   return true;
 }
 
-/** Quita a un miembro (si RLS lo permite) */
+/** Quita a un miembro (si RLS lo permite) - uses safe RPC with revocation pattern */
 export async function removeMember(orgId: string, userId: string) {
-  const { error } = await supabase
-    .from("memberships")
-    .delete()
-    .match({ org_id: orgId, user_id: userId });
+  const { error } = await supabase.rpc("remove_member", {
+    p_org: orgId,
+    p_user: userId,
+  });
   if (error) throw error;
   return true;
 }
