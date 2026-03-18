@@ -33,18 +33,26 @@ export default function RequireOrg({ children }) {
   } = useAuth();
 
   const location = useLocation();
-  const isTrackerGpsRoute =
-    location.pathname === "/tracker-gps" || location.pathname.startsWith("/tracker-gps/");
+  const isTrackerRoute =
+    location.pathname === "/tracker" ||
+    location.pathname.startsWith("/tracker/") ||
+    location.pathname === "/tracker-gps" ||
+    location.pathname.startsWith("/tracker-gps/");
   const bypassLoggedRef = useRef(false);
-  const [trackerBypass, setTrackerBypass] = useState(isTrackerGpsRoute);
+  const [trackerBypass, setTrackerBypass] = useState(isTrackerRoute);
 
   useEffect(() => {
-    if (!isTrackerGpsRoute) {
+    if (!isTrackerRoute) {
       setTrackerBypass(false);
       return;
     }
 
     setTrackerBypass(true);
+    if (!bypassLoggedRef.current) {
+      console.warn("[monetization-regression] source=RequireOrg");
+      console.warn("[monetization-regression] tracker bypass applied");
+      bypassLoggedRef.current = true;
+    }
 
     let cancelled = false;
     (async () => {
@@ -64,7 +72,7 @@ export default function RequireOrg({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [isTrackerGpsRoute]);
+  }, [isTrackerRoute]);
 
   // AutocuraciÃ³n: si estÃ¡ logueado y hay orgs pero falta currentOrg, selecciona la primera
   useEffect(() => {
@@ -77,10 +85,12 @@ export default function RequireOrg({ children }) {
     }
   }, [loading, ready, isLoggedIn, currentOrg?.id, organizations, selectOrg]);
 
-  if (isTrackerGpsRoute && trackerBypass) {
+  if (isTrackerRoute && trackerBypass) {
     if (!bypassLoggedRef.current) {
       console.warn("[org-access-guard] bypass preview");
       console.warn("[org-access-guard] source=RequireOrg");
+      console.warn("[monetization-regression] source=RequireOrg");
+      console.warn("[monetization-regression] tracker bypass applied");
       bypassLoggedRef.current = true;
     }
     return children;

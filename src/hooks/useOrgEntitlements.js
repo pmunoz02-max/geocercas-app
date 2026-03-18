@@ -1,5 +1,5 @@
 // src/hooks/useOrgEntitlements.js
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient.js";
 import { useAuth } from "@/context/auth.js";
 
@@ -58,14 +58,46 @@ function buildFallbackEntitlementsFromPlan(planCode, billingRow = null) {
 }
 
 export default function useOrgEntitlements() {
-  const { ready, authenticated, currentOrgId } = useAuth();
+  const { ready, authenticated, currentOrgId, currentRole } = useAuth();
 
-  const [loading, setLoading] = useState(true);
+  const trackerRouteBypass = useMemo(() => {
+    try {
+      const p = String(window.location.pathname || "").toLowerCase();
+      return p === "/tracker" || p.startsWith("/tracker/") || p === "/tracker-gps" || p.startsWith("/tracker-gps/");
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const trackerRoleBypass = String(currentRole || "").toLowerCase() === "tracker";
+  const shouldBypassForTracker = trackerRouteBypass || trackerRoleBypass;
+
+  const [loading, setLoading] = useState(!shouldBypassForTracker);
   const [error, setError] = useState("");
   const [entitlements, setEntitlements] = useState(null);
   const [source, setSource] = useState("none");
+  const bypassLoggedRef = useRef(false);
 
   const loadEntitlements = useCallback(async () => {
+    if (shouldBypassForTracker) {
+      if (!bypassLoggedRef.current) {
+        console.warn("[monetization-regression] source=useOrgEntitlements");
+        console.warn("[monetization-regression] tracker bypass applied");
+        bypassLoggedRef.current = true;
+      }
+
+      setEntitlements(
+        buildFallbackEntitlementsFromPlan("pro", {
+          org_id: currentOrgId || null,
+          tracker_limit_override: 9999,
+        })
+      );
+      setError("");
+      setSource("tracker_preview_bypass");
+      setLoading(false);
+      return;
+    }
+
     if (!ready) return;
 
     if (!authenticated || !currentOrgId) {
@@ -147,7 +179,7 @@ export default function useOrgEntitlements() {
     } finally {
       setLoading(false);
     }
-  }, [ready, authenticated, currentOrgId]);
+  }, [ready, authenticated, currentOrgId, shouldBypassForTracker]);
 
   useEffect(() => {
     loadEntitlements();
