@@ -125,6 +125,7 @@ export default function TrackerGpsPage() {
   const [membershipDetail, setMembershipDetail] = useState("");
   const [tokenIss, setTokenIss] = useState("");
   const [isActivationBgRunning, setIsActivationBgRunning] = useState(false);
+  const [trackerAccessToken, setTrackerAccessToken] = useState("");
 
   const [disclosureAccepted, setDisclosureAccepted] = useState(false);
 
@@ -255,6 +256,38 @@ export default function TrackerGpsPage() {
       }
     })();
   }, [trackerReady, PRIMARY, lang]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadTrackerToken = async () => {
+      try {
+        const { data } = await supabaseTracker.auth.getSession();
+        const token = data?.session?.access_token || "";
+        const userId = data?.session?.user?.id || "";
+        console.log("[gps-auth] preload token present", !!token);
+        console.log("[gps-auth] preload tracker user", userId || "(none)");
+        if (mounted) setTrackerAccessToken(token);
+      } catch (error) {
+        console.error("[gps-auth] preload failed", error);
+      }
+    };
+
+    loadTrackerToken();
+
+    const { data: sub } = supabaseTracker.auth.onAuthStateChange((_event, session) => {
+      const token = session?.access_token || "";
+      const userId = session?.user?.id || "";
+      console.log("[gps-auth] auth change token present", !!token);
+      console.log("[gps-auth] auth change tracker user", userId || "(none)");
+      setTrackerAccessToken(token);
+    });
+
+    return () => {
+      mounted = false;
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
 
   useEffect(() => {
     console.log("[activation-gate] disabled");
@@ -442,14 +475,18 @@ export default function TrackerGpsPage() {
 
   async function invokeSendPosition(body) {
     console.log("[gps] sendPosition entered");
+    console.log("[gps-auth] token from state present", !!trackerAccessToken);
+    console.log(
+      "[gps-auth] token preview",
+      trackerAccessToken ? trackerAccessToken.slice(0, 16) : ""
+    );
     let timeoutId = null;
     let controller = null;
     try {
       const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
       const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
-      const trackerSessionData = await supabaseTracker.auth.getSession();
-      const trackerToken = String(trackerSessionData?.data?.session?.access_token || "").trim();
-      const trackerUserId = String(trackerSessionData?.data?.session?.user?.id || "").trim();
+      const trackerToken = String(trackerAccessToken || "").trim();
+      const trackerUserId = String(decodeJwtPayload(trackerToken)?.sub || "").trim();
 
       if (!sbUrl || !anon) {
         throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
@@ -508,7 +545,7 @@ export default function TrackerGpsPage() {
         method: "POST",
         headers: {
           apikey: anon,
-          Authorization: `Bearer ${trackerToken}`,
+          Authorization: `Bearer ${trackerAccessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
