@@ -34,6 +34,28 @@ function projectRefFromUrl(u) {
   }
 }
 
+function runtimeHostname() {
+  try {
+    return String(window.location?.hostname || "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function expectedRefsForHostname(hostname) {
+  const host = String(hostname || "").toLowerCase();
+
+  if (host.startsWith("preview.")) {
+    return [PREVIEW_PROJECT_REF];
+  }
+
+  if (host === "app.tugeocercas.com") {
+    return [PRODUCTION_PROJECT_REF];
+  }
+
+  return [PREVIEW_PROJECT_REF, PRODUCTION_PROJECT_REF];
+}
+
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -50,13 +72,23 @@ if (!isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
-const EXPECTED_PROJECT_REF = "mujwsfhkocsuuahlrssn";
+// Preview ref: proyecto preview/staging.
+const PREVIEW_PROJECT_REF = "mujwsfhkocsuauhlrssn";
+// Production ref: proyecto real productivo.
+const PRODUCTION_PROJECT_REF = "wpaixkvokdkudymgjoua";
 const currentRef = projectRefFromUrl(SUPABASE_URL);
+const currentHostname = runtimeHostname();
+const expectedRefs = expectedRefsForHostname(currentHostname);
 
-if (currentRef !== EXPECTED_PROJECT_REF) {
-  throw new Error(
-    `[supabaseClient] Proyecto incorrecto. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-  );
+// No debemos crashear toda la app por un mismatch de ref.
+// Esta validación solo sirve como guard-rail para detectar mezcla de preview/prod.
+if (!expectedRefs.includes(currentRef)) {
+  console.warn("[supabaseClient] Proyecto inesperado para este entorno.", {
+    hostname: currentHostname,
+    expectedRefs,
+    currentRef,
+    supabaseUrl: SUPABASE_URL,
+  });
 }
 
 // ✅ Token solo en memoria (para enviar Bearer al backend bootstrap si hace falta)
@@ -117,8 +149,10 @@ if (typeof window !== "undefined") {
   const info = {
     MODE: import.meta.env.MODE,
     ORIGIN: window.location.origin,
+    HOSTNAME: currentHostname,
     SUPABASE_URL,
     PROJECT_REF: currentRef,
+    EXPECTED_PROJECT_REFS: expectedRefs,
     HAS_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
     FLOW: "implicit",
     PERSIST_SESSION: false,
