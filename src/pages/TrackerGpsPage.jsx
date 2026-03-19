@@ -483,14 +483,8 @@ export default function TrackerGpsPage() {
     let timeoutId = null;
     let controller = null;
     try {
-      const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
-      const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
       const trackerToken = String(trackerAccessToken || "").trim();
       const trackerUserId = String(decodeJwtPayload(trackerToken)?.sub || "").trim();
-
-      if (!sbUrl || !anon) {
-        throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
-      }
 
       if (!body?.org_id) {
         console.warn("[gps] send aborted: missing org_id");
@@ -524,7 +518,7 @@ export default function TrackerGpsPage() {
         last_http_status: null,
       }));
 
-      console.log("[gps] transport=fetch");
+      console.log("[gps] transport=app-api");
       console.log("[gps] send payload", {
         org_id: body.org_id,
         userId: trackerUserId,
@@ -534,17 +528,15 @@ export default function TrackerGpsPage() {
         timestamp: body.timestamp ?? Date.now(),
       });
 
-      const url = `${sbUrl.replace(/\/+$/, "")}/functions/v1/send_position`;
       controller = new AbortController();
       timeoutId = setTimeout(() => {
         console.warn("[gps] send timeout");
         controller?.abort();
       }, 5000);
 
-      const res = await fetch(url, {
+      const res = await fetch("/api/send-position", {
         method: "POST",
         headers: {
-          apikey: anon,
           Authorization: `Bearer ${trackerAccessToken}`,
           "Content-Type": "application/json",
         },
