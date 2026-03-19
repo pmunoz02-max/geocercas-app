@@ -441,51 +441,97 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
-    const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
-    const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
-
-    if (!sbUrl || !anon) {
-      throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
-    }
-
-    const userJwt = await getFreshJwtOrThrow("send_position(fetch)");
-
-    setDebug((d) => ({
-      ...d,
-      last_invoke_fn: "send_position",
-      last_invoke_token_len: userJwt.length,
-      last_invoke_auth: "fetch:Authorization=anon; x-user-jwt=user",
-      last_http_status: null,
-    }));
-
-    const url = `${sbUrl.replace(/\/+$/, "")}/functions/v1/send_position`;
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        apikey: anon,
-        Authorization: `Bearer ${anon}`,
-        "Content-Type": "application/json",
-        "x-user-jwt": userJwt,
-      },
-      body: JSON.stringify(body),
-    });
-
-    setDebug((d) => ({ ...d, last_http_status: res.status }));
-
-    let j = null;
+    console.log("[gps] sendPosition entered");
+    let timeoutId = null;
+    let controller = null;
     try {
-      j = await res.json();
-    } catch {}
+      const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
+      const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
 
-    console.log("[gps] send response", { status: res.status, body: j });
+      if (!sbUrl || !anon) {
+        throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
+      }
 
-    if (!res.ok) {
-      const msg = j?.error || j?.message || `HTTP ${res.status}`;
-      throw new Error(`send_position http ${res.status}: ${msg}`);
+      if (!body?.org_id) {
+        console.warn("[gps] send aborted: missing org_id");
+        return null;
+      }
+      if (!Number.isFinite(Number(body?.lat)) || !Number.isFinite(Number(body?.lng))) {
+        console.warn("[gps] send aborted: invalid coords");
+        return null;
+      }
+
+      const userJwt = await getFreshJwtOrThrow("send_position(fetch)");
+      const jwtPayload = decodeJwtPayload(userJwt);
+      const userId = String(jwtPayload?.sub || "").trim();
+      if (!userId) {
+        console.warn("[gps] send aborted: missing userId");
+        return null;
+      }
+
+      setDebug((d) => ({
+        ...d,
+        last_invoke_fn: "send_position",
+        last_invoke_token_len: userJwt.length,
+        last_invoke_auth: "fetch:Authorization=anon; x-user-jwt=user",
+        last_http_status: null,
+      }));
+
+      console.log("[gps] transport=fetch");
+      console.log("[gps] send payload", {
+        org_id: body.org_id,
+        userId,
+        lat: body.lat,
+        lng: body.lng,
+        accuracy: body.accuracy ?? null,
+        timestamp: body.timestamp ?? Date.now(),
+      });
+
+      const url = `${sbUrl.replace(/\/+$/, "")}/functions/v1/send_position`;
+      controller = new AbortController();
+      timeoutId = setTimeout(() => {
+        console.warn("[gps] send timeout");
+        controller?.abort();
+      }, 5000);
+
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          apikey: anon,
+          Authorization: `Bearer ${anon}`,
+          "Content-Type": "application/json",
+          "x-user-jwt": userJwt,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      setDebug((d) => ({ ...d, last_http_status: res.status }));
+
+      let j = null;
+      try {
+        j = await res.json();
+      } catch {}
+
+      console.log("[gps] send response", { status: res.status, body: j });
+
+      if (!res.ok) {
+        const msg = j?.error || j?.message || `HTTP ${res.status}`;
+        throw new Error(`send_position http ${res.status}: ${msg}`);
+      }
+
+      return j;
+    } catch (e) {
+      console.error("[gps] send error", {
+        message: e?.message || String(e),
+        stack: e?.stack || null,
+        details: e,
+      });
+      throw e;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      console.log("[gps] sendPosition completed");
     }
-
-    return j;
   }
 
   const tryAcceptInvite = async (reason = "unknown") => {
