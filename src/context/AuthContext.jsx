@@ -307,7 +307,7 @@ export function AuthProvider({ children }) {
 
         setCurrentOrg(orgObj || null);
 
-        if (orgs.length === 1 && pickedId && serverOrgId !== pickedId) {
+        if (pickedId && serverOrgId !== pickedId) {
           void persistCurrentOrgServer(pickedId);
         }
 
@@ -626,8 +626,8 @@ export function AuthProvider({ children }) {
       const s1 = serverSession || (await fetchSession());
 
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
-        if (localUser) {
-          await hydrateClientContext(localUser);
+        if (resolvedUser) {
+          await hydrateClientContext(resolvedUser);
         } else {
           clearResolvedAuthState();
         }
@@ -655,8 +655,8 @@ export function AuthProvider({ children }) {
         const s2 = await fetchSession();
         if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
-        } else if (localUser) {
-          await hydrateClientContext(localUser);
+        } else if (resolvedUser) {
+          await hydrateClientContext(resolvedUser);
         }
       }
     } catch (error) {
