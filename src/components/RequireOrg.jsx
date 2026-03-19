@@ -49,6 +49,8 @@ export default function RequireOrg({ children }) {
 
     setTrackerBypass(true);
     if (!bypassLoggedRef.current) {
+      console.warn("[tracker-fallback] source=RequireOrg");
+      console.warn("[tracker-fallback] bypassed");
       console.warn("[tracker-blocking-ui] source=RequireOrg");
       console.warn("[tracker-blocking-ui] bypassed");
       console.warn("[tracker-org-sync-gate] bypassed on tracker route");
@@ -90,6 +92,8 @@ export default function RequireOrg({ children }) {
 
   if (isTrackerRoute && trackerBypass) {
     if (!bypassLoggedRef.current) {
+      console.warn("[tracker-fallback] source=RequireOrg");
+      console.warn("[tracker-fallback] bypassed");
       console.warn("[tracker-blocking-ui] source=RequireOrg");
       console.warn("[tracker-blocking-ui] bypassed");
       console.warn("[tracker-org-sync-gate] bypassed on tracker route");
