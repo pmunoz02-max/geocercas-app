@@ -28,6 +28,7 @@ export default function RequireOrg({ children }) {
     isAuthenticated,
     user,
     currentOrg,
+    currentOrgId,
     role,
     ctx,
     refreshContext,
@@ -43,7 +44,8 @@ export default function RequireOrg({ children }) {
   }, [loading, contextLoading, isAuthenticated, user?.id]);
 
   const roleLower = useMemo(() => String(role || "").toLowerCase(), [role]);
-  const hasOrg = !!currentOrg?.id;
+  const effectiveOrgId = currentOrg?.id || currentOrgId || null;
+  const hasContext = !!effectiveOrgId && !!roleLower;
 
   // 1) Boot auth
   if (loading) {
@@ -65,8 +67,8 @@ export default function RequireOrg({ children }) {
     );
   }
 
-  // 3) Si ya tenemos org, no bloquear por ctx/role
-  if (hasOrg) {
+  // 3) Si ya tenemos org_id y role, no bloquear por nombre de org pendiente
+  if (hasContext) {
     return children;
   }
 
@@ -95,7 +97,7 @@ export default function RequireOrg({ children }) {
             <b>Rol:</b> {roleLower || "sin rol"}
           </div>
           <div>
-            <b>Org:</b> (no resuelta)
+            <b>Org:</b> {effectiveOrgId || "(no resuelta)"}
           </div>
           {errMsg && (
             <div className="text-xs text-red-600">

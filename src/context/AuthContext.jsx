@@ -222,6 +222,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
+  const [currentOrgIdState, setCurrentOrgIdState] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
   const [canSwitchOrganizations, setCanSwitchOrganizations] = useState(false);
 
@@ -305,6 +306,8 @@ export function AuthProvider({ children }) {
 
         const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
 
+        setCurrentOrgIdState(pickedId || null);
+
         setCurrentOrg(orgObj || null);
 
         if (pickedId && serverOrgId !== pickedId) {
@@ -325,9 +328,11 @@ export function AuthProvider({ children }) {
 
       // Sin orgs list: solo setea si hay finalOrgId
       if (finalOrgId) {
+        setCurrentOrgIdState(finalOrgId);
         setOrganizations([{ id: finalOrgId }]);
         setCurrentOrg({ id: finalOrgId });
       } else {
+        setCurrentOrgIdState(null);
         setOrganizations([]);
         setCurrentOrg(null);
       }
@@ -352,6 +357,8 @@ export function AuthProvider({ children }) {
     if (org_id) {
       const normalizedCurrentOrgId = currentOrgPayload?.id ?? currentOrgPayload?.org_id ?? org_id;
       const orgFromList = orgs.find((org) => org?.id === normalizedCurrentOrgId) || null;
+
+      setCurrentOrgIdState(normalizedCurrentOrgId);
 
       setCurrentOrg((prev) => {
         if (orgFromList) return orgFromList;
@@ -384,6 +391,7 @@ export function AuthProvider({ children }) {
   }, [path]);
 
   const clearResolvedAuthState = useCallback(() => {
+    setCurrentOrgIdState(null);
     setCurrentRole(null);
     setIsAppRoot(false);
     setCanSwitchOrganizations(false);
@@ -501,6 +509,7 @@ export function AuthProvider({ children }) {
           organizationsResolved.filter((org) => isNonTrackerRole(org?.role)).length > 1
       );
       setOrganizations(organizationsResolved);
+      setCurrentOrgIdState(pickedOrg?.id || null);
       setCurrentOrg(pickedOrg || null);
       setCurrentRole(
         normalizeRole(pickedOrg?.role) ||
@@ -537,6 +546,7 @@ export function AuthProvider({ children }) {
       const found = organizations.find((o) => o?.id === orgIdToSelect);
 
       // Siempre actualiza el estado
+  setCurrentOrgIdState(orgIdToSelect);
       setCurrentOrg(found || { id: orgIdToSelect });
 
       setOrganizations((prev) => {
@@ -718,11 +728,13 @@ export function AuthProvider({ children }) {
     () => {
       const resolvedUser = session?.user ?? user ?? null;
       const isAuthenticated = Boolean(resolvedUser?.id);
+      const effectiveCurrentOrgId = currentOrg?.id || currentOrgIdState || null;
       const r = normalizeRole(currentRole);
       const isAdmin = r === "owner" || r === "admin" || isAppRoot;
 
       return {
       loading,
+      contextLoading: switchingOrg,
       ready,
       initialized,
       session,
@@ -737,14 +749,18 @@ export function AuthProvider({ children }) {
       canSwitchOrganizations,
       organizations,
       currentOrg,
+      ctx: effectiveCurrentOrgId
+        ? { ok: true, org_id: effectiveCurrentOrgId, role: currentRole || null }
+        : null,
       switchingOrg,
       selectOrg,
 
       role: currentRole,
-      activeOrgId: currentOrg?.id || null,
-      currentOrgId: currentOrg?.id || null,
-      orgId: currentOrg?.id || null,
+      activeOrgId: effectiveCurrentOrgId,
+      currentOrgId: effectiveCurrentOrgId,
+      orgId: effectiveCurrentOrgId,
 
+      refreshContext: bootstrap,
       refreshSession: bootstrap,
       logout,
       };
@@ -756,6 +772,7 @@ export function AuthProvider({ children }) {
       initialized,
       user,
       currentRole,
+      currentOrgIdState,
       isAppRoot,
       canSwitchOrganizations,
       organizations,
