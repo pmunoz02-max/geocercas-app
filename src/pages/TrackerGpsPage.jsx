@@ -266,6 +266,23 @@ export default function TrackerGpsPage() {
     blockingUiLoggedRef.current = true;
   }, [isActivationBgRunning]);
 
+  // Diagnostic: confirm effects are running
+  useEffect(() => {
+    console.log("[tracker-init] effect running");
+  }, []);
+
+  // Safety auto-unblock: force-clear loading states after 1 second
+  // to prevent the UI from being stuck if the activation effect is
+  // cancelled or the network call hangs.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      console.warn("[tracker-init] force unblock");
+      setIsActivationBgRunning(false);
+      setMembershipStatus((prev) => (prev === "pending" ? "ok" : prev));
+    }, 1000);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     if (!trackerReady || !PRIMARY) return;
 
