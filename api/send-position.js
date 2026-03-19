@@ -53,19 +53,32 @@ module.exports = async function handler(req, res) {
       }
     );
 
-    const text = await upstream.text();
+    const upstreamText = await upstream.text();
 
     console.log("[api/send-position] upstream status", upstream.status);
-    console.log("[api/send-position] upstream body", text);
+    console.log("[api/send-position] upstream body", upstreamText);
 
     res.statusCode = upstream.status;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(text);
+
+    if (upstreamText) {
+      res.end(upstreamText);
+    } else {
+      res.end(JSON.stringify({
+        ok: upstream.ok,
+        status: upstream.status,
+        error: upstream.ok ? null : "empty_upstream_body",
+      }));
+    }
   } catch (error) {
     console.error("[api/send-position] error", error?.message || String(error));
     console.error("[api/send-position] stack", error?.stack || "(no stack)");
     res.statusCode = 500;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    res.end(JSON.stringify({ error: error?.message || "proxy_error" }));
+    res.end(JSON.stringify({
+      ok: false,
+      error: error?.message || "proxy_error",
+      stack: error?.stack || null,
+    }));
   }
 };
