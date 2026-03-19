@@ -217,7 +217,9 @@ async function persistCurrentOrgServer(orgIdToSelect) {
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
+  const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
@@ -229,7 +231,6 @@ export function AuthProvider({ children }) {
 
   const didBootstrapOnceRef = useRef(false);
   const didEnsureContextThisRunRef = useRef(false);
-  const trackerBootstrapLogRef = useRef("");
 
   const [path, setPath] = useState(() => {
     try {
@@ -382,6 +383,145 @@ export function AuthProvider({ children }) {
     }
   }, [path]);
 
+  const clearResolvedAuthState = useCallback(() => {
+    setCurrentRole(null);
+    setIsAppRoot(false);
+    setCanSwitchOrganizations(false);
+    setOrganizations([]);
+    setCurrentOrg(null);
+  }, []);
+
+  const hydrateClientContext = useCallback(
+    async (sessionUser) => {
+      const userId = sessionUser?.id || null;
+
+      if (!userId) {
+        clearResolvedAuthState();
+        return;
+      }
+
+      let membershipRows = [];
+
+      try {
+        const { data, error } = await supabase
+          .from("memberships")
+          .select("org_id, role, is_default, revoked_at")
+          .eq("user_id", userId)
+          .is("revoked_at", null)
+          .order("is_default", { ascending: false });
+
+        if (!error && Array.isArray(data)) {
+          membershipRows = data;
+        }
+      } catch {}
+
+      if (membershipRows.length === 0) {
+        try {
+          const { data, error } = await supabase
+            .from("user_organizations")
+            .select("org_id, role")
+            .eq("user_id", userId);
+
+          if (!error && Array.isArray(data)) {
+            membershipRows = data.map((row, idx) => ({
+              ...row,
+              is_default: idx === 0,
+              revoked_at: null,
+            }));
+          }
+        } catch {}
+      }
+
+      const orgIds = Array.from(
+        new Set(membershipRows.map((row) => row?.org_id).filter(Boolean))
+      );
+
+      let orgRows = [];
+      if (orgIds.length > 0) {
+        try {
+          const { data, error } = await supabase
+            .from("organizations")
+            .select("id, name, slug")
+            .in("id", orgIds);
+
+          if (!error && Array.isArray(data)) {
+            orgRows = data;
+          }
+        } catch {}
+      }
+
+      const orgById = new Map(orgRows.map((row) => [row.id, row]));
+      const organizationsResolved = Array.from(
+        new Map(
+          membershipRows
+            .filter((row) => row?.org_id)
+            .map((row) => {
+              const orgMeta = orgById.get(row.org_id) || null;
+              return [
+                row.org_id,
+                {
+                  id: row.org_id,
+                  name: orgMeta?.name || "",
+                  slug: orgMeta?.slug || null,
+                  role: normalizeRole(row?.role),
+                },
+              ];
+            })
+        ).values()
+      );
+
+      let preferredOrgId = null;
+      try {
+        preferredOrgId = localStorage.getItem(LS_ORG_KEY);
+      } catch {}
+
+      const safePreferredOrgId = !isTrackerUiPath(path)
+        ? sanitizePreferredOrgId(preferredOrgId, organizationsResolved)
+        : null;
+
+      let pickedId =
+        (safePreferredOrgId &&
+          organizationsResolved.find((org) => org?.id === safePreferredOrgId)?.id) ||
+        null;
+
+      if (!pickedId) {
+        const firstNonTracker = organizationsResolved.find((org) => isNonTrackerRole(org?.role));
+        pickedId = firstNonTracker?.id || organizationsResolved[0]?.id || null;
+      }
+
+      const pickedOrg = pickedId
+        ? organizationsResolved.find((org) => org?.id === pickedId) || null
+        : null;
+
+      setIsAppRoot(
+        Boolean(sessionUser?.app_metadata?.is_app_root ?? sessionUser?.app_metadata?.isAppRoot)
+      );
+      setCanSwitchOrganizations(
+        extractCanSwitchOrganizations({ user: sessionUser, organizations: organizationsResolved }) ||
+          organizationsResolved.filter((org) => isNonTrackerRole(org?.role)).length > 1
+      );
+      setOrganizations(organizationsResolved);
+      setCurrentOrg(pickedOrg || null);
+      setCurrentRole(
+        normalizeRole(pickedOrg?.role) ||
+          normalizeRole(sessionUser?.app_metadata?.role) ||
+          normalizeRole(sessionUser?.user_metadata?.role) ||
+          null
+      );
+
+      if (pickedOrg?.id && isNonTrackerRole(pickedOrg?.role) && !isTrackerUiPath(path)) {
+        try {
+          localStorage.setItem(LS_ORG_KEY, pickedOrg.id);
+        } catch {}
+      }
+
+      if (pickedOrg?.id) {
+        void persistCurrentOrgServer(pickedOrg.id);
+      }
+    },
+    [clearResolvedAuthState, path]
+  );
+
   /**
    * selectOrg = selección explícita del usuario desde selector de org.
    * Regla universal: solo persistimos como "org global" si NO es tracker.
@@ -430,28 +570,44 @@ export function AuthProvider({ children }) {
   );
 
   const bootstrap = useCallback(async () => {
-    if (isPublicAuthPath(path)) {
-      setLoading(false);
-      if (!didBootstrapOnceRef.current) {
-        didBootstrapOnceRef.current = true;
-        setReady(true);
-      }
-      return;
-    }
-
     setLoading(true);
     didEnsureContextThisRunRef.current = false;
 
     try {
+      const {
+        data: { session: currentSession },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      setSession(currentSession || null);
+      setUser(currentSession?.user ?? null);
+
+      if (!currentSession?.user) {
+        clearResolvedAuthState();
+        return;
+      }
+
+      if (isPublicAuthPath(path)) {
+        setIsAppRoot(
+          Boolean(
+            currentSession.user?.app_metadata?.is_app_root ??
+              currentSession.user?.app_metadata?.isAppRoot
+          )
+        );
+        setCanSwitchOrganizations(
+          extractCanSwitchOrganizations({ user: currentSession.user })
+        );
+        return;
+      }
+
       const s1 = await fetchSession();
 
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
-        setUser(null);
-        setCurrentRole(null);
-        setIsAppRoot(false);
-        setCanSwitchOrganizations(false);
-        setOrganizations([]);
-        setCurrentOrg(null);
+        await hydrateClientContext(currentSession.user);
         return;
       }
 
@@ -476,22 +632,44 @@ export function AuthProvider({ children }) {
         const s2 = await fetchSession();
         if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
+        } else {
+          await hydrateClientContext(currentSession.user);
         }
       }
+    } catch (error) {
+      console.error("[AUTHCTX] bootstrap failed", error);
+      setSession(null);
+      setUser(null);
+      clearResolvedAuthState();
     } finally {
       setLoading(false);
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
       }
+      setInitialized(true);
     }
-  }, [applySessionData, applyEnsureContext, path]);
+  }, [applySessionData, applyEnsureContext, clearResolvedAuthState, hydrateClientContext, path]);
 
   useEffect(() => {
     bootstrap();
   }, [bootstrap]);
 
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      void bootstrap();
+    });
+
+    return () => {
+      data?.subscription?.unsubscribe?.();
+    };
+  }, [bootstrap]);
+
   const logout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {}
+
     try {
       await fetch("/api/auth/logout", {
         method: "POST",
@@ -503,43 +681,31 @@ export function AuthProvider({ children }) {
       localStorage.removeItem(LS_ORG_KEY);
     } catch {}
 
+    setSession(null);
     setUser(null);
-    setCurrentRole(null);
-    setIsAppRoot(false);
-    setCanSwitchOrganizations(false);
-    setOrganizations([]);
-    setCurrentOrg(null);
+    clearResolvedAuthState();
+    setLoading(false);
+    setReady(true);
+    setInitialized(true);
 
     window.location.href = "/login";
-  }, []);
+  }, [clearResolvedAuthState]);
 
   const value = useMemo(
     () => {
-      const isAuthenticated = Boolean(user?.id);
+      const resolvedUser = session?.user ?? user ?? null;
+      const isAuthenticated = Boolean(resolvedUser?.id);
       const r = normalizeRole(currentRole);
       const isAdmin = r === "owner" || r === "admin" || isAppRoot;
-      const isTrackerBootstrapRoute = isTrackerUiPath(path) || isTrackerGpsPath(path);
-      const trackerBootstrapBypassed = isTrackerBootstrapRoute && isAuthenticated;
-      const exposedLoading = trackerBootstrapBypassed ? false : loading;
-      const exposedReady = trackerBootstrapBypassed ? true : ready;
-
-      if (trackerBootstrapBypassed) {
-        const marker = `${path}:${user?.id || ""}`;
-        if (trackerBootstrapLogRef.current !== marker) {
-          trackerBootstrapLogRef.current = marker;
-          // eslint-disable-next-line no-console
-          console.warn("[tracker-auth-bootstrap] source=AuthContext");
-          // eslint-disable-next-line no-console
-          console.warn("[tracker-auth-bootstrap] bypassed");
-        }
-      }
 
       return {
-      loading: exposedLoading,
-      ready: exposedReady,
+      loading,
+      ready,
+      initialized,
+      session,
       isAuthenticated,
       authenticated: isAuthenticated,
-      user,
+      user: resolvedUser,
       isLoggedIn: isAuthenticated,
 
       currentRole,
@@ -561,8 +727,10 @@ export function AuthProvider({ children }) {
       };
     },
     [
+      session,
       loading,
       ready,
+      initialized,
       user,
       currentRole,
       isAppRoot,
@@ -573,7 +741,6 @@ export function AuthProvider({ children }) {
       selectOrg,
       bootstrap,
       logout,
-      path,
     ]
   );
 
@@ -587,6 +754,8 @@ export function AuthProvider({ children }) {
 const SAFE_FALLBACK = {
   loading: true,
   ready: false,
+  initialized: false,
+  session: null,
   isAuthenticated: false,
   authenticated: false,
   user: null,

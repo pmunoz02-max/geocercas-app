@@ -1,7 +1,6 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
-import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 function FullScreenLoader({ text = "Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦" }) {
   return (
@@ -26,6 +25,7 @@ export default function RequireOrg({ children }) {
   const {
     loading,
     ready,
+    initialized,
     isLoggedIn,
     currentOrg,
     organizations,
@@ -33,51 +33,8 @@ export default function RequireOrg({ children }) {
   } = useAuth();
 
   const location = useLocation();
-  const isTrackerRoute =
-    location.pathname === "/tracker" ||
-    location.pathname.startsWith("/tracker/") ||
-    location.pathname === "/tracker-gps" ||
-    location.pathname.startsWith("/tracker-gps/");
-  const bypassLoggedRef = useRef(false);
-  const [trackerBypass, setTrackerBypass] = useState(isTrackerRoute);
-
-  useEffect(() => {
-    if (!isTrackerRoute) {
-      setTrackerBypass(false);
-      return;
-    }
-
-    setTrackerBypass(true);
-    if (!bypassLoggedRef.current) {
-      console.warn("[tracker-fallback] source=RequireOrg");
-      console.warn("[tracker-fallback] bypassed");
-      console.warn("[tracker-blocking-ui] source=RequireOrg");
-      console.warn("[tracker-blocking-ui] bypassed");
-      console.warn("[tracker-org-sync-gate] bypassed on tracker route");
-      console.warn("[monetization-regression] source=RequireOrg");
-      console.warn("[monetization-regression] tracker bypass applied");
-      bypassLoggedRef.current = true;
-    }
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await supabaseTracker.auth.getSession();
-        if (cancelled) return;
-        if (data?.session?.user?.id) {
-          console.warn("[org-access-guard] bypass preview");
-          console.warn("[org-access-guard] source=RequireOrg");
-          bypassLoggedRef.current = true;
-        }
-      } catch {
-        // ignore session probe failures in preview bypass
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isTrackerRoute]);
+  const initLoggedRef = useRef(false);
+  const orgHydrationLoggedRef = useRef(false);
 
   // AutocuraciÃ³n: si estÃ¡ logueado y hay orgs pero falta currentOrg, selecciona la primera
   useEffect(() => {
@@ -90,24 +47,16 @@ export default function RequireOrg({ children }) {
     }
   }, [loading, ready, isLoggedIn, currentOrg?.id, organizations, selectOrg]);
 
-  if (isTrackerRoute && trackerBypass) {
-    if (!bypassLoggedRef.current) {
-      console.warn("[tracker-fallback] source=RequireOrg");
-      console.warn("[tracker-fallback] bypassed");
-      console.warn("[tracker-blocking-ui] source=RequireOrg");
-      console.warn("[tracker-blocking-ui] bypassed");
-      console.warn("[tracker-org-sync-gate] bypassed on tracker route");
-      console.warn("[org-access-guard] bypass preview");
-      console.warn("[org-access-guard] source=RequireOrg");
-      console.warn("[monetization-regression] source=RequireOrg");
-      console.warn("[monetization-regression] tracker bypass applied");
-      bypassLoggedRef.current = true;
-    }
-    return children;
-  }
-
   // 1) Mientras se hidrata el contexto
-  if (loading || !ready) return <FullScreenLoader />;
+  if (!initialized || loading || !ready) {
+    if (!initLoggedRef.current) {
+      console.log("[RequireOrg] waiting for auth initialization", {
+        path: location.pathname,
+      });
+      initLoggedRef.current = true;
+    }
+    return <FullScreenLoader />;
+  }
 
   // 2) Sin sesiÃ³n -> login
   if (!isLoggedIn) {
@@ -117,6 +66,13 @@ export default function RequireOrg({ children }) {
 
   // 3) Tiene orgs pero todavÃ­a no se asentÃ³ currentOrg (1 render)
   if (!currentOrg?.id && Array.isArray(organizations) && organizations.length > 0) {
+    if (!orgHydrationLoggedRef.current) {
+      console.log("[RequireOrg] waiting for currentOrg resolution", {
+        path: location.pathname,
+        organizations: organizations.length,
+      });
+      orgHydrationLoggedRef.current = true;
+    }
     return <FullScreenLoader text="Resolviendo tu organizaciÃ³nâ€¦" />;
   }
 

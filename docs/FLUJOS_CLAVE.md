@@ -72,6 +72,11 @@ Implementación:
 
 Source of truth:
 - `activeOrgId` operativo se toma de `AuthContext` alimentado por `/api/auth/session`.
+- La sesión base del dashboard/app se hidrata desde el singleton `src/lib/supabaseClient.js` con `auth.getSession()` y `auth.onAuthStateChange()`.
+- `AuthContext` expone `session`, `user`, `loading`, `initialized` y solo resuelve contexto de org después de confirmar la sesión del cliente.
+- `AuthGuard` y `RequireOrg` redirigen a `/login` solo cuando `initialized === true` y no existe `user`.
+- `Login.tsx`, `AuthContext.jsx`, `AuthGuard.jsx`, `RequireOrg.jsx`, `/tracker` y `/dashboard` deben usar la misma instancia singleton de Supabase.
+- El flujo público `tracker-gps` mantiene su cliente dedicado, pero sin `storageKey` manual para evitar divergencias entre preview y production.
 
 ## Misma org vs org distinta
 
@@ -90,3 +95,5 @@ Cross-org (`org_id` distinto):
 2. Overwrite de rol en same-org al aceptar invitación.
 3. Mostrar selector de org a usuario normal de una sola org.
 4. Usar cliente principal para callbacks/páginas tracker (`AuthCallback` y `TrackerGpsPage` deben usar cliente tracker en flujo tracker).
+5. Mezclar para `/tracker` o `/dashboard` varias fuentes de auth a la vez (`/api/auth/session`, bypasses manuales y otro cliente Supabase distinto).
+6. Forzar `storageKey='sb-tracker-auth'` cuando el SDK persiste la sesión bajo su clave canónica del proyecto.

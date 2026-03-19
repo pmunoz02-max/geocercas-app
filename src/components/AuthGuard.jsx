@@ -9,32 +9,23 @@ console.log("[TG AUTHGUARD MARKER]", window.__TG_AUTHGUARD_MARKER);
 
 export default function AuthGuard({ children }) {
   const location = useLocation();
-  const bypassLoggedRef = useRef(false);
+  const missingProviderLoggedRef = useRef(false);
 
   // ✅ nunca lanza
   const auth = useAuthSafe();
 
   if (!auth) {
+    if (!missingProviderLoggedRef.current) {
+      console.error("[AuthGuard] auth provider missing");
+      missingProviderLoggedRef.current = true;
+    }
     const next = encodeURIComponent(location.pathname || "/inicio");
     return <Navigate to={`/login?next=${next}&err=auth_provider_missing`} replace />;
   }
 
-  const { loading, user } = auth;
-  const isTrackerRoute =
-    location.pathname.startsWith("/tracker") || location.pathname.startsWith("/tracker-gps");
+  const { loading, initialized, user } = auth;
 
-  if (isTrackerRoute && user) {
-    if (!bypassLoggedRef.current) {
-      console.warn("[tracker-auth-bootstrap] source=AuthGuard");
-      console.warn("[tracker-auth-bootstrap] bypassed");
-      console.warn("[ROOT-BYPASS] tracker flow unblocked at root");
-      bypassLoggedRef.current = true;
-    }
-    if (children) return children;
-    return <Outlet />;
-  }
-
-  if (loading) return null;
+  if (!initialized || loading) return null;
 
   if (!user) {
     const next = encodeURIComponent(location.pathname || "/inicio");

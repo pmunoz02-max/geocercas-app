@@ -1,11 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Preview ONLY - Tracker client
+ * Tracker client
  *
  * ✅ Migrado a PKCE (consistente con el client principal)
  * - Singleton global: globalThis.__SUPABASE_TRACKER__
- * - StorageKey fijo: sb-tracker-auth
+ * - StorageKey: usar default del SDK para evitar divergencias entre builds
  * - Storage real: localStorage
  * - detectSessionInUrl: false (callback controlado por nuestra app)
  */
@@ -22,6 +22,14 @@ function getLocalStorage() {
     if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
   } catch {}
   return undefined;
+}
+
+function projectRefFromUrl(rawUrl) {
+  try {
+    return new URL(String(rawUrl || "")).hostname.split(".")[0] || "";
+  } catch {
+    return "";
+  }
 }
 
 // ✅ Universal:
@@ -43,6 +51,8 @@ const url = mustBeSupabaseUrl(trackerUrlRaw);
 const anon = String(trackerAnonRaw || "").trim();
 
 const storage = getLocalStorage();
+const projectRef = projectRefFromUrl(url);
+const sdkStorageKey = projectRef ? `sb-${projectRef}-auth-token` : null;
 
 let client = null;
 
@@ -55,7 +65,6 @@ if (url && anon) {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
-        storageKey: "sb-tracker-auth",
         storage,
       },
     });
@@ -74,7 +83,7 @@ if (!url || !anon) {
 } else {
   console.log("[supabaseTrackerClient] tracker client ready:", {
     url,
-    storageKey: "sb-tracker-auth",
+    storageKey: sdkStorageKey || "sdk-default",
     hasLocalStorage: !!storage,
     singleton: true,
     flowType: "pkce",
