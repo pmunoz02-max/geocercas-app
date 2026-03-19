@@ -14,16 +14,10 @@ import TopTabs from "../components/TopTabs.jsx";
  * - Pricing y Billing al extremo derecho
  */
 
-function buildTabs({ role, isAppRoot }) {
+function buildTabs({ role, isAppRoot, isAdmin }) {
   const r = String(role || "").toLowerCase();
 
   const isTrackerOnly = r === "tracker";
-  const isAdmin =
-    r === "admin" ||
-    r === "owner" ||
-    r === "root" ||
-    r === "root_owner" ||
-    isAppRoot;
 
   if (isTrackerOnly) {
     return [{ path: "/tracker", labelKey: "app.tabs.tracker" }];
@@ -61,7 +55,7 @@ function buildTabs({ role, isAppRoot }) {
 }
 
 export default function ProtectedShell() {
-  const { loading, user, currentRole, isAppRoot } = useAuth();
+  const { loading, user, currentRole, isAppRoot, isAdmin } = useAuth();
   const location = useLocation();
   const bypassLoggedRef = useRef(false);
 
@@ -80,7 +74,7 @@ export default function ProtectedShell() {
   if (loading) return null;
   if (!user) return null;
 
-  const tabs = buildTabs({ role: currentRole, isAppRoot });
+  const tabs = buildTabs({ role: currentRole, isAppRoot, isAdmin });
 
   return (
     <div className="min-h-screen bg-slate-50">

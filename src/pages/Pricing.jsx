@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
@@ -179,7 +179,7 @@ function ProPlanAction({
 
 export default function Pricing() {
   const { t } = useTranslation();
-  const { loading, ready, authenticated, currentOrgId } = useAuth();
+  const { loading, ready, authenticated, currentOrgId, isAdmin } = useAuth();
   const {
     loading: entitlementsLoading,
     error: entitlementsError,
@@ -188,12 +188,68 @@ export default function Pricing() {
     maxTrackers,
   } = useOrgEntitlements();
 
+  const [billingPanel, setBillingPanel] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBillingPanel() {
+      if (!authenticated || !currentOrgId) {
+        if (!cancelled) setBillingPanel(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("v_billing_panel")
+        .select("org_id, effective_plan_code, plan_status, trial_end")
+        .eq("org_id", currentOrgId)
+        .maybeSingle();
+
+      if (!cancelled) {
+        if (error) {
+          setBillingPanel(null);
+          return;
+        }
+        setBillingPanel(data || null);
+      }
+    }
+
+    loadBillingPanel();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated, currentOrgId]);
+
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
     return data?.session?.access_token || null;
   }
 
-  const currentPlanCode = useMemo(() => normalizePlanCode(planCode), [planCode]);
+  const currentPlanCode = useMemo(() => {
+    return normalizePlanCode(billingPanel?.effective_plan_code || planCode);
+  }, [billingPanel, planCode]);
+
+  const billingStatus = useMemo(() => {
+    const raw = billingPanel?.plan_status;
+    if (raw == null || raw === "") return "unknown";
+    return String(raw).toLowerCase();
+  }, [billingPanel]);
+
+  const billingStatusLabel = useMemo(() => {
+    if (billingStatus === "unknown") {
+      return t("pricing.summary.noCommercialData", { defaultValue: "Sin datos comerciales" });
+    }
+    return billingStatus;
+  }, [billingStatus, t]);
+
+  const trialUntil = useMemo(() => {
+    const value = billingPanel?.trial_end;
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString();
+  }, [billingPanel]);
 
   const freeFeatures = useMemo(
     () => [
@@ -234,6 +290,22 @@ export default function Pricing() {
 
   if (loading || !ready) return null;
 
+  if (!isAdmin) {
+    return (
+      <div className="max-w-3xl mx-auto px-6 py-10">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <h1 className="text-xl font-semibold">{t("pricing.page.title")}</h1>
+          <p className="mt-2 text-sm">
+            {t(
+              "pricing.accessDenied",
+              "You do not have permission to view monetization for this organization."
+            )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 space-y-8">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -257,7 +329,7 @@ export default function Pricing() {
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs uppercase tracking-wide text-slate-500">
               {t("pricing.summary.detectedPlan")}
@@ -265,6 +337,22 @@ export default function Pricing() {
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {currentPlanCode.toUpperCase()}
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              {t("pricing.summary.status", { defaultValue: "Status" })}
+            </div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">
+              {billingStatusLabel}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-slate-500">
+              {t("pricing.summary.trialUntil", { defaultValue: "Trial until" })}
+            </div>
+            <div className="mt-1 text-lg font-semibold text-slate-900">{trialUntil}</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
