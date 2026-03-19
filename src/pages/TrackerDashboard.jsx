@@ -662,6 +662,7 @@ const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
 
 const TrackerLayers = React.memo(function TrackerLayers({
   allTrackerMarkers,
+  mapMarkers,
   selectedTrackerPath,
   personalById,
   personalByUserId,
@@ -731,18 +732,17 @@ const TrackerLayers = React.memo(function TrackerLayers({
     );
   };
 
+  // Use mapMarkers for the "all trackers" view - includes offline trackers with valid coords
   if (selectedTrackerId === "all") {
     return (
       <>
-        {(allTrackerMarkers || []).map((item) => {
+        {(mapMarkers || []).map((item) => {
           const latest = item?.latest || null;
-          if (!latest) return null;
-
           const latestLat = Number(item?.lat);
           const latestLng = Number(item?.lng);
-          if (!isValidLatLng(latestLat, latestLng)) return null;
+          if (!item?.hasValidCoords || !isValidLatLng(latestLat, latestLng)) return null;
 
-          const live = item?.live || getTrackerLiveStatus(latest);
+          const live = item?.live || { status: "offline", ageSec: null };
           const markerStyle = getMarkerStyleByStatus(live.status, item.color);
           const trackerDisplayName =
             item?.trackerLabel ||
@@ -750,12 +750,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
             latest?.name ||
             latest?.tracker_name ||
             item?.key;
-
-          console.log("LIVE MARKER latest:", latest);
-          console.log("LIVE MARKER latest.user_id:", latest?.user_id);
-          console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
-          console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
-          console.log("LIVE MARKER latest.name:", latest?.name);
 
           return (
             <AnimatedTrackerDot
@@ -785,8 +779,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const personalId = latest.personal_id || null;
   const person = personalId ? personalById.get(String(personalId)) : null;
   const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
-  console.log("DEBUG LATEST:", latest);
-  console.log("DEBUG latest.tracker_label:", latest?.tracker_label);
   const trackerLabel =
     latest?.tracker_label ||
     latest?.tracker_name ||
@@ -799,12 +791,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
-
-  console.log("LIVE MARKER latest:", latest);
-  console.log("LIVE MARKER latest.user_id:", latest?.user_id);
-  console.log("LIVE MARKER latest.tracker_label:", latest?.tracker_label);
-  console.log("LIVE MARKER latest.tracker_name:", latest?.tracker_name);
-  console.log("LIVE MARKER latest.name:", latest?.name);
 
   return (
     <>
@@ -1676,6 +1662,14 @@ export default function TrackerDashboard() {
   const trackersUi = useMemo(() => {
     const map = new Map();
 
+    // Helper: check if coordinates are valid
+    const hasValidCoords = (item) => {
+      if (!item) return false;
+      const lat = Number(item?.lat);
+      const lng = Number(item?.lng);
+      return Number.isFinite(lat) && Number.isFinite(lng) && isValidLatLng(lat, lng);
+    };
+
     for (const row of positions || []) {
       const trackerKey = getTrackerKey(row);
       const person = row.personal_id ? personalById.get(String(row.personal_id)) : null;
@@ -1688,6 +1682,8 @@ export default function TrackerDashboard() {
       const fullName = p?.full_name || p?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
       const email = p?.email || row?.email || null;
       const baseLabel = fullName || email || trackerKey;
+      const lat = Number(row?.lat);
+      const lng = Number(row?.lng);
 
       if (!map.has(trackerKey)) {
         const live = getTrackerLiveStatus(row);
@@ -1707,6 +1703,9 @@ export default function TrackerDashboard() {
           latest: row,
           live,
           latestTs,
+          lat,
+          lng,
+          hasValidCoords: hasValidCoords({ lat, lng }),
           statusPriority: getTrackerStatusPriority(live.status),
         });
         continue;
@@ -1731,6 +1730,9 @@ export default function TrackerDashboard() {
           latest: row,
           live,
           latestTs,
+          lat,
+          lng,
+          hasValidCoords: hasValidCoords({ lat, lng }),
           statusPriority: getTrackerStatusPriority(live.status),
         });
       }
@@ -1761,6 +1763,9 @@ export default function TrackerDashboard() {
           latest: null,
           live: { status: "offline", ageSec: null },
           latestTs: 0,
+          lat: null,
+          lng: null,
+          hasValidCoords: false,
           statusPriority: getTrackerStatusPriority("offline"),
         });
       }
@@ -1808,6 +1813,30 @@ export default function TrackerDashboard() {
 
     return m;
   }, [assignments]);
+
+  // Map markers: trackers with valid coordinates, regardless of online/offline status
+  const mapMarkers = useMemo(() => {
+    const rawMarkers = (trackersUi || []).filter((t) => t?.hasValidCoords === true);
+
+    // Assign colors
+    const markers = rawMarkers.map((t, idx) => ({
+      ...t,
+      color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
+    }));
+
+    const stats = {
+      trackersUi: trackersUi?.length || 0,
+      withCoords: markers.length,
+      online: (trackersUi || []).filter((t) => t?.live?.status === "online").length,
+      stale: (trackersUi || []).filter((t) => t?.live?.status === "stale").length,
+      offline: (trackersUi || []).filter((t) => t?.live?.status === "offline").length,
+      markersRendered: markers.length,
+    };
+
+    console.log("[tracker-map] totals", stats);
+
+    return markers;
+  }, [trackersUi]);
 
   const trackerMap = useMemo(() => {
     const m = new Map();
@@ -2431,6 +2460,7 @@ export default function TrackerDashboard() {
 
                   <TrackerLayers
                     allTrackerMarkers={filteredAllTrackerMarkers}
+                    mapMarkers={mapMarkers}
                     selectedTrackerPath={selectedTrackerPath}
                     personalById={personalById}
                     personalByUserId={personalByUserId}
