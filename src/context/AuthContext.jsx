@@ -229,6 +229,7 @@ export function AuthProvider({ children }) {
 
   const didBootstrapOnceRef = useRef(false);
   const didEnsureContextThisRunRef = useRef(false);
+  const trackerBootstrapLogRef = useRef("");
 
   const [path, setPath] = useState(() => {
     try {
@@ -517,10 +518,25 @@ export function AuthProvider({ children }) {
       const isAuthenticated = Boolean(user?.id);
       const r = normalizeRole(currentRole);
       const isAdmin = r === "owner" || r === "admin" || isAppRoot;
+      const isTrackerBootstrapRoute = isTrackerUiPath(path) || isTrackerGpsPath(path);
+      const trackerBootstrapBypassed = isTrackerBootstrapRoute && isAuthenticated;
+      const exposedLoading = trackerBootstrapBypassed ? false : loading;
+      const exposedReady = trackerBootstrapBypassed ? true : ready;
+
+      if (trackerBootstrapBypassed) {
+        const marker = `${path}:${user?.id || ""}`;
+        if (trackerBootstrapLogRef.current !== marker) {
+          trackerBootstrapLogRef.current = marker;
+          // eslint-disable-next-line no-console
+          console.warn("[tracker-auth-bootstrap] source=AuthContext");
+          // eslint-disable-next-line no-console
+          console.warn("[tracker-auth-bootstrap] bypassed");
+        }
+      }
 
       return {
-      loading,
-      ready,
+      loading: exposedLoading,
+      ready: exposedReady,
       isAuthenticated,
       authenticated: isAuthenticated,
       user,
@@ -557,6 +573,7 @@ export function AuthProvider({ children }) {
       selectOrg,
       bootstrap,
       logout,
+      path,
     ]
   );
 
