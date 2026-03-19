@@ -116,8 +116,10 @@ export default function TrackerGpsPage() {
   const [lastError, setLastError] = useState(null);
 
   const [hasSession, setHasSession] = useState(false);
+  const [session, setSession] = useState(null);
   const [trackerReady, setTrackerReady] = useState(true);
   const [orgId, setOrgId] = useState(null);
+  const [lastPosition, setLastPosition] = useState(null);
 
   const [membershipStatus, setMembershipStatus] = useState("pending");
   const [membershipDetail, setMembershipDetail] = useState("");
@@ -148,7 +150,6 @@ export default function TrackerGpsPage() {
   });
 
   const watchIdRef = useRef(null);
-  const intervalRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const isSendingRef = useRef(false);
   const lastSentAtRef = useRef(0);
@@ -167,6 +168,7 @@ export default function TrackerGpsPage() {
     if (!PRIMARY) {
       setTrackerReady(false);
       setHasSession(false);
+      setSession(null);
       setStatus(
         tt("trackerGps.errors.notConfigured", "Tracker is not configured in this deployment.")
       );
@@ -319,6 +321,7 @@ export default function TrackerGpsPage() {
       updateDebugFromToken(tokenB);
 
       if (!ok) {
+        setSession(null);
         setHasSession(false);
         setStatus(tt("trackerGps.status.noSession", "No active tracker session."));
         setLastError(
@@ -330,6 +333,7 @@ export default function TrackerGpsPage() {
         return;
       }
 
+      setSession(session);
       setHasSession(true);
       setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
       setLastError(null);
@@ -341,9 +345,13 @@ export default function TrackerGpsPage() {
       updateDebugFromToken(tokenB);
 
       if (tokenB && looksLikeJwt(tokenB)) {
+        setSession(session);
         setHasSession(true);
         setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
         setLastError(null);
+      } else {
+        setSession(null);
+        setHasSession(false);
       }
     });
 
@@ -745,6 +753,14 @@ export default function TrackerGpsPage() {
         lng: pos.coords.longitude,
         accuracy: pos.coords.accuracy ?? null,
       };
+      setLastPosition({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy ?? null,
+        speed: pos.coords.speed ?? null,
+        heading: pos.coords.heading ?? null,
+        timestamp: pos.timestamp,
+      });
       lastCoordsRef.current = c;
       setCoords(c);
 
@@ -786,34 +802,44 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, membershipStatus, disclosureAccepted, lang]);
 
   useEffect(() => {
-    if (!trackerReady) return;
-    if (!hasSession) {
+    if (!lastPosition) {
+      console.log("[gps] send skipped: no coords");
+      return;
+    }
+    if (!session?.user?.id) {
       console.log("[gps] send skipped: missing session");
       return;
     }
-    if (!disclosureAccepted) return;
-    if (membershipStatus !== "ok") return;
     if (!orgId) {
       console.log("[gps] send skipped: missing org_id");
       return;
     }
+    if (!trackerReady || !hasSession) return;
+    if (!disclosureAccepted) return;
+    if (membershipStatus !== "ok") return;
 
-    async function sendOnce() {
-      const c = lastCoordsRef.current;
-      if (!c) {
-        console.log("[gps] send skipped: no coords");
-        return;
-      }
+    const c = {
+      lat: lastPosition.lat,
+      lng: lastPosition.lng,
+      accuracy: lastPosition.accuracy,
+    };
 
-      const now = Date.now();
-      if (now - lastSentAtRef.current < CLIENT_MIN_INTERVAL_MS) {
-        console.log("[gps] send skipped: throttled");
-        return;
-      }
-      if (isSendingRef.current) return;
+    const now = Date.now();
+    if (now - lastSentAtRef.current < CLIENT_MIN_INTERVAL_MS) {
+      console.log("[gps] send skipped: throttled");
+      return;
+    }
+    if (isSendingRef.current) return;
 
+    console.log("[gps] ready to send", {
+      userId: session.user.id,
+      org_id: orgId,
+    });
+
+    let cancelled = false;
+
+    (async () => {
       isSendingRef.current = true;
-
       try {
         const payload = {
           org_id: orgId,
@@ -832,7 +858,9 @@ export default function TrackerGpsPage() {
         try {
           await invokeSendPosition(payload);
         } catch (e) {
-          setLastError(`send_position error: ${String(e?.message || e)}`);
+          if (!cancelled) {
+            setLastError(`send_position error: ${String(e?.message || e)}`);
+          }
           return;
         }
 
@@ -862,21 +890,28 @@ export default function TrackerGpsPage() {
           }
         }
 
-        lastSentAtRef.current = Date.now();
-        setLastSend(new Date());
-        setLastError(null);
+        if (!cancelled) {
+          lastSentAtRef.current = Date.now();
+          setLastSend(new Date());
+          setLastError(null);
+        }
       } finally {
         isSendingRef.current = false;
       }
-    }
-
-    intervalRef.current = window.setInterval(sendOnce, TICK_MS);
-    sendOnce();
+    })();
 
     return () => {
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
+      cancelled = true;
     };
-  }, [trackerReady, hasSession, orgId, membershipStatus, disclosureAccepted]);
+  }, [
+    lastPosition,
+    session?.user?.id,
+    orgId,
+    trackerReady,
+    hasSession,
+    disclosureAccepted,
+    membershipStatus,
+  ]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
