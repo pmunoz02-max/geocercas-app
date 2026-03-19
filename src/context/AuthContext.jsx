@@ -583,31 +583,54 @@ export function AuthProvider({ children }) {
         throw sessionError;
       }
 
-      setSession(currentSession || null);
-      setUser(currentSession?.user ?? null);
+      const localUser = currentSession?.user ?? null;
+      let resolvedUser = localUser;
+      let serverSession = null;
 
-      if (!currentSession?.user) {
-        clearResolvedAuthState();
-        return;
+      if (localUser) {
+        console.info("[AUTHCTX] bootstrap: local session found");
+      } else {
+        const s0 = await fetchSession();
+
+        if (s0.ok && s0.data?.authenticated === true && s0.data?.user?.id) {
+          serverSession = s0.data;
+          resolvedUser = s0.data.user;
+          console.info("[AUTHCTX] bootstrap: session recovered from backend");
+        } else {
+          console.info("[AUTHCTX] bootstrap: not authenticated");
+          setSession(null);
+          setUser(null);
+          clearResolvedAuthState();
+          return;
+        }
       }
+
+      setSession(currentSession || null);
+      setUser(resolvedUser || null);
 
       if (isPublicAuthPath(path)) {
         setIsAppRoot(
           Boolean(
-            currentSession.user?.app_metadata?.is_app_root ??
-              currentSession.user?.app_metadata?.isAppRoot
+            resolvedUser?.app_metadata?.is_app_root ??
+              resolvedUser?.app_metadata?.isAppRoot ??
+              serverSession?.is_app_root ??
+              serverSession?.isAppRoot
           )
         );
         setCanSwitchOrganizations(
-          extractCanSwitchOrganizations({ user: currentSession.user })
+          extractCanSwitchOrganizations(serverSession || { user: resolvedUser })
         );
         return;
       }
 
-      const s1 = await fetchSession();
+      const s1 = serverSession || (await fetchSession());
 
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
-        await hydrateClientContext(currentSession.user);
+        if (localUser) {
+          await hydrateClientContext(localUser);
+        } else {
+          clearResolvedAuthState();
+        }
         return;
       }
 
@@ -632,8 +655,8 @@ export function AuthProvider({ children }) {
         const s2 = await fetchSession();
         if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
-        } else {
-          await hydrateClientContext(currentSession.user);
+        } else if (localUser) {
+          await hydrateClientContext(localUser);
         }
       }
     } catch (error) {
