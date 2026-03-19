@@ -1,4 +1,4 @@
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.statusCode = 405;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -7,13 +7,12 @@ module.exports = async function handler(req, res) {
   }
 
   console.log("[api/send-position] diagnostic route hit");
+
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.end(
-    JSON.stringify({
-      ok: true,
-      marker: "send-position-diagnostic-03",
-      source: "api/send-position.js",
-    })
-  );
-};
+  res.end(JSON.stringify({
+    ok: true,
+    marker: "send-position-diagnostic-04",
+    source: "api/send-position.js",
+  }));
+}
