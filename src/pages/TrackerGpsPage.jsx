@@ -447,8 +447,9 @@ export default function TrackerGpsPage() {
     try {
       const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
       const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
-      const accessToken = String(session?.access_token || "").trim();
-      const userId = String(session?.user?.id || "").trim();
+      const trackerSessionData = await supabaseTracker.auth.getSession();
+      const trackerToken = String(trackerSessionData?.data?.session?.access_token || "").trim();
+      const trackerUserId = String(trackerSessionData?.data?.session?.user?.id || "").trim();
 
       if (!sbUrl || !anon) {
         throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
@@ -462,19 +463,26 @@ export default function TrackerGpsPage() {
         console.warn("[gps] send aborted: invalid coords");
         return null;
       }
-      if (!userId) {
+
+      const tokenPreview = trackerToken ? trackerToken.slice(0, 16) : "";
+      console.log("[gps-auth] token source=trackerClient");
+      console.log("[gps-auth] token present=", !!trackerToken);
+      console.log("[gps-auth] token preview=", tokenPreview);
+      console.log("[gps-auth] tracker session user", trackerUserId || null);
+
+      if (!trackerUserId) {
         console.warn("[gps] send aborted: missing userId");
         return null;
       }
-      if (!accessToken) {
-        console.warn("[gps] send aborted: missing access token");
+      if (!trackerToken) {
+        console.warn("[gps] send aborted: missing tracker access token");
         return null;
       }
 
       setDebug((d) => ({
         ...d,
         last_invoke_fn: "send_position",
-        last_invoke_token_len: accessToken.length,
+        last_invoke_token_len: trackerToken.length,
         last_invoke_auth: "fetch:Authorization=user",
         last_http_status: null,
       }));
@@ -482,7 +490,7 @@ export default function TrackerGpsPage() {
       console.log("[gps] transport=fetch");
       console.log("[gps] send payload", {
         org_id: body.org_id,
-        userId,
+        userId: trackerUserId,
         lat: body.lat,
         lng: body.lng,
         accuracy: body.accuracy ?? null,
@@ -500,7 +508,7 @@ export default function TrackerGpsPage() {
         method: "POST",
         headers: {
           apikey: anon,
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${trackerToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
