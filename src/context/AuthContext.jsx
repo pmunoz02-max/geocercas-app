@@ -273,7 +273,22 @@ export function AuthProvider({ children }) {
       setCanSwitchOrganizations(extractCanSwitchOrganizations(data));
 
       const serverOrgId = extractServerOrgId(data);
+      const serverRole = extractServerRole(data);
       const orgs = extractOrganizations(data);
+
+      console.log("SESSION BACKEND:", data);
+
+      if (serverOrgId || serverRole) {
+        console.log("SET CONTEXT:", serverOrgId, serverRole);
+      }
+
+      if (serverOrgId) {
+        setCurrentOrgIdState(serverOrgId);
+      }
+
+      if (serverRole) {
+        setCurrentRole(serverRole);
+      }
 
       // Lee preferencia (legacy), pero la sanitiza contra orgs/roles
       let preferredOrgId = null;
@@ -306,7 +321,7 @@ export function AuthProvider({ children }) {
 
         const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
 
-        setCurrentOrgIdState(pickedId || null);
+        setCurrentOrgIdState(pickedId || serverOrgId || null);
 
         setCurrentOrg(orgObj || null);
 
@@ -321,7 +336,7 @@ export function AuthProvider({ children }) {
           } catch {}
         }
 
-        setCurrentRole(extractServerRole(data) || normalizeRole(orgObj?.role));
+        setCurrentRole((prev) => serverRole || normalizeRole(orgObj?.role) || prev || null);
 
         return;
       }
@@ -332,12 +347,12 @@ export function AuthProvider({ children }) {
         setOrganizations([{ id: finalOrgId }]);
         setCurrentOrg({ id: finalOrgId });
       } else {
-        setCurrentOrgIdState(null);
+        setCurrentOrgIdState((prev) => prev || null);
         setOrganizations([]);
-        setCurrentOrg(null);
+        setCurrentOrg((prev) => prev || null);
       }
 
-      setCurrentRole(extractServerRole(data));
+      setCurrentRole((prev) => serverRole || prev || null);
     },
     [path]
   );
@@ -603,6 +618,8 @@ export function AuthProvider({ children }) {
         const s0 = await fetchSession();
 
         if (s0.ok && s0.data?.authenticated === true && s0.data?.user?.id) {
+          console.log("SESSION BACKEND:", s0.data);
+          console.log("SET CONTEXT:", extractServerOrgId(s0.data), extractServerRole(s0.data));
           serverSession = s0.data;
           resolvedUser = s0.data.user;
           console.info("[AUTHCTX] bootstrap: session recovered from backend");
@@ -635,6 +652,11 @@ export function AuthProvider({ children }) {
 
       const s1 = serverSession || (await fetchSession());
 
+      if (s1?.data) {
+        console.log("SESSION BACKEND:", s1.data);
+        console.log("SET CONTEXT:", extractServerOrgId(s1.data), extractServerRole(s1.data));
+      }
+
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
         if (resolvedUser) {
           await hydrateClientContext(resolvedUser);
@@ -663,6 +685,10 @@ export function AuthProvider({ children }) {
         }
 
         const s2 = await fetchSession();
+        if (s2?.data) {
+          console.log("SESSION BACKEND:", s2.data);
+          console.log("SET CONTEXT:", extractServerOrgId(s2.data), extractServerRole(s2.data));
+        }
         if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
         } else if (resolvedUser) {
