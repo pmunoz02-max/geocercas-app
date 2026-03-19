@@ -273,3 +273,112 @@ Notas de seguridad de datos:
 - Si falta `plan_status`, se usa estado `unknown` y texto seguro (`Sin datos comerciales`).
 - Se mantiene `v_billing_panel` como fuente unica de datos comerciales.
 - No usar `organizations.plan`.
+
+---
+
+## Preview - Monetizacion y contexto de organizacion
+
+Resumen tecnico y funcional del bloque completado (solo preview).
+
+### Fuentes canonicas vigentes
+
+1. Org activa unica: `AuthContext.currentOrgId`.
+2. Permiso UI monetizacion: `AuthContext.isAdmin`.
+3. Lectura comercial del panel: `public.v_billing_panel`.
+4. Regla explicita: no usar `organizations.plan` para decisiones de monetizacion.
+
+### Cambios implementados
+
+1. `accept_invitation` endurecido para no degradar `owner/admin` cuando se acepta invite tracker en la misma org.
+2. `accept-tracker-invite` (legacy compat) ajustado para no pisar roles altos existentes.
+3. `OrgSelector` oculto cuando el usuario tiene una sola org activa.
+4. `Billing` refactorizado para leer solo `v_billing_panel`.
+5. `Pricing` alineado a `currentOrgId` e `isAdmin`.
+6. `ProtectedShell` alineado con `isAdmin` canonico.
+
+### UX actual de Billing (preview)
+
+1. Tarjetas: plan, estado, trial, limites y consumo.
+2. Severidad de consumo:
+- `warning`: `usage_pct >= 80` y `< 100`.
+- `critical`: `usage_pct >= 100` o `billing_over_limit = true`.
+- `unknown`: faltan datos de consumo; render neutro.
+3. Banner `over_limit` visible con `over_limit_reason` cuando existe.
+4. CTA contextual:
+- `free/starter`: ir a `Pricing`.
+- `trialing`: CTA para convertir antes del vencimiento.
+- `over_limit`: CTA prioritario de upgrade.
+5. Countdown de trial cuando `plan_status = trialing` y existe `trial_end`.
+6. Null safety aplicado a `trial_end`, `current_period_end`, limites y consumo.
+
+### Edge cases conocidos en preview
+
+1. `Pricing` aun ejecuta `useOrgEntitlements` antes del guard visual de `isAdmin`.
+2. Si faltan datos comerciales, la UI usa estado neutral `unknown` y textos seguros (`Sin datos`, `Sin datos comerciales`).
+
+### Checklist de validacion manual (preview)
+
+1. Owner/Admin con una org: panel visible, selector oculto, datos comerciales cargan.
+2. Owner/Admin multi-org: cambiar org refresca `Billing` y `Pricing` por `currentOrgId`.
+3. Tracker/Viewer: monetizacion bloqueada por `isAdmin`.
+4. Org `trialing`: banner/countdown y CTA de conversion visibles.
+5. Org `over_limit`: banner critico con razon + CTA prioritario.
+6. Cambio de org consecutivo: no quedan datos stale entre organizaciones.
+
+### Nota obligatoria
+
+- Estos cambios pertenecen solo a preview.
+- No promover a produccion sin validacion visual y funcional.
+
+---
+
+## Hotfix de produccion - Billing y org context
+
+Resumen del fix defensivo aplicado en produccion, separado de la arquitectura nueva de preview.
+
+### Ajuste aplicado en org context
+
+Se corrigio un callsite frontend de `set_current_org` para usar el payload correcto de la funcion existente en produccion:
+
+- Firma valida en produccion: `set_current_org(p_org uuid)`
+- Compatibilidad legacy preservada: `rpc_set_current_org(p_org_id uuid)`
+
+Regla aplicada en el hotfix:
+- si el frontend llama `set_current_org`, debe enviar `p_org`
+- el fallback legacy a `rpc_set_current_org({ p_org_id })` se mantiene sin cambios
+
+### Ajuste aplicado en Billing
+
+El boton `Administrar suscripcion` quedo deshabilitado en produccion.
+
+Motivo:
+- la edge function de portal no existe todavia en produccion
+- el frontend la estaba invocando como si estuviera disponible
+
+Comportamiento actual:
+- el boton no rompe la pagina
+- se muestra un mensaje seguro de indisponibilidad
+- se evita la invocacion de una function inexistente
+
+### Alcance y limites del hotfix
+
+Este cambio:
+
+1. No toca SQL.
+2. No introduce `v_billing_panel`.
+3. No migra la arquitectura preview a produccion.
+4. No cambia el modelo de billing productivo actual.
+
+### Impacto esperado
+
+1. Elimina el `404` causado por payload incorrecto en `set_current_org`.
+2. Evita el `500` por invocacion de portal inexistente.
+3. Mantiene `Billing` operativo con degradacion segura.
+
+### Seguimiento requerido
+
+Reactivar el portal solo cuando existan en produccion:
+
+1. backend / edge function productiva para portal
+2. secrets y variables de entorno validados
+3. prueba funcional completa del flujo de administracion de suscripcion
