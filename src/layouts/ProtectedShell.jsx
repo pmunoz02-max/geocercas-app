@@ -1,5 +1,6 @@
 ﻿// src/layouts/ProtectedShell.jsx
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
+import { useRef } from "react";
 import { useAuth } from "@/context/auth.js";
 import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
@@ -61,6 +62,20 @@ function buildTabs({ role, isAppRoot }) {
 
 export default function ProtectedShell() {
   const { loading, user, currentRole, isAppRoot } = useAuth();
+  const location = useLocation();
+  const bypassLoggedRef = useRef(false);
+
+  const isTrackerRoute =
+    location.pathname.startsWith("/tracker") || location.pathname.startsWith("/tracker-gps");
+
+  if (isTrackerRoute && user) {
+    if (!bypassLoggedRef.current) {
+      console.warn("[tracker-auth-bootstrap] source=ProtectedShell");
+      console.warn("[tracker-auth-bootstrap] bypassed");
+      console.warn("[ROOT-BYPASS] tracker flow unblocked at root");
+      bypassLoggedRef.current = true;
+    }
+  }
 
   if (loading) return null;
   if (!user) return null;
