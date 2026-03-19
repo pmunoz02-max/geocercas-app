@@ -49,6 +49,7 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 function RootEntry() {
   const location = useLocation();
+  const auth = useAuthSafe();
 
   const hash = typeof location.hash === "string" ? location.hash : "";
   const hasAccessToken = hash.includes("access_token=");
@@ -66,7 +67,15 @@ function RootEntry() {
     return <Navigate to={target} replace />;
   }
 
-  return <Landing />;
+  if (!auth || !auth.initialized) {
+    return null;
+  }
+
+  if (auth.user) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
 }
 
 /**
@@ -122,6 +131,7 @@ function AppRoutes() {
     <Routes>
       {/* 🌐 Public */}
       <Route path="/" element={<RootEntry />} />
+      <Route path="/landing" element={<Landing />} />
       <Route path="/demo" element={<DemoGeocercas />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
