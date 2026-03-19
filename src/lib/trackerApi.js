@@ -1,17 +1,78 @@
 // src/lib/trackerApi.js
-// API unificada para tracking:
+// API unificada para tracking (CAN├ôNICO: tracker_positions)
 // - listTrackers: lista usuarios trackers del tenant
 // - getSessionUser: obtiene usuario actual
-// - upsertPositionCompat: envía posición al Edge Function send_position
-// - suscribirsePosiciones: snapshot + realtime + polling sobre la tabla positions
+// - upsertPositionCompat: env├¡a posici├│n al Edge Function send_position
+// - suscribirsePosiciones: snapshot + realtime + polling sobre tracker_positions
+// - fetchLatest / subscribeLatest: helpers usados por useRealtimePositions
 
-<<<<<<< HEAD
-import { supabase } from "./supabaseClient";
-=======
 import { supabase, getMemoryAccessToken } from "../lib/supabaseClient";
->>>>>>> preview
 
-const EDGE_URL = import.meta.env.VITE_EDGE_SEND_POSITION;
+// Ô£à Tabla can├│nica ├║nica
+const POSITIONS_TABLE = "tracker_positions";
+const TRACKER_ACTIVE_PING_WINDOW_MS = 5 * 60 * 1000;
+
+// EDGE_URL puede venir como:
+// - URL completa a la function (recomendado): https://...supabase.co/functions/v1/send_position
+// - o base supabase url: https://...supabase.co  (se completa autom├íticamente)
+// - o vac├¡o: intenta VITE_SUPABASE_FUNCTIONS_URL + /functions/v1/send_position
+const RAW_EDGE_URL =
+  import.meta.env.VITE_EDGE_SEND_POSITION ||
+  import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ||
+  "";
+
+function buildEdgeUrl(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  // si ya apunta a functions/v1, lo dejamos
+  if (s.includes("/functions/v1/")) return s;
+  // si termina en /, quitamos
+  const base = s.replace(/\/+$/, "");
+  return `${base}/functions/v1/send_position`;
+}
+
+const EDGE_URL = buildEdgeUrl(RAW_EDGE_URL);
+
+function getTrackerActivePingKey(orgId, userId) {
+  return `tracker_ping_${orgId}_${userId}`;
+}
+
+function getTrackerActivePingLastAt(key) {
+  if (typeof localStorage === "undefined") return 0;
+  return Number(localStorage.getItem(key) || 0);
+}
+
+function setTrackerActivePingLastAt(key, value) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(key, String(value));
+}
+
+function emitTrackerActivePing({ orgId, userId, lat, lng }) {
+  if (!orgId || !userId) return;
+
+  const key = getTrackerActivePingKey(orgId, userId);
+  const now = Date.now();
+  const lastPing = getTrackerActivePingLastAt(key);
+
+  if (now - lastPing <= TRACKER_ACTIVE_PING_WINDOW_MS) return;
+
+  setTrackerActivePingLastAt(key, now);
+
+  void supabase
+    .from("org_metrics_events")
+    .insert({
+      org_id: orgId,
+      user_id: userId,
+      event_type: "tracker_active_ping",
+      meta: {
+        lat,
+        lng,
+      },
+    })
+    .catch(() => {
+      // never block tracking
+    });
+}
 
 // ===================== Helpers de Auth =====================
 
@@ -25,46 +86,39 @@ export async function getSessionUser() {
 }
 
 async function getSessionAccessToken() {
-  // ✅ Arquitectura final: primero token en memoria (AuthCallback lo setea)
+  // Ô£à Arquitectura final: primero token en memoria (AuthCallback lo setea)
   const mem = getMemoryAccessToken?.();
   if (mem) return mem;
 
-  // fallback (por si en algún flujo hay sesión interna)
+  // fallback (por si en alg├║n flujo hay sesi├│n interna)
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     console.error("[trackerApi] getSessionAccessToken error:", error);
-<<<<<<< HEAD
-    throw error;
-=======
     return "";
->>>>>>> preview
   }
   return data?.session?.access_token || "";
 }
 
-// ===================== Envío de posiciones =====================
+// ===================== Env├¡o de posiciones =====================
 
 /**
  * upsertPositionCompat
- * Enviar posición al Edge Function send_position.
+ * Enviar posici├│n al Edge Function send_position (server-owned):
  * payload:
- *  - orgId
- *  - userId
+ *  - orgId (opcional; server lo ignora y resuelve org can├│nica)
+ *  - userId (opcional; server usa el user del JWT)
  *  - personalId (opcional)
  *  - lat, lng
  *  - accuracy, speed, heading, battery (opcionales)
- *  - at (Date | string | null)
+ *  - at (Date | string | null) ÔÇô timestamp de la posici├│n
  */
 export async function upsertPositionCompat(payload) {
-<<<<<<< HEAD
-=======
   if (!EDGE_URL) {
     throw new Error(
-      "EDGE_URL no configurado (VITE_EDGE_SEND_POSITION). Revisa tu .env.local"
+      "EDGE_URL no configurado (VITE_EDGE_SEND_POSITION o VITE_SUPABASE_FUNCTIONS_URL). Revisa tu .env.local"
     );
   }
 
->>>>>>> preview
   const {
     orgId,
     userId,
@@ -79,20 +133,14 @@ export async function upsertPositionCompat(payload) {
   } = payload || {};
 
   if (typeof lat !== "number" || typeof lng !== "number") {
-    throw new Error("Lat/Lng inválidos en upsertPositionCompat");
-  }
-<<<<<<< HEAD
-=======
-  if (!orgId) {
-    console.warn("[trackerApi] upsertPositionCompat sin orgId");
+    throw new Error("Lat/Lng inv├ílidos en upsertPositionCompat");
   }
 
   const token = await getSessionAccessToken();
->>>>>>> preview
 
   const body = {
-    org_id: orgId || null,
-    user_id: userId || null,
+    org_id: orgId || null, // server-owned (ignorado)
+    user_id: userId || null, // server-owned (ignorado)
     personal_id: personalId || null,
     lat,
     lng,
@@ -103,41 +151,6 @@ export async function upsertPositionCompat(payload) {
     at: at instanceof Date ? at.toISOString() : at || new Date().toISOString(),
   };
 
-<<<<<<< HEAD
-  // Preferir fetch directo si está configurado (compatibilidad)
-  if (EDGE_URL) {
-    const token = await getSessionAccessToken();
-
-    const res = await fetch(EDGE_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      const err = new Error(`send_position failed: ${res.status} ${text || res.statusText}`);
-      // @ts-ignore
-      err.status = res.status;
-      try {
-        // @ts-ignore
-        err.details = JSON.parse(text);
-      } catch {
-        // ignore
-      }
-      console.error("[trackerApi] upsertPositionCompat error:", err);
-      throw err;
-    }
-
-    try {
-      return await res.json();
-    } catch {
-      return null;
-    }
-=======
   const res = await fetch(EDGE_URL, {
     method: "POST",
     headers: {
@@ -162,25 +175,23 @@ export async function upsertPositionCompat(payload) {
     }
     console.error("[trackerApi] upsertPositionCompat error:", err);
     throw err;
->>>>>>> preview
   }
 
-  // Fallback universal: Supabase Edge Functions invoke
-  const { data, error } = await supabase.functions.invoke("send_position", { body });
-
-  if (error) {
-    console.error("[trackerApi] invoke send_position error:", error);
-    throw new Error(error.message || "Error invoke send_position");
+  try {
+    const data = await res.json();
+    emitTrackerActivePing({ orgId, userId, lat, lng });
+    return data;
+  } catch {
+    emitTrackerActivePing({ orgId, userId, lat, lng });
+    return null;
   }
-
-  return data ?? null;
 }
 
 // ===================== Listar trackers =====================
 
 /**
  * Lista usuarios del tenant actual que pueden actuar como trackers.
- * Usa v_app_profiles, filtrada por tenant_id vía RLS.
+ * Usa v_app_profiles, filtrada por tenant_id v├¡a RLS.
  */
 export async function listTrackers() {
   const { data, error } = await supabase
@@ -197,8 +208,23 @@ export async function listTrackers() {
   return data || [];
 }
 
-// ===================== Suscripción a posiciones =====================
+// ===================== Suscripci├│n a posiciones (CAN├ôNICO) =====================
 
+/**
+ * suscribirsePosiciones(callback, options)
+ *
+ * callback(evt):
+ *  - snapshot: { type: 'snapshot', rows: [...] }
+ *  - poll:     { type: 'poll', rows: [...] }
+ *  - realtime: { type: 'realtime', row: {...} }
+ *  - *_error:  { type: 'snapshot_error' | 'poll_error' | 'realtime_error', error }
+ *
+ * options:
+ *  - filtros: { personal_id?, sinceMinutes? }
+ *  - intervalMs: n├║mero ms para polling (backup)
+ *  - enablePollingBackup: boolean
+ *  - events: ['INSERT','UPDATE',...]
+ */
 export function suscribirsePosiciones(callback, options = {}) {
   const {
     filtros = {},
@@ -214,20 +240,12 @@ export function suscribirsePosiciones(callback, options = {}) {
   const applyFilters = (query) => {
     const f = filtros || {};
     if (f.personal_id) query = query.eq("personal_id", f.personal_id);
-<<<<<<< HEAD
-    if (f.user_id) query = query.eq("user_id", f.user_id);
-    if (f.org_id) query = query.eq("org_id", f.org_id);
-
-    if (f.sinceMinutes && Number.isFinite(f.sinceMinutes)) {
-      const since = new Date(Date.now() - f.sinceMinutes * 60 * 1000).toISOString();
-=======
 
     if (f.sinceMinutes && Number.isFinite(f.sinceMinutes)) {
       const since = new Date(
         Date.now() - f.sinceMinutes * 60 * 1000
       ).toISOString();
->>>>>>> preview
-      query = query.gte("ts", since);
+      query = query.gte("recorded_at", since);
     }
     return query;
   };
@@ -235,96 +253,64 @@ export function suscribirsePosiciones(callback, options = {}) {
   async function loadSnapshot(isPoll = false) {
     try {
       let query = supabase
-        .from("positions")
-<<<<<<< HEAD
-        .select("id, org_id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, ts, created_at")
-=======
+        .from(POSITIONS_TABLE)
         .select(
-          "id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, ts, created_at"
+          "id, org_id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at"
         )
->>>>>>> preview
-        .order("ts", { ascending: false })
-        .limit(200);
+        .order("recorded_at", { ascending: false })
+        .limit(500);
 
       query = applyFilters(query);
-<<<<<<< HEAD
-      const { data, error } = await query;
-      if (error) throw error;
-
-=======
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // Última posición por personal_id
->>>>>>> preview
+      // ├Ültima posici├│n por personal_id (o user_id como fallback)
       const map = new Map();
       for (const row of data || []) {
         const key = row.personal_id || row.user_id || row.id;
         if (!map.has(key)) map.set(key, row);
       }
 
-<<<<<<< HEAD
-      const rows = Array.from(map.values());
-      callback({ type: isPoll ? "poll" : "snapshot", rows });
-=======
-      callback({ type: isPoll ? "poll" : "snapshot", rows: Array.from(map.values()) });
->>>>>>> preview
+      callback({
+        type: isPoll ? "poll" : "snapshot",
+        rows: Array.from(map.values()),
+      });
     } catch (e) {
       console.error("[trackerApi] loadSnapshot error:", e);
       callback({ type: isPoll ? "poll_error" : "snapshot_error", error: e });
     }
   }
 
+  // 1) Snapshot inicial
   loadSnapshot(false);
 
+  // 2) Polling backup
   if (enablePollingBackup && intervalMs > 0) {
     timerId = setInterval(() => {
       if (!stopped) loadSnapshot(true);
     }, intervalMs);
   }
 
-<<<<<<< HEAD
-=======
   // 3) Realtime
->>>>>>> preview
   if (typeof supabase.channel === "function") {
     try {
       channel = supabase
-        .channel("positions_tracker")
-<<<<<<< HEAD
-        .on("postgres_changes", { event: "*", schema: "public", table: "positions" }, (payload) => {
-          if (stopped) return;
-          const newRow = payload.new || payload.record || null;
-          if (!newRow) return;
-=======
+        .channel("tracker_positions_channel")
         .on(
           "postgres_changes",
-          { event: "*", schema: "public", table: "positions" },
+          { event: "*", schema: "public", table: POSITIONS_TABLE },
           (payload) => {
             if (stopped) return;
 
-            // Filtra por evento (INSERT/UPDATE/DELETE)
             if (payload?.eventType && !events.includes(payload.eventType)) return;
 
             const newRow = payload.new || payload.record || null;
             if (!newRow) return;
->>>>>>> preview
 
-          const f = filtros || {};
-          if (f.personal_id && newRow.personal_id !== f.personal_id) return;
-          if (f.user_id && newRow.user_id !== f.user_id) return;
-          if (f.org_id && newRow.org_id !== f.org_id) return;
+            const f = filtros || {};
+            if (f.personal_id && newRow.personal_id !== f.personal_id) return;
 
-<<<<<<< HEAD
-          if (!events.includes(payload.eventType)) return;
-
-          callback({ type: "realtime", row: newRow });
-        })
-        .subscribe((status) => {
-          if (status === "CHANNEL_ERROR") {
-            callback({ type: "realtime_error", error: new Error("Error en canal realtime positions_tracker") });
-=======
             callback({ type: "realtime", row: newRow });
           }
         )
@@ -332,9 +318,8 @@ export function suscribirsePosiciones(callback, options = {}) {
           if (status === "CHANNEL_ERROR") {
             callback({
               type: "realtime_error",
-              error: new Error("Error en canal realtime positions_tracker"),
+              error: new Error("Error en canal realtime tracker_positions_channel"),
             });
->>>>>>> preview
           }
         });
     } catch (e) {
@@ -360,14 +345,62 @@ export function suscribirsePosiciones(callback, options = {}) {
             channel.unsubscribe();
           }
         } catch (e) {
-<<<<<<< HEAD
-          console.warn("[trackerApi] error removeChannel:", e);
-=======
           console.warn("[trackerApi] error cerrando canal:", e);
->>>>>>> preview
         }
         channel = null;
       }
+    },
+  };
+}
+
+// ===================== Helpers usados por useRealtimePositions =====================
+
+export async function fetchLatest(orgId, { limit = 500 } = {}) {
+  if (!orgId) return [];
+
+  const { data, error } = await supabase
+    .from(POSITIONS_TABLE)
+    .select("id, org_id, user_id, personal_id, lat, lng, accuracy, speed, heading, battery, source, recorded_at, created_at")
+    .eq("org_id", orgId)
+    .order("recorded_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("[trackerApi] fetchLatest error:", error);
+    throw error;
+  }
+
+  // last by user_id
+  const map = new Map();
+  for (const r of data || []) {
+    const k = r.user_id || r.id;
+    if (!map.has(k)) map.set(k, r);
+  }
+  return Array.from(map.values());
+}
+
+export function subscribeLatest({ orgId, onInsertOrUpdate } = {}) {
+  if (!orgId) return { unsubscribe: () => {} };
+
+  const ch = supabase
+    .channel(`rt-${POSITIONS_TABLE}-${orgId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: POSITIONS_TABLE, filter: `org_id=eq.${orgId}` },
+      (payload) => {
+        if (!payload) return;
+        if (payload.eventType !== "INSERT" && payload.eventType !== "UPDATE") return;
+        onInsertOrUpdate?.(payload);
+      }
+    )
+    .subscribe();
+
+  return {
+    unsubscribe() {
+      try {
+        if (typeof supabase.removeChannel === "function") supabase.removeChannel(ch);
+        else if (typeof ch.unsubscribe === "function") ch.unsubscribe();
+      } catch {}
     },
   };
 }
