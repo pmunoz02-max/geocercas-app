@@ -175,26 +175,42 @@ function logLiveMetric(label, payload = {}) {
 }
 
 
-function FitIfOutOfView({ layerItems, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
+function FitIfOutOfView({ layerItems, markerPoints, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
 
   const bounds = useMemo(() => {
     try {
-      const pts = [];
+      const geofencePts = [];
       (layerItems || []).forEach((it) => {
-        if (it.type === "polygon") (it.positions || []).forEach((p) => pts.push(p));
+        if (it.type === "polygon") (it.positions || []).forEach((p) => geofencePts.push(p));
         else if (it.type === "circle") {
-          if (Array.isArray(it.center) && it.center.length >= 2) pts.push(it.center);
+          if (Array.isArray(it.center) && it.center.length >= 2) geofencePts.push(it.center);
         }
       });
-      if (pts.length < 1) return null;
-      const b = L.latLngBounds(pts);
-      return b.isValid() ? b : null;
+
+      const markerPts = [];
+      (markerPoints || []).forEach((p) => {
+        if (Array.isArray(p) && p.length >= 2) {
+          const lat = Number(p[0]);
+          const lng = Number(p[1]);
+          if (isValidLatLng(lat, lng)) markerPts.push([lat, lng]);
+        }
+      });
+
+      const geofenceBounds = geofencePts.length > 0 ? L.latLngBounds(geofencePts) : null;
+      const markerBounds = markerPts.length > 0 ? L.latLngBounds(markerPts) : null;
+
+      const geofenceValid = !!(geofenceBounds?.isValid?.() && !isProbablyZeroZeroBounds(geofenceBounds));
+      const markerValid = !!(markerBounds?.isValid?.());
+
+      if (geofenceValid) return geofenceBounds;
+      if (markerValid) return markerBounds;
+      return null;
     } catch {
       return null;
     }
-  }, [layerItems]);
+  }, [layerItems, markerPoints]);
 
   useEffect(() => {
     if (!map) return;
@@ -662,7 +678,6 @@ const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
 
 const TrackerLayers = React.memo(function TrackerLayers({
   allTrackerMarkers,
-  mapMarkers,
   selectedTrackerPath,
   personalById,
   personalByUserId,
@@ -732,11 +747,11 @@ const TrackerLayers = React.memo(function TrackerLayers({
     );
   };
 
-  // Use mapMarkers for the "all trackers" view - includes offline trackers with valid coords
+  // Use allTrackerMarkers (derived from trackersUi) for the "all trackers" view.
   if (selectedTrackerId === "all") {
     return (
       <>
-        {(mapMarkers || []).map((item) => {
+        {(allTrackerMarkers || []).map((item) => {
           const latest = item?.latest || null;
           const latestLat = Number(item?.lat);
           const latestLng = Number(item?.lng);
@@ -1814,30 +1829,6 @@ export default function TrackerDashboard() {
     return m;
   }, [assignments]);
 
-  // Map markers: trackers with valid coordinates, regardless of online/offline status
-  const mapMarkers = useMemo(() => {
-    const rawMarkers = (trackersUi || []).filter((t) => t?.hasValidCoords === true);
-
-    // Assign colors
-    const markers = rawMarkers.map((t, idx) => ({
-      ...t,
-      color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
-    }));
-
-    const stats = {
-      trackersUi: trackersUi?.length || 0,
-      withCoords: markers.length,
-      online: (trackersUi || []).filter((t) => t?.live?.status === "online").length,
-      stale: (trackersUi || []).filter((t) => t?.live?.status === "stale").length,
-      offline: (trackersUi || []).filter((t) => t?.live?.status === "offline").length,
-      markersRendered: markers.length,
-    };
-
-    console.log("[tracker-map] totals", stats);
-
-    return markers;
-  }, [trackersUi]);
-
   const trackerMap = useMemo(() => {
     const m = new Map();
 
@@ -1950,45 +1941,44 @@ export default function TrackerDashboard() {
   const allTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return [];
 
-    return (visiblePositions || []).reduce((acc, row, idx) => {
-      const key = getTrackerKey(row);
-      if (!key) return acc;
+    const rows = Array.isArray(trackersUi) ? trackersUi : [];
 
-      const lat = Number(row?.lat);
-      const lng = Number(row?.lng);
+    const markers = rows.reduce((acc, item, idx) => {
+      const latest = item?.latest || null;
+      const lat = Number(latest?.lat);
+      const lng = Number(latest?.lng);
+
       if (!isValidLatLng(lat, lng)) return acc;
 
-      const personalId = row?.personal_id || null;
-      const person = personalId ? personalById.get(String(personalId)) : null;
-      const byUser = row?.user_id ? personalByUserId.get(String(row.user_id)) : null;
-      const source = person || byUser || null;
-      const firstName = source?.first_name || row?.first_name || null;
-      const lastName = source?.last_name || row?.last_name || null;
-      const fullName = source?.full_name || source?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
-      const email = source?.email || row?.email || null;
-      const trackerLabel =
-        fullName || email ||
-        row?.tracker_label || row?.name || row?.tracker_name ||
-        key;
-
       acc.push({
-        key,
-        latest: row,
+        key: item?.tracker_key || item?.user_id || item?.key || `tracker-${idx}`,
+        latest,
         lat,
         lng,
-        personalId,
-        firstName,
-        lastName,
-        fullName,
-        email,
-        trackerLabel,
+        personalId: item?.personalId || item?.personal_id || null,
+        firstName: item?.firstName || null,
+        lastName: item?.lastName || null,
+        fullName: item?.fullName || null,
+        email: item?.email || null,
+        trackerLabel: item?.baseLabel || item?.trackerLabel || item?.label || item?.tracker_key || item?.user_id,
         color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
-        live: getTrackerLiveStatus(row),
+        live: item?.live || getTrackerLiveStatus(latest),
+        hasValidCoords: true,
       });
 
       return acc;
     }, []);
-  }, [selectedTrackerId, visiblePositions, personalById, personalByUserId]);
+
+    console.log("[tracker-map] markers_from_trackersUi", {
+      trackersUi: rows.length,
+      markers: markers.length,
+      online: markers.filter((m) => m?.live?.status === "online").length,
+      stale: markers.filter((m) => m?.live?.status === "stale").length,
+      offline: markers.filter((m) => m?.live?.status === "offline").length,
+    });
+
+    return markers;
+  }, [selectedTrackerId, trackersUi]);
 
   const filteredAllTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return allTrackerMarkers;
@@ -2034,9 +2024,39 @@ export default function TrackerDashboard() {
     };
   }, [selectedTrackerId, visiblePositions]);
 
+  const mapFitPoints = useMemo(() => {
+    if (selectedTrackerId === "all") {
+      return (filteredAllTrackerMarkers || [])
+        .filter((m) => m?.hasValidCoords)
+        .map((m) => [Number(m?.lat), Number(m?.lng)])
+        .filter(([lat, lng]) => isValidLatLng(lat, lng));
+    }
+
+    const singlePoints = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
+    if (singlePoints.length) return singlePoints;
+
+    const latest = selectedTrackerPath?.latest;
+    const lat = Number(latest?.lat);
+    const lng = Number(latest?.lng);
+    return isValidLatLng(lat, lng) ? [[lat, lng]] : [];
+  }, [selectedTrackerId, filteredAllTrackerMarkers, selectedTrackerPath]);
+
   const mapZoom = useMemo(() => (isDemoOrg ? 18 : 12), [isDemoOrg]);
 
   const mapCenter = useMemo(() => {
+    const markerCandidates =
+      (allTrackerMarkers || []).filter((m) => isValidLatLng(m?.lat, m?.lng));
+
+    if (markerCandidates.length) {
+      const best = markerCandidates.reduce((acc, cur) => {
+        const ts = getPositionTs(cur?.latest);
+        const accTs = getPositionTs(acc?.latest);
+        return ts > accTs ? cur : acc;
+      }, markerCandidates[0]);
+
+      if (best) return [best.lat, best.lng];
+    }
+
     const candidates = visiblePositions?.length ? visiblePositions : positions;
     if (candidates?.length) {
       let best = null;
@@ -2055,8 +2075,9 @@ export default function TrackerDashboard() {
     if (poly) return poly;
     const circ = layerItems.find((x) => x.type === "circle" && Array.isArray(x.center))?.center;
     if (circ) return circ;
+
     return [-0.22985, -78.52495];
-  }, [visiblePositions, positions, layerItems]);
+  }, [allTrackerMarkers, visiblePositions, positions, layerItems]);
 
   const Badge = ({ children }) => (
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
@@ -2433,6 +2454,11 @@ export default function TrackerDashboard() {
                 >
                   <FitIfOutOfView
                     layerItems={layerItems}
+                    markerPoints={
+                      selectedTrackerId === "all"
+                        ? (filteredAllTrackerMarkers || []).map((m) => [m?.lat, m?.lng])
+                        : mapFitPoints
+                    }
                     fitSignal={fitSignal}
                     isDemoOrg={isDemoOrg}
                     onBoundsComputed={(b) => {
@@ -2460,7 +2486,6 @@ export default function TrackerDashboard() {
 
                   <TrackerLayers
                     allTrackerMarkers={filteredAllTrackerMarkers}
-                    mapMarkers={mapMarkers}
                     selectedTrackerPath={selectedTrackerPath}
                     personalById={personalById}
                     personalByUserId={personalByUserId}
