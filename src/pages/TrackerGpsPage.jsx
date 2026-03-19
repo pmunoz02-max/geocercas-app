@@ -470,6 +470,8 @@ export default function TrackerGpsPage() {
       j = await res.json();
     } catch {}
 
+    console.log("[gps] send response", { status: res.status, body: j });
+
     if (!res.ok) {
       const msg = j?.error || j?.message || `HTTP ${res.status}`;
       throw new Error(`send_position http ${res.status}: ${msg}`);
@@ -680,16 +682,63 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
 
-    if (!("geolocation" in navigator)) {
-      setStatus(tt("trackerGps.status.noGeolocation", "This device does not support geolocation."));
-      setLastError(tt("trackerGps.errors.geolocationUnavailable", "Geolocation not available."));
-      return;
+    async function startTracking() {
+      console.log("[gps] startTracking called");
+
+      if (!("geolocation" in navigator)) {
+        setStatus(tt("trackerGps.status.noGeolocation", "This device does not support geolocation."));
+        setLastError(tt("trackerGps.errors.geolocationUnavailable", "Geolocation not available."));
+        return;
+      }
+
+      console.log("[gps] geolocation supported");
+      console.log("[gps] requesting permission");
+
+      if (navigator.permissions?.query) {
+        try {
+          const p = await navigator.permissions.query({ name: "geolocation" });
+          console.log(`[gps] permission state ${p?.state || "unknown"}`);
+        } catch {}
+      }
+
+      // One-time fallback: request a single position before watch mode.
+      try {
+        const oneShot = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 15000,
+          });
+        });
+        console.log("[gps] position received", {
+          lat: oneShot.coords?.latitude,
+          lng: oneShot.coords?.longitude,
+          accuracy: oneShot.coords?.accuracy ?? null,
+          speed: oneShot.coords?.speed ?? null,
+          heading: oneShot.coords?.heading ?? null,
+          timestamp: oneShot.timestamp,
+        });
+      } catch (err) {
+        console.warn("[gps] position error", {
+          code: err?.code,
+          message: err?.message || String(err),
+        });
+      }
     }
 
     let cancelled = false;
 
     const handleSuccess = (pos) => {
       if (cancelled) return;
+
+      console.log("[gps] position received", {
+        lat: pos.coords?.latitude,
+        lng: pos.coords?.longitude,
+        accuracy: pos.coords?.accuracy ?? null,
+        speed: pos.coords?.speed ?? null,
+        heading: pos.coords?.heading ?? null,
+        timestamp: pos.timestamp,
+      });
 
       const c = {
         lat: pos.coords.latitude,
@@ -710,15 +759,23 @@ export default function TrackerGpsPage() {
 
     const handleError = (err) => {
       if (cancelled) return;
+      console.warn("[gps] position error", {
+        code: err?.code,
+        message: err?.message || String(err),
+      });
       setStatus(tt("trackerGps.status.gpsError", "GPS error"));
       setLastError(err?.message || String(err));
     };
 
+    startTracking();
+
+    console.log("[gps] watchPosition started");
     watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
       enableHighAccuracy: true,
       maximumAge: 0,
       timeout: 20000,
     });
+    console.log(`[gps] watchPosition id=${watchIdRef.current}`);
 
     return () => {
       cancelled = true;
@@ -729,17 +786,30 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, membershipStatus, disclosureAccepted, lang]);
 
   useEffect(() => {
-    if (!trackerReady || !hasSession) return;
+    if (!trackerReady) return;
+    if (!hasSession) {
+      console.log("[gps] send skipped: missing session");
+      return;
+    }
     if (!disclosureAccepted) return;
     if (membershipStatus !== "ok") return;
-    if (!orgId) return;
+    if (!orgId) {
+      console.log("[gps] send skipped: missing org_id");
+      return;
+    }
 
     async function sendOnce() {
       const c = lastCoordsRef.current;
-      if (!c) return;
+      if (!c) {
+        console.log("[gps] send skipped: no coords");
+        return;
+      }
 
       const now = Date.now();
-      if (now - lastSentAtRef.current < CLIENT_MIN_INTERVAL_MS) return;
+      if (now - lastSentAtRef.current < CLIENT_MIN_INTERVAL_MS) {
+        console.log("[gps] send skipped: throttled");
+        return;
+      }
       if (isSendingRef.current) return;
 
       isSendingRef.current = true;
@@ -752,6 +822,12 @@ export default function TrackerGpsPage() {
           accuracy: c.accuracy,
           source: "tracker-gps-web",
         };
+
+        console.log("[gps] sending position", {
+          org_id: payload.org_id,
+          lat: payload.lat,
+          lng: payload.lng,
+        });
 
         try {
           await invokeSendPosition(payload);
