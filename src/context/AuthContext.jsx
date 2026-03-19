@@ -271,7 +271,7 @@ export function AuthProvider({ children }) {
     const backendRole = extractServerRole(session);
 
     console.log("SESSION RECEIVED", session);
-    console.log("SETTING ROLE/ORG", backendRole || null, backendOrgId || null);
+    console.log("SETTING CONTEXT", backendOrgId || null, backendRole || null);
 
     if (backendOrgId) {
       setCurrentOrgIdState((prev) => backendOrgId || prev || null);
@@ -304,6 +304,14 @@ export function AuthProvider({ children }) {
       const serverOrgId = extractServerOrgId(data);
       const serverRole = extractServerRole(data);
       const orgs = extractOrganizations(data);
+
+      if (serverOrgId) {
+        setCurrentOrgIdState((prev) => prev || serverOrgId);
+      }
+
+      if (serverRole) {
+        setCurrentRole((prev) => prev || serverRole);
+      }
 
       // Lee preferencia (legacy), pero la sanitiza contra orgs/roles
       let preferredOrgId = null;
