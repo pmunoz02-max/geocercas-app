@@ -447,6 +447,8 @@ export default function TrackerGpsPage() {
     try {
       const sbUrl = (import.meta.env.VITE_SUPABASE_URL || "").trim();
       const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim();
+      const accessToken = String(session?.access_token || "").trim();
+      const userId = String(session?.user?.id || "").trim();
 
       if (!sbUrl || !anon) {
         throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in this deployment");
@@ -460,20 +462,20 @@ export default function TrackerGpsPage() {
         console.warn("[gps] send aborted: invalid coords");
         return null;
       }
-
-      const userJwt = await getFreshJwtOrThrow("send_position(fetch)");
-      const jwtPayload = decodeJwtPayload(userJwt);
-      const userId = String(jwtPayload?.sub || "").trim();
       if (!userId) {
         console.warn("[gps] send aborted: missing userId");
+        return null;
+      }
+      if (!accessToken) {
+        console.warn("[gps] send aborted: missing access token");
         return null;
       }
 
       setDebug((d) => ({
         ...d,
         last_invoke_fn: "send_position",
-        last_invoke_token_len: userJwt.length,
-        last_invoke_auth: "fetch:Authorization=anon; x-user-jwt=user",
+        last_invoke_token_len: accessToken.length,
+        last_invoke_auth: "fetch:Authorization=user",
         last_http_status: null,
       }));
 
@@ -498,9 +500,8 @@ export default function TrackerGpsPage() {
         method: "POST",
         headers: {
           apikey: anon,
-          Authorization: `Bearer ${anon}`,
+          Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
-          "x-user-jwt": userJwt,
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -522,10 +523,12 @@ export default function TrackerGpsPage() {
 
       return j;
     } catch (e) {
+      if (e?.name === "AbortError") {
+        console.warn("[gps] send timeout");
+      }
       console.error("[gps] send error", {
         message: e?.message || String(e),
         stack: e?.stack || null,
-        details: e,
       });
       throw e;
     } finally {
@@ -892,6 +895,7 @@ export default function TrackerGpsPage() {
           lat: c.lat,
           lng: c.lng,
           accuracy: c.accuracy,
+          timestamp: lastPosition.timestamp ?? Date.now(),
           source: "tracker-gps-web",
         };
 
