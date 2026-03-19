@@ -39,6 +39,26 @@ function sameProjectRef(url, expectedRef) {
   }
 }
 
+function runtimeHost(req) {
+  return String(req?.headers?.host || "").toLowerCase();
+}
+
+const PREVIEW_PROJECT_REF = "mujwsfhkocsuauhlrssn";
+const PRODUCTION_PROJECT_REF = "wpaixkvokdkudymgjoua";
+
+function expectedProjectRefsForHost(host) {
+  const normalized = String(host || "").toLowerCase();
+
+  if (normalized.startsWith("preview.")) return [PREVIEW_PROJECT_REF];
+  if (normalized === "app.tugeocercas.com") return [PRODUCTION_PROJECT_REF];
+
+  return [PREVIEW_PROJECT_REF, PRODUCTION_PROJECT_REF];
+}
+
+function sameAnyProjectRef(url, expectedRefs) {
+  return expectedRefs.some((expectedRef) => sameProjectRef(url, expectedRef));
+}
+
 function safeError(err) {
   if (!err) return null;
   return {
@@ -62,20 +82,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 🔒 Ref fijo del proyecto (para evitar dominios viejos)
-    const PROJECT_REF = "mujwsfhkocsuuahlrssn";
+    const host = runtimeHost(req);
+    const expectedProjectRefs = expectedProjectRefsForHost(host);
 
     // ✅ Env principal (server)
     let url = process.env.SUPABASE_URL;
     let anonKey = process.env.SUPABASE_ANON_KEY;
 
-    // ✅ Fallback CONTROLADO (solo si coincide project ref y dominio)
-    // (Esto no es ambiguo: solo acepta el mismo ref y *.supabase.co)
+    // ✅ Fallback controlado: acepta el ref esperado para el host actual.
     if ((!url || !anonKey) && process.env.VITE_SUPABASE_URL && process.env.VITE_SUPABASE_ANON_KEY) {
       const candidateUrl = process.env.VITE_SUPABASE_URL;
       const candidateAnon = process.env.VITE_SUPABASE_ANON_KEY;
 
-      if (isValidSupabaseUrl(candidateUrl) && sameProjectRef(candidateUrl, PROJECT_REF)) {
+      if (isValidSupabaseUrl(candidateUrl) && sameAnyProjectRef(candidateUrl, expectedProjectRefs)) {
         url = url || candidateUrl;
         anonKey = anonKey || candidateAnon;
       }
@@ -85,6 +104,15 @@ export default async function handler(req, res) {
 
     // ❗ Nunca 500 por env faltante: responde controlado
     if (!url || !anonKey) {
+      console.error("[/api/auth/session] missing env", {
+        build_tag,
+        host,
+        expectedProjectRefs,
+        hasSupabaseUrl: Boolean(process.env.SUPABASE_URL),
+        hasSupabaseAnonKey: Boolean(process.env.SUPABASE_ANON_KEY),
+        hasViteSupabaseUrl: Boolean(process.env.VITE_SUPABASE_URL),
+        hasViteSupabaseAnonKey: Boolean(process.env.VITE_SUPABASE_ANON_KEY),
+      });
       return res.status(503).json({
         build_tag,
         authenticated: false,
@@ -101,15 +129,22 @@ export default async function handler(req, res) {
       });
     }
 
-    // ✅ Validación dura del URL: dominio + project ref
-    if (!isValidSupabaseUrl(url) || !sameProjectRef(url, PROJECT_REF)) {
+    // No mezclar preview con producción, pero sin romper la app por un mismatch.
+    if (!isValidSupabaseUrl(url) || !sameAnyProjectRef(url, expectedProjectRefs)) {
+      console.error("[/api/auth/session] invalid supabase url for host", {
+        build_tag,
+        host,
+        url_used: url,
+        expectedProjectRefs,
+      });
       return res.status(503).json({
         build_tag,
         authenticated: false,
         ok: false,
         error_code: "INVALID_SUPABASE_URL",
         url_used: url,
-        note: `El SUPABASE_URL debe ser https://${PROJECT_REF}.supabase.co`,
+        expected_refs: expectedProjectRefs,
+        note: "El SUPABASE_URL no coincide con el proyecto permitido para este host.",
       });
     }
 
