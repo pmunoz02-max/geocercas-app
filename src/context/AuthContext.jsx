@@ -263,11 +263,40 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("popstate", onNav);
   }, []);
 
+  const applyBackendSessionContext = useCallback((sessionData) => {
+    const session = sessionData?.data ?? sessionData ?? null;
+    if (!session || session.authenticated !== true) return;
+
+    const backendOrgId = extractServerOrgId(session);
+    const backendRole = extractServerRole(session);
+
+    console.log("SESSION RECEIVED", session);
+    console.log("SETTING ROLE/ORG", backendRole || null, backendOrgId || null);
+
+    if (backendOrgId) {
+      setCurrentOrgIdState((prev) => backendOrgId || prev || null);
+      setCurrentOrg((prev) => {
+        if (prev?.id === backendOrgId) return prev;
+        return {
+          ...(prev || {}),
+          id: backendOrgId,
+          name: prev?.name || "",
+        };
+      });
+    }
+
+    if (backendRole) {
+      setCurrentRole((prev) => backendRole || prev || null);
+    }
+  }, []);
+
   /**
    * Aplica session data sin contaminar org global por tracker.
    */
   const applySessionData = useCallback(
     (data) => {
+      applyBackendSessionContext(data);
+
       setUser(data?.user ?? null);
       setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
       setCanSwitchOrganizations(extractCanSwitchOrganizations(data));
@@ -275,20 +304,6 @@ export function AuthProvider({ children }) {
       const serverOrgId = extractServerOrgId(data);
       const serverRole = extractServerRole(data);
       const orgs = extractOrganizations(data);
-
-      console.log("SESSION BACKEND:", data);
-
-      if (serverOrgId || serverRole) {
-        console.log("SET CONTEXT:", serverOrgId, serverRole);
-      }
-
-      if (serverOrgId) {
-        setCurrentOrgIdState(serverOrgId);
-      }
-
-      if (serverRole) {
-        setCurrentRole(serverRole);
-      }
 
       // Lee preferencia (legacy), pero la sanitiza contra orgs/roles
       let preferredOrgId = null;
@@ -354,7 +369,7 @@ export function AuthProvider({ children }) {
 
       setCurrentRole((prev) => serverRole || prev || null);
     },
-    [path]
+    [applyBackendSessionContext, path]
   );
 
   const applyEnsureContext = useCallback((payload) => {
@@ -618,8 +633,7 @@ export function AuthProvider({ children }) {
         const s0 = await fetchSession();
 
         if (s0.ok && s0.data?.authenticated === true && s0.data?.user?.id) {
-          console.log("SESSION BACKEND:", s0.data);
-          console.log("SET CONTEXT:", extractServerOrgId(s0.data), extractServerRole(s0.data));
+          applyBackendSessionContext(s0.data);
           serverSession = s0.data;
           resolvedUser = s0.data.user;
           console.info("[AUTHCTX] bootstrap: session recovered from backend");
@@ -652,10 +666,7 @@ export function AuthProvider({ children }) {
 
       const s1 = serverSession || (await fetchSession());
 
-      if (s1?.data) {
-        console.log("SESSION BACKEND:", s1.data);
-        console.log("SET CONTEXT:", extractServerOrgId(s1.data), extractServerRole(s1.data));
-      }
+      if (s1?.data) applyBackendSessionContext(s1.data);
 
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
         if (resolvedUser) {
@@ -685,10 +696,7 @@ export function AuthProvider({ children }) {
         }
 
         const s2 = await fetchSession();
-        if (s2?.data) {
-          console.log("SESSION BACKEND:", s2.data);
-          console.log("SET CONTEXT:", extractServerOrgId(s2.data), extractServerRole(s2.data));
-        }
+        if (s2?.data) applyBackendSessionContext(s2.data);
         if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
         } else if (resolvedUser) {
@@ -708,7 +716,7 @@ export function AuthProvider({ children }) {
       }
       setInitialized(true);
     }
-  }, [applySessionData, applyEnsureContext, clearResolvedAuthState, hydrateClientContext, path]);
+  }, [applyBackendSessionContext, applySessionData, applyEnsureContext, clearResolvedAuthState, hydrateClientContext, path]);
 
   useEffect(() => {
     bootstrap();
