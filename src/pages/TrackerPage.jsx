@@ -1,35 +1,16 @@
 ﻿// src/pages/TrackerPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../supabaseClient";
-import { useAuth } from "@/context/auth.js";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext.jsx";
 import Tracker from "./Tracker.jsx";
-import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
-import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
-
-function normalizePlanLabel(planCode) {
-  const v = String(planCode || "").toLowerCase();
-  if (v === "pro") return "PRO";
-  if (v === "enterprise") return "ENTERPRISE";
-  if (v === "elite_plus") return "ELITE PLUS";
-  if (v === "elite") return "ELITE";
-  if (v === "starter") return "STARTER";
-  if (v === "free") return "FREE";
-  return v ? v.toUpperCase() : "—";
-}
 
 export default function TrackerPage() {
   const { t } = useTranslation();
   const tr = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { user, currentOrg, setCurrentOrg } = useAuth();
-  const {
-    loading: entitlementsLoading,
-    error: entitlementsError,
-    planCode,
-    isFree,
-  } = useOrgEntitlements();
+  const { user, currentOrg, selectOrg } = useAuth();
 
   const [resolviendoOrg, setResolviendoOrg] = useState(true);
   const [error, setError] = useState(null);
@@ -122,8 +103,8 @@ export default function TrackerPage() {
           role: role || "tracker",
         };
 
-        if (!cancelado) {
-          setCurrentOrg(orgObj);
+        if (!cancelado && selectOrg) {
+          await selectOrg(orgObj.id);
         }
 
         try {
@@ -133,7 +114,7 @@ export default function TrackerPage() {
         }
       } catch (e) {
         if (!cancelado) {
-          console.error("[TrackerPage] error resolviendo organización:", e);
+          console.error("[TrackerPage] error resolviendo organizacion:", e);
           setError(
             tr(
               "trackerPage.errors.resolveOrg",
@@ -153,14 +134,9 @@ export default function TrackerPage() {
     return () => {
       cancelado = true;
     };
-  }, [user, currentOrg, setCurrentOrg, t]);
+  }, [user, currentOrg, t]);
 
   const orgName = currentOrg?.name || tr("trackerPage.labels.yourOrg", "your organization");
-  const currentOrgId = currentOrg?.id || null;
-
-  const trackerBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && isFree;
-  }, [entitlementsLoading, isFree]);
 
   if (!user) {
     return (
@@ -182,7 +158,7 @@ export default function TrackerPage() {
     return (
       <div className="p-6 max-w-xl mx-auto">
         <h1 className="text-2xl font-semibold mb-2">
-          {tr("trackerPage.states.preparingTitle", "Preparing tracker…")}
+          {tr("trackerPage.states.preparingTitle", "Preparing tracker...")}
         </h1>
         <p className="text-gray-600 text-sm">
           {tr(
@@ -190,94 +166,6 @@ export default function TrackerPage() {
             "We are verifying your organization and preparing the sending of your location. Please wait a moment."
           )}
         </p>
-      </div>
-    );
-  }
-
-  if (entitlementsLoading) {
-    return (
-      <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">
-          {tr("trackerPage.states.validatingPlanTitle", "Validating plan…")}
-        </h1>
-        <p className="text-gray-600 text-sm">
-          {tr(
-            "trackerPage.states.validatingPlanBody",
-            "We are verifying whether your organization has the Tracker module enabled."
-          )}
-        </p>
-      </div>
-    );
-  }
-
-  if (entitlementsError) {
-    return (
-      <div className="p-6 max-w-xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-3">
-          {tr("trackerPage.title", "Tracker")}
-        </h1>
-        <div className="border border-amber-300 bg-amber-50 text-amber-800 rounded px-4 py-3 text-sm">
-          {tr(
-            "trackerPage.errors.planValidation",
-            "Could not validate the organization's plan. Please try again."
-          )}
-          <div className="mt-2 font-mono text-xs break-all">{entitlementsError}</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (trackerBlockedByPlan) {
-    return (
-      <div className="p-6 max-w-2xl mx-auto space-y-4">
-        <h1 className="text-2xl font-semibold">
-          {tr("trackerPage.title", "Tracker")}
-        </h1>
-
-        <div className="border border-amber-300 bg-amber-50 text-amber-900 rounded-xl px-4 py-4">
-          <div className="text-base font-semibold">
-            {tr(
-              "trackerPage.planBlocked.title",
-              "The Tracker module is not available on the current plan."
-            )}
-          </div>
-          <div className="mt-2 text-sm">
-            {tr("trackerPage.planBlocked.organization", "Organization")}:{" "}
-            <span className="font-semibold">{orgName}</span>
-          </div>
-          <div className="mt-1 text-sm">
-            {tr("trackerPage.planBlocked.detectedPlan", "Detected plan")}:{" "}
-            <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
-          </div>
-          <div className="mt-3 text-sm">
-            {tr(
-              "trackerPage.planBlocked.description",
-              "To send and manage real-time positions, upgrade this organization to PRO or higher."
-            )}
-          </div>
-        </div>
-
-        {currentOrgId ? (
-          <div className="border rounded-xl p-4 bg-white">
-            <div className="text-sm text-gray-700 mb-3">
-              {tr(
-                "trackerPage.planBlocked.upgradePrompt",
-                "Upgrade to enable Tracker for this organization."
-              )}
-            </div>
-            <UpgradeToProButton
-              orgId={currentOrgId}
-              getAccessToken={getAccessToken}
-            />
-          </div>
-        ) : null}
-
-        <div className="border border-slate-200 bg-slate-50 text-slate-700 rounded-xl px-4 py-3 text-sm">
-          {tr(
-            "trackerPage.planBlocked.backendAuthority",
-            "The backend remains the authority. This block is visual and part of the user experience to reflect the organization's active plan."
-          )}
-        </div>
       </div>
     );
   }

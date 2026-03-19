@@ -1,342 +1,286 @@
 // src/pages/AuthCallback.tsx
-<<<<<<< HEAD
-// CALLBACK-V35 – Universal: hash token | PKCE code | token_hash+type (verifyOtp) | fallback getSession
-import React, { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { supabase, setMemoryAccessToken } from "../supabaseClient";
-=======
-// CALLBACK-IMPLICIT-V2 — hash token (#access_token)
-// - login normal: bootstrap cookie y redirige a next (limpia hash)
-// - recovery: reenvía el hash completo hacia /reset-password (NO limpiar antes)
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { supabase } from "../lib/supabaseClient";
+import { supabaseTracker } from "../lib/supabaseTrackerClient";
+import { isTrackerCallbackNext } from "../lib/trackerFlow";
 
-import React, { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { setMemoryAccessToken } from "../lib/supabaseClient";
->>>>>>> preview
+function getQueryParam(search: string, key: string) {
+  const v = new URLSearchParams(search).get(key);
+  return v ?? "";
+}
 
-type Diag = {
-  step: string;
-  next?: string;
-  type?: string;
-  hasAccessToken?: boolean;
-<<<<<<< HEAD
-  hasCode?: boolean;
-  hasTokenHash?: boolean;
-  otpType?: string;
-  bootstrapOrgId?: string;
-=======
-  bootstrapOk?: boolean;
->>>>>>> preview
-  error?: string;
-};
+function safeNextPath(next: string) {
+  if (!next) return "/inicio";
+  // SOLO paths relativos (seguro)
+  if (next.startsWith("/")) return next;
+  return "/inicio";
+}
 
 function parseHashParams(hash: string) {
-  const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
+  const h = String(hash || "").replace(/^#/, "");
   const sp = new URLSearchParams(h);
-  const access_token = sp.get("access_token") || "";
-  const refresh_token = sp.get("refresh_token") || "";
-<<<<<<< HEAD
-  const error = sp.get("error") || sp.get("error_description") || "";
-  return { access_token, refresh_token, error };
+  const out: Record<string, string> = {};
+  sp.forEach((v, k) => (out[k] = v));
+  return out;
 }
 
-function safeNext(raw: string | null | undefined) {
-  const n = (raw || "").trim();
-  if (!n || !n.startsWith("/")) return "/inicio";
-  return n;
-}
-
-async function bootstrapAndRedirect(next: string, accessToken: string) {
-  // Token en memoria para tu fetch wrapper / RPC
-  setMemoryAccessToken(accessToken);
-
-  const { data: orgId, error: rpcError } = await supabase.rpc("bootstrap_user_after_login");
-  if (rpcError) throw rpcError;
-
-  try {
-    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-  } catch {}
-
-  window.location.replace(next);
-  return orgId ? String(orgId) : undefined;
-=======
-  const type = (sp.get("type") || "").toLowerCase(); // recovery / magiclink / etc
-  const error = sp.get("error") || sp.get("error_description") || "";
-  return { access_token, refresh_token, type, error };
-}
-
-function safeReplaceUrlWithoutSecrets() {
-  try {
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } catch {}
-}
-
-async function bootstrapBackendCookie(accessToken: string) {
+async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
   const res = await fetch("/api/auth/bootstrap", {
     method: "POST",
-    credentials: "include",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      "cache-control": "no-cache",
-      pragma: "no-cache",
     },
-    body: JSON.stringify({}),
+    credentials: "include",
+    body: JSON.stringify({
+      refresh_token: refreshToken,
+      expires_in: typeof expiresIn === "number" ? expiresIn : undefined,
+    }),
   });
 
-  let j: any = null;
-  try {
-    j = await res.json();
-  } catch {}
-  return { ok: res.ok && !!j?.ok, status: res.status, json: j };
->>>>>>> preview
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(`Bootstrap failed (HTTP ${res.status}). ${txt || ""}`.trim());
+  }
+}
+
+function normalizeAuthErrorMessage(raw: string) {
+  const msg = String(raw || "").trim();
+  const low = msg.toLowerCase();
+
+  // Caso t├¡pico: link consumido por ÔÇ£link scanningÔÇØ, abierto 2 veces, o expir├│.
+  if (
+    low.includes("email link is invalid") ||
+    low.includes("has expired") ||
+    low.includes("invalid or has expired") ||
+    low.includes("otp_expired") ||
+    low.includes("token has expired")
+  ) {
+    return {
+      title: "El enlace de acceso ya no es v├ílido",
+      detail:
+        "Esto pasa si el enlace expir├│ o si fue abierto/escaneado antes (por ejemplo, previsualizaci├│n del correo, SafeLinks de Outlook, o abrirlo dos veces).",
+      tips: [
+        "Usa el correo m├ís reciente (├║ltima invitaci├│n) y ├íbrelo solo una vez.",
+        "Evita abrirlo dentro de un navegador interno (in-app browser). Si puedes, elige ÔÇ£Abrir en Chrome/SafariÔÇØ.",
+        "Si vuelve a fallar, pide al Owner que reenv├¡e la invitaci├│n.",
+      ],
+    };
+  }
+
+  // Errores comunes de callback/session
+  if (low.includes("no se pudo establecer sesi├│n") || low.includes("could not establish session")) {
+    return {
+      title: "No se pudo completar el login.",
+      detail:
+        "No se pudo establecer la sesi├│n desde el callback. Esto suele ocurrir si el callback no procesa el tipo de enlace recibido o si el enlace fue consumido/expir├│.",
+      tips: [
+        "Reintenta con un enlace nuevo (magic link m├ís reciente).",
+        "Aseg├║rate de abrir el enlace en el mismo dispositivo/navegador donde lo solicitaste.",
+      ],
+    };
+  }
+
+  return { title: "No se pudo completar el login.", detail: msg, tips: [] as string[] };
+}
+
+/**
+ * Tipos v├ílidos para verifyOtp:
+ * - "magiclink" (caso actual)
+ * - "invite"
+ * - "recovery"
+ * - "email" (dependiendo de flujo)
+ *
+ * Nota: Supabase env├¡a `type=magiclink` en tu caso.
+ */
+function normalizeOtpType(t: string) {
+  const v = String(t || "").toLowerCase().trim();
+  if (!v) return "magiclink";
+  if (v === "magiclink" || v === "invite" || v === "recovery" || v === "email") return v;
+  // fallback seguro
+  return "magiclink";
 }
 
 export default function AuthCallback() {
-  const [searchParams] = useSearchParams();
-  const fired = useRef(false);
-  const [diag, setDiag] = useState<Diag>({ step: "idle" });
+  const location = useLocation();
+  const [status, setStatus] = useState<string>("Procesando autenticaci├│nÔÇª");
+  const [error, setError] = useState<string | null>(null);
+  const [errorMeta, setErrorMeta] = useState<{ title: string; detail: string; tips: string[] } | null>(
+    null
+  );
+
+  const next = useMemo(() => {
+    const n = getQueryParam(location.search, "next");
+    return safeNextPath(n || "/inicio");
+  }, [location.search]);
+
+  const isTrackerFlow = useMemo(() => isTrackerCallbackNext(next), [next]);
 
   useEffect(() => {
-    if (fired.current) return;
-    fired.current = true;
+    let alive = true;
 
-<<<<<<< HEAD
     (async () => {
-      const next = safeNext(searchParams.get("next") || "/inicio");
-
       try {
-        setDiag({ step: "parse_url", next });
+        setError(null);
+        setErrorMeta(null);
 
-        const code = searchParams.get("code") || "";
-        const token_hash = searchParams.get("token_hash") || "";
-        const type = searchParams.get("type") || ""; // magiclink | recovery | invite | email_change ...
+        // 0) Errores en hash o query
+        const hash = typeof window !== "undefined" ? window.location.hash : "";
+        const hp = parseHashParams(hash);
 
-        const { access_token, refresh_token, error } = parseHashParams(window.location.hash || "");
+        const queryErr = getQueryParam(location.search, "error");
+        const queryDesc = getQueryParam(location.search, "error_description");
 
-        setDiag({
-          step: "parsed",
-          next,
-          hasAccessToken: !!access_token,
-          hasCode: !!code,
-          hasTokenHash: !!token_hash,
-          otpType: type || undefined,
-          error: error || undefined,
-        });
-
-        // error explícito
-        if (error) {
-          const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(error)}`;
-          window.location.replace(target);
-          return;
+        if (hp.error || queryErr) {
+          const e = hp.error || queryErr;
+          const d = hp.error_description
+            ? decodeURIComponent(hp.error_description)
+            : queryDesc
+            ? decodeURIComponent(queryDesc)
+            : "";
+          const msg = d ? `${e}: ${d}` : String(e);
+          throw new Error(msg);
         }
 
-        // 1) HASH token (legacy)
-        if (access_token) {
-          setDiag({ step: "hash_token_flow", next, hasAccessToken: true });
+        // 1) Ô£à PKCE magiclink / invite / recovery v├¡a query: token_hash + type
+        // Ejemplo: /auth/callback?next=...&token_hash=pkce_xxx&type=magiclink
+        const token_hash = getQueryParam(location.search, "token_hash");
+        const type = normalizeOtpType(getQueryParam(location.search, "type"));
 
-          // Evita “sesión pegada”
-          try {
-            await supabase.auth.signOut({ scope: "local" });
-          } catch {}
-
-          // Si hay refresh_token, fija sesión completa
-          if (refresh_token) {
-            const { error: setErr } = await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-            if (setErr) throw setErr;
-          }
-
-          setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
-          const orgId = await bootstrapAndRedirect(next, access_token);
-          setDiag({ step: "redirect", next, bootstrapOrgId: orgId });
-          return;
+        const authClient = isTrackerFlow ? supabaseTracker : supabase;
+        if (isTrackerFlow && !authClient) {
+          throw new Error("Tracker auth client not available for tracker callback flow.");
         }
 
-        // 2) PKCE code flow
-        if (code) {
-          setDiag({ step: "pkce_exchange", next, hasCode: true });
-
-          const { data, error: exErr } = await supabase.auth.exchangeCodeForSession(window.location.href);
-          if (exErr) throw exErr;
-
-          const at = data?.session?.access_token || "";
-          if (!at) throw new Error("exchange_no_access_token");
-
-          setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
-          const orgId = await bootstrapAndRedirect(next, at);
-          setDiag({ step: "redirect", next, bootstrapOrgId: orgId });
-          return;
-        }
-
-        // 3) token_hash + type (nuevo flujo de magic link)
-        if (token_hash && type) {
-          setDiag({ step: "verify_otp", next, hasTokenHash: true, otpType: type });
-
-          const { data, error: vErr } = await supabase.auth.verifyOtp({
+        if (token_hash) {
+          setStatus("Confirmando sesi├│n (token_hash)ÔÇª");
+          const { error: vErr } = await authClient.auth.verifyOtp({
             type: type as any,
             token_hash,
           });
           if (vErr) throw vErr;
+        } else {
+          // 2) PKCE: ?code=...
+          const code = getQueryParam(location.search, "code");
+          if (code) {
+            setStatus("Confirmando sesi├│n (code)ÔÇª");
+            const { error: exErr } = await authClient.auth.exchangeCodeForSession(code);
+            if (exErr) throw exErr;
+          } else {
+            // 3) Implicit: #access_token=...&refresh_token=...
+            const access_token = hp.access_token || "";
+            const refresh_token = hp.refresh_token || "";
 
-          const at = data?.session?.access_token || "";
-          if (!at) {
-            // fallback: quizá sesión ya quedó guardada por persistSession
-            const { data: s } = await supabase.auth.getSession();
-            const at2 = s?.session?.access_token || "";
-            if (!at2) throw new Error("verifyotp_no_access_token");
-            setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
-            const orgId2 = await bootstrapAndRedirect(next, at2);
-            setDiag({ step: "redirect", next, bootstrapOrgId: orgId2 });
-            return;
+            if (access_token && refresh_token) {
+              setStatus("Confirmando sesi├│n (token)ÔÇª");
+              const { error: ssErr } = await authClient.auth.setSession({
+                access_token,
+                refresh_token,
+              });
+              if (ssErr) throw ssErr;
+            } else {
+              // 4) Si no vino nada, intentamos getSession por si ya est├í hidratada
+              setStatus("Confirmando sesi├│nÔÇª");
+            }
           }
-
-          setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
-          const orgId = await bootstrapAndRedirect(next, at);
-          setDiag({ step: "redirect", next, bootstrapOrgId: orgId });
-          return;
         }
 
-        // 4) Último fallback: ya hay sesión (por detectSessionInUrl/persistSession)
-        setDiag({ step: "fallback_getSession", next });
-        const { data: sessData } = await supabase.auth.getSession();
-        const at = sessData?.session?.access_token || "";
-        if (at) {
-          setDiag({ step: "bootstrap_rpc", next, hasAccessToken: true });
-          const orgId = await bootstrapAndRedirect(next, at);
-          setDiag({ step: "redirect", next, bootstrapOrgId: orgId });
-          return;
+        // 5) Obtener sesi├│n desde el cliente
+        const { data } = await authClient.auth.getSession();
+        const session = data?.session;
+
+        if (!session?.access_token || !session?.refresh_token) {
+          throw new Error("No se pudo establecer sesi├│n desde el callback.");
         }
 
-        // Nada funcionó
-        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent("missing_access_token")}`;
-        window.location.replace(target);
+        // 6) Bootstrap cookies (tg_at/tg_rt)
+        if (!isTrackerFlow) {
+          setStatus("Creando cookies segurasÔÇª");
+          await bootstrapCookie(
+            session.access_token,
+            session.refresh_token,
+            typeof session.expires_in === "number" ? session.expires_in : undefined
+          );
+        }
+
+        // 7) Redirigir al panel (hard redirect)
+        setStatus("EntrandoÔÇª");
+        if (!alive) return;
+        window.location.assign(next);
       } catch (e: any) {
-        const msg = String(e?.message || e || "callback_error");
-        setDiag({ step: "fatal", next, error: msg });
-        const target = `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(msg)}`;
-        window.location.replace(target);
+        if (!alive) return;
+
+        const raw = e?.message || String(e);
+        const meta = normalizeAuthErrorMessage(raw);
+
+        setError(raw);
+        setErrorMeta(meta);
+        setStatus(meta.title || "No se pudo completar el login.");
       }
     })();
-=======
-    const run = async () => {
-      const next = searchParams.get("next") || "/inicio";
-      setDiag({ step: "parse_url", next });
 
-      // Si llega ?code= es PKCE viejo
-      const code = searchParams.get("code");
-      if (code) {
-        safeReplaceUrlWithoutSecrets();
-        window.location.replace(
-          `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(
-            "pkce_disabled_use_magic_link_implicit"
-          )}`
-        );
-        return;
-      }
-
-      const { access_token, refresh_token, type, error } = parseHashParams(
-        window.location.hash || ""
-      );
-
-      setDiag({ step: "hash_parsed", next, type });
-
-      if (error) {
-        safeReplaceUrlWithoutSecrets();
-        window.location.replace(
-          `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(
-            error
-          )}`
-        );
-        return;
-      }
-
-      if (!access_token) {
-        safeReplaceUrlWithoutSecrets();
-        window.location.replace(
-          `/login?next=${encodeURIComponent(next)}&err=${encodeURIComponent(
-            "missing_access_token_in_hash"
-          )}`
-        );
-        return;
-      }
-
-      // ✅ CASO RECOVERY: reenviar el hash COMPLETO a /reset-password
-      // (no limpies hash antes, o se pierde access_token/refresh_token)
-      if (type === "recovery") {
-        // Si next ya apunta a reset-password, respétalo, sino fuerza /reset-password
-        const target =
-          next && next.startsWith("/reset-password")
-            ? next
-            : "/reset-password";
-
-        setDiag({
-          step: "recovery_forward_hash",
-          next: target,
-          type,
-          hasAccessToken: true,
-        });
-
-        // Reenviamos hash tal cual llegó
-        window.location.replace(`${target}${window.location.hash}`);
-        return;
-      }
-
-      // ✅ LOGIN NORMAL: set token en memoria + bootstrap cookie
-      setDiag({ step: "hash_ok", next, type, hasAccessToken: true });
-
-      try {
-        setMemoryAccessToken(access_token);
-      } catch {}
-
-      setDiag((d) => ({ ...d, step: "bootstrap_start" }));
-      const boot = await bootstrapBackendCookie(access_token);
-      setDiag((d) => ({ ...d, step: "bootstrap_done", bootstrapOk: boot.ok }));
-
-      // ✅ ahora sí limpiamos hash (ya no lo necesitamos)
-      safeReplaceUrlWithoutSecrets();
-
-      setDiag({
-        step: "redirect",
-        next,
-        type,
-        hasAccessToken: true,
-        bootstrapOk: boot.ok,
-      });
-      window.location.replace(next);
+    return () => {
+      alive = false;
     };
+  }, [isTrackerFlow, location.search, next]);
 
-    void run();
->>>>>>> preview
-  }, [searchParams]);
+  const onGoLogin = () => {
+    window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200 flex items-center justify-center px-4">
-      <div className="w-full max-w-xl">
-        <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">
-          <h1 className="text-2xl font-semibold">Creando sesión...</h1>
-          <p className="text-sm opacity-70 mt-2">
-            Procesando link de autenticación...
-          </p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-6">
+      <div className="max-w-md w-full rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+        <div className="text-lg font-semibold">Auth Callback</div>
+        <div className="mt-2 text-sm opacity-80">{status}</div>
 
-          <div className="mt-6 text-xs bg-black/30 border border-white/10 rounded-2xl p-4 space-y-1">
-            <div>step: {diag.step}</div>
-            <div>type: {diag.type || "-"}</div>
-            <div>next: {diag.next || "-"}</div>
-            <div>hasAccessToken: {String(diag.hasAccessToken ?? "-")}</div>
-<<<<<<< HEAD
-            <div>hasCode: {String(diag.hasCode ?? "-")}</div>
-            <div>hasTokenHash: {String(diag.hasTokenHash ?? "-")}</div>
-            <div>otpType: {diag.otpType || "-"}</div>
-            <div>bootstrapOrgId: {diag.bootstrapOrgId || "-"}</div>
-=======
-            <div>bootstrapOk: {String(diag.bootstrapOk ?? "-")}</div>
->>>>>>> preview
-            <div>error: {diag.error || "-"}</div>
+        {errorMeta && (
+          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm">
+            <div className="font-semibold">{errorMeta.title}</div>
+            <div className="mt-2 opacity-90">{errorMeta.detail}</div>
+
+            {errorMeta.tips?.length ? (
+              <ul className="mt-3 list-disc pl-5 opacity-90 space-y-1">
+                {errorMeta.tips.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            ) : null}
+
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={onGoLogin}
+                className="rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 px-3 py-2 text-sm"
+              >
+                Volver a Login
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 px-3 py-2 text-sm"
+              >
+                Reintentar
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {!errorMeta && error && (
+          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm">
+            {error}
+            <div className="mt-2 opacity-80">Intenta abrir de nuevo el link o vuelve a Login.</div>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={onGoLogin}
+                className="rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 px-3 py-2 text-sm"
+              >
+                Volver a Login
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 text-xs opacity-60 break-all">next: {next}</div>
       </div>
     </div>
   );

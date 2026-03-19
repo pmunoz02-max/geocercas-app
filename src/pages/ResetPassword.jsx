@@ -1,37 +1,19 @@
 // src/pages/ResetPassword.jsx
 // RESET-PASSWORD-IMPLICIT-V2
-// Soporta 2 entradas:
+// Soporta 2 entrada:
 // A) Implicit recovery: /reset-password#access_token=...&refresh_token=...&type=recovery
 // B) Legacy token_hash: /reset-password?token_hash=...&type=recovery  (verifyOtp)
 
 import React, { useEffect, useMemo, useState } from "react";
-<<<<<<< HEAD
-import { useNavigate } from "react-router-dom";
-
-/**
- * ResetPassword (Ruta B API-first)
- * - NO usa Supabase client en frontend para updateUser (evita "Auth session missing")
- * - Llama a tu endpoint: POST /api/auth/recovery
- * - Parseo robusto: resp.text() -> JSON.parse seguro (evita "Unexpected end of JSON input")
- * - Incluye diagnóstico visible (temporal) para ver status + respuesta real del API
- */
-=======
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate, useSearchParams } from "react-router-dom";
->>>>>>> preview
 
 function isStrongEnough(pw) {
   const s = String(pw || "");
   return s.length >= 8 && /[A-Za-z]/.test(s) && /\d/.test(s);
 }
 
-<<<<<<< HEAD
-function getRecoveryParams() {
-  const q = new URLSearchParams(window.location.search);
-  const token_hash = q.get("token_hash") || q.get("token") || q.get("recovery_token") || "";
-  const type = (q.get("type") || "recovery").toLowerCase();
-  return { token_hash, type };
-=======
 function parseHashParams(hash) {
   const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
   const sp = new URLSearchParams(h);
@@ -41,14 +23,14 @@ function parseHashParams(hash) {
     type: (sp.get("type") || "").toLowerCase(),
     error: sp.get("error") || sp.get("error_description") || "",
   };
->>>>>>> preview
 }
 
 export default function ResetPassword() {
+  const { t } = useTranslation();
+  const tr = (key, fallback, options = {}) =>
+    t(key, { defaultValue: fallback, ...options });
+
   const navigate = useNavigate();
-<<<<<<< HEAD
-  const { token_hash, type } = getRecoveryParams();
-=======
   const [searchParams] = useSearchParams();
 
   const token_hash = searchParams.get("token_hash") || "";
@@ -56,17 +38,11 @@ export default function ResetPassword() {
 
   const [checking, setChecking] = useState(true);
   const [ready, setReady] = useState(false);
->>>>>>> preview
 
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
 
   const [busy, setBusy] = useState(false);
-<<<<<<< HEAD
-  const [msg, setMsg] = useState(null); // { type: "success"|"warn"|"error", text }
-  const [diag, setDiag] = useState(null); // debug visible
-
-=======
   const [msg, setMsg] = useState(null); // { type, text }
 
   const canSubmit = useMemo(() => {
@@ -75,58 +51,29 @@ export default function ResetPassword() {
     return isStrongEnough(password);
   }, [password, password2]);
 
->>>>>>> preview
   useEffect(() => {
-    // eslint-disable-next-line no-console
-    console.log("[ResetPassword] mounted", {
-      hasTokenHash: Boolean(token_hash),
-      type,
-      href: window.location.href,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
 
-  const canSave = useMemo(() => {
-    return (
-      Boolean(token_hash) &&
-      password &&
-      password2 &&
-      password === password2 &&
-      isStrongEnough(password)
-    );
-  }, [token_hash, password, password2]);
+    async function bootstrap() {
+      setChecking(true);
+      setReady(false);
+      setMsg(null);
 
-<<<<<<< HEAD
-  async function handleSave() {
-    // eslint-disable-next-line no-console
-    console.log("[ResetPassword] CLICK DETECTED");
-    setMsg(null);
-    setDiag(null);
-
-    if (!token_hash) {
-      setMsg({ type: "error", text: "Link inválido o incompleto. Genera un reset nuevo." });
-      return;
-    }
-
-    if (!canSave) {
-      setMsg({
-        type: "warn",
-        text: "Contraseña inválida o no coincide. Mín. 8 caracteres con letras y números.",
-=======
       try {
-        // 1) Caso A: hash implicit recovery
         const h = parseHashParams(window.location.hash || "");
         if (h.error) {
           setMsg({
             type: "error",
-            text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+            text: tr(
+              "resetPassword.errors.invalidOrExpiredLink",
+              "The recovery link is invalid or expired. Generate a new one."
+            ),
           });
           setReady(false);
           return;
         }
 
         if (h.access_token && (h.type === "recovery" || h.type === "magiclink")) {
-          // Creamos sesión en memoria para permitir updateUser
           const { error } = await supabase.auth.setSession({
             access_token: h.access_token,
             refresh_token: h.refresh_token || "",
@@ -137,13 +84,15 @@ export default function ResetPassword() {
           if (error) {
             setMsg({
               type: "error",
-              text: "No se pudo iniciar sesión de recuperación. Genera un link nuevo e inténtalo en incógnito.",
+              text: tr(
+                "resetPassword.errors.couldNotStartRecoverySession",
+                "Could not start the recovery session. Generate a new link and try again in incognito mode."
+              ),
             });
             setReady(false);
             return;
           }
 
-          // limpiamos hash (opcional) para no dejar tokens visibles
           try {
             window.history.replaceState({}, document.title, window.location.pathname);
           } catch {}
@@ -152,7 +101,6 @@ export default function ResetPassword() {
           return;
         }
 
-        // 2) Caso B: legacy token_hash
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -175,7 +123,10 @@ export default function ResetPassword() {
           if (error || !data?.session?.user?.id) {
             setMsg({
               type: "error",
-              text: "El link de recuperación es inválido o expiró. Genera uno nuevo.",
+              text: tr(
+                "resetPassword.errors.invalidOrExpiredLink",
+                "The recovery link is invalid or expired. Generate a new one."
+              ),
             });
             setReady(false);
             return;
@@ -187,12 +138,18 @@ export default function ResetPassword() {
 
         setMsg({
           type: "error",
-          text: "No hay sesión de recuperación. Solicita un nuevo link de recuperación.",
+          text: tr(
+            "resetPassword.errors.noRecoverySession",
+            "There is no recovery session. Request a new recovery link."
+          ),
         });
         setReady(false);
       } catch (e) {
         if (cancelled) return;
-        setMsg({ type: "error", text: e?.message || "Error inesperado." });
+        setMsg({
+          type: "error",
+          text: e?.message || tr("resetPassword.errors.unexpected", "Unexpected error."),
+        });
         setReady(false);
       } finally {
         if (!cancelled) setChecking(false);
@@ -203,7 +160,7 @@ export default function ResetPassword() {
     return () => {
       cancelled = true;
     };
-  }, [token_hash, type_q]);
+  }, [token_hash, type_q, t]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -212,84 +169,57 @@ export default function ResetPassword() {
     if (!canSubmit) {
       setMsg({
         type: "warn",
-        text: "Revisa tu contraseña: mínimo 8 caracteres, incluye letras y números, y ambas entradas deben coincidir.",
->>>>>>> preview
+        text: tr(
+          "resetPassword.errors.passwordRequirements",
+          "Check your password: minimum 8 characters, includes letters and numbers, and both entries must match."
+        ),
       });
       return;
     }
 
     try {
       setBusy(true);
-      // eslint-disable-next-line no-console
-      console.log("[ResetPassword] calling /api/auth/recovery");
 
-<<<<<<< HEAD
-      const resp = await fetch("/api/auth/recovery", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          token_hash,
-          type,
-          new_password: password,
-        }),
-      });
-=======
       const {
         data: { session },
       } = await supabase.auth.getSession();
->>>>>>> preview
 
-      // ✅ Parse robusto (evita: Unexpected end of JSON input)
-      const raw = await resp.text();
-      let data = {};
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch {
-        data = { raw };
-      }
-
-      setDiag({
-        step: "api_response",
-        status: resp.status,
-        ok: resp.ok,
-        data,
-      });
-
-      if (!resp.ok || !data?.ok) {
+      if (!session?.user?.id) {
         setMsg({
           type: "error",
-<<<<<<< HEAD
-          text:
-            data?.error ||
-            `No se pudo actualizar (HTTP ${resp.status}). Genera un link nuevo e intenta otra vez.`,
-=======
-          text: "No hay sesión activa para cambiar la contraseña. Abre el link de recuperación nuevamente o genera uno nuevo.",
->>>>>>> preview
+          text: tr(
+            "resetPassword.errors.noActiveSessionForPasswordChange",
+            "There is no active session to change the password. Open the recovery link again or generate a new one."
+          ),
         });
         return;
       }
 
-      setMsg({ type: "success", text: "✅ Contraseña actualizada. Redirigiendo a login…" });
+      const { error } = await supabase.auth.updateUser({ password });
 
-      // Limpia URL para no dejar token expuesto
-      try {
-        window.history.replaceState({}, document.title, "/reset-password");
-      } catch {}
+      if (error) {
+        setMsg({
+          type: "error",
+          text: error.message || tr("resetPassword.errors.updateFailed", "Could not update."),
+        });
+        return;
+      }
 
-<<<<<<< HEAD
-      setTimeout(() => navigate("/login", { replace: true }), 900);
-    } catch (e) {
-      setMsg({ type: "error", text: e?.message || "Error inesperado." });
-      setDiag({ step: "exception", error: e?.message || String(e) });
-=======
-      setMsg({ type: "success", text: "✅ Contraseña actualizada. Ya puedes iniciar sesión." });
+      setMsg({
+        type: "success",
+        text: tr(
+          "resetPassword.messages.updated",
+          "Ô£à Password updated. You can now sign in."
+        ),
+      });
 
       await supabase.auth.signOut().catch(() => {});
       setTimeout(() => navigate("/login", { replace: true }), 900);
     } catch (e2) {
-      setMsg({ type: "error", text: e2?.message || "Error inesperado." });
->>>>>>> preview
+      setMsg({
+        type: "error",
+        text: e2?.message || tr("resetPassword.errors.unexpected", "Unexpected error."),
+      });
     } finally {
       setBusy(false);
     }
@@ -305,72 +235,82 @@ export default function ResetPassword() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border rounded-2xl p-6">
-        <h1 className="text-xl font-semibold mb-2">Actualizar contraseña</h1>
-        <p className="text-sm text-slate-600 mb-4">Ingresa una nueva contraseña para tu cuenta.</p>
+        <h1 className="text-xl font-semibold mb-2">
+          {tr("resetPassword.title", "Reset password")}
+        </h1>
+        <p className="text-sm text-slate-600 mb-4">
+          {tr(
+            "resetPassword.description",
+            "Enter a new password for your account."
+          )}
+        </p>
 
-        {!token_hash ? (
+        {checking ? (
+          <div className="text-sm text-slate-600">
+            {tr("resetPassword.states.verifyingLink", "Verifying linkÔÇª")}
+          </div>
+        ) : !ready ? (
           <div className="space-y-3">
-            <div className="text-sm text-red-600">
-              Link inválido o incompleto. Genera un reset nuevo.
-            </div>
+            {msg ? <div className={`text-sm ${msgClass}`}>{msg.text}</div> : null}
             <button
-              type="button"
               className="w-full bg-slate-900 text-white rounded-lg px-4 py-2 text-sm"
               onClick={() => navigate("/login", { replace: true })}
             >
-              Ir a Login
+              {tr("resetPassword.actions.goToLogin", "Go to Login")}
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Nueva contraseña
+                {tr("resetPassword.newPasswordLabel", "New password")}
               </label>
               <input
                 type="password"
                 className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mín. 8 caracteres, letras y números"
+                placeholder={tr(
+                  "resetPassword.newPasswordPlaceholder",
+                  "Min. 8 characters, letters and numbers"
+                )}
               />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                Repetir contraseña
+                {tr("resetPassword.repeatPasswordLabel", "Repeat password")}
               </label>
               <input
                 type="password"
                 className="w-full border rounded-lg px-3 py-2 text-sm"
                 value={password2}
                 onChange={(e) => setPassword2(e.target.value)}
-                placeholder="Repite la contraseña"
+                placeholder={tr(
+                  "resetPassword.repeatPasswordPlaceholder",
+                  "Repeat the password"
+                )}
               />
             </div>
 
             {msg ? <div className={`text-sm ${msgClass}`}>{msg.text}</div> : null}
 
             <button
-              type="button"
-              onClick={handleSave}
               disabled={busy}
               className="w-full bg-emerald-600 text-white rounded-lg px-4 py-2 text-sm disabled:opacity-60"
             >
-              {busy ? "Guardando…" : "Guardar"}
+              {busy
+                ? tr("resetPassword.actions.saving", "SavingÔÇª")
+                : tr("resetPassword.actions.saveNewPassword", "Save new password")}
             </button>
 
-            {/* Diagnóstico temporal (quitar cuando ya esté estable) */}
-            {diag ? (
-              <pre className="mt-2 text-[10px] whitespace-pre-wrap bg-slate-50 border rounded-lg p-2 text-slate-700">
-                {JSON.stringify(diag, null, 2)}
-              </pre>
-            ) : null}
-
             <div className="text-[11px] text-slate-500">
-              Tip: si el link expiró, genera uno nuevo.
+              {tr(
+                "resetPassword.tip",
+                "Tip: if it fails, generate a new link and open it in incognito mode."
+              )}
             </div>
-          </div>
+          </form>
         )}
       </div>
     </div>

@@ -1,41 +1,21 @@
 // src/components/AuthGuard.jsx
-import React, { useEffect } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import React from "react";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthSafe } from "../context/AuthContext.jsx";
 
-<<<<<<< HEAD
-/**
- * AuthGuard SIN overlay visual.
- *
- * Motivo:
- * - Los overlays fullscreen durante auth bootstrap
- *   rompen el native <select> en Chrome / WebView (bug conocido).
- *
- * Estrategia:
- * - Mientras loading: NO renderizar nada (null)
- * - Si no hay user: redirect
- * - Si hay user: render children
- */
-=======
->>>>>>> preview
 export default function AuthGuard({ children }) {
   const auth = useAuthSafe();
   const location = useLocation();
 
-<<<<<<< HEAD
-  // ⛔ NO overlay, NO div fullscreen
-=======
-  // Si NO hay provider, no crasheamos: mostramos fallback y mandamos a login
+  // If provider is missing, redirect to login instead of crashing
   if (!auth) {
-    // Guard-rail: evita loop si ya estás en login/callback
     const p = location.pathname || "/";
-    if (p.startsWith("/login") || p.startsWith("/auth/callback")) return children;
-
+    if (p.startsWith("/login") || p.startsWith("/auth/callback")) {
+      return children || <Outlet />;
+    }
     return (
       <Navigate
-        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}&err=${encodeURIComponent(
-          "auth_provider_missing"
-        )}`}
+        to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}&err=auth_provider_missing`}
         replace
       />
     );
@@ -43,7 +23,6 @@ export default function AuthGuard({ children }) {
 
   const { loading, user } = auth;
 
->>>>>>> preview
   if (loading) return null;
 
   if (!user) {
@@ -55,5 +34,7 @@ export default function AuthGuard({ children }) {
     );
   }
 
-  return children;
+  if (children) return children;
+  return <Outlet />;
 }
+
