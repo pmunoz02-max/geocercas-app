@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import supabase from '../supabase';
+import { supabase } from "@/lib/supabaseClient.js";
 
 export default function RequireAuth() {
   const [checking, setChecking] = useState(true);
