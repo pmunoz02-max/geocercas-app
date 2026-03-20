@@ -240,7 +240,11 @@ function formatTrialCountdown(trialEndIso) {
               </div>
             </div>
           </>
-        )}
+        );
+  }, [trackerUsageState, isOverLimit]);
+
+  const trackerUsageSeverity = useMemo(() => {
+    return getUsageSeverity(trackerUsageState, isOverLimit);
   }, [trackerUsageState, isOverLimit]);
 
   const geofenceUsageSeverity = useMemo(() => {
