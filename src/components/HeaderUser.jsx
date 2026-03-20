@@ -2,6 +2,7 @@
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { useUserProfile } from "../hooks/useUserProfile";
+import { Link } from "react-router-dom";
 
 export default function HeaderUser() {
   const { t } = useTranslation();
@@ -26,7 +27,9 @@ export default function HeaderUser() {
           ) : profile ? (
             <>
               <div className="flex flex-col leading-tight">
-                <span className="text-sm">{profile.email ?? t("common.fallbacks.noEmail")}</span>
+                <Link to="/account" className="text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 rounded">
+                  {profile.email ?? t("common.fallbacks.noEmail")}
+                </Link>
                 <div className="flex items-center gap-2">
                   <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full border">
                     {t("home.labels.role", { defaultValue: "Rol:" })}{" "}
@@ -35,7 +38,7 @@ export default function HeaderUser() {
                   {profile.org_id && (
                     <span className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-gray-50 border">
                       {t("app.header.organizationLabel", { defaultValue: "Org" })}:{" "}
-                      {String(profile.org_id).slice(0, 8)}â€¦
+                      {String(profile.org_id).slice(0, 8)}
                     </span>
                   )}
                 </div>
