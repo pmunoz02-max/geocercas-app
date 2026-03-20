@@ -193,29 +193,13 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
 
 async function setOrgSafe(orgId) {
   try {
-    const res = await fetch("/set_current_org", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ p_org: orgId }),
+    await supabase.rpc("set_current_org", {
+      p_org: orgId,
     });
-
-    if (!res.ok) throw new Error("primary failed");
     return true;
   } catch (e) {
-    console.warn("[Auth] fallback rpc_set_current_org");
-
-    try {
-      const { error } = await supabase.rpc("rpc_set_current_org", {
-        p_org_id: orgId,
-      });
-
-      if (error) throw error;
-      return true;
-    } catch (err) {
-      console.error("[Auth] set org failed:", err);
-      return false;
-    }
+    console.error("[Auth] set org failed:", e);
+    return false;
   }
 }
 

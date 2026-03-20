@@ -205,13 +205,21 @@ export default function Pricing() {
         .eq("org_id", currentOrgId)
         .maybeSingle();
 
-      if (!cancelled) {
-        if (error) {
+      if (error) {
+        if (
+          error.message?.includes("does not exist") ||
+          error.message?.includes("schema cache")
+        ) {
+          console.warn("[Pricing] fallback billing");
           setBillingPanel(null);
           return;
         }
-        setBillingPanel(data || null);
+
+        setBillingPanel(null);
+        return;
       }
+
+      setBillingPanel(data || null);
     }
 
     loadBillingPanel();

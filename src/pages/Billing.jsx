@@ -177,14 +177,12 @@ export default function Billing() {
         return;
       }
 
+      setBillingLoading(true);
+      setBillingError("");
       try {
-        setBillingLoading(true);
-        setBillingError("");
-
         const { data, error } = await supabase
           .from("v_billing_panel")
-          .select(
-            `
+          .select(`
             org_id,
             org_name,
             billing_plan_code,
@@ -200,24 +198,38 @@ export default function Billing() {
             geocercas_used,
             billing_over_limit,
             over_limit_reason
-          `
-          )
+          `)
           .eq("org_id", currentOrgId)
           .maybeSingle();
 
-        if (error) throw error;
+        // Robust fallback: if the view is missing, set a fallback object
+        if (error) {
+          const msg = String(error.message || "").toLowerCase();
+          const code = String(error.code || "");
+          const isMissingView =
+            code === "42P01" ||
+            msg.includes("does not exist") ||
+            msg.includes("undefined") ||
+            msg.includes("missing") ||
+            msg.includes("not found") ||
+            msg.includes("pgrst202");
 
-        if (!cancelled) {
+          if (isMissingView) {
+            setBilling({ fallback: true });
+            setBillingError(tr("billing.errors.missingView", "La vista de facturación no está disponible en este entorno."));
+          } else {
+            setBilling(null);
+            setBillingError(error.message || tr("billing.errors.loadPlanStatus", "Could not load the plan status."));
+          }
+        } else {
           setBilling(data || null);
         }
       } catch (err) {
-        if (!cancelled) {
-          setBilling(null);
-          setBillingError(
-            err?.message ||
-              tr("billing.errors.loadPlanStatus", "Could not load the plan status.")
-          );
-        }
+        setBilling(null);
+        setBillingError(
+          err?.message ||
+            tr("billing.errors.loadPlanStatus", "Could not load the plan status.")
+        );
       } finally {
         if (!cancelled) {
           setBillingLoading(false);
@@ -230,7 +242,7 @@ export default function Billing() {
     return () => {
       cancelled = true;
     };
-  }, [authenticated, currentOrgId]);
+  }, [authenticated, currentOrgId, tr]);
 
   const effectivePlanCode = useMemo(() => {
     return String(billing?.effective_plan_code || billing?.billing_plan_code || "starter").toLowerCase();
@@ -397,7 +409,14 @@ export default function Billing() {
           </p>
         ) : billingError ? (
           <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            {billingError}
+            {billing?.fallback ? (
+              <>
+                <b>{tr("billing.errors.missingViewTitle", "Facturación no disponible")}</b>
+                <div className="mt-1">{billingError}</div>
+              </>
+            ) : (
+              billingError
+            )}
           </div>
         ) : (
           <>
