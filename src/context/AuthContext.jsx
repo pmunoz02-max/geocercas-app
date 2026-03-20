@@ -194,20 +194,32 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
   return found.id;
 }
 
-async function persistCurrentOrgServer(orgIdToSelect) {
-  if (!orgIdToSelect) return false;
-
+async function setOrgSafe(orgId) {
   try {
-    const { error } = await supabase.rpc("set_current_org", { p_org: orgIdToSelect });
-    if (!error) return true;
-  } catch {}
+    const res = await fetch("/set_current_org", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ p_org: orgId }),
+    });
 
-  try {
-    const { error } = await supabase.rpc("rpc_set_current_org", { p_org_id: orgIdToSelect });
-    if (!error) return true;
-  } catch {}
+    if (!res.ok) throw new Error("primary failed");
+    return true;
+  } catch (e) {
+    console.warn("[Auth] fallback rpc_set_current_org");
 
-  return false;
+    try {
+      const { error } = await supabase.rpc("rpc_set_current_org", {
+        p_org_id: orgId,
+      });
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error("[Auth] set org failed:", err);
+      return false;
+    }
+  }
 }
 
 /* =========================
