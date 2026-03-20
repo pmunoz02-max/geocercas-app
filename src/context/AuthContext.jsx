@@ -18,7 +18,7 @@ import { isTrackerGpsPath } from "@/lib/trackerFlow";
  * Reset-password safe
  *
  * FIX 2026-02-28:
- * - Evitar contaminaci├│n de org global por roles tracker (multi-rol owner+tracker)
+ * - Evitar contaminación de org global por roles tracker (multi-rol owner+tracker)
  * - localStorage tg_current_org_id solo aplica a orgs NO-tracker
  */
 
@@ -28,7 +28,7 @@ const AuthContext = createContext(null);
 const LS_ORG_KEY = "tg_current_org_id";
 
 /* =========================
-   FINGERPRINT (diagn├│stico)
+   FINGERPRINT (diagnóstico)
 ========================= */
 
 const AUTH_CTX_INSTANCE_ID = `AUTHCTX_${Math.random().toString(16).slice(2)}_${Date.now()}`;
@@ -222,12 +222,13 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [user, setUser] = useState(null);
   const [currentRole, setCurrentRole] = useState(null);
-  const [currentOrgIdState, setCurrentOrgIdState] = useState(null);
   const [isAppRoot, setIsAppRoot] = useState(false);
   const [canSwitchOrganizations, setCanSwitchOrganizations] = useState(false);
 
   const [organizations, setOrganizations] = useState([]);
   const [currentOrg, setCurrentOrg] = useState(null);
+  const [resolvedOrgId, setResolvedOrgId] = useState(null);
+  const [resolvedRole, setResolvedRole] = useState(null);
   const [switchingOrg, setSwitchingOrg] = useState(false);
 
   const didBootstrapOnceRef = useRef(false);
@@ -241,7 +242,7 @@ export function AuthProvider({ children }) {
     }
   });
 
-  // FINGERPRINT: marca que el provider de ESTA instancia se mont├│
+  // FINGERPRINT: marca que el provider de ESTA instancia se montó
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
@@ -263,40 +264,11 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("popstate", onNav);
   }, []);
 
-  const applyBackendSessionContext = useCallback((sessionData) => {
-    const session = sessionData?.data ?? sessionData ?? null;
-    if (!session || session.authenticated !== true) return;
-
-    const backendOrgId = extractServerOrgId(session);
-    const backendRole = extractServerRole(session);
-
-    console.log("SESSION RECEIVED", session);
-    console.log("SETTING CONTEXT", backendOrgId || null, backendRole || null);
-
-    if (backendOrgId) {
-      setCurrentOrgIdState((prev) => backendOrgId || prev || null);
-      setCurrentOrg((prev) => {
-        if (prev?.id === backendOrgId) return prev;
-        return {
-          ...(prev || {}),
-          id: backendOrgId,
-          name: prev?.name || "",
-        };
-      });
-    }
-
-    if (backendRole) {
-      setCurrentRole((prev) => backendRole || prev || null);
-    }
-  }, []);
-
   /**
    * Aplica session data sin contaminar org global por tracker.
    */
   const applySessionData = useCallback(
     (data) => {
-      applyBackendSessionContext(data);
-
       setUser(data?.user ?? null);
       setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
       setCanSwitchOrganizations(extractCanSwitchOrganizations(data));
@@ -304,14 +276,6 @@ export function AuthProvider({ children }) {
       const serverOrgId = extractServerOrgId(data);
       const serverRole = extractServerRole(data);
       const orgs = extractOrganizations(data);
-
-      if (serverOrgId) {
-        setCurrentOrgIdState((prev) => prev || serverOrgId);
-      }
-
-      if (serverRole) {
-        setCurrentRole((prev) => prev || serverRole);
-      }
 
       // Lee preferencia (legacy), pero la sanitiza contra orgs/roles
       let preferredOrgId = null;
@@ -327,13 +291,13 @@ export function AuthProvider({ children }) {
       const safePreferredOrgId =
         allowPreferred ? sanitizePreferredOrgId(preferredOrgId, orgs) : null;
 
-      // Org final global: serverOrgId can├│nico > preferencia segura (fallback) > null
+      // Org final global: serverOrgId canónico > preferencia segura (fallback) > null
       const finalOrgId = serverOrgId || safePreferredOrgId || null;
 
       if (orgs.length > 0) {
         setOrganizations(orgs);
 
-        // pickedId: si finalOrgId existe y es parte de orgs => ├║salo; si no, usa el primer org NO-tracker si existe
+        // pickedId: si finalOrgId existe y es parte de orgs => úsalo; si no, usa el primer org NO-tracker si existe
         let pickedId =
           (finalOrgId && orgs.find((o) => o?.id === finalOrgId)?.id) || null;
 
@@ -344,11 +308,10 @@ export function AuthProvider({ children }) {
 
         const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
 
-        setCurrentOrgIdState(pickedId || serverOrgId || null);
-
         setCurrentOrg(orgObj || null);
+        setResolvedOrgId(pickedId || finalOrgId || null);
 
-        if (pickedId && serverOrgId !== pickedId) {
+        if (orgs.length === 1 && pickedId && serverOrgId !== pickedId) {
           void persistCurrentOrgServer(pickedId);
         }
 
@@ -359,25 +322,27 @@ export function AuthProvider({ children }) {
           } catch {}
         }
 
-        setCurrentRole((prev) => serverRole || normalizeRole(orgObj?.role) || prev || null);
+        setResolvedRole(serverRole || normalizeRole(orgObj?.role) || null);
+        setCurrentRole(serverRole || normalizeRole(orgObj?.role) || null);
 
         return;
       }
 
       // Sin orgs list: solo setea si hay finalOrgId
       if (finalOrgId) {
-        setCurrentOrgIdState(finalOrgId);
         setOrganizations([{ id: finalOrgId }]);
         setCurrentOrg({ id: finalOrgId });
+        setResolvedOrgId(finalOrgId);
       } else {
-        setCurrentOrgIdState((prev) => prev || null);
         setOrganizations([]);
-        setCurrentOrg((prev) => prev || null);
+        setCurrentOrg(null);
+        setResolvedOrgId(null);
       }
 
-      setCurrentRole((prev) => serverRole || prev || null);
+      setResolvedRole(serverRole || null);
+      setCurrentRole(serverRole || null);
     },
-    [applyBackendSessionContext, path]
+    [path]
   );
 
   const applyEnsureContext = useCallback((payload) => {
@@ -394,9 +359,8 @@ export function AuthProvider({ children }) {
 
     if (org_id) {
       const normalizedCurrentOrgId = currentOrgPayload?.id ?? currentOrgPayload?.org_id ?? org_id;
+      setResolvedOrgId(normalizedCurrentOrgId);
       const orgFromList = orgs.find((org) => org?.id === normalizedCurrentOrgId) || null;
-
-      setCurrentOrgIdState(normalizedCurrentOrgId);
 
       setCurrentOrg((prev) => {
         if (orgFromList) return orgFromList;
@@ -424,17 +388,19 @@ export function AuthProvider({ children }) {
     }
 
     if (roleRaw) {
+      setResolvedRole(roleNorm);
       setCurrentRole(roleNorm);
     }
   }, [path]);
 
   const clearResolvedAuthState = useCallback(() => {
-    setCurrentOrgIdState(null);
     setCurrentRole(null);
+    setResolvedRole(null);
     setIsAppRoot(false);
     setCanSwitchOrganizations(false);
     setOrganizations([]);
     setCurrentOrg(null);
+    setResolvedOrgId(null);
   }, []);
 
   const hydrateClientContext = useCallback(
@@ -547,14 +513,15 @@ export function AuthProvider({ children }) {
           organizationsResolved.filter((org) => isNonTrackerRole(org?.role)).length > 1
       );
       setOrganizations(organizationsResolved);
-      setCurrentOrgIdState(pickedOrg?.id || null);
       setCurrentOrg(pickedOrg || null);
-      setCurrentRole(
+      const hydratedRole =
         normalizeRole(pickedOrg?.role) ||
-          normalizeRole(sessionUser?.app_metadata?.role) ||
-          normalizeRole(sessionUser?.user_metadata?.role) ||
-          null
-      );
+        normalizeRole(sessionUser?.app_metadata?.role) ||
+        normalizeRole(sessionUser?.user_metadata?.role) ||
+        null;
+      setResolvedOrgId(pickedOrg?.id || null);
+      setResolvedRole(hydratedRole);
+      setCurrentRole(hydratedRole);
 
       if (pickedOrg?.id && isNonTrackerRole(pickedOrg?.role) && !isTrackerUiPath(path)) {
         try {
@@ -570,7 +537,7 @@ export function AuthProvider({ children }) {
   );
 
   /**
-   * selectOrg = selecci├│n expl├¡cita del usuario desde selector de org.
+   * selectOrg = selección explícita del usuario desde selector de org.
    * Regla universal: solo persistimos como "org global" si NO es tracker.
    */
   const selectOrg = useCallback(
@@ -584,8 +551,8 @@ export function AuthProvider({ children }) {
       const found = organizations.find((o) => o?.id === orgIdToSelect);
 
       // Siempre actualiza el estado
-  setCurrentOrgIdState(orgIdToSelect);
       setCurrentOrg(found || { id: orgIdToSelect });
+      setResolvedOrgId(orgIdToSelect);
 
       setOrganizations((prev) => {
         if (prev.some((o) => o?.id === orgIdToSelect)) return prev;
@@ -599,7 +566,9 @@ export function AuthProvider({ children }) {
         } catch {}
       }
 
-      setCurrentRole(normalizeRole(found?.role) || currentRole || null);
+      const nextRole = normalizeRole(found?.role) || normalizeRole(currentRole) || null;
+      setResolvedRole(nextRole);
+      setCurrentRole(nextRole);
 
       setSwitchingOrg(true);
 
@@ -631,57 +600,38 @@ export function AuthProvider({ children }) {
         throw sessionError;
       }
 
-      const localUser = currentSession?.user ?? null;
-      let resolvedUser = localUser;
-      let serverSession = null;
-
-      if (localUser) {
-        console.info("[AUTHCTX] bootstrap: local session found");
-      } else {
-        const s0 = await fetchSession();
-
-        if (s0.ok && s0.data?.authenticated === true && s0.data?.user?.id) {
-          applyBackendSessionContext(s0.data);
-          serverSession = s0.data;
-          resolvedUser = s0.data.user;
-          console.info("[AUTHCTX] bootstrap: session recovered from backend");
-        } else {
-          console.info("[AUTHCTX] bootstrap: not authenticated");
-          setSession(null);
-          setUser(null);
-          clearResolvedAuthState();
-          return;
-        }
-      }
-
       setSession(currentSession || null);
-      setUser(resolvedUser || null);
+      setUser(currentSession?.user ?? null);
 
-      if (isPublicAuthPath(path)) {
-        setIsAppRoot(
-          Boolean(
-            resolvedUser?.app_metadata?.is_app_root ??
-              resolvedUser?.app_metadata?.isAppRoot ??
-              serverSession?.is_app_root ??
-              serverSession?.isAppRoot
-          )
-        );
-        setCanSwitchOrganizations(
-          extractCanSwitchOrganizations(serverSession || { user: resolvedUser })
-        );
+      console.log("BOOTSTRAP local session:", Boolean(currentSession?.user));
+
+      const s1 = await fetchSession();
+      console.log("BOOTSTRAP backend session:", s1?.data);
+
+      if (!currentSession?.user && (!s1.ok || !s1.data || s1.data.authenticated !== true)) {
+        clearResolvedAuthState();
         return;
       }
 
-      const s1 = serverSession || (await fetchSession());
+      if (isPublicAuthPath(path)) {
+        const bootstrapUser = currentSession?.user ?? s1?.data?.user ?? null;
+        setUser(bootstrapUser);
+        setIsAppRoot(Boolean(bootstrapUser?.app_metadata?.is_app_root ?? bootstrapUser?.app_metadata?.isAppRoot));
+        setCanSwitchOrganizations(extractCanSwitchOrganizations({ user: bootstrapUser }));
 
-      if (s1?.data) applyBackendSessionContext(s1.data);
+        if (s1.ok && s1.data?.authenticated === true) {
+          applySessionData(s1.data);
+        }
+        return;
+      }
 
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
-        if (resolvedUser) {
-          await hydrateClientContext(resolvedUser);
-        } else {
+        const fallbackUser = currentSession?.user ?? s1?.data?.user ?? null;
+        if (!fallbackUser) {
           clearResolvedAuthState();
+          return;
         }
+        await hydrateClientContext(fallbackUser);
         return;
       }
 
@@ -704,11 +654,10 @@ export function AuthProvider({ children }) {
         }
 
         const s2 = await fetchSession();
-        if (s2?.data) applyBackendSessionContext(s2.data);
         if (s2.ok && s2.data?.authenticated === true) {
           applySessionData(s2.data);
-        } else if (resolvedUser) {
-          await hydrateClientContext(resolvedUser);
+        } else {
+          await hydrateClientContext(currentSession.user);
         }
       }
     } catch (error) {
@@ -724,7 +673,7 @@ export function AuthProvider({ children }) {
       }
       setInitialized(true);
     }
-  }, [applyBackendSessionContext, applySessionData, applyEnsureContext, clearResolvedAuthState, hydrateClientContext, path]);
+  }, [applySessionData, applyEnsureContext, clearResolvedAuthState, hydrateClientContext, path]);
 
   useEffect(() => {
     bootstrap();
@@ -770,13 +719,13 @@ export function AuthProvider({ children }) {
     () => {
       const resolvedUser = session?.user ?? user ?? null;
       const isAuthenticated = Boolean(resolvedUser?.id);
-      const effectiveCurrentOrgId = currentOrg?.id || currentOrgIdState || null;
-      const r = normalizeRole(currentRole);
+      const exportedRole = normalizeRole(currentRole) || normalizeRole(resolvedRole) || null;
+      const exportedOrgId = currentOrg?.id || resolvedOrgId || null;
+      const r = exportedRole;
       const isAdmin = r === "owner" || r === "admin" || isAppRoot;
 
       return {
       loading,
-      contextLoading: switchingOrg,
       ready,
       initialized,
       session,
@@ -785,24 +734,20 @@ export function AuthProvider({ children }) {
       user: resolvedUser,
       isLoggedIn: isAuthenticated,
 
-      currentRole,
+      currentRole: exportedRole,
       isAppRoot,
       isAdmin,
       canSwitchOrganizations,
       organizations,
       currentOrg,
-      ctx: effectiveCurrentOrgId
-        ? { ok: true, org_id: effectiveCurrentOrgId, role: currentRole || null }
-        : null,
       switchingOrg,
       selectOrg,
 
-      role: currentRole,
-      activeOrgId: effectiveCurrentOrgId,
-      currentOrgId: effectiveCurrentOrgId,
-      orgId: effectiveCurrentOrgId,
+      role: exportedRole,
+      activeOrgId: exportedOrgId,
+      currentOrgId: exportedOrgId,
+      orgId: exportedOrgId,
 
-      refreshContext: bootstrap,
       refreshSession: bootstrap,
       logout,
       };
@@ -814,11 +759,12 @@ export function AuthProvider({ children }) {
       initialized,
       user,
       currentRole,
-      currentOrgIdState,
+      resolvedRole,
       isAppRoot,
       canSwitchOrganizations,
       organizations,
       currentOrg,
+      resolvedOrgId,
       switchingOrg,
       selectOrg,
       bootstrap,
@@ -861,7 +807,7 @@ const SAFE_FALLBACK = {
   logout: async () => {},
 };
 
-// ­ƒöÑ NO throw, evita pantalla negra
+// 🔥 NO throw, evita pantalla negra
 export function useAuth() {
   const ctx = useContext(AuthContext);
 
