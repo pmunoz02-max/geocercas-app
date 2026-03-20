@@ -7,6 +7,7 @@ import { useAuthSafe } from "@/context/auth.js";
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
+import RequireAuth from "./components/RequireAuth.jsx";
 
 // Public pages
 import Landing from "./pages/Landing.jsx";
@@ -34,6 +35,7 @@ import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 import DeleteAccountPage from "./pages/DeleteAccountPage.jsx";
+import Account from "@/pages/Account.jsx";
 
 // ✅ Billing / Pricing pages
 import Billing from "./pages/Billing.jsx";
@@ -161,13 +163,14 @@ function AppRoutes() {
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
       {/* 🔒 Protected */}
-      <Route
-        element={
-          <AuthGuard>
-            <ProtectedShell />
-          </AuthGuard>
-        }
-      >
+      <Route element={<RequireAuth />}>
+        <Route
+          element={
+            <AuthGuard>
+              <ProtectedShell />
+            </AuthGuard>
+          }
+        >
         <Route path="/inicio" element={<Inicio />} />
 
         {/* ✅ Billing / Pricing */}
@@ -179,6 +182,7 @@ function AppRoutes() {
             </RequireOrg>
           }
         />
+        <Route path="/account" element={<Account />} />
         <Route
           path="/pricing"
           element={
@@ -286,6 +290,7 @@ function AppRoutes() {
             </AdminRoute>
           }
         />
+        </Route>
       </Route>
 
       {/* Fallback */}
