@@ -24,9 +24,6 @@ import { isTrackerGpsPath } from "@/lib/trackerFlow";
 
 const AuthContext = createContext(null);
 
-// Key legacy (se mantiene por compatibilidad)
-const LS_ORG_KEY = "tg_current_org_id";
-
 /* =========================
    FINGERPRINT (diagnóstico)
 ========================= */
@@ -222,30 +219,6 @@ async function setOrgSafe(orgId) {
   }
 }
 
-const persistCurrentOrgServer = useCallback(async (orgIdToSelect) => {
-  if (!orgIdToSelect) return false;
-
-  try {
-    const { error } = await supabase.rpc("set_current_org", {
-      p_org: orgIdToSelect,
-    });
-    if (!error) return true;
-  } catch {}
-
-  try {
-    const { error } = await supabase.rpc("rpc_set_current_org", {
-      p_org_id: orgIdToSelect,
-    });
-    if (!error) return true;
-  } catch {}
-
-  return false;
-}, []);
-
-/* =========================
-   PROVIDER
-========================= */
-
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [ready, setReady] = useState(false);
@@ -294,6 +267,26 @@ export function AuthProvider({ children }) {
 
     window.addEventListener("popstate", onNav);
     return () => window.removeEventListener("popstate", onNav);
+  }, []);
+
+  const persistCurrentOrgServer = useCallback(async (orgIdToSelect) => {
+    if (!orgIdToSelect) return false;
+
+    try {
+      const { error } = await supabase.rpc("set_current_org", {
+        p_org: orgIdToSelect,
+      });
+      if (!error) return true;
+    } catch {}
+
+    try {
+      const { error } = await supabase.rpc("rpc_set_current_org", {
+        p_org_id: orgIdToSelect,
+      });
+      if (!error) return true;
+    } catch {}
+
+    return false;
   }, []);
 
   /**
