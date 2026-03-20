@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# Protect /docs from accidental commits.
+# Blocks commits when staged files include docs/.
+
+set -eu
+
+STAGED_DOCS="$(git diff --cached --name-only --diff-filter=ACMR -- docs/)"
+
+if [ -n "$STAGED_DOCS" ]; then
+	echo ""
+	echo "ERROR: Commit blocked - staged changes detected in docs/."
+	echo ""
+	echo "The docs/ folder is critical and defines architecture contracts, invariants,"
+	echo "data flow boundaries, and multitenant/security guarantees."
+	echo "Changes in docs/ require explicit approval before commit."
+	echo ""
+	echo "Staged docs files:"
+	echo "$STAGED_DOCS"
+	echo ""
+	echo "Commit aborted by pre-commit policy."
+	echo ""
+	exit 1
+fi
+
+# Keep existing docs consistency check.
+if [ -f "scripts/docs-sync-check.mjs" ]; then
+	node scripts/docs-sync-check.mjs
+fi
