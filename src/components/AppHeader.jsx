@@ -123,7 +123,7 @@ export default function AppHeader() {
 
               <Link
                 to="/settings/delete-account"
-                className="px-4 py-2 rounded-xl text-sm font-semibold border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 transition"
+                className="px-4 py-2 rounded-xl text-sm font-semibold border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 transition"
               >
                 Delete account
               </Link>
