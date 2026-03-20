@@ -273,7 +273,7 @@ export default function DeleteAccountPage() {
                 disabled={!canSubmit}
                 className={canSubmit
                   ? "px-4 py-2 rounded-xl font-semibold text-sm transition border border-red-600 bg-red-600 text-white hover:bg-red-700"
-                  : "px-4 py-2 rounded-xl font-semibold text-sm transition border !border-red-200 !bg-red-50 !text-red-400 cursor-not-allowed !opacity-100"
+                  : "px-4 py-2 rounded-xl font-semibold text-sm transition border !border-red-300 !bg-red-100 !text-red-700 cursor-not-allowed !opacity-100"
                 }
               >
                 {submitting
