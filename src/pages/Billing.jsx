@@ -199,10 +199,7 @@ export default function Billing() {
             active_trackers_24h,
             geocercas_used,
             billing_over_limit,
-            over_limit_reason,
-            stripe_customer_id,
-            stripe_subscription_id,
-            stripe_price_id
+            over_limit_reason
           `
           )
           .eq("org_id", currentOrgId)
@@ -246,7 +243,7 @@ export default function Billing() {
   }, [billing]);
 
   const hasStripeSubscription = useMemo(() => {
-    return !!billing?.stripe_customer_id || !!billing?.stripe_subscription_id;
+    return !!billing && !['unknown', 'free'].includes(String(billing?.plan_status || '').toLowerCase());
   }, [billing]);
 
   const shouldShowManageButton = useMemo(() => {
