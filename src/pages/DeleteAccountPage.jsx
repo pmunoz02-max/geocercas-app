@@ -271,7 +271,11 @@ export default function DeleteAccountPage() {
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="px-4 py-2 rounded-xl text-sm font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`px-4 py-2 rounded-xl font-semibold text-sm transition
+                  ${canSubmit
+                    ? "bg-red-600 text-white hover:bg-red-700 border border-red-600"
+                    : "bg-red-100 text-red-400 border border-red-200 cursor-not-allowed opacity-70"}
+                `}
               >
                 {submitting
                   ? t("deleteAccount.submitting", {
@@ -281,6 +285,11 @@ export default function DeleteAccountPage() {
                       defaultValue: "Request account deletion",
                     })}
               </button>
+              {!canSubmit && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Debes cancelar tu suscripción antes de eliminar la cuenta
+                </p>
+              )}
 
               <Link
                 to="/inicio"
