@@ -103,190 +103,144 @@ function formatTrialCountdown(trialEndIso) {
 
   const days = Math.floor(diffMs / dayMs);
   if (days >= 1) {
-    return `Quedan ${days} dia${days === 1 ? "" : "s"} de trial`;
-  }
+        <h2 className="text-lg font-semibold text-slate-900">
+          {tr("billing.planState.title", "Plan status")}
+        </h2>
 
-  const hours = Math.max(1, Math.floor(diffMs / hourMs));
-  return `Quedan ${hours} hora${hours === 1 ? "" : "s"} de trial`;
-}
+        {loadingBilling ? (
+          <p>Cargando estado del plan...</p>
+        ) : billingFallback ? (
+          <div className="p-4 border rounded-lg bg-yellow-50 text-yellow-800">
+            Información de facturación en actualización.
+          </div>
+        ) : (
+          <>
+            {/* PlanStatusCard not present, so fallback to current plan render */}
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {tr("billing.cards.currentPlan", "Current plan")}
+                </div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {labelPlan(effectivePlanCode)}
+                </div>
+              </div>
 
-function labelPlan(planCode) {
-  const v = String(planCode || "free").toLowerCase();
-  if (v === "pro") return "PRO";
-  if (v === "free") return "FREE";
-  if (v === "enterprise") return "ENTERPRISE";
-  if (v === "starter") return "STARTER";
-  if (v === "elite") return "ELITE";
-  if (v === "elite_plus") return "ELITE+";
-  return v.toUpperCase();
-}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {tr("billing.cards.status", "Status")}
+                </div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">
+                  {labelStatus(effectivePlanStatus, t)}
+                </div>
+              </div>
 
-function labelStatus(planStatus, t) {
-  const v = String(planStatus || "unknown").toLowerCase();
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {tr("billing.cards.trialUntil", "Trial until")}
+                </div>
+                <div className="mt-1 text-base font-medium text-slate-900">
+                  {formatDate(billing?.trial_end, dateLocale)}
+                </div>
+              </div>
 
-  if (v === "trialing") return t("billing.status.trialing", { defaultValue: "Trial" });
-  if (v === "active") return t("billing.status.active", { defaultValue: "Active" });
-  if (v === "past_due") return t("billing.status.pastDue", { defaultValue: "Past due" });
-  if (v === "canceled") return t("billing.status.canceled", { defaultValue: "Canceled" });
-  if (v === "free") return t("billing.status.free", { defaultValue: "Free" });
-  if (v === "unknown") return t("billing.status.unknown", { defaultValue: "Sin datos comerciales" });
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {tr("billing.cards.currentPeriodUntil", "Current period until")}
+                </div>
+                <div className="mt-1 text-base font-medium text-slate-900">
+                  {formatDate(billing?.current_period_end, dateLocale)}
+                </div>
+              </div>
 
-  return v;
-}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {tr("billing.cards.trackerLimit", "Tracker limit")}
+                </div>
+                <div className="mt-1 text-base font-medium text-slate-900">
+                  {formatLimit(billing?.max_trackers)}
+                </div>
+              </div>
 
-export default function Billing() {
-  const { t, i18n } = useTranslation();
-  const tr = (key, fallback, options = {}) =>
-    t(key, { defaultValue: fallback, ...options });
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  {tr("billing.cards.geofenceLimit", "Geofence limit")}
+                </div>
+                <div className="mt-1 text-base font-medium text-slate-900">
+                  {formatLimit(billing?.max_geocercas)}
+                </div>
+              </div>
 
-  const dateLocale = useMemo(() => resolveDateLocale(i18n?.language), [i18n?.language]);
+              <div className={`rounded-xl border p-4 ${usageCardTone(trackerUsageSeverity)}`}>
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500">
+                  <span>{tr("billing.cards.trackerUsage", "Tracker usage")}</span>
+                  <span>
+                    {trackerUsageState.hasData
+                      ? `${trackerUsageState.pct.toFixed(1)}%`
+                      : tr("billing.common.noData", "Sin datos")}
+                  </span>
+                </div>
+                {trackerUsageSeverity === "warning" ? (
+                  <div className="mt-1 text-xs font-semibold text-amber-700">
+                    {tr("billing.usage.warning", "Cerca del limite")}
+                  </div>
+                ) : null}
+                {trackerUsageSeverity === "critical" ? (
+                  <div className="mt-1 text-xs font-semibold text-rose-700">
+                    {tr("billing.usage.critical", "Limite excedido")}
+                  </div>
+                ) : null}
+                <div className="mt-2 text-base font-medium text-slate-900">
+                  {trackerUsageState.hasData
+                    ? formatUsage(billing?.trackers_used, billing?.max_trackers)
+                    : tr("billing.common.noData", "Sin datos")}
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className={`h-full rounded-full ${
+                      trackerUsageState.hasData ? "bg-emerald-600" : "bg-slate-300"
+                    }`}
+                    style={{ width: trackerUsageState.hasData ? `${trackerUsageState.pct}%` : "100%" }}
+                  />
+                </div>
+              </div>
 
-  const { loading, ready, authenticated, user, currentOrgId, isAdmin } = useAuth();
-
-  const isPreviewBillingNoticeVisible = useMemo(() => {
-    if (import.meta.env.DEV) return true;
-
-    const appEnv = String(import.meta.env.VITE_APP_ENV || "").toLowerCase();
-    if (appEnv === "preview" || appEnv === "test") return true;
-
-    const hostname =
-      typeof window !== "undefined" ? String(window.location?.hostname || "") : "";
-
-    return hostname.startsWith("preview.");
-  }, []);
-
-  const [billing, setBilling] = useState(null);
-  const [billingLoading, setBillingLoading] = useState(false);
-  const [billingError, setBillingError] = useState("");
-
-  async function getAccessToken() {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadBilling() {
-      if (!authenticated || !currentOrgId) {
-        if (!cancelled) {
-          setBilling(null);
-          setBillingError("");
-          setBillingLoading(false);
-        }
-        return;
-      }
-
-      setBillingLoading(true);
-      setBillingError("");
-      try {
-        const { data, error } = await supabase
-          .from("v_billing_panel")
-          .select(`
-            org_id,
-            org_name,
-            billing_plan_code,
-            effective_plan_code,
-            plan_status,
-            trial_end,
-            current_period_end,
-            max_trackers,
-            max_geocercas,
-            trackers_used,
-            geocercas_used,
-            active_trackers_24h,
-            geocercas_used,
-            billing_over_limit,
-            over_limit_reason
-          `)
-          .eq("org_id", currentOrgId)
-          .maybeSingle();
-
-        // Robust fallback: if the view is missing, set a fallback object
-        if (error) {
-          const msg = String(error.message || "").toLowerCase();
-          const code = String(error.code || "");
-          const isMissingView =
-            code === "42P01" ||
-            msg.includes("does not exist") ||
-            msg.includes("undefined") ||
-            msg.includes("missing") ||
-            msg.includes("not found") ||
-            msg.includes("pgrst202");
-
-          if (isMissingView) {
-            setBilling({ fallback: true });
-            setBillingError(tr("billing.errors.missingView", "La vista de facturación no está disponible en este entorno."));
-          } else {
-            setBilling(null);
-            setBillingError(error.message || tr("billing.errors.loadPlanStatus", "Could not load the plan status."));
-          }
-        } else {
-          setBilling(data || null);
-        }
-      } catch (err) {
-        setBilling(null);
-        setBillingError(
-          err?.message ||
-            tr("billing.errors.loadPlanStatus", "Could not load the plan status.")
-        );
-      } finally {
-        if (!cancelled) {
-          setBillingLoading(false);
-        }
-      }
-    }
-
-    loadBilling();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authenticated, currentOrgId, tr]);
-
-  const effectivePlanCode = useMemo(() => {
-    return String(billing?.effective_plan_code || billing?.billing_plan_code || "starter").toLowerCase();
-  }, [billing]);
-
-  const effectivePlanStatus = useMemo(() => {
-    const raw = billing?.plan_status;
-    if (raw == null || raw === "") return "unknown";
-    return String(raw).toLowerCase();
-  }, [billing]);
-
-  const hasStripeSubscription = useMemo(() => {
-    return !!billing && !['unknown', 'free'].includes(String(billing?.plan_status || '').toLowerCase());
-  }, [billing]);
-
-  const shouldShowManageButton = useMemo(() => {
-    if (!currentOrgId) return false;
-    if (!hasStripeSubscription) return false;
-
-    return ["trialing", "active", "past_due", "canceled"].includes(effectivePlanStatus);
-  }, [currentOrgId, hasStripeSubscription, effectivePlanStatus]);
-
-  const isOverLimit = Boolean(billing?.billing_over_limit);
-  const trialEndsAt = billing?.trial_end || null;
-  const trialCountdown = useMemo(() => formatTrialCountdown(trialEndsAt), [trialEndsAt]);
-
-  const trackerUsageState = useMemo(() => {
-    return buildUsageState(
-      billing?.trackers_used,
-      billing?.max_trackers,
-      billing?.active_trackers_24h
-    );
-  }, [billing]);
-
-  const geofenceUsageState = useMemo(() => {
-    return buildUsageState(
-      billing?.geocercas_used,
-      billing?.max_geocercas,
-      billing?.geocercas_used
-    );
-  }, [billing]);
-
-  const trackerUsageSeverity = useMemo(() => {
-    return getUsageSeverity(trackerUsageState, isOverLimit);
+              <div className={`rounded-xl border p-4 ${usageCardTone(geofenceUsageSeverity)}`}>
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500">
+                  <span>{tr("billing.cards.geofenceUsage", "Geofence usage")}</span>
+                  <span>
+                    {geofenceUsageState.hasData
+                      ? `${geofenceUsageState.pct.toFixed(1)}%`
+                      : tr("billing.common.noData", "Sin datos")}
+                  </span>
+                </div>
+                {geofenceUsageSeverity === "warning" ? (
+                  <div className="mt-1 text-xs font-semibold text-amber-700">
+                    {tr("billing.usage.warning", "Cerca del limite")}
+                  </div>
+                ) : null}
+                {geofenceUsageSeverity === "critical" ? (
+                  <div className="mt-1 text-xs font-semibold text-rose-700">
+                    {tr("billing.usage.critical", "Limite excedido")}
+                  </div>
+                ) : null}
+                <div className="mt-2 text-base font-medium text-slate-900">
+                  {geofenceUsageState.hasData
+                    ? formatUsage(billing?.geocercas_used, billing?.max_geocercas)
+                    : tr("billing.common.noData", "Sin datos")}
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className={`h-full rounded-full ${
+                      geofenceUsageState.hasData ? "bg-emerald-600" : "bg-slate-300"
+                    }`}
+                    style={{ width: geofenceUsageState.hasData ? `${geofenceUsageState.pct}%` : "100%" }}
+                  />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
   }, [trackerUsageState, isOverLimit]);
 
   const geofenceUsageSeverity = useMemo(() => {
@@ -629,12 +583,18 @@ export default function Billing() {
               {tr("billing.compareBeforeUpgrade.description", "Review the plans page to compare Free, Pro, and Enterprise.")}
             </p>
             <div className="mt-4">
-              <Link
-                to="/pricing"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={loadingBilling || billingFallback}
+                onClick={() => {
+                  if (!(loadingBilling || billingFallback)) {
+                    window.location.href = "/pricing";
+                  }
+                }}
               >
                 {tr("billing.actions.viewPlans", "View plans")}
-              </Link>
+              </button>
             </div>
           </>
         ) : null}
