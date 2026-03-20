@@ -194,10 +194,10 @@ export default function Billing() {
             current_period_end,
             max_trackers,
             max_geocercas,
-            active_tracker_count,
-            active_geocercas_count,
-            tracker_usage_pct,
-            geocercas_usage_pct,
+            trackers_used,
+            geocercas_used,
+            active_trackers_24h,
+            geocercas_used,
             billing_over_limit,
             over_limit_reason,
             stripe_customer_id,
@@ -262,17 +262,17 @@ export default function Billing() {
 
   const trackerUsageState = useMemo(() => {
     return buildUsageState(
-      billing?.active_tracker_count,
+      billing?.trackers_used,
       billing?.max_trackers,
-      billing?.tracker_usage_pct
+      billing?.active_trackers_24h
     );
   }, [billing]);
 
   const geofenceUsageState = useMemo(() => {
     return buildUsageState(
-      billing?.active_geocercas_count,
+      billing?.geocercas_used,
       billing?.max_geocercas,
-      billing?.geocercas_usage_pct
+      billing?.geocercas_used
     );
   }, [billing]);
 
@@ -480,7 +480,7 @@ export default function Billing() {
                 ) : null}
                 <div className="mt-2 text-base font-medium text-slate-900">
                   {trackerUsageState.hasData
-                    ? formatUsage(billing?.active_tracker_count, billing?.max_trackers)
+                    ? formatUsage(billing?.trackers_used, billing?.max_trackers)
                     : tr("billing.common.noData", "Sin datos")}
                 </div>
                 <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
@@ -514,7 +514,7 @@ export default function Billing() {
                 ) : null}
                 <div className="mt-2 text-base font-medium text-slate-900">
                   {geofenceUsageState.hasData
-                    ? formatUsage(billing?.active_geocercas_count, billing?.max_geocercas)
+                    ? formatUsage(billing?.geocercas_used, billing?.max_geocercas)
                     : tr("billing.common.noData", "Sin datos")}
                 </div>
                 <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
