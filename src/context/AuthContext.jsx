@@ -222,6 +222,26 @@ async function setOrgSafe(orgId) {
   }
 }
 
+const persistCurrentOrgServer = useCallback(async (orgIdToSelect) => {
+  if (!orgIdToSelect) return false;
+
+  try {
+    const { error } = await supabase.rpc("set_current_org", {
+      p_org: orgIdToSelect,
+    });
+    if (!error) return true;
+  } catch {}
+
+  try {
+    const { error } = await supabase.rpc("rpc_set_current_org", {
+      p_org_id: orgIdToSelect,
+    });
+    if (!error) return true;
+  } catch {}
+
+  return false;
+}, []);
+
 /* =========================
    PROVIDER
 ========================= */
@@ -323,10 +343,6 @@ export function AuthProvider({ children }) {
         setCurrentOrg(orgObj || null);
         setResolvedOrgId(pickedId || finalOrgId || null);
 
-        if (orgs.length === 1 && pickedId && serverOrgId !== pickedId) {
-          void persistCurrentOrgServer(pickedId);
-        }
-
         // Persistir SOLO si NO tracker y NO estamos en UI tracker
         if (pickedId && isNonTrackerRole(orgObj?.role) && !isTrackerUiPath(path)) {
           try {
@@ -354,7 +370,7 @@ export function AuthProvider({ children }) {
       setResolvedRole(serverRole || null);
       setCurrentRole(serverRole || null);
     },
-    [path]
+    [path, persistCurrentOrgServer]
   );
 
   const applyEnsureContext = useCallback((payload) => {
@@ -403,7 +419,7 @@ export function AuthProvider({ children }) {
       setResolvedRole(roleNorm);
       setCurrentRole(roleNorm);
     }
-  }, [path]);
+  }, [path, persistCurrentOrgServer]);
 
   const clearResolvedAuthState = useCallback(() => {
     setCurrentRole(null);
@@ -545,7 +561,7 @@ export function AuthProvider({ children }) {
         void persistCurrentOrgServer(pickedOrg.id);
       }
     },
-    [clearResolvedAuthState, path]
+    [clearResolvedAuthState, path, persistCurrentOrgServer]
   );
 
   /**
@@ -585,8 +601,6 @@ export function AuthProvider({ children }) {
       setSwitchingOrg(true);
 
       try {
-        await persistCurrentOrgServer(orgIdToSelect);
-
         const s1 = await fetchSession();
         if (s1.ok && s1.data?.authenticated === true) {
           applySessionData(s1.data);
@@ -595,7 +609,14 @@ export function AuthProvider({ children }) {
         setSwitchingOrg(false);
       }
     },
-    [applySessionData, canSwitchOrganizations, currentOrg?.id, currentRole, organizations]
+    [
+      applySessionData,
+      canSwitchOrganizations,
+      currentOrg?.id,
+      currentRole,
+      organizations,
+      persistCurrentOrgServer,
+    ]
   );
 
   const bootstrap = useCallback(async () => {
