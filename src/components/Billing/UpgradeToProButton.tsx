@@ -45,7 +45,7 @@ function isUuid(v: string) {
 export default function UpgradeToProButton({
   orgId,
   plan = "PRO",
-  projectRef = "mujwsfhkocsuuahlrssn", // PREVIEW por defecto
+  projectRef = "wpaixkvokdkudymgjoua", // PREVIEW por defecto (Paddle)
   onStarted,
 }: Props) {
   const [orgInput, setOrgInput] = useState<string>(() => localStorage.getItem("gc_active_org_id") || "");
@@ -54,8 +54,7 @@ export default function UpgradeToProButton({
 
   const resolvedOrgId = useMemo(() => (orgId && orgId.trim() ? orgId.trim() : orgInput.trim()), [orgId, orgInput]);
 
-  const functionsBase = `https://${projectRef}.functions.supabase.co`;
-  const endpoint = `${functionsBase}/stripe-create-checkout`;
+  const endpoint = `https://${projectRef}.supabase.co/functions/v1/paddle-create-checkout`;
 
   const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || loading;
 
@@ -86,7 +85,7 @@ export default function UpgradeToProButton({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ plan, org_id: resolvedOrgId }),
+        body: JSON.stringify({ org_id: resolvedOrgId }),
       });
 
       const out = await res.json().catch(async () => ({ raw: await res.text() }));
@@ -97,12 +96,12 @@ export default function UpgradeToProButton({
         return;
       }
 
-      if (out?.url) {
-        window.location.href = out.url;
+      if (out?.checkout?.url) {
+        window.location.href = out.checkout.url;
         return;
       }
 
-      setMsg("Respuesta inesperada del servidor (no vino url). Revisa logs de la función.");
+      setMsg("Respuesta inesperada del servidor (no vino checkout.url). Revisa logs de la función Paddle.");
     } catch (e: any) {
       setMsg(`Error: ${String(e?.message ?? e)}`);
     } finally {
@@ -115,7 +114,7 @@ export default function UpgradeToProButton({
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Geocercas PRO</div>
-          <div style={{ fontSize: 13, opacity: 0.8 }}>USD $29/mes · 14 días trial · Stripe TEST (Preview)</div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>USD $29/mes · 14 días trial · Paddle (Preview)</div>
         </div>
 
         {!orgId && (
@@ -152,7 +151,7 @@ export default function UpgradeToProButton({
             color: "white",
           }}
         >
-          {loading ? "Abriendo Stripe..." : "Suscribirme a PRO"}
+          {loading ? "Abriendo Paddle..." : "Suscribirme a PRO"}
         </button>
 
         <div style={{ fontSize: 12, opacity: 0.8 }}>

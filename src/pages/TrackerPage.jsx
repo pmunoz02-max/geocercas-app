@@ -127,10 +127,14 @@ export default function TrackerPage() {
         }
 
         try {
-          await supabase.rpc("set_current_org", { p_org: orgId });
-        } catch (e) {
-          console.warn("[TrackerPage] set_current_org warning:", e);
-        }
+            // Use setOrgSafe fallback logic
+            try {
+              await supabase.rpc("set_current_org", {
+                p_org: orgId,
+              });
+            } catch (e) {
+              console.error("[TrackerPage] set org failed:", e);
+            }
       } catch (e) {
         if (!cancelado) {
           console.error("[TrackerPage] error resolviendo organización:", e);

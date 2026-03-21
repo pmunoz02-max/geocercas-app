@@ -3,14 +3,14 @@ import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient.js";
 
 /**
- * Botón universal para abrir Stripe Checkout (PREVIEW / TEST).
+ * Botón universal para abrir Paddle Checkout (PREVIEW).
  * Requiere orgId (UUID) y getAccessToken().
  *
  * Ventajas:
  * - No depende de projectRef hardcodeado
  * - Usa supabase.functions.invoke igual que el portal
  * - Envía success_url y cancel_url explícitas
- * - Muestra detail real devuelto por la Edge Function
+ * - Muestra detail real devuelto por la Edge Function Paddle
  */
 export default function UpgradeToProButton({
   orgId,
@@ -89,36 +89,26 @@ export default function UpgradeToProButton({
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke(
-        "stripe-create-checkout",
-        {
-          body: {
-            plan: String(plan || "PRO").trim().toUpperCase(),
-            org_id: String(orgId || "").trim(),
-            success_url,
-            cancel_url,
-          },
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      if (error) {
-        throw new Error(error.message || "No se pudo crear la sesión de Checkout.");
-      }
-
-      if (!data?.url) {
-        const detailText =
-          stringifyDetail(data?.detail) ||
-          stringifyDetail(data) ||
-          "Stripe no devolvió URL de Checkout.";
-
-        setMsg(detailText);
+      const endpoint = `https://wpaixkvokdkudymgjoua.supabase.co/functions/v1/paddle-create-checkout`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ org_id: String(orgId || "").trim() }),
+      });
+      const out = await res.json().catch(async () => ({ raw: await res.text() }));
+      if (!res.ok) {
+        const m = out?.message || out?.error || JSON.stringify(out);
+        setMsg(`Error ${res.status}: ${m}`);
         return;
       }
-
-      window.location.href = data.url;
+      if (out?.checkout?.url) {
+        window.location.href = out.checkout.url;
+        return;
+      }
+      setMsg("Respuesta inesperada del servidor (no vino checkout.url). Revisa logs de la función Paddle.");
     } catch (e) {
       setMsg(`Error: ${String(e?.message ?? e)}`);
     } finally {
@@ -132,7 +122,7 @@ export default function UpgradeToProButton({
         <div>
           <div className="text-lg font-semibold text-slate-900">Geocercas PRO</div>
           <div className="text-sm text-slate-600">
-            USD $29/mes · 14 días trial · Stripe TEST (Preview)
+            USD $29/mes · 14 días trial · Paddle (Preview)
           </div>
         </div>
 
@@ -158,9 +148,9 @@ export default function UpgradeToProButton({
             px-5 py-3
             transition
             disabled:opacity-60 disabled:cursor-not-allowed
-          "
+        "
         >
-          {loading ? "Abriendo Stripe..." : "Suscribirme a PRO"}
+          {loading ? "Abriendo Paddle..." : "Suscribirme a PRO"}
         </button>
 
         {msg ? (

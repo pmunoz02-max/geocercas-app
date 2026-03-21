@@ -372,7 +372,7 @@ export default function Billing() {
             {isPreviewBillingNoticeVisible ? (
               <p className="mt-2 text-slate-600">
                 {tr("billing.previewNotice.prefix", "Monetization in")} <b>PREVIEW</b>{" "}
-                {tr("billing.previewNotice.middle", "(Stripe TEST).")}{" "}
+                {tr("billing.previewNotice.middle", "(Paddle).")}{" "}
                 {tr("billing.previewNotice.suffix", "It does not affect production.")}
               </p>
             ) : null}

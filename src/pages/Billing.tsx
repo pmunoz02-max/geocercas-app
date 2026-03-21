@@ -6,7 +6,7 @@ export default function BillingPage() {
     <div style={{ padding: 24 }}>
       <h1 style={{ margin: 0, fontSize: 22 }}>Billing</h1>
       <p style={{ opacity: 0.75, marginTop: 8 }}>
-        Monetización en <b>PREVIEW</b> (Stripe TEST). No afecta producción.
+        Monetización en <b>PREVIEW</b> (Paddle). No afecta producción.
       </p>
 
       <div style={{ marginTop: 16 }}>

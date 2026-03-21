@@ -25,26 +25,7 @@ export default function ManageSubscriptionButton({
       if (!accessToken) {
         throw new Error("No se pudo obtener la sesión del usuario.");
       }
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "stripe-create-portal-session",
-        {
-          body: {
-            org_id: orgId,
-            return_url: returnUrl || `${window.location.origin}/billing`,
-          },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      );
-      if (fnError) {
-        throw new Error(fnError.message || "No se pudo abrir el portal de Stripe.");
-      }
-      if (!data?.url) {
-        throw new Error("Stripe no devolvió la URL del portal.");
-      }
-      setPortalUrl(data.url);
-      window.location.href = data.url;
+      throw new Error("Portal deshabilitado temporalmente (migrando a Paddle)");
     } catch (err) {
       setError(err?.message || "No se pudo abrir el portal de suscripción.");
     } finally {
