@@ -127,7 +127,7 @@ function assertRefSafety() {
         `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
       );
     }
-  }
+    // Otros entornos: solo warn
     console.warn(
       `[supabaseClient] [unknown env] ref=${currentRef} != expected=${EXPECTED_PROJECT_REF}. Revisa VITE_SUPABASE_URL/REFs.`
     );
