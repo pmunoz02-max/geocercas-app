@@ -615,6 +615,13 @@ export default function Billing() {
                 </div>
               </div>
             ) : null}
+
+            {/* Renderizar UpgradeToProButton si NO es PRO activo */}
+            {(!billing || String(billing?.billing_plan_code).toLowerCase() !== "pro" || String(billing?.plan_status).toLowerCase() !== "active") && currentOrgId ? (
+              <div className="mt-6">
+                <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
+              </div>
+            ) : null}
           </>
         )}
       </div>
