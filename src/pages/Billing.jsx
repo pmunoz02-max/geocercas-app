@@ -600,10 +600,7 @@ export default function Billing() {
                   {tr("billing.subscriptionManagement.title", "Subscription management")}
                 </div>
                 <p className="mt-1 text-sm text-slate-600">
-                  {tr(
-                    "billing.subscriptionManagement.description",
-                    "Open Stripe Customer Portal to update your card, cancel, or review your subscription."
-                  )}
+                  Portal de suscripción temporalmente deshabilitado mientras migramos a Paddle.
                 </p>
 
                 <div className="mt-4">
