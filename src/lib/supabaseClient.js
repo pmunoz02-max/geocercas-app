@@ -63,7 +63,7 @@ function expectedRefByHostname(currentRef) {
   const fromEnvPreview = normRef(import.meta.env.VITE_SUPABASE_PREVIEW_PROJECT_REF);
   const fromEnvProd = normRef(import.meta.env.VITE_SUPABASE_PROD_PROJECT_REF);
 
-  const DEFAULT_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
+  const DEFAULT_PREVIEW_REF = "wpaixkvokdkudymgjoua";
   const DEFAULT_PROD_REF = "wpaixkvokdkudymgjoua";
 
   if (envKind === "preview" || envKind === "staging") {
