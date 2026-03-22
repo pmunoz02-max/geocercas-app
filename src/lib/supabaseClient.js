@@ -109,18 +109,25 @@ function assertRefSafety() {
   if (!EXPECTED_PROJECT_REF) return;
 
   if (currentRef !== EXPECTED_PROJECT_REF) {
+    const message = `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`;
     if (envKind === "preview" || envKind === "staging") {
-      throw new Error(
-        `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-      );
+      console.error(message);
+      if (typeof window !== "undefined") {
+        window.__SUPABASE_PREVIEW_MISMATCH__ = {
+          expectedRef: EXPECTED_PROJECT_REF,
+          actualRef: currentRef,
+          message,
+        };
+      }
+      // No lanzar throw fatal, solo log y variable global
+      return;
     }
-
     if (envKind === "production") {
       throw new Error(
         `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
       );
     }
-
+  }
     console.warn(
       `[supabaseClient] [unknown env] ref=${currentRef} != expected=${EXPECTED_PROJECT_REF}. Revisa VITE_SUPABASE_URL/REFs.`
     );
