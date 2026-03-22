@@ -1,18 +1,13 @@
 import React, { useMemo, useState } from "react";
 
 type Props = {
-  /** org_id UUID (si lo tienes desde contexto). Si no, el componente muestra un input. */
   orgId?: string | null;
-  /** Plan a comprar (por ahora solo PRO) */
   plan?: "PRO";
-  /** Supabase project ref. Si no se pasa, usa el de PREVIEW por defecto */
   projectRef?: string;
-  /** Callback opcional para logging */
   onStarted?: () => void;
 };
 
 function findSupabaseAccessToken(): string | null {
-  // Busca el token en localStorage (formato típico: sb-<ref>-auth-token)
   const keys = Object.keys(localStorage);
   const key =
     keys.find((k) => k.startsWith("sb-") && k.endsWith("-auth-token")) ||
@@ -45,30 +40,37 @@ function isUuid(v: string) {
 export default function UpgradeToProButton({
   orgId,
   plan = "PRO",
-  projectRef = "wpaixkvokdkudymgjoua", // PREVIEW por defecto (Paddle)
   onStarted,
 }: Props) {
   const [orgInput, setOrgInput] = useState<string>(() => localStorage.getItem("gc_active_org_id") || "");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Endpoint fijo Paddle preview
+  const endpoint = "https://wpaixkvokdkudymgjoua.supabase.co/functions/v1/paddle-create-checkout";
+
+  // Permitir input manual si falta orgId
   const resolvedOrgId = useMemo(() => (orgId && orgId.trim() ? orgId.trim() : orgInput.trim()), [orgId, orgInput]);
 
-  const endpoint = `https://${projectRef}.supabase.co/functions/v1/paddle-create-checkout`;
+  // Log render siempre
+  console.log("UpgradeToProButton render", { orgId, resolvedOrgId, loading });
 
-  const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || loading;
+  const disabled = loading || !resolvedOrgId || !isUuid(resolvedOrgId);
 
   async function startCheckout() {
     setMsg(null);
+    console.log("UpgradeToProButton click", { resolvedOrgId });
 
     const token = findSupabaseAccessToken();
     if (!token) {
       setMsg("No hay sesión activa. Cierra sesión e inicia sesión nuevamente.");
+      console.error("No access token");
       return;
     }
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
       setMsg("Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí.");
+      console.warn("Org ID inválido", { resolvedOrgId });
       return;
     }
 
@@ -78,7 +80,7 @@ export default function UpgradeToProButton({
     try {
       setLoading(true);
       onStarted?.();
-
+      console.log("UpgradeToProButton request", { endpoint, org_id: resolvedOrgId });
       const res = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -87,23 +89,27 @@ export default function UpgradeToProButton({
         },
         body: JSON.stringify({ org_id: resolvedOrgId }),
       });
-
       const out = await res.json().catch(async () => ({ raw: await res.text() }));
-
+      console.log("UpgradeToProButton response", { status: res.status, out });
       if (!res.ok) {
         const m = out?.message || out?.error || JSON.stringify(out);
         setMsg(`Error ${res.status}: ${m}`);
+        console.error("UpgradeToProButton error", { status: res.status, out });
         return;
       }
-
       if (out?.checkout?.url) {
         window.location.href = out.checkout.url;
         return;
       }
-
+      if (out?.url) {
+        window.location.href = out.url;
+        return;
+      }
       setMsg("Respuesta inesperada del servidor (no vino checkout.url). Revisa logs de la función Paddle.");
+      console.warn("No checkout.url ni url en respuesta", { out });
     } catch (e: any) {
       setMsg(`Error: ${String(e?.message ?? e)}`);
+      console.error("UpgradeToProButton exception", e);
     } finally {
       setLoading(false);
     }
@@ -114,10 +120,11 @@ export default function UpgradeToProButton({
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Geocercas PRO</div>
-          <div style={{ fontSize: 13, opacity: 0.8 }}>USD $29/mes · 14 días trial · Paddle (Preview)</div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>USD $29/mes · Paddle (Preview)</div>
         </div>
 
-        {!orgId && (
+        {/* Input manual si falta orgId o no es UUID */}
+        {(!orgId || !isUuid(resolvedOrgId)) && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <label style={{ fontSize: 12, fontWeight: 600 }}>Organization ID (org_id)</label>
             <input

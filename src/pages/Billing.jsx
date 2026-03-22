@@ -614,11 +614,16 @@ export default function Billing() {
             ) : null}
 
             {/* Renderizar UpgradeToProButton si NO es PRO activo */}
-            {(!billing || String(billing?.billing_plan_code).toLowerCase() !== "pro" || String(billing?.plan_status).toLowerCase() !== "active") && currentOrgId ? (
-              <div className="mt-6">
-                <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
-              </div>
-            ) : null}
+            {(() => {
+              const showUpgrade = !billing || String(billing?.billing_plan_code).toLowerCase() !== "pro" || String(billing?.plan_status).toLowerCase() !== "active";
+              const orgId = billing?.org_id ?? null;
+              console.log("BillingPage render", { billing, loading: billingLoading, showUpgrade, orgId });
+              return showUpgrade ? (
+                <div className="mt-6">
+                  <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+                </div>
+              ) : null;
+            })()}
           </>
         )}
       </div>
