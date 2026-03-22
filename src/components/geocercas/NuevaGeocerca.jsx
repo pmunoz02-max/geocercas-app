@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 
 import { supabase } from "@/lib/supabaseClient.js";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
-import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
 import { listGeofences, getGeofence, upsertGeofence, deleteGeofence } from "../../lib/geofencesApi.js";
 

@@ -5,7 +5,7 @@ import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 import Tracker from "./Tracker.jsx";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
-import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
