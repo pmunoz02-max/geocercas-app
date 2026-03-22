@@ -388,6 +388,22 @@ export default function Billing() {
           </div>
         </div>
 
+        {/* Bloque Paddle Upgrade visible inmediatamente tras el título */}
+        {(() => {
+          const showUpgrade = !billing || String(billing?.billing_plan_code).toLowerCase() !== "pro" || String(billing?.plan_status).toLowerCase() !== "active";
+          const orgId = billing?.org_id ?? null;
+          console.log("BillingPage render", { billing, loading: billingLoading, showUpgrade, orgId });
+          console.log("🔥 SHOW UPGRADE BLOCK", { showUpgrade, orgId });
+          return showUpgrade ? (
+            <div className="mt-6 mb-6 p-4 border border-emerald-200 rounded-xl bg-emerald-50">
+              <div style={{ fontSize: 18, fontWeight: 700 }}>Geocercas PRO</div>
+              <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 6 }}>USD $29/mes · Paddle (Preview)</div>
+              <div style={{ fontSize: 13, marginBottom: 8 }}><b>Org ID:</b> <span style={{ fontFamily: 'monospace' }}>{orgId || "—"}</span></div>
+              <UpgradeToProButton orgId={orgId} />
+            </div>
+          ) : null;
+        })()}
+
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
           <div>
             <b>{tr("billing.labels.email", "Email")}:</b> {user.email}
@@ -613,17 +629,6 @@ export default function Billing() {
               </div>
             ) : null}
 
-            {/* Renderizar UpgradeToProButton si NO es PRO activo */}
-            {(() => {
-              const showUpgrade = !billing || String(billing?.billing_plan_code).toLowerCase() !== "pro" || String(billing?.plan_status).toLowerCase() !== "active";
-              const orgId = billing?.org_id ?? null;
-              console.log("BillingPage render", { billing, loading: billingLoading, showUpgrade, orgId });
-              return showUpgrade ? (
-                <div className="mt-6">
-                  <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
-                </div>
-              ) : null;
-            })()}
           </>
         )}
       </div>
