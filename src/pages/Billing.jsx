@@ -388,18 +388,31 @@ export default function Billing() {
           </div>
         </div>
 
-        {/* Bloque Paddle Upgrade visible inmediatamente tras el título */}
+        {/* Bloque Paddle Upgrade visible inmediatamente tras el título - SOLO UNO */}
         {(() => {
-          const showUpgrade = !billing || String(billing?.billing_plan_code).toLowerCase() !== "pro" || String(billing?.plan_status).toLowerCase() !== "active";
-          const orgId = billing?.org_id ?? null;
-          console.log("BillingPage render", { billing, loading: billingLoading, showUpgrade, orgId });
+          const showUpgrade =
+            !billing ||
+            String(billing?.billing_plan_code).toLowerCase() !== "pro" ||
+            String(billing?.plan_status).toLowerCase() !== "active";
+          const orgId = billing?.org_id ?? currentOrgId ?? null;
+          console.log("BillingPage render", {
+            billing,
+            loading: billingLoading,
+            showUpgrade,
+            orgId,
+          });
           console.log("🔥 SHOW UPGRADE BLOCK", { showUpgrade, orgId });
           return showUpgrade ? (
-            <div className="mt-6 mb-6 p-4 border border-emerald-200 rounded-xl bg-emerald-50">
-              <div style={{ fontSize: 18, fontWeight: 700 }}>Geocercas PRO</div>
-              <div style={{ fontSize: 14, opacity: 0.8, marginBottom: 6 }}>USD $29/mes · Paddle (Preview)</div>
-              <div style={{ fontSize: 13, marginBottom: 8 }}><b>Org ID:</b> <span style={{ fontFamily: 'monospace' }}>{orgId || "—"}</span></div>
-              <UpgradeToProButton orgId={orgId} />
+            <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
+              <div className="text-xl font-bold text-slate-900">Geocercas PRO</div>
+              <div className="mt-1 text-sm text-slate-700">USD $29/mes · Paddle (Preview)</div>
+              <div className="mt-2 text-xs text-slate-700">
+                <b>Org ID:</b>{" "}
+                <span className="font-mono break-all text-slate-900">{orgId || "—"}</span>
+              </div>
+              <div className="mt-4">
+                <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+              </div>
             </div>
           ) : null;
         })()}
@@ -647,14 +660,11 @@ export default function Billing() {
                 )}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              {currentOrgId ? (
-                <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
-              ) : null}
               <Link
-                to="/pricing"
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                to="/billing"
+                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
               >
-                {tr("billing.actions.viewPlans", "View plans")}
+                Ir a facturación
               </Link>
             </div>
           </>
