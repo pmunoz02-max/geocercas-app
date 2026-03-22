@@ -10,7 +10,7 @@ export default function BillingSuccess() {
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8 space-y-4">
         <h1 className="text-2xl font-semibold text-slate-900">Pago iniciado ✅</h1>
         <p className="text-slate-700">
-          Stripe confirmó el checkout. En segundos el webhook actualizará tu plan.
+          Paddle confirmó el checkout. En segundos el webhook actualizará tu plan.
         </p>
         <div className="text-sm text-slate-600">
           Si aún ves “FREE”, espera 10–30s y recarga. Luego revisamos <code>org_billing</code>.

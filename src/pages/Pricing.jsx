@@ -280,7 +280,7 @@ export default function Pricing() {
       }),
       t("pricing.pro.features.trackerEnabled"),
       t("pricing.pro.features.invitesEnabled"),
-      t("pricing.pro.features.stripeSelfManaged"),
+      "Checkout y gestión con Paddle (preview)",
     ],
     [maxTrackers, maxGeocercas, t]
   );
