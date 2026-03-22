@@ -86,10 +86,21 @@ export default function UpgradeToProButton({
 
     const token = await resolveToken();
 
+    console.log("JWT present", !!token);
+    console.log("JWT sample", token ? token.slice(0, 20) : null);
+    console.log("JWT segments", token ? token.split(".").length : 0);
+
     if (!token) {
       setMsg("No hay sesión activa. Cierra sesión e inicia sesión nuevamente.");
       return;
     }
+
+    console.log("Paddle auth debug", {
+      endpoint,
+      resolvedOrgId,
+      hasToken: !!token,
+      tokenSample: token ? token.slice(0, 20) : null,
+    });
 
     localStorage.setItem("gc_active_org_id", resolvedOrgId);
 
