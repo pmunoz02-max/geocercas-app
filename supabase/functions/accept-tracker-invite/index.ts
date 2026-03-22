@@ -473,15 +473,21 @@ serve(async (req) => {
     let setOrgError: string | null = null;
 
     try {
-      const { error } = await supabaseAdmin.rpc("set_current_org", { p_org_id: org_id });
+      let error = null;
+      try {
+        ({ error } = await supabaseAdmin.rpc("set_current_org", { p_org_id: org_id }));
+      } catch {}
+      if (error) {
+        try {
+          ({ error } = await supabaseAdmin.rpc("rpc_set_current_org", { p_org_id: org_id }));
+        } catch {}
+      }
       if (error) {
         setOrgError = error.message;
       } else {
         setOrgOk = true;
       }
-    } catch (e: any) {
-      setOrgError = e?.message ?? String(e);
-    }
+    } catch {}
 
     // 3) LEGACY COMPAT: user_organizations (best-effort, no fatal)
     // Conflict path MUST never downgrade role: keep existing row as-is.

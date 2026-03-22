@@ -129,9 +129,11 @@ export default function UpgradeToProButton({
         status: res.status,
         ok: res.ok,
         out,
+        outString: JSON.stringify(out),
       });
 
       if (!res.ok) {
+        alert(JSON.stringify(out));
         const m = out?.message || out?.error || out?.raw || JSON.stringify(out);
 
         if (res.status === 401) {

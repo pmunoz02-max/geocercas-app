@@ -171,21 +171,25 @@ export default async function handler(req, res) {
         });
       }
 
-      const { data: setData, error: setErr } = await sb.rpc("set_current_org", {
-        p_org_id: orgId,
-      });
-
-      if (setErr) {
-        return res.status(403).json({
-          build_tag,
-          ok: false,
-          authenticated: true,
-          user,
-          error: "Failed to set current org",
-          details: safeError(setErr),
-          supabase_project_ref,
+        const { error: setOrgError } = await sb.rpc("set_current_org", {
+          p_org_id: orgId,
         });
-      }
+
+        if (setOrgError) {
+          const { error: fallbackError } = await sb.rpc("rpc_set_current_org", {
+            p_org_id: orgId,
+          });
+          if (fallbackError) {
+            return res.status(403).json({
+              build_tag,
+              ok: false,
+              authenticated: true,
+              user,
+              error: fallbackError.message || fallbackError,
+              supabase_project_ref,
+            });
+          }
+        }
 
       return res.status(200).json({
         build_tag,
