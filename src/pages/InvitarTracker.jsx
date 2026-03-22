@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { useAuthSafe } from "@/context/auth.js";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
-import UpgradeToProButton from "@/components/Billing/UpgradeToProButton.jsx";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
 function normalizeEmail(v) {
   return String(v || "").trim().toLowerCase();
