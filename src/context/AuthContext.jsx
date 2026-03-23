@@ -193,12 +193,21 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
 
 async function setOrgSafe(orgId) {
   try {
+    // Log antes de llamar RPC
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log("SET CURRENT ORG TRY", {
+      fn: "set_current_org",
+      orgId,
+      hasSession: !!sessionData?.session,
+      userId: sessionData?.session?.user?.id || null,
+      tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
+    });
     await supabase.rpc("set_current_org", {
       p_org: orgId,
     });
     return true;
   } catch (e) {
-    console.error("[Auth] set org failed:", e);
+    console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error: e });
     return false;
   }
 }
@@ -257,18 +266,34 @@ export function AuthProvider({ children }) {
     if (!orgIdToSelect) return false;
 
     try {
-      const { error } = await supabase.rpc("set_current_org", {
+      // Log antes de llamar RPC
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("SET CURRENT ORG TRY", {
+        fn: "set_current_org",
+        orgId: orgIdToSelect,
+        hasSession: !!sessionData?.session,
+        userId: sessionData?.session?.user?.id || null,
+        tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
+      });
+      const { error, status } = await supabase.rpc("set_current_org", {
         p_org: orgIdToSelect,
       });
       if (!error) return true;
-    } catch {}
+      console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", status, error });
+    } catch (e) {
+      console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error: e });
+    }
 
     try {
-      const { error } = await supabase.rpc("rpc_set_current_org", {
+      console.log("SET CURRENT ORG FALLBACK", { fn: "rpc_set_current_org", orgId: orgIdToSelect });
+      const { error, status } = await supabase.rpc("rpc_set_current_org", {
         p_org_id: orgIdToSelect,
       });
       if (!error) return true;
-    } catch {}
+      console.error("SET CURRENT ORG FAILED", { fn: "rpc_set_current_org", status, error });
+    } catch (e) {
+      console.error("SET CURRENT ORG FAILED", { fn: "rpc_set_current_org", error: e });
+    }
 
     return false;
   }, []);
@@ -618,8 +643,16 @@ export function AuthProvider({ children }) {
       const s1 = await fetchSession();
       console.log("BOOTSTRAP backend session:", s1?.data);
 
+
       if (!currentSession?.user && (!s1.ok || !s1.data || s1.data.authenticated !== true)) {
         clearResolvedAuthState();
+        return;
+      }
+
+      // Fallback: si hay sesión válida en Supabase pero el backend falla, usar hydrateClientContext
+      if (currentSession?.user && (!s1.ok || s1.data?.authenticated !== true)) {
+        console.warn("[AUTHCTX] backend session invalid, using supabase session fallback");
+        await hydrateClientContext(currentSession.user);
         return;
       }
 
