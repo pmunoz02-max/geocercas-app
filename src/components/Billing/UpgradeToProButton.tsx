@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { supabaseTrackerClient } from "../../lib/supabaseTrackerClient";
+import * as supabaseTrackerModule from "../../lib/supabaseTrackerClient";
 
 type Props = {
   orgId?: string | null;
@@ -12,6 +12,18 @@ type Props = {
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     v.trim()
+  );
+}
+
+function resolveTrackerClient() {
+  const mod = supabaseTrackerModule as Record<string, any>;
+
+  return (
+    mod.supabaseTrackerClient ||
+    mod.default ||
+    mod.client ||
+    mod.trackerClient ||
+    null
   );
 }
 
@@ -37,11 +49,28 @@ export default function UpgradeToProButton({
 
   async function startCheckout() {
     setMsg(null);
-
     console.log("UpgradeToProButton click", { resolvedOrgId });
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
       setMsg("Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí.");
+      return;
+    }
+
+    const supabaseTrackerClient = resolveTrackerClient();
+
+    if (
+      !supabaseTrackerClient ||
+      !supabaseTrackerClient.functions ||
+      typeof supabaseTrackerClient.functions.invoke !== "function"
+    ) {
+      console.error("supabaseTrackerClient invalid", {
+        exportedKeys: Object.keys(
+          (supabaseTrackerModule as Record<string, unknown>) || {}
+        ),
+      });
+      setMsg(
+        "Cliente Supabase preview no disponible. Revisa la exportación de supabaseTrackerClient."
+      );
       return;
     }
 
@@ -71,7 +100,6 @@ export default function UpgradeToProButton({
       if (error) {
         const message =
           error.message || error.context?.message || JSON.stringify(error);
-
         setMsg(`Error: ${message}`);
         return;
       }
