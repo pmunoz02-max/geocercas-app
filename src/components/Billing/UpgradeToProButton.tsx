@@ -1,4 +1,6 @@
+
 import React, { useMemo, useState } from "react";
+import supabaseTrackerClient from "../../lib/supabaseTrackerClient";
 
 type Props = {
   orgId?: string | null;
@@ -56,53 +58,23 @@ export default function UpgradeToProButton({
     [orgId, orgInput]
   );
 
-  // Preview: usar siempre el endpoint correcto
-  const SUPABASE_PREVIEW_URL = "https://mujwsfhkocsuuahlrssn.supabase.co";
-  const endpoint = `${SUPABASE_PREVIEW_URL}/functions/v1/paddle-create-checkout`;
+
 
   console.log("UpgradeToProButton render", { orgId, resolvedOrgId });
 
   const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || loading;
 
-  async function resolveToken() {
-    if (typeof getAccessToken === "function") {
-      try {
-        const tokenFromProp = await getAccessToken();
-        if (tokenFromProp) return tokenFromProp;
-      } catch (err) {
-        console.warn("getAccessToken failed, fallback to localStorage", err);
-      }
-    }
 
-    return findSupabaseAccessToken();
-  }
 
   async function startCheckout() {
+
     setMsg(null);
-    console.log("UpgradeToProButton click", { resolvedOrgId, endpoint });
+    console.log("UpgradeToProButton click", { resolvedOrgId });
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
       setMsg("Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí.");
       return;
     }
-
-    const token = await resolveToken();
-
-    console.log("JWT present", !!token);
-    console.log("JWT sample", token ? token.slice(0, 20) : null);
-    console.log("JWT segments", token ? token.split(".").length : 0);
-
-    if (!token) {
-      setMsg("No hay sesión activa. Cierra sesión e inicia sesión nuevamente.");
-      return;
-    }
-
-    console.log("Paddle auth debug", {
-      endpoint,
-      resolvedOrgId,
-      hasToken: !!token,
-      tokenSample: token ? token.slice(0, 20) : null,
-    });
 
     localStorage.setItem("gc_active_org_id", resolvedOrgId);
 
@@ -111,45 +83,28 @@ export default function UpgradeToProButton({
       onStarted?.();
 
       console.log("UpgradeToProButton request", {
-        endpoint,
         org_id: resolvedOrgId,
-        hasToken: !!token,
+        plan,
       });
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ org_id: resolvedOrgId, plan }),
-      });
-
-      const out = await res.json().catch(async () => ({ raw: await res.text() }));
-
-      console.log("UpgradeToProButton response", {
-        status: res.status,
-        ok: res.ok,
-        out,
-        outString: JSON.stringify(out),
-      });
-
-      if (!res.ok) {
-        alert(JSON.stringify(out));
-        const m = out?.message || out?.error || out?.raw || JSON.stringify(out);
-
-        if (res.status === 401) {
-          setMsg(
-            "Sesión inválida para Paddle checkout (401). Haz logout/login y vuelve a intentar."
-          );
-          return;
+      const { data, error } = await supabaseTrackerClient.functions.invoke(
+        "paddle-create-checkout",
+        {
+          body: {
+            org_id: resolvedOrgId,
+            plan,
+          },
         }
+      );
 
-        setMsg(`Error ${res.status}: ${m}`);
+      console.log("PADDLE INVOKE RESULT:", { data, error });
+
+      if (error) {
+        setMsg(`Error: ${error.message || JSON.stringify(error)}`);
         return;
       }
 
-      const checkoutUrl = out?.checkout?.url || out?.url;
+      const checkoutUrl = data?.checkout?.url || data?.url;
 
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
