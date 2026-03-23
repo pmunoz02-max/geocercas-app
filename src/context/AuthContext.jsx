@@ -191,45 +191,6 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
   return found.id;
 }
 
-async function setOrgSafe(orgId) {
-  try {
-    // Log antes de llamar Edge Function
-      const { data: refreshData, error: refreshError } =
-        await supabase.auth.refreshSession();
-      if (refreshError) {
-        console.error("SESSION REFRESH FAILED", refreshError);
-      }
-      const refreshedSession = refreshData?.session ?? null;
-
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
-      if (sessionError) {
-        throw new Error("Failed to get Supabase session");
-      }
-      const session = refreshedSession ?? sessionData?.session ?? null;
-      const accessToken = session?.access_token;
-      if (!accessToken) {
-        throw new Error("No Supabase access token available");
-      }
-      console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
-      const { data, error } = await supabase.functions.invoke("set-current-org", {
-        body: { org_id: orgId },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-      });
-    if (error) {
-      console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error });
-      return false;
-    }
-    console.log("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
-    return true;
-  } catch (e) {
-    console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error: e });
-    return false;
-  }
-}
 
 export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
@@ -282,42 +243,25 @@ export function AuthProvider({ children }) {
   }, []);
 
 
+
   const persistCurrentOrgServer = useCallback(async (orgIdToSelect) => {
     if (!orgIdToSelect) return false;
 
     try {
-      // Log antes de llamar Edge Function
-      const { data: session } = await supabase.auth.getSession();
       console.log("SET CURRENT ORG TRY", {
         fn: "set_current_org",
         orgId: orgIdToSelect,
-        hasSession: !!session?.session,
-        userId: session?.session?.user?.id || null,
-        tokenPrefix: session?.session?.access_token?.slice(0, 16) || null,
       });
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        throw new Error("Failed to get session");
-      }
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) {
-        throw new Error("No Supabase access token available");
-      }
-      console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
-      const { data, error } = await supabase.functions.invoke(
-        "set-current-org",
-        {
-          body: { org_id: orgIdToSelect },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
-        }
-      );
+
+      const { data, error } = await supabase.functions.invoke("set-current-org", {
+        body: { org_id: orgIdToSelect },
+      });
+
       if (!error) {
         console.log("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
         return true;
       }
+
       console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error });
     } catch (e) {
       console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error: e });
@@ -341,32 +285,32 @@ export function AuthProvider({ children }) {
    * Aplica session data sin contaminar org global por tracker.
    */
   const applySessionData = useCallback(
-    (data) => {
-      setUser(data?.user ?? null);
-      setIsAppRoot(Boolean(data?.is_app_root ?? data?.isAppRoot ?? false));
-      setCanSwitchOrganizations(extractCanSwitchOrganizations(data));
+    try {
+      console.log("SET CURRENT ORG FALLBACK", {
+        fn: "rpc_set_current_org",
+        orgId: orgIdToSelect,
+      });
 
-      const serverOrgId = extractServerOrgId(data);
-      const serverRole = extractServerRole(data);
-      const orgs = extractOrganizations(data);
+      const { error, status } = await supabase.rpc("rpc_set_current_org", {
+        p_org_id: orgIdToSelect,
+      });
 
-      // Lee preferencia (legacy), pero la sanitiza contra orgs/roles
-      let preferredOrgId = null;
-      try {
-        preferredOrgId = localStorage.getItem(LS_ORG_KEY);
-      } catch {}
+      if (!error) return true;
 
-      // Si estamos en UI tracker, NO forzamos org global desde LS.
-      // (El dashboard tracker resuelve su org por su RPC y debe ser local.)
-      const allowPreferred =
-        !isTrackerUiPath(path);
+      console.error("SET CURRENT ORG FAILED", {
+        fn: "rpc_set_current_org",
+        status,
+        error,
+      });
+    } catch (e) {
+      console.error("SET CURRENT ORG FAILED", {
+        fn: "rpc_set_current_org",
+        error: e,
+      });
+    }
 
-      const safePreferredOrgId =
-        allowPreferred ? sanitizePreferredOrgId(preferredOrgId, orgs) : null;
-
-      // Org final global: serverOrgId canónico > preferencia segura (fallback) > null
-      const finalOrgId = serverOrgId || safePreferredOrgId || null;
-
+    return false;
+  }, []);
       if (orgs.length > 0) {
         setOrganizations(orgs);
 
