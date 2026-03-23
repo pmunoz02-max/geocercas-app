@@ -63,7 +63,7 @@ function expectedRefByHostname(currentRef) {
   const fromEnvPreview = normRef(import.meta.env.VITE_SUPABASE_PREVIEW_PROJECT_REF);
   const fromEnvProd = normRef(import.meta.env.VITE_SUPABASE_PROD_PROJECT_REF);
 
-  const DEFAULT_PREVIEW_REF = "wpaixkvokdkudymgjoua";
+  const DEFAULT_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
   const DEFAULT_PROD_REF = "wpaixkvokdkudymgjoua";
 
   if (envKind === "preview" || envKind === "staging") {
@@ -75,7 +75,6 @@ function expectedRefByHostname(currentRef) {
 
   return currentRef || "";
 }
-
 
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -108,32 +107,19 @@ function assertRefSafety() {
   }
 
   if (!EXPECTED_PROJECT_REF) return;
+  if (currentRef === EXPECTED_PROJECT_REF) return;
 
-  if (currentRef !== EXPECTED_PROJECT_REF) {
-    const message = `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`;
-    if (envKind === "preview" || envKind === "staging") {
-      console.error(message);
-      if (typeof window !== "undefined") {
-        window.__SUPABASE_PREVIEW_MISMATCH__ = {
-          expectedRef: EXPECTED_PROJECT_REF,
-          actualRef: currentRef,
-          message,
-        };
-      }
-      // No lanzar throw fatal, solo log y variable global
-      return;
-    }
-    if (envKind === "production") {
-      throw new Error(
-        `[supabaseClient] Proyecto incorrecto para producción. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`
-      );
-    }
-    // Otros entornos: solo warn
-    console.warn(
-      `[supabaseClient] [unknown env] ref=${currentRef} != expected=${EXPECTED_PROJECT_REF}. Revisa VITE_SUPABASE_URL/REFs.`
-    );
+  const message = `[supabaseClient] Proyecto incorrecto para ${envKind}. Esperado ${EXPECTED_PROJECT_REF} pero llegó ${currentRef}`;
+
+  if (typeof window !== "undefined") {
+    window.__SUPABASE_PREVIEW_MISMATCH__ = {
+      expectedRef: EXPECTED_PROJECT_REF,
+      actualRef: currentRef,
+      message,
+    };
   }
 
+  throw new Error(message);
 }
 
 assertRefSafety();
@@ -214,7 +200,7 @@ if (typeof window !== "undefined") {
     SOURCE: "src/lib/supabaseClient.js",
   };
 
-  window.__TG_SUPABASE_INFO__ = info; // ✅ para inspección rápida
+  window.__TG_SUPABASE_INFO__ = info;
   window.__TG_BUILD_MARKERS__ = window.__TG_BUILD_MARKERS__ || [];
   window.__TG_BUILD_MARKERS__.push({
     marker: BUILD_MARKER,
