@@ -76,6 +76,7 @@ function expectedRefByHostname(currentRef) {
   return currentRef || "";
 }
 
+
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -132,6 +133,7 @@ function assertRefSafety() {
       `[supabaseClient] [unknown env] ref=${currentRef} != expected=${EXPECTED_PROJECT_REF}. Revisa VITE_SUPABASE_URL/REFs.`
     );
   }
+
 }
 
 assertRefSafety();
