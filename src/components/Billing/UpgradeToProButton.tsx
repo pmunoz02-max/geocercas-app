@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { supabaseTracker } from "../../lib/supabaseTrackerClient";
+import { supabase } from "@/lib/supabaseClient";
 
 type Props = {
   orgId?: string | null;
@@ -44,11 +44,7 @@ export default function UpgradeToProButton({
       return;
     }
 
-    if (!supabaseTracker?.functions?.invoke) {
-      console.error("supabaseTracker invalid", { supabaseTracker });
-      setMsg("Cliente Supabase preview no disponible.");
-      return;
-    }
+
 
     localStorage.setItem("gc_active_org_id", resolvedOrgId);
 
@@ -61,7 +57,16 @@ export default function UpgradeToProButton({
         plan,
       });
 
-      const { data, error } = await supabaseTracker.functions.invoke(
+
+      // Log temporal de sesión primaria
+      const { data: sessionData } = await supabase.auth.getSession();
+      console.log("PRIMARY SESSION CHECK", {
+        hasSession: !!sessionData?.session,
+        userId: sessionData?.session?.user?.id || null,
+        tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
+      });
+
+      const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
         {
           body: {
