@@ -211,12 +211,16 @@ async function setOrgSafe(orgId) {
       throw new Error("No Supabase access token available");
     }
     console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
-    const { data, error } = await supabase.functions.invoke("set-current-org", {
-      body: { org_id: orgId },
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
+    const { data, error } = await supabase.functions.invoke(
+      "set-current-org",
+      {
+        body: { org_id: orgId },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+      }
+    );
     if (error) {
       console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error });
       return false;
@@ -302,12 +306,16 @@ export function AuthProvider({ children }) {
         throw new Error("No Supabase access token available");
       }
       console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
-      const { data, error } = await supabase.functions.invoke("set-current-org", {
-        body: { org_id: orgIdToSelect },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
+      const { data, error } = await supabase.functions.invoke(
+        "set-current-org",
+        {
+          body: { org_id: orgIdToSelect },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+        }
+      );
       if (!error) {
         console.log("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
         return true;
