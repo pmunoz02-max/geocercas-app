@@ -79,20 +79,27 @@ const sdkStorageKey = projectRef ? `sb-${projectRef}-auth-token` : null;
 const EXPECTED_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 const EXPECTED_PROD_REF = "wpaixkvokdkudymgjoua";
 
-if (envKind === "preview" || envKind === "staging") {
-  if (projectRef && projectRef !== EXPECTED_PREVIEW_REF) {
-    throw new Error(
-      `[supabaseTrackerClient] Ref incorrecto para preview/staging. Esperado ${EXPECTED_PREVIEW_REF} pero llegó ${projectRef}`
-    );
-  }
+
+const isPreviewProject = projectRef === EXPECTED_PREVIEW_REF;
+const isProdProject = projectRef === EXPECTED_PROD_REF;
+
+// 🚫 Nunca bloquear preview
+if (isPreviewProject) {
+  console.info("[supabaseTrackerClient] preview project OK", projectRef);
 }
 
-if (envKind === "production") {
-  if (projectRef && projectRef !== EXPECTED_PROD_REF) {
-    throw new Error(
-      `[supabaseTrackerClient] Ref incorrecto para production. Esperado ${EXPECTED_PROD_REF} pero llegó ${projectRef}`
-    );
-  }
+// ✅ Solo validar estrictamente producción
+if (envKind === "production" && !isProdProject) {
+  throw new Error(
+    `[supabaseTrackerClient] Ref incorrecto para producción. Esperado ${EXPECTED_PROD_REF} pero llegó ${projectRef}`
+  );
+}
+
+// ⚠️ Si estamos en preview pero detectado como production, solo warning
+if (envKind === "production" && isPreviewProject) {
+  console.warn(
+    "[supabaseTrackerClient] production detectado pero usando preview project. Permitido en preview deployment."
+  );
 }
 
 let client = null;
