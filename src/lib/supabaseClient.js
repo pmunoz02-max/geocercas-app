@@ -76,11 +76,19 @@ function expectedRefByHostname(currentRef) {
   return currentRef || "";
 }
 
+
 const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
+
+// TEMP DEBUG
+console.info("[SUPABASE ENV DEBUG]", {
+  url: SUPABASE_URL,
+  anonPrefix: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.slice(0, 20) : null,
+  anonLength: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.length : 0,
+});
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error("[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build.");

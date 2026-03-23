@@ -59,12 +59,41 @@ if (envKind === "preview" || envKind === "staging") {
   trackerUrlRaw = `https://${PREVIEW_REF}.supabase.co`;
 }
 
+
 const url = mustBeSupabaseUrl(trackerUrlRaw);
 const anon = String(trackerAnonRaw || "").trim();
 
+// TEMP DEBUG
+console.info("[TRACKER ENV DEBUG]", {
+  trackerUrl: url,
+  trackerAnonPrefix: anon ? anon.slice(0, 20) : null,
+  trackerAnonLength: anon ? anon.length : 0,
+});
+
 const storage = getLocalStorage();
+
 const projectRef = projectRefFromUrl(url);
 const sdkStorageKey = projectRef ? `sb-${projectRef}-auth-token` : null;
+
+// Validación dura de projectRef según entorno
+const EXPECTED_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
+const EXPECTED_PROD_REF = "wpaixkvokdkudymgjoua";
+
+if (envKind === "preview" || envKind === "staging") {
+  if (projectRef && projectRef !== EXPECTED_PREVIEW_REF) {
+    throw new Error(
+      `[supabaseTrackerClient] Ref incorrecto para preview/staging. Esperado ${EXPECTED_PREVIEW_REF} pero llegó ${projectRef}`
+    );
+  }
+}
+
+if (envKind === "production") {
+  if (projectRef && projectRef !== EXPECTED_PROD_REF) {
+    throw new Error(
+      `[supabaseTrackerClient] Ref incorrecto para production. Esperado ${EXPECTED_PROD_REF} pero llegó ${projectRef}`
+    );
+  }
+}
 
 let client = null;
 
