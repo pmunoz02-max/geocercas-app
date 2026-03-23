@@ -70,10 +70,8 @@ console.info("[TRACKER ENV DEBUG]", {
   trackerAnonLength: anon ? anon.length : 0,
 });
 
-const storage = getLocalStorage();
 
 const projectRef = projectRefFromUrl(url);
-const sdkStorageKey = projectRef ? `sb-${projectRef}-auth-token` : null;
 
 
 // Validación única de entorno/projectRef
@@ -110,18 +108,15 @@ if (url && anon) {
     g.__SUPABASE_TRACKER__ = createClient(url, anon, {
       auth: {
         flowType: "pkce",
-        persistSession: true,
-        autoRefreshToken: true,
+        persistSession: false,
+        autoRefreshToken: false,
         detectSessionInUrl: false,
-        storage,
       },
     });
   }
   client = g.__SUPABASE_TRACKER__;
-
   console.log("[supabaseTrackerClient] tracker client ready", {
     url,
-    storageKey: sdkStorageKey,
     projectRef,
     envKind,
   });
@@ -134,15 +129,6 @@ if (!url || !anon) {
     trackerUrlRaw,
     hasTrackerUrl: !!url,
     hasTrackerAnon: !!anon,
-    envKind,
-  });
-} else {
-  console.log("[supabaseTrackerClient] tracker client ready:", {
-    url,
-    storageKey: sdkStorageKey || "sdk-default",
-    hasLocalStorage: !!storage,
-    singleton: true,
-    flowType: "pkce",
     envKind,
   });
 }
