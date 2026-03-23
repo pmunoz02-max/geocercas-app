@@ -32,25 +32,31 @@ function projectRefFromUrl(rawUrl) {
   }
 }
 
-
 // --- PREVIEW ALIGNMENT ---
-// En preview, forzar el mismo ref que billing/paddle si no está definido explícitamente
-const envKind = (typeof window !== "undefined" && window.__TG_ENV_KIND) || import.meta.env.ENV_KIND || import.meta.env.MODE || "";
-const DEFAULT_PREVIEW_REF = "wpaixkvokdkudymgjoua";
+// En preview, usar explícitamente el proyecto preview correcto.
+// Nunca reescribir preview hacia producción.
+const envKind =
+  (typeof window !== "undefined" && window.__TG_ENV_KIND) ||
+  import.meta.env.ENV_KIND ||
+  import.meta.env.MODE ||
+  "";
+
+const PREVIEW_REF = "mujwsfhkocsuuahlrssn";
+
 let trackerUrlRaw = (
   import.meta.env.VITE_SUPABASE_TRACKER_URL ||
   import.meta.env.VITE_SUPABASE_URL ||
   ""
 ).trim();
+
 let trackerAnonRaw = (
   import.meta.env.VITE_SUPABASE_TRACKER_ANON_KEY ||
   import.meta.env.VITE_SUPABASE_ANON_KEY ||
   ""
 ).trim();
 
-if ((envKind === "preview" || envKind === "staging") && trackerUrlRaw && trackerUrlRaw.includes("mujwsfhkocsuuahlrssn")) {
-  trackerUrlRaw = `https://${DEFAULT_PREVIEW_REF}.supabase.co`;
-  // Si tienes el anon key de preview, ponlo aquí manualmente o usa el de VITE_SUPABASE_ANON_KEY
+if (envKind === "preview" || envKind === "staging") {
+  trackerUrlRaw = `https://${PREVIEW_REF}.supabase.co`;
 }
 
 const url = mustBeSupabaseUrl(trackerUrlRaw);
@@ -76,11 +82,12 @@ if (url && anon) {
     });
   }
   client = g.__SUPABASE_TRACKER__;
-  // Log de ref activo
+
   console.log("[supabaseTrackerClient] tracker client ready", {
     url,
     storageKey: sdkStorageKey,
     projectRef,
+    envKind,
   });
 }
 
@@ -91,6 +98,7 @@ if (!url || !anon) {
     trackerUrlRaw,
     hasTrackerUrl: !!url,
     hasTrackerAnon: !!anon,
+    envKind,
   });
 } else {
   console.log("[supabaseTrackerClient] tracker client ready:", {
@@ -99,5 +107,6 @@ if (!url || !anon) {
     hasLocalStorage: !!storage,
     singleton: true,
     flowType: "pkce",
+    envKind,
   });
 }

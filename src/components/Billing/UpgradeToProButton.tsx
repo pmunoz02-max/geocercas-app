@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import * as supabaseTrackerModule from "../../lib/supabaseTrackerClient";
+import { supabaseTracker } from "../../lib/supabaseTrackerClient";
 
 type Props = {
   orgId?: string | null;
@@ -12,18 +12,6 @@ type Props = {
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     v.trim()
-  );
-}
-
-function resolveTrackerClient() {
-  const mod = supabaseTrackerModule as Record<string, any>;
-
-  return (
-    mod.supabaseTrackerClient ||
-    mod.default ||
-    mod.client ||
-    mod.trackerClient ||
-    null
   );
 }
 
@@ -56,21 +44,9 @@ export default function UpgradeToProButton({
       return;
     }
 
-    const supabaseTrackerClient = resolveTrackerClient();
-
-    if (
-      !supabaseTrackerClient ||
-      !supabaseTrackerClient.functions ||
-      typeof supabaseTrackerClient.functions.invoke !== "function"
-    ) {
-      console.error("supabaseTrackerClient invalid", {
-        exportedKeys: Object.keys(
-          (supabaseTrackerModule as Record<string, unknown>) || {}
-        ),
-      });
-      setMsg(
-        "Cliente Supabase preview no disponible. Revisa la exportación de supabaseTrackerClient."
-      );
+    if (!supabaseTracker?.functions?.invoke) {
+      console.error("supabaseTracker invalid", { supabaseTracker });
+      setMsg("Cliente Supabase preview no disponible.");
       return;
     }
 
@@ -85,7 +61,7 @@ export default function UpgradeToProButton({
         plan,
       });
 
-      const { data, error } = await supabaseTrackerClient.functions.invoke(
+      const { data, error } = await supabaseTracker.functions.invoke(
         "paddle-create-checkout",
         {
           body: {
