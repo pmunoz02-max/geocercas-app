@@ -194,33 +194,31 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
 async function setOrgSafe(orgId) {
   try {
     // Log antes de llamar Edge Function
-    const { data: session } = await supabase.auth.getSession();
-    console.log("SET CURRENT ORG TRY", {
-      fn: "set_current_org",
-      orgId,
-      hasSession: !!session?.session,
-      userId: session?.session?.user?.id || null,
-      tokenPrefix: session?.session?.access_token?.slice(0, 16) || null,
-    });
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) {
-      throw new Error("Failed to get session");
-    }
-    const accessToken = sessionData?.session?.access_token;
-    if (!accessToken) {
-      throw new Error("No Supabase access token available");
-    }
-    console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
-    const { data, error } = await supabase.functions.invoke(
-      "set-current-org",
-      {
+      const { data: refreshData, error: refreshError } =
+        await supabase.auth.refreshSession();
+      if (refreshError) {
+        console.error("SESSION REFRESH FAILED", refreshError);
+      }
+      const refreshedSession = refreshData?.session ?? null;
+
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+      if (sessionError) {
+        throw new Error("Failed to get Supabase session");
+      }
+      const session = refreshedSession ?? sessionData?.session ?? null;
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        throw new Error("No Supabase access token available");
+      }
+      console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
+      const { data, error } = await supabase.functions.invoke("set-current-org", {
         body: { org_id: orgId },
         headers: {
           Authorization: `Bearer ${accessToken}`,
           apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
         },
-      }
-    );
+      });
     if (error) {
       console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error });
       return false;
