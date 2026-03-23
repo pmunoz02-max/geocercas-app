@@ -75,30 +75,30 @@ const storage = getLocalStorage();
 const projectRef = projectRefFromUrl(url);
 const sdkStorageKey = projectRef ? `sb-${projectRef}-auth-token` : null;
 
-// Validación dura de projectRef según entorno
+
+// Validación única de entorno/projectRef
 const EXPECTED_PREVIEW_REF = "mujwsfhkocsuuahlrssn";
 const EXPECTED_PROD_REF = "wpaixkvokdkudymgjoua";
-
 
 const isPreviewProject = projectRef === EXPECTED_PREVIEW_REF;
 const isProdProject = projectRef === EXPECTED_PROD_REF;
 
-// 🚫 Nunca bloquear preview
 if (isPreviewProject) {
   console.info("[supabaseTrackerClient] preview project OK", projectRef);
-}
-
-// ✅ Solo validar estrictamente producción
-if (envKind === "production" && !isProdProject) {
+} else if (envKind === "production") {
+  if (!isProdProject) {
+    throw new Error(
+      `[supabaseTrackerClient] Ref incorrecto para producción. Esperado ${EXPECTED_PROD_REF} pero llegó ${projectRef}`
+    );
+  }
+  console.info("[supabaseTrackerClient] production project OK", projectRef);
+} else if (envKind === "preview" || envKind === "staging") {
   throw new Error(
-    `[supabaseTrackerClient] Ref incorrecto para producción. Esperado ${EXPECTED_PROD_REF} pero llegó ${projectRef}`
+    `[supabaseTrackerClient] Ref incorrecto para ${envKind}. Esperado ${EXPECTED_PREVIEW_REF} pero llegó ${projectRef}`
   );
-}
-
-// ⚠️ Si estamos en preview pero detectado como production, solo warning
-if (envKind === "production" && isPreviewProject) {
+} else {
   console.warn(
-    "[supabaseTrackerClient] production detectado pero usando preview project. Permitido en preview deployment."
+    `[supabaseTrackerClient] Entorno no identificado (${envKind}). projectRef=${projectRef}`
   );
 }
 
