@@ -56,7 +56,9 @@ export default function UpgradeToProButton({
     [orgId, orgInput]
   );
 
-  const endpoint = `https://${projectRef}.supabase.co/functions/v1/paddle-create-checkout`;
+  // Preview: usar siempre el endpoint correcto
+  const SUPABASE_PREVIEW_URL = "https://mujwsfhkocsuuahlrssn.supabase.co";
+  const endpoint = `${SUPABASE_PREVIEW_URL}/functions/v1/paddle-create-checkout`;
 
   console.log("UpgradeToProButton render", { orgId, resolvedOrgId });
 
