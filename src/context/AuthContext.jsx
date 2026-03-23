@@ -202,10 +202,15 @@ async function setOrgSafe(orgId) {
       userId: session?.session?.user?.id || null,
       tokenPrefix: session?.session?.access_token?.slice(0, 16) || null,
     });
-    const accessToken = session?.session?.access_token;
-    if (!accessToken) {
-      throw new Error("No session token");
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      throw new Error("Failed to get session");
     }
+    const accessToken = sessionData?.session?.access_token;
+    if (!accessToken) {
+      throw new Error("No Supabase access token available");
+    }
+    console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
     const { data, error } = await supabase.functions.invoke("set-current-org", {
       body: { org_id: orgId },
       headers: {
@@ -288,10 +293,15 @@ export function AuthProvider({ children }) {
         userId: session?.session?.user?.id || null,
         tokenPrefix: session?.session?.access_token?.slice(0, 16) || null,
       });
-      const accessToken = session?.session?.access_token;
-      if (!accessToken) {
-        throw new Error("No session token");
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        throw new Error("Failed to get session");
       }
+      const accessToken = sessionData?.session?.access_token;
+      if (!accessToken) {
+        throw new Error("No Supabase access token available");
+      }
+      console.log("ACCESS TOKEN PREFIX", accessToken.slice(0, 20));
       const { data, error } = await supabase.functions.invoke("set-current-org", {
         body: { org_id: orgIdToSelect },
         headers: {
