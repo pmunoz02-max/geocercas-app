@@ -66,15 +66,26 @@ export default function UpgradeToProButton({
         tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
       });
 
-      const { data, error } = await supabase.functions.invoke(
-        "paddle-create-checkout",
-        {
-          body: {
-            org_id: resolvedOrgId,
-            plan,
-          },
-        }
-      );
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const accessToken = session?.access_token;
+      if (!accessToken) {
+        throw new Error("No session token");
+      }
+
+      const res = await supabase.functions.invoke("paddle-create-checkout", {
+        body: {
+          org_id: resolvedOrgId,
+          plan: "PRO",
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const { data, error } = res;
 
       console.log("PADDLE INVOKE RESULT:", { data, error });
 
