@@ -193,18 +193,30 @@ function sanitizePreferredOrgId(preferredOrgId, orgs) {
 
 async function setOrgSafe(orgId) {
   try {
-    // Log antes de llamar RPC
-    const { data: sessionData } = await supabase.auth.getSession();
+    // Log antes de llamar Edge Function
+    const { data: session } = await supabase.auth.getSession();
     console.log("SET CURRENT ORG TRY", {
       fn: "set_current_org",
       orgId,
-      hasSession: !!sessionData?.session,
-      userId: sessionData?.session?.user?.id || null,
-      tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
+      hasSession: !!session?.session,
+      userId: session?.session?.user?.id || null,
+      tokenPrefix: session?.session?.access_token?.slice(0, 16) || null,
     });
-    await supabase.rpc("set_current_org", {
-      p_org: orgId,
+    const accessToken = session?.session?.access_token;
+    if (!accessToken) {
+      throw new Error("No session token");
+    }
+    const { data, error } = await supabase.functions.invoke("set-current-org", {
+      body: { org_id: orgId },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
+    if (error) {
+      console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error });
+      return false;
+    }
+    console.log("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
     return true;
   } catch (e) {
     console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error: e });
@@ -262,24 +274,35 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("popstate", onNav);
   }, []);
 
+
   const persistCurrentOrgServer = useCallback(async (orgIdToSelect) => {
     if (!orgIdToSelect) return false;
 
     try {
-      // Log antes de llamar RPC
-      const { data: sessionData } = await supabase.auth.getSession();
+      // Log antes de llamar Edge Function
+      const { data: session } = await supabase.auth.getSession();
       console.log("SET CURRENT ORG TRY", {
         fn: "set_current_org",
         orgId: orgIdToSelect,
-        hasSession: !!sessionData?.session,
-        userId: sessionData?.session?.user?.id || null,
-        tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
+        hasSession: !!session?.session,
+        userId: session?.session?.user?.id || null,
+        tokenPrefix: session?.session?.access_token?.slice(0, 16) || null,
       });
-      const { error, status } = await supabase.rpc("set_current_org", {
-        p_org: orgIdToSelect,
+      const accessToken = session?.session?.access_token;
+      if (!accessToken) {
+        throw new Error("No session token");
+      }
+      const { data, error } = await supabase.functions.invoke("set-current-org", {
+        body: { org_id: orgIdToSelect },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
-      if (!error) return true;
-      console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", status, error });
+      if (!error) {
+        console.log("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
+        return true;
+      }
+      console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error });
     } catch (e) {
       console.error("SET CURRENT ORG FAILED", { fn: "set_current_org", error: e });
     }
