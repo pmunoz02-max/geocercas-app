@@ -1,6 +1,5 @@
-
 import React, { useMemo, useState } from "react";
-import supabaseTrackerClient from "../../lib/supabaseTrackerClient";
+import { supabaseTrackerClient } from "../../lib/supabaseTrackerClient";
 
 type Props = {
   orgId?: string | null;
@@ -9,30 +8,6 @@ type Props = {
   onStarted?: () => void;
   getAccessToken?: () => Promise<string | null>;
 };
-
-function findSupabaseAccessToken(): string | null {
-  const keys = Object.keys(localStorage);
-  const key =
-    keys.find((k) => k.startsWith("sb-") && k.endsWith("-auth-token")) ||
-    keys.find((k) => k.includes("auth-token"));
-
-  if (!key) return null;
-
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-
-    return (
-      parsed?.access_token ||
-      parsed?.currentSession?.access_token ||
-      parsed?.session?.access_token ||
-      null
-    );
-  } catch {
-    return null;
-  }
-}
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -43,9 +18,7 @@ function isUuid(v: string) {
 export default function UpgradeToProButton({
   orgId,
   plan = "PRO",
-  projectRef = "wpaixkvokdkudymgjoua",
   onStarted,
-  getAccessToken,
 }: Props) {
   const [orgInput, setOrgInput] = useState<string>(
     () => localStorage.getItem("gc_active_org_id") || ""
@@ -58,17 +31,13 @@ export default function UpgradeToProButton({
     [orgId, orgInput]
   );
 
-
-
   console.log("UpgradeToProButton render", { orgId, resolvedOrgId });
 
   const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || loading;
 
-
-
   async function startCheckout() {
-
     setMsg(null);
+
     console.log("UpgradeToProButton click", { resolvedOrgId });
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
@@ -100,7 +69,10 @@ export default function UpgradeToProButton({
       console.log("PADDLE INVOKE RESULT:", { data, error });
 
       if (error) {
-        setMsg(`Error: ${error.message || JSON.stringify(error)}`);
+        const message =
+          error.message || error.context?.message || JSON.stringify(error);
+
+        setMsg(`Error: ${message}`);
         return;
       }
 
@@ -162,10 +134,6 @@ export default function UpgradeToProButton({
         >
           {loading ? "Abriendo Paddle..." : "Suscribirme a PRO"}
         </button>
-
-        <div className="text-xs text-slate-600 break-all">
-          Endpoint: <code>{endpoint}</code>
-        </div>
 
         {msg && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
