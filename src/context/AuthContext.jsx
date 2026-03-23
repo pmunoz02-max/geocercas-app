@@ -241,13 +241,42 @@ export function AuthProvider({ children }) {
     if (!orgIdToSelect) return false;
 
     try {
+      const {
+        data: { session: currentSession },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        console.error("SET CURRENT ORG FAILED", {
+          fn: "set_current_org",
+          error: sessionError,
+        });
+        return false;
+      }
+
+      const accessToken = currentSession?.access_token || null;
+
       console.log("SET CURRENT ORG TRY", {
         fn: "set_current_org",
         orgId: orgIdToSelect,
+        hasSession: !!currentSession,
+        userId: currentSession?.user?.id || null,
+        tokenPrefix: accessToken ? accessToken.slice(0, 16) : null,
       });
+
+      if (!accessToken) {
+        console.error("SET CURRENT ORG FAILED", {
+          fn: "set_current_org",
+          error: "Missing access token",
+        });
+        return false;
+      }
 
       const { data, error } = await supabase.functions.invoke("set-current-org", {
         body: { org_id: orgIdToSelect },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
 
       if (!error) {
