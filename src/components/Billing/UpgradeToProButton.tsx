@@ -69,11 +69,11 @@ export default function UpgradeToProButton({
       console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
     } catch (e) {
       console.error("[PADDLE BUTTON] exception", e);
+
     } finally {
       setIsLoading(false);
     }
   };
-  }
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
