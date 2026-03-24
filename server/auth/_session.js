@@ -32,27 +32,36 @@ function safeError(err) {
 }
 
 function normalizeDefault(orgs) {
-  if (!Array.isArray(orgs) || orgs.length === 0) return { orgs: [], defaultOrg: null };
+  if (!Array.isArray(orgs) || orgs.length === 0) {
+    return { orgs: [], defaultOrg: null };
+  }
 
   const defaults = orgs.filter((o) => !!o.is_default);
-  if (defaults.length === 1) return { orgs, defaultOrg: defaults[0] };
+  if (defaults.length === 1) {
+    return { orgs, defaultOrg: defaults[0] };
+  }
 
-  // Si hay 0 o >1 defaults, aplicar jerarquía: owner > admin > tracker (nunca tracker si hay superior)
-  const roleHierarchy = ['owner', 'admin', 'tracker'];
+  // Si hay 0 o >1 defaults, aplicar jerarquía: owner > admin > tracker
+  const roleHierarchy = ["owner", "admin", "tracker"];
   let chosen = null;
 
   for (const role of roleHierarchy) {
-    const candidate = orgs.find((o) => String(o?.role || '').toLowerCase() === role);
+    const candidate = orgs.find(
+      (o) => String(o?.role || "").toLowerCase() === role
+    );
     if (candidate) {
       chosen = candidate;
       break;
     }
   }
 
-  // Fallback: primer org si no coincide ningún rol esperado
   if (!chosen) chosen = orgs[0];
 
-  const fixed = orgs.map((o) => ({ ...o, is_default: o.id === chosen.id }));
+  const fixed = orgs.map((o) => ({
+    ...o,
+    is_default: o.id === chosen.id,
+  }));
+
   return { orgs: fixed, defaultOrg: chosen };
 }
 
@@ -60,7 +69,9 @@ function jsonBody(req) {
   return new Promise((resolve) => {
     try {
       let data = "";
-      req.on("data", (chunk) => (data += chunk));
+      req.on("data", (chunk) => {
+        data += chunk;
+      });
       req.on("end", () => {
         try {
           resolve(data ? JSON.parse(data) : {});
@@ -86,7 +97,7 @@ export default async function handler(req, res) {
   const build_tag = "session-v16-readonly-get-explicit-jwt";
 
   try {
-
+    // Backend SOLO usa variables server-side.
     const url = process.env.SUPABASE_URL;
     const anonKey = process.env.SUPABASE_ANON_KEY;
 
@@ -100,7 +111,6 @@ export default async function handler(req, res) {
     }
 
     const supabase_project_ref = projectRefFromUrl(url);
-
     const access_token = getCookie(req, "tg_at");
 
     // Sin cookie => no autenticado (pero ok)
@@ -113,15 +123,25 @@ export default async function handler(req, res) {
       });
     }
 
-    // Cliente “stateless” para serverless
+    // Cliente stateless para serverless
     const sb = createClient(url, anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      global: { headers: { Authorization: `Bearer ${access_token}` } },
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      },
     });
 
-    // 1) Validar usuario (JWT EXPLÍCITO => robusto)
+    // 1) Validar usuario con JWT explícito
     const { data: u1, error: uerr } = await sb.auth.getUser(access_token);
-    const user = u1?.user ? { id: u1.user.id, email: u1.user.email } : null;
+    const user = u1?.user
+      ? { id: u1.user.id, email: u1.user.email }
+      : null;
 
     if (!user || uerr) {
       return res.status(200).json({
@@ -164,32 +184,35 @@ export default async function handler(req, res) {
         });
       }
 
-        const { error: setOrgError } = await sb.rpc("set_current_org", {
+      const { error: setOrgError } = await sb.rpc("set_current_org", {
+        p_org_id: orgId,
+      });
+
+      if (setOrgError) {
+        const { error: fallbackError } = await sb.rpc("rpc_set_current_org", {
           p_org_id: orgId,
         });
 
-        if (setOrgError) {
-          const { error: fallbackError } = await sb.rpc("rpc_set_current_org", {
-            p_org_id: orgId,
+        if (fallbackError) {
+          return res.status(403).json({
+            build_tag,
+            ok: false,
+            authenticated: true,
+            user,
+            error: fallbackError.message || fallbackError,
+            set_org_error: safeError(setOrgError),
+            fallback_error: safeError(fallbackError),
+            supabase_project_ref,
           });
-          if (fallbackError) {
-            return res.status(403).json({
-              build_tag,
-              ok: false,
-              authenticated: true,
-              user,
-              error: fallbackError.message || fallbackError,
-              supabase_project_ref,
-            });
-          }
         }
+      }
 
       return res.status(200).json({
         build_tag,
         ok: true,
         authenticated: true,
         user,
-        current_org_id: setData || orgId,
+        current_org_id: orgId,
         supabase_project_ref,
       });
     }
@@ -226,7 +249,7 @@ export default async function handler(req, res) {
 
     const { orgs, defaultOrg } = normalizeDefault(orgsRaw);
 
-    // 3) Leer org actual persistida (si tu RPC existe). Si no existe/da error => fallback a defaultOrg.
+    // 3) Leer org actual persistida. Si falla, fallback a defaultOrg.
     let currentOrgId = null;
     try {
       const { data: cur, error: curErr } = await sb.rpc("get_current_org_id");
@@ -235,13 +258,14 @@ export default async function handler(req, res) {
       // ignore
     }
 
-    if (!currentOrgId && defaultOrg?.id) currentOrgId = defaultOrg.id;
+    if (!currentOrgId && defaultOrg?.id) {
+      currentOrgId = defaultOrg.id;
+    }
 
-    // role asociado a current org si existe
     const currentRole =
       currentOrgId && orgs?.length
-        ? (orgs.find((o) => o.id === currentOrgId)?.role || null)
-        : (defaultOrg?.role || null);
+        ? orgs.find((o) => o.id === currentOrgId)?.role || null
+        : defaultOrg?.role || null;
 
     return res.status(200).json({
       build_tag,
