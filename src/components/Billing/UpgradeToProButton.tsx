@@ -79,7 +79,7 @@ export default function UpgradeToProButton({
         return;
       }
 
-      const checkoutUrl = result?.data?.checkout_url;
+      const checkoutUrl = result?.data?.checkout_url || result?.data?.url;
 
       if (checkoutUrl) {
         console.log("[PADDLE BUTTON] redirecting", checkoutUrl);
