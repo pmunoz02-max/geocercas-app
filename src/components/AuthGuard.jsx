@@ -11,6 +11,11 @@ export default function AuthGuard({ children }) {
   const location = useLocation();
   const missingProviderLoggedRef = useRef(false);
 
+  // Permitir acceso directo a /paddle-checkout sin sesión ni redirigir
+  if (location.pathname.startsWith("/paddle-checkout")) {
+    return children || <Outlet />;
+  }
+
   // ✅ nunca lanza
   const auth = useAuthSafe();
 

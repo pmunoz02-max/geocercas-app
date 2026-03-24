@@ -49,6 +49,8 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
+import PaddleCheckoutPage from "./pages/paddle-checkout.tsx";
+
 function RootEntry() {
   const location = useLocation();
   const auth = useAuthSafe();
@@ -162,6 +164,9 @@ function AppRoutes() {
       <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
+      {/* ✅ Paddle Checkout PUBLIC */}
+      <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
+
       {/* 🔒 Protected */}
       <Route element={<RequireAuth />}>
         <Route
@@ -171,125 +176,134 @@ function AppRoutes() {
             </AuthGuard>
           }
         >
-        <Route path="/inicio" element={<Inicio />} />
+          <Route path="/inicio" element={<Inicio />} />
 
-        {/* ✅ Billing / Pricing */}
-        <Route
-          path="/billing"
-          element={
-            <RequireOrg>
-              <Billing />
-            </RequireOrg>
-          }
-        />
-        <Route path="/account" element={<Account />} />
-        <Route
-          path="/pricing"
-          element={
-            <RequireOrg>
-              <Pricing />
-            </RequireOrg>
-          }
-        />
-        <Route path="/billing/success" element={<BillingSuccess />} />
-        <Route path="/billing/cancel" element={<BillingCancel />} />
+          {/* ✅ Billing / Pricing */}
+          <Route
+            path="/billing"
+            element={
+              <RequireOrg>
+                <Billing />
+              </RequireOrg>
+            }
+          />
+          <Route path="/account" element={<Account />} />
+          <Route
+            path="/pricing"
+            element={
+              <RequireOrg>
+                <Pricing />
+              </RequireOrg>
+            }
+          />
+          <Route path="/billing/success" element={<BillingSuccess />} />
+          <Route path="/billing/cancel" element={<BillingCancel />} />
 
-        <Route
-          path="/settings/delete-account"
-          element={
-            <RequireOrg>
-              <DeleteAccountPage />
-            </RequireOrg>
-          }
-        />
+          <Route
+            path="/settings/delete-account"
+            element={
+              <RequireOrg>
+                <DeleteAccountPage />
+              </RequireOrg>
+            }
+          />
 
-        <Route
-          path="/geocerca"
-          element={
-            <RequireOrg>
-              <NuevaGeocerca />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/geocercas"
-          element={
-            <RequireOrg>
-              <GeocercasPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/personal"
-          element={
-            <RequireOrg>
-              <Personal />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/actividades"
-          element={
-            <RequireOrg>
-              <ActividadesPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/asignaciones"
-          element={
-            <RequireOrg>
-              <AsignacionesPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/reportes"
-          element={
-            <RequireOrg>
-              <Reports />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/dashboard"
-          element={
-            <RequireOrg>
-              <CostosDashboardPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/tracker"
-          element={
-            <RequireOrg>
-              <TrackerDashboard />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/invitar-tracker"
-          element={
-            <RequireOrg>
-              <InvitarTracker />
-            </RequireOrg>
-          }
-        />
+          <Route
+            path="/geocerca"
+            element={
+              <RequireOrg>
+                <NuevaGeocerca />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/geocercas"
+            element={
+              <RequireOrg>
+                <GeocercasPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/personal"
+            element={
+              <RequireOrg>
+                <Personal />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/actividades"
+            element={
+              <RequireOrg>
+                <ActividadesPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/asignaciones"
+            element={
+              <RequireOrg>
+                <AsignacionesPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/reportes"
+            element={
+              <RequireOrg>
+                <Reports />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireOrg>
+                <CostosDashboardPage />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/tracker"
+            element={
+              <RequireOrg>
+                <TrackerDashboard />
+              </RequireOrg>
+            }
+          />
+          <Route
+            path="/invitar-tracker"
+            element={
+              <RequireOrg>
+                <InvitarTracker />
+              </RequireOrg>
+            }
+          />
 
-        {/* Help */}
-        <Route path="/help/instructions" element={<InstructionsPage />} />
-        <Route path="/help/faq" element={<FaqPage />} />
-        <Route path="/help/support" element={<SupportPage />} />
-        <Route path="/help/changelog" element={<ChangelogPage />} />
+          <Route
+            path="/admins"
+            element={
+              <AdminRoute>
+                <InvitarAdmin />
+              </AdminRoute>
+            }
+          />
 
-        <Route
-          path="/admins"
-          element={
-            <AdminRoute>
-              <InvitarAdmin />
-            </AdminRoute>
-          }
-        />
+          <Route
+            path="/help/instructions" element={<InstructionsPage />} />
+          <Route path="/help/faq" element={<FaqPage />} />
+          <Route path="/help/support" element={<SupportPage />} />
+          <Route path="/help/changelog" element={<ChangelogPage />} />
+
+          <Route
+            path="/settings"
+            element={
+              <RequireOrg>
+                <DeleteAccountPage />
+              </RequireOrg>
+            }
+          />
         </Route>
       </Route>
 
