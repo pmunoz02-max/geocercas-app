@@ -134,6 +134,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* 🌐 Public */}
+      <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
       <Route path="/" element={<RootEntry />} />
       <Route path="/landing" element={<Landing />} />
       <Route path="/demo" element={<DemoGeocercas />} />
@@ -163,9 +164,6 @@ function AppRoutes() {
       <Route path="/admin" element={<Navigate to="/admins" replace />} />
       <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
-
-      {/* ✅ Paddle Checkout PUBLIC */}
-      <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
 
       {/* 🔒 Protected */}
       <Route element={<RequireAuth />}>
