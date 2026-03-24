@@ -286,15 +286,14 @@ export default async function handler(req, res) {
       return res.status(401).json({ ok: false, error: "missing tg_at cookie" });
     }
 
-    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const anon = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const url = process.env.SUPABASE_URL;
+    const anon = process.env.SUPABASE_ANON_KEY;
 
     if (!url || !anon) {
-      return res.status(500).json({
+      return res.status(503).json({
         ok: false,
-        error: "missing SUPABASE_URL/ANON_KEY",
-        hasUrl: Boolean(url),
-        hasAnon: Boolean(anon),
+        authenticated: false,
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY in server environment",
       });
     }
 

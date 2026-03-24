@@ -86,23 +86,16 @@ export default async function handler(req, res) {
   const build_tag = "session-v16-readonly-get-explicit-jwt";
 
   try {
-    // Preferimos SIEMPRE vars server-side. (Las VITE_* son front-build y pueden inducir mezcla.)
-    const url =
-      process.env.SUPABASE_URL ||
-      process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      process.env.VITE_SUPABASE_URL;
 
-    const anonKey =
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY;
+    const url = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
 
     if (!url || !anonKey) {
       return res.status(503).json({
         build_tag,
         ok: false,
         authenticated: false,
-        error: "Missing SUPABASE env vars (SUPABASE_URL / SUPABASE_ANON_KEY)",
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY in server environment",
       });
     }
 
