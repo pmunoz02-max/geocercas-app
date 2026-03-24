@@ -27,9 +27,12 @@ export default function PaddleCheckoutPage() {
 
         console.log("[PADDLE PAGE] Paddle loaded");
 
-        window.Paddle.Environment.set("sandbox");
+
+        // Inicializar Paddle en SANDBOX con token
+        console.log("[PADDLE PAGE] using token", import.meta.env.VITE_PADDLE_CLIENT_TOKEN?.slice(0, 20));
         window.Paddle.Initialize({
           environment: "sandbox",
+          token: import.meta.env.VITE_PADDLE_CLIENT_TOKEN,
         });
 
         console.log("[PADDLE PAGE] opening checkout", txn);
