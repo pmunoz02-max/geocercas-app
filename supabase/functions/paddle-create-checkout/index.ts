@@ -369,6 +369,8 @@ serve(async (req) => {
     let paddleJson: JsonRecord = {};
 
     try {
+
+      // Diagnóstico: log payload antes del fetch
       console.log("[PADDLE CREATE] payload", JSON.stringify(payload, null, 2));
       paddleResponse = await fetch(`${paddleApiBase}/transactions`, {
         method: "POST",
@@ -378,12 +380,9 @@ serve(async (req) => {
         },
         body: JSON.stringify(payload),
       });
-      // TEMP DIAGNOSTIC: log transaction status and body
-      const txBody = await paddleResponse.clone().json().catch(() => null);
-      console.log("[PADDLE DIAG] /transactions status", paddleResponse.status);
-      console.log("[PADDLE DIAG] /transactions body", txBody);
 
-      // Log response as text for diagnóstico
+      // Diagnóstico: log status y response como texto
+      console.log("[PADDLE CREATE] status", paddleResponse.status);
       const text = await paddleResponse.clone().text();
       console.log("[PADDLE CREATE] response", text);
 
