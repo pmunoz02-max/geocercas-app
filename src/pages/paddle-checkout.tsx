@@ -18,7 +18,8 @@ export default function PaddleCheckoutPage() {
       return;
     }
 
-    const initCheckout = () => {
+
+    const initCheckout = async () => {
       try {
         if (!window.Paddle) {
           setMsg("Error: Paddle.js no está disponible");
@@ -27,19 +28,23 @@ export default function PaddleCheckoutPage() {
 
         console.log("[PADDLE PAGE] Paddle loaded");
 
+        // 1. Set environment
         window.Paddle.Environment.set("sandbox");
-        console.log(
-          "[PADDLE PAGE] using token",
-          import.meta.env.VITE_PADDLE_CLIENT_TOKEN?.slice(0, 20)
-        );
+        // 2. Log token
+        const token = import.meta.env.VITE_PADDLE_CLIENT_TOKEN;
+        console.log("[PADDLE PAGE] using token", token?.slice(0, 20));
 
+        // 3. Reset seguro antes de Initialize
+        if (typeof window.Paddle.Setup === "function") {
+          window.Paddle.Setup({});
+        }
+
+        // 4. Inicializar Paddle
         window.Paddle.Initialize({
-          token: import.meta.env.VITE_PADDLE_CLIENT_TOKEN,
-          eventCallback: (event: any) => {
+          token,
+          eventCallback: (event) => {
             console.log("[PADDLE CHECKOUT EVENT]", event);
-
             const eventName = event?.name || event?.type || "unknown";
-
             if (
               eventName.includes("checkout.loaded") ||
               eventName.includes("checkout.opened")
@@ -47,14 +52,12 @@ export default function PaddleCheckoutPage() {
               console.log("[PADDLE CHECKOUT] loaded", event);
               setMsg("Checkout cargado...");
             }
-
             if (
               eventName.includes("checkout.closed") ||
               eventName.includes("checkout.completed")
             ) {
               console.log("[PADDLE CHECKOUT] close/success", event);
             }
-
             if (eventName.includes("error")) {
               console.error("[PADDLE CHECKOUT] error", event);
               setMsg(
@@ -68,17 +71,19 @@ export default function PaddleCheckoutPage() {
           },
         });
 
+        // 5. Espera async tras Initialize
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        // 6. Abrir checkout SOLO después de la espera
         console.log("[PADDLE CHECKOUT] opening", txn);
         setMsg("Abriendo checkout...");
-
-        window.Paddle.Checkout.open({
-          transactionId: txn,
-        });
+        window.Paddle.Checkout.open({ transactionId: txn });
       } catch (err) {
         console.error("[PADDLE CHECKOUT] exception", err);
         setMsg(`Error iniciando checkout: ${String(err)}`);
       }
     };
+
 
     if (window.Paddle) {
       initCheckout();
@@ -89,6 +94,7 @@ export default function PaddleCheckoutPage() {
       'script[src="https://cdn.paddle.com/paddle/v2/paddle.js"]'
     ) as HTMLScriptElement | null;
 
+
     if (existing) {
       existing.addEventListener("load", initCheckout, { once: true });
       return;
@@ -97,7 +103,7 @@ export default function PaddleCheckoutPage() {
     const script = document.createElement("script");
     script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
     script.async = true;
-    script.onload = initCheckout;
+    script.onload = () => { initCheckout(); };
     script.onerror = () => {
       console.error("[PADDLE PAGE] error", "No se pudo cargar Paddle.js");
       setMsg("Error cargando Paddle.js");

@@ -1,10 +1,13 @@
-// supabase/functions/paddle-create-checkout/index.ts
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-type JsonRecord = Record<string, unknown>;
+type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
+interface JsonObject {
+  [key: string]: JsonValue;
+}
+interface JsonArray extends Array<JsonValue> {}
 
-const corsHeaders = {
+const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
@@ -12,19 +15,11 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-function json(status: number, body: JsonRecord) {
+function json(status: number, body: JsonObject) {
   return new Response(JSON.stringify(body), {
     status,
     headers: corsHeaders,
   });
-}
-
-function log(
-  level: "log" | "warn" | "error",
-  message: string,
-  meta?: Record<string, unknown>,
-) {
-  console[level](message, meta ?? {});
 }
 
 function getEnv(name: string): string {
@@ -33,6 +28,14 @@ function getEnv(name: string): string {
     throw new Error(`Missing environment variable: ${name}`);
   }
   return value;
+}
+
+function getBearerToken(req: Request): string | null {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader) return null;
+  if (!authHeader.toLowerCase().startsWith("bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  return token || null;
 }
 
 function isValidHttpUrl(value: string): boolean {
@@ -44,270 +47,215 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   let stage = "init";
 
   try {
-    stage = "function_hit";
-    console.log("🚀 NEW DEPLOY MARKER v2");
-    console.log("[paddle-create-checkout] FUNCTION HIT");
-
     if (req.method === "OPTIONS") {
       return new Response("ok", { headers: corsHeaders });
     }
 
     if (req.method !== "POST") {
-      return json(405, { error: "Method not allowed" });
-    }
-
-    const authHeader = req.headers.get("Authorization");
-    console.log("[paddle-create-checkout] auth_header_received", {
-      present: !!authHeader,
-      bearer:
-        typeof authHeader === "string" && authHeader.startsWith("Bearer "),
-      preview: authHeader ? `${authHeader.slice(0, 20)}...` : null,
-    });
-
-    if (!authHeader) {
-      return json(401, { error: "Missing Authorization header" });
+      return json(405, {
+        ok: false,
+        error: "Method not allowed",
+      });
     }
 
     stage = "load_env";
 
     const SUPABASE_URL = getEnv("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const SUPABASE_ANON_KEY = getEnv("SUPABASE_ANON_KEY");
     const PADDLE_API_KEY = getEnv("PADDLE_API_KEY");
     const PADDLE_PRICE_ID_PRO = getEnv("PADDLE_PRICE_ID_PRO");
-    const PADDLE_ENV = Deno.env.get("PADDLE_ENV") ?? "sandbox";
+    const PADDLE_ENV = (Deno.env.get("PADDLE_ENV") || "sandbox").trim();
 
-    // --- DIAGNOSTIC LOGS ---
-    const paddleEnv = PADDLE_ENV;
-    const keyPreview = PADDLE_API_KEY ? PADDLE_API_KEY.slice(0, 20) : null;
-    const isSandbox = !!PADDLE_API_KEY && PADDLE_API_KEY.startsWith("pdl_sdbx_apikey_");
-    const isLive = !!PADDLE_API_KEY && PADDLE_API_KEY.startsWith("pdl_live_apikey_");
-    const pricePreview = PADDLE_PRICE_ID_PRO ? PADDLE_PRICE_ID_PRO.slice(0, 10) : null;
-    console.log("🚀 NEW DEPLOY MARKER v2");
-    console.log("[PADDLE KEY CHECK]", { paddleEnv, keyPreview, isSandbox, isLive, pricePreview });
-
-    // --- EARLY VALIDATION ---
-    if (!PADDLE_ENV) {
-      return json(500, { error: "Missing PADDLE_ENV" });
-    }
-    if (!PADDLE_API_KEY) {
-      return json(500, { error: "Missing PADDLE_API_KEY" });
-    }
-    if (!PADDLE_PRICE_ID_PRO) {
-      return json(500, { error: "Missing PADDLE_PRICE_ID_PRO" });
-    }
-    if (PADDLE_ENV === "sandbox" && !PADDLE_API_KEY.startsWith("pdl_sdbx_apikey_")) {
-      return json(500, { error: "Sandbox key must start with pdl_sdbx_apikey_" });
-    }
-    if (PADDLE_ENV === "live" && !PADDLE_API_KEY.startsWith("pdl_live_apikey_")) {
-      return json(500, { error: "Live key must start with pdl_live_apikey_" });
-    }
-
-    stage = "get_user";
-    const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-      auth: {
-        persistSession: false,
-      },
-    });
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAuth.auth.getUser();
-
-    console.log("[paddle-create-checkout] get_user_result", {
-      hasUser: !!user,
-      userId: user?.id ?? null,
-      userError: userError?.message ?? null,
-    });
-
-    if (userError || !user) {
-      return json(401, {
-        ok: false,
-        stage: "getUser",
-        authHeaderPresent: !!authHeader,
-        bearerFormat:
-          typeof authHeader === "string" && authHeader.startsWith("Bearer "),
-        error: userError?.message ?? "Unauthorized",
-      });
-    }
-
-    stage = "parse_body";
-    const requestBody = await req.json();
-    console.log("[paddle-create-checkout] request_body", {
-      org_id:
-        typeof requestBody?.org_id === "string" ? requestBody.org_id : null,
-      plan: typeof requestBody?.plan === "string" ? requestBody.plan : null,
-      return_url:
-        typeof requestBody?.return_url === "string"
-          ? requestBody.return_url
-          : null,
-    });
-
-    stage = "validate_env";
-
-    log("log", "[PADDLE ENV FULL DEBUG]", {
-      rawKeyLength: PADDLE_API_KEY.length,
-      rawKeyFirstChar: PADDLE_API_KEY.charCodeAt(0),
-      rawKeyLastChar: PADDLE_API_KEY.charCodeAt(PADDLE_API_KEY.length - 1),
-      rawKeyPreview: PADDLE_API_KEY.slice(0, 25),
-      startsWithSandbox: PADDLE_API_KEY.startsWith("pdl_sandbox_"),
-      startsWithLive: PADDLE_API_KEY.startsWith("pdl_live_"),
-      paddleEnv: PADDLE_ENV,
-    });
-
-    // TEMP DEBUG LOG FOR KEY CHECK
-    log("log", "[PADDLE KEY CHECK]", {
-      preview: PADDLE_API_KEY.slice(0, 20),
-      isSandbox: PADDLE_API_KEY.startsWith("pdl_sdbx_apikey_"),
-      isLive: PADDLE_API_KEY.startsWith("pdl_live_apikey_"),
-      paddleEnv: PADDLE_ENV,
-    });
-
-    const isSandboxKey =
-      PADDLE_API_KEY.startsWith("pdl_sdbx_apikey_") ||
-      PADDLE_API_KEY.startsWith("pdl_sandbox_");
-
-    const isLiveKey =
-      PADDLE_API_KEY.startsWith("pdl_live_apikey_") ||
-      PADDLE_API_KEY.startsWith("pdl_live_");
+    const isSandboxKey = PADDLE_API_KEY.startsWith("pdl_sdbx_apikey_");
+    const isLiveKey = PADDLE_API_KEY.startsWith("pdl_live_apikey_");
 
     if (!isSandboxKey && !isLiveKey) {
       return json(500, {
+        ok: false,
         error: "Invalid Paddle API key format",
-        hint: "Expected sandbox key like pdl_sdbx_apikey_* or live key like pdl_live_apikey_*",
       });
     }
 
     if (PADDLE_ENV === "sandbox" && !isSandboxKey) {
       return json(500, {
+        ok: false,
         error: "Paddle API key/environment mismatch",
-        expected: "sandbox key: pdl_sdbx_apikey_*",
+        expected: "sandbox key must start with pdl_sdbx_apikey_",
       });
     }
 
-    if ((PADDLE_ENV === "production" || PADDLE_ENV === "live") && !isLiveKey) {
+    if ((PADDLE_ENV === "live" || PADDLE_ENV === "production") && !isLiveKey) {
       return json(500, {
+        ok: false,
         error: "Paddle API key/environment mismatch",
-        expected: "live key: pdl_live_apikey_*",
+        expected: "live key must start with pdl_live_apikey_",
       });
     }
 
     if (!PADDLE_PRICE_ID_PRO.startsWith("pri_")) {
       return json(500, {
-        error: "Invalid Paddle price_id",
+        ok: false,
+        error: "Invalid Paddle price id in env",
         value: PADDLE_PRICE_ID_PRO,
       });
     }
 
-    stage = "create_admin_client";
-    const adminClient = createClient(
-      SUPABASE_URL,
-      SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: { persistSession: false },
-      },
-    );
+    stage = "parse_body";
 
-    stage = "validate_input";
-    const orgId =
-      typeof requestBody?.org_id === "string" ? requestBody.org_id.trim() : "";
-    const returnUrl =
-      typeof requestBody?.return_url === "string"
-        ? requestBody.return_url.trim()
-        : undefined;
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return json(400, {
+        ok: false,
+        error: "Invalid JSON body",
+      });
+    }
+
+    const orgIdRaw =
+      typeof body.org_id === "string"
+        ? body.org_id
+        : typeof body.orgId === "string"
+        ? body.orgId
+        : "";
+
+    const returnUrlRaw =
+      typeof body.return_url === "string"
+        ? body.return_url
+        : typeof body.returnUrl === "string"
+        ? body.returnUrl
+        : "";
+
+    const requestedPriceId =
+      typeof body.price_id === "string"
+        ? body.price_id
+        : typeof body.priceId === "string"
+        ? body.priceId
+        : "";
+
+    const fallbackEmail =
+      typeof body.email === "string" ? body.email.trim() : "";
+
+    const orgId = orgIdRaw.trim();
+    const returnUrl = returnUrlRaw.trim();
 
     if (!orgId) {
-      log("warn", "[paddle-create-checkout] org_id missing");
-      return json(400, { error: "org_id is required" });
+      return json(400, {
+        ok: false,
+        error: "org_id is required",
+      });
     }
 
     if (returnUrl && !isValidHttpUrl(returnUrl)) {
-      log("warn", "[paddle-create-checkout] return_url invalid");
       return json(400, {
+        ok: false,
         error: "return_url must be a valid http/https URL",
       });
     }
 
-    log("log", "[paddle-create-checkout] request received", {
-      method: req.method,
-      origin: req.headers.get("origin") || null,
-      hasAuthHeader: !!authHeader,
-      orgId,
-      hasReturnUrl: !!returnUrl,
-      userId: user.id,
-      userEmail: user.email ?? null,
-    });
-
-    stage = "load_org";
-    try {
-      const { data: membership, error: membershipError } = await adminClient.rpc(
-        "gc_is_member_of_org",
-        {
-          p_user_id: user.id,
-          p_org_id: orgId,
-        },
-      );
-
-      log("log", "[paddle-create-checkout] membership debug", {
-        userId: user.id,
-        orgId,
-        membership,
-        membershipError: membershipError?.message ?? null,
-      });
-    } catch (err) {
-      log("warn", "[paddle-create-checkout] membership check failed", {
-        userId: user.id,
-        orgId,
-        details: err instanceof Error ? err.message : String(err),
+    if (requestedPriceId && requestedPriceId !== PADDLE_PRICE_ID_PRO) {
+      return json(400, {
+        ok: false,
+        error: "priceId does not match server configured plan",
       });
     }
 
-    const { data: billingRow, error: billingError } = await adminClient
+    stage = "authenticate_user";
+
+    const accessToken = getBearerToken(req);
+    if (!accessToken) {
+      return json(401, {
+        ok: false,
+        error: "Missing or invalid Bearer token",
+        stage,
+      });
+    }
+
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false },
+    });
+
+    const userResult = await adminClient.auth.getUser(accessToken);
+    const user = userResult.data.user;
+    const userError = userResult.error;
+
+    if (userError || !user) {
+      return json(401, {
+        ok: false,
+        error: userError?.message || "Unauthorized",
+        stage,
+      });
+    }
+
+    stage = "check_membership";
+
+    const membershipResult = await adminClient.rpc("gc_is_member_of_org", {
+      p_user_id: user.id,
+      p_org_id: orgId,
+    });
+
+    if (membershipResult.error) {
+      return json(500, {
+        ok: false,
+        error: "Failed to validate org membership",
+        details: membershipResult.error.message,
+        stage,
+      });
+    }
+
+    const isMember = !!membershipResult.data;
+    if (!isMember) {
+      return json(403, {
+        ok: false,
+        error: "User is not a member of the organization",
+        org_id: orgId,
+        stage,
+      });
+    }
+
+    stage = "load_billing_row";
+
+    const billingResult = await adminClient
       .from("org_billing")
       .select(
-        "org_id, plan_code, plan_status, billing_provider, paddle_customer_id, paddle_subscription_id, paddle_price_id",
+        "org_id, billing_provider, paddle_customer_id, paddle_subscription_id, paddle_price_id, plan_code, plan_status"
       )
       .eq("org_id", orgId)
       .maybeSingle();
 
-    if (billingError) {
-      log("error", "[paddle-create-checkout] failed to load billing row", {
-        orgId,
-        details: billingError.message,
-      });
+    if (billingResult.error) {
       return json(500, {
-        error: "Failed to load billing row.",
-        details: billingError.message,
+        ok: false,
+        error: "Failed to load billing row",
+        details: billingResult.error.message,
+        stage,
       });
     }
 
-    if (!billingRow) {
-      log("warn", "[paddle-create-checkout] org_billing row not found", {
-        orgId,
-      });
+    if (!billingResult.data) {
       return json(404, {
-        error: "Billing row not found for org.",
+        ok: false,
+        error: "Billing row not found for org",
         org_id: orgId,
+        stage,
       });
     }
 
-    stage = "build_checkout_payload";
+    const billingRow = billingResult.data;
     const paddleApiBase =
       PADDLE_ENV === "sandbox"
         ? "https://sandbox-api.paddle.com"
         : "https://api.paddle.com";
 
-    const payload: JsonRecord = {
+    stage = "build_payload";
+
+    const customerEmail = (user.email || fallbackEmail || "").trim();
+
+    const payload: Record<string, unknown> = {
       items: [
         {
           price_id: PADDLE_PRICE_ID_PRO,
@@ -325,12 +273,12 @@ serve(async (req) => {
 
     if (
       typeof billingRow.paddle_customer_id === "string" &&
-      billingRow.paddle_customer_id
+      billingRow.paddle_customer_id.trim() !== ""
     ) {
-      payload.customer_id = billingRow.paddle_customer_id;
-    } else if (user.email) {
+      payload.customer_id = billingRow.paddle_customer_id.trim();
+    } else if (customerEmail) {
       payload.customer = {
-        email: user.email,
+        email: customerEmail,
       };
     }
 
@@ -340,133 +288,77 @@ serve(async (req) => {
       };
     }
 
-    log("log", "[paddle-create-checkout] paddle request debug", {
-      apiBase: paddleApiBase,
-      hasApiKey: !!PADDLE_API_KEY,
-      apiKeyPrefix: PADDLE_API_KEY.slice(0, 15),
-      env: PADDLE_ENV,
-      priceId: PADDLE_PRICE_ID_PRO,
-      orgId,
+    stage = "call_paddle";
+
+    const paddleResponse = await fetch(`${paddleApiBase}/transactions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${PADDLE_API_KEY}`,
+      },
+      body: JSON.stringify(payload),
     });
 
-    // --- TEMP DIAGNOSTIC: Paddle /event-types ---
+    const paddleText = await paddleResponse.text();
+
+    let paddleJson: Record<string, unknown> = {};
     try {
-      const eventTypesResp = await fetch(`${paddleApiBase}/event-types`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${PADDLE_API_KEY}`,
-        },
-      });
-      const eventTypesBody = await eventTypesResp.json();
-      console.log("[PADDLE DIAG] /event-types status", eventTypesResp.status);
-      console.log("[PADDLE DIAG] /event-types body", eventTypesBody);
-    } catch (e) {
-      console.error("[PADDLE DIAG] /event-types error", e);
+      paddleJson = JSON.parse(paddleText);
+    } catch {
+      paddleJson = { raw: paddleText };
     }
 
-    stage = "call_paddle";
-    let paddleResponse: Response;
-    let paddleJson: JsonRecord = {};
-
-    try {
-
-      // Diagnóstico: log payload antes del fetch
-      console.log("[PADDLE CREATE] payload", JSON.stringify(payload, null, 2));
-      paddleResponse = await fetch(`${paddleApiBase}/transactions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${PADDLE_API_KEY}`,
-        },
-        body: JSON.stringify(payload),
+    if (!paddleResponse.ok) {
+      return json(500, {
+        ok: false,
+        error: "Failed to create Paddle checkout transaction",
+        paddle_status: paddleResponse.status,
+        paddle_response: paddleJson as unknown as JsonObject,
+        stage,
       });
-
-      // Diagnóstico: log status y response como texto
-      const text = await paddleResponse.clone().text();
-      console.log("[PADDLE CREATE] status", paddleResponse.status);
-      console.log("[PADDLE CREATE] response", text);
-
-      let safeParsedBodyOrText: unknown = text;
-      try {
-        safeParsedBodyOrText = JSON.parse(text);
-      } catch {}
-
-      if (!paddleResponse.ok) {
-        return new Response(
-          JSON.stringify({
-            error: "Failed to create Paddle checkout transaction.",
-            paddle_status: paddleResponse.status,
-            paddle_response: safeParsedBodyOrText,
-          }),
-          {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          }
-        );
-      }
-
-      paddleJson = typeof safeParsedBodyOrText === "object" && safeParsedBodyOrText !== null ? safeParsedBodyOrText as JsonRecord : {};
-
-      log("log", "[paddle-create-checkout] paddle raw response", {
-        status: paddleResponse.status,
-        ok: paddleResponse.ok,
-        body: paddleJson,
-      });
-    } catch (err) {
-      console.error("[PADDLE CREATE] exception", err);
-      return new Response(
-        JSON.stringify({
-          error: "Unhandled paddle-create-checkout exception",
-          detail: String(err),
-        }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        }
-      );
     }
 
     const paddleData =
-      paddleJson && typeof paddleJson === "object" && "data" in paddleJson
+      paddleJson &&
+      typeof paddleJson === "object" &&
+      "data" in paddleJson &&
+      typeof paddleJson.data === "object" &&
+      paddleJson.data !== null
         ? (paddleJson.data as Record<string, unknown>)
-        : undefined;
+        : null;
 
     const transactionId =
-      typeof paddleData?.id === "string" ? paddleData.id : undefined;
+      paddleData && typeof paddleData.id === "string" ? paddleData.id : "";
 
     const checkoutObj =
-      paddleData?.checkout &&
+      paddleData &&
       typeof paddleData.checkout === "object" &&
       paddleData.checkout !== null
         ? (paddleData.checkout as Record<string, unknown>)
-        : undefined;
+        : null;
 
     const checkoutUrl =
-      typeof checkoutObj?.url === "string" ? checkoutObj.url : undefined;
+      checkoutObj && typeof checkoutObj.url === "string"
+        ? checkoutObj.url
+        : "";
 
     const paddleCustomerId =
-      typeof paddleData?.customer_id === "string"
+      paddleData && typeof paddleData.customer_id === "string"
         ? paddleData.customer_id
-        : undefined;
+        : "";
 
     if (!transactionId || !checkoutUrl) {
-      log(
-        "error",
-        "[paddle-create-checkout] paddle did not return checkout url",
-        {
-          orgId,
-          transactionId: transactionId ?? null,
-          hasCheckoutUrl: !!checkoutUrl,
-        },
-      );
       return json(500, {
-        error: "Paddle did not return a checkout URL.",
-        paddle_response: paddleJson,
+        ok: false,
+        error: "Paddle did not return transaction id or checkout URL",
+        paddle_response: paddleJson as unknown as JsonObject,
+        stage,
       });
     }
 
     stage = "persist_billing_metadata";
-    const updatePayload: JsonRecord = {
+
+    const updatePayload: Record<string, unknown> = {
       billing_provider: "paddle",
       paddle_price_id: PADDLE_PRICE_ID_PRO,
       updated_at: new Date().toISOString(),
@@ -476,59 +368,35 @@ serve(async (req) => {
       updatePayload.paddle_customer_id = paddleCustomerId;
     }
 
-    const { error: updateError } = await adminClient
+    const updateResult = await adminClient
       .from("org_billing")
       .update(updatePayload)
       .eq("org_id", orgId);
 
-    if (updateError) {
-      log(
-        "error",
-        "[paddle-create-checkout] failed to persist billing metadata",
-        {
-          orgId,
-          transactionId,
-          details: updateError.message,
-        },
-      );
+    if (updateResult.error) {
       return json(500, {
-        error: "Checkout created, but failed to persist billing metadata.",
-        details: updateError.message,
+        ok: false,
+        error: "Checkout created, but failed to persist billing metadata",
+        details: updateResult.error.message,
         checkout_url: checkoutUrl,
         transaction_id: transactionId,
+        stage,
       });
     }
 
-    log("log", "[paddle-create-checkout] checkout created successfully", {
-      orgId,
-      transactionId,
-      checkoutUrl,
-      environment: PADDLE_ENV,
-    });
-
     return json(200, {
+      ok: true,
       url: checkoutUrl,
+      checkoutUrl,
       transaction_id: transactionId,
+      transactionId,
       environment: PADDLE_ENV,
     });
   } catch (error) {
-    console.error("[paddle-create-checkout] unhandled_error", {
-      stage,
-      message: error instanceof Error ? error.message : String(error),
-      stack:
-        error instanceof Error && error.stack
-          ? error.stack.slice(0, 500)
-          : null,
-    });
-
     return json(500, {
       ok: false,
-      stage,
       error: error instanceof Error ? error.message : String(error),
-      stack:
-        error instanceof Error && error.stack
-          ? error.stack.slice(0, 500)
-          : null,
+      stage,
     });
   }
 });
