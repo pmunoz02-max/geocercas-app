@@ -23,7 +23,7 @@ export default function UpgradeToProButton({
   const [orgInput, setOrgInput] = useState<string>(
     () => localStorage.getItem("gc_active_org_id") || ""
   );
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const resolvedOrgId = useMemo(
@@ -33,88 +33,46 @@ export default function UpgradeToProButton({
 
   console.log("UpgradeToProButton render", { orgId, resolvedOrgId });
 
-  const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || loading;
+  const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || isLoading;
 
-  async function startCheckout() {
+  const handleUpgrade = async () => {
+    if (isLoading) return;
     setMsg(null);
-    console.log("UpgradeToProButton click", { resolvedOrgId });
-
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
       setMsg("Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí.");
       return;
     }
-
-
-
     localStorage.setItem("gc_active_org_id", resolvedOrgId);
-
     try {
-      setLoading(true);
-      onStarted?.();
-
-      console.log("UpgradeToProButton request", {
-        org_id: resolvedOrgId,
-        plan,
+      setIsLoading(true);
+      console.log("[PADDLE BUTTON] disabled state", { isLoading, orgId: resolvedOrgId });
+      console.log("[PADDLE BUTTON] click");
+      console.log("[PADDLE BUTTON] orgId", resolvedOrgId);
+      const result = await supabase.functions.invoke("paddle-create-checkout", {
+        body: {
+          org_id: resolvedOrgId,
+          plan: "PRO",
+        },
       });
-
-
-      // Log temporal de sesión primaria
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log("PRIMARY SESSION CHECK", {
-        hasSession: !!sessionData?.session,
-        userId: sessionData?.session?.user?.id || null,
-        tokenPrefix: sessionData?.session?.access_token?.slice(0, 16) || null,
-      });
-
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      const accessToken = session?.access_token;
-      if (!accessToken) {
-        throw new Error("No session token");
+      console.log("[PADDLE BUTTON] raw result", result);
+      console.log("[PADDLE BUTTON] data", result?.data);
+      console.log("[PADDLE BUTTON] error", result?.error);
+      if (result?.error) {
+        console.error("[PADDLE BUTTON] invoke error", result.error);
+        return;
       }
-
-      try {
-        console.log("[PADDLE BUTTON] click");
-        console.log("[PADDLE BUTTON] orgId", currentOrg?.id);
-
-        const result = await supabase.functions.invoke("paddle-create-checkout", {
-          body: {
-            org_id: resolvedOrgId,
-            plan: "PRO",
-          },
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-        console.log("[PADDLE BUTTON] raw result", result);
-        console.log("[PADDLE BUTTON] data", result?.data);
-        console.log("[PADDLE BUTTON] error", result?.error);
-
-        if (result?.error) {
-          // No redirect if error
-          return;
-        }
-
-        if (result?.data?.checkout_url) {
-          window.location.href = result.data.checkout_url;
-          return;
-        }
-
-        console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
-        // No fallback redirect
-      } catch (e) {
-        console.error("[PADDLE CHECKOUT EXCEPTION]", e);
+      const checkoutUrl = result?.data?.checkout_url;
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
       }
-    } catch (e: any) {
-      console.error("UpgradeToProButton error", e);
-      setMsg(`Error: ${String(e?.message ?? e)}`);
+      console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
+    } catch (e) {
+      console.error("[PADDLE BUTTON] exception", e);
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
+  };
   }
 
   return (
@@ -153,11 +111,11 @@ export default function UpgradeToProButton({
 
         <button
           type="button"
-          onClick={startCheckout}
+          onClick={handleUpgrade}
           disabled={disabled}
           className="rounded-xl bg-slate-900 px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Abriendo Paddle..." : "Suscribirme a PRO"}
+          {isLoading ? "Procesando..." : "Suscribirme a PRO"}
         </button>
 
         {msg && (
