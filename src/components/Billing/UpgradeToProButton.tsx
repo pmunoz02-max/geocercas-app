@@ -76,34 +76,39 @@ export default function UpgradeToProButton({
         throw new Error("No session token");
       }
 
-      const res = await supabase.functions.invoke("paddle-create-checkout", {
-        body: {
-          org_id: resolvedOrgId,
-          plan: "PRO",
-        },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-      const { data, error } = res;
+      try {
+        console.log("[PADDLE BUTTON] click");
+        console.log("[PADDLE BUTTON] orgId", currentOrg?.id);
 
-      console.log("PADDLE INVOKE RESULT:", { data, error });
+        const result = await supabase.functions.invoke("paddle-create-checkout", {
+          body: {
+            org_id: resolvedOrgId,
+            plan: "PRO",
+          },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
 
-      if (error) {
-        const message =
-          error.message || error.context?.message || JSON.stringify(error);
-        setMsg(`Error: ${message}`);
-        return;
+        console.log("[PADDLE BUTTON] raw result", result);
+        console.log("[PADDLE BUTTON] data", result?.data);
+        console.log("[PADDLE BUTTON] error", result?.error);
+
+        if (result?.error) {
+          // No redirect if error
+          return;
+        }
+
+        if (result?.data?.checkout_url) {
+          window.location.href = result.data.checkout_url;
+          return;
+        }
+
+        console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
+        // No fallback redirect
+      } catch (e) {
+        console.error("[PADDLE CHECKOUT EXCEPTION]", e);
       }
-
-      const checkoutUrl = data?.checkout?.url || data?.url;
-
-      if (checkoutUrl) {
-        window.location.href = checkoutUrl;
-        return;
-      }
-
-      setMsg("Respuesta inesperada del servidor: no vino checkout.url.");
     } catch (e: any) {
       console.error("UpgradeToProButton error", e);
       setMsg(`Error: ${String(e?.message ?? e)}`);
