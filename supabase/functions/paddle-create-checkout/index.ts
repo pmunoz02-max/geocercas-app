@@ -382,11 +382,30 @@ serve(async (req) => {
       });
 
       // Diagnóstico: log status y response como texto
-      console.log("[PADDLE CREATE] status", paddleResponse.status);
       const text = await paddleResponse.clone().text();
+      console.log("[PADDLE CREATE] status", paddleResponse.status);
       console.log("[PADDLE CREATE] response", text);
 
-      paddleJson = await paddleResponse.json().catch(() => ({}));
+      let safeParsedBodyOrText: unknown = text;
+      try {
+        safeParsedBodyOrText = JSON.parse(text);
+      } catch {}
+
+      if (!paddleResponse.ok) {
+        return new Response(
+          JSON.stringify({
+            error: "Failed to create Paddle checkout transaction.",
+            paddle_status: paddleResponse.status,
+            paddle_response: safeParsedBodyOrText,
+          }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      paddleJson = typeof safeParsedBodyOrText === "object" && safeParsedBodyOrText !== null ? safeParsedBodyOrText as JsonRecord : {};
 
       log("log", "[paddle-create-checkout] paddle raw response", {
         status: paddleResponse.status,
@@ -394,28 +413,17 @@ serve(async (req) => {
         body: paddleJson,
       });
     } catch (err) {
-      log("error", "[paddle-create-checkout] error calling paddle api", {
-        orgId,
-        details: err instanceof Error ? err.message : String(err),
-      });
-      return json(500, { error: "Error calling Paddle API." });
-    }
-
-    stage = "paddle_response";
-    if (!paddleResponse.ok) {
-      log(
-        "error",
-        "[paddle-create-checkout] failed to create Paddle checkout transaction",
+      console.error("[PADDLE CREATE] exception", err);
+      return new Response(
+        JSON.stringify({
+          error: "Unhandled paddle-create-checkout exception",
+          detail: String(err),
+        }),
         {
-          status: paddleResponse.status,
-          response: paddleJson,
-        },
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
       );
-      return json(400, {
-        error: "Failed to create Paddle checkout transaction.",
-        paddle_status: paddleResponse.status,
-        paddle_response: paddleJson,
-      });
     }
 
     const paddleData =
