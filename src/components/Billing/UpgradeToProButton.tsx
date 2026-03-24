@@ -37,39 +37,73 @@ export default function UpgradeToProButton({
 
   const handleUpgrade = async () => {
     if (isLoading) return;
+
     setMsg(null);
+
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
       setMsg("Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí.");
       return;
     }
+
     localStorage.setItem("gc_active_org_id", resolvedOrgId);
+
     try {
       setIsLoading(true);
-      console.log("[PADDLE BUTTON] disabled state", { isLoading, orgId: resolvedOrgId });
-      console.log("[PADDLE BUTTON] click");
-      console.log("[PADDLE BUTTON] orgId", resolvedOrgId);
+
+      console.log("[PADDLE BUTTON] disabled state", {
+        isLoading,
+        orgId: resolvedOrgId,
+      });
+      console.log("[PADDLE BUTTON] click", { orgId: resolvedOrgId, plan });
+
       const result = await supabase.functions.invoke("paddle-create-checkout", {
         body: {
           org_id: resolvedOrgId,
-          plan: "PRO",
+          plan,
         },
       });
+
       console.log("[PADDLE BUTTON] raw result", result);
       console.log("[PADDLE BUTTON] data", result?.data);
       console.log("[PADDLE BUTTON] error", result?.error);
+
       if (result?.error) {
         console.error("[PADDLE BUTTON] invoke error", result.error);
+        const errorText =
+          typeof result.error === "string"
+            ? result.error
+            : JSON.stringify(result.error, null, 2);
+
+        setMsg(`PADDLE ERROR:\n${errorText}`);
+        alert(`PADDLE ERROR: ${errorText}`);
         return;
       }
+
       const checkoutUrl = result?.data?.checkout_url;
+
       if (checkoutUrl) {
+        console.log("[PADDLE BUTTON] redirecting", checkoutUrl);
+
+        if (typeof onStarted === "function") {
+          onStarted();
+        }
+
+        alert(`CHECKOUT URL: ${checkoutUrl}`);
         window.location.href = checkoutUrl;
         return;
       }
+
       console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
+
+      const missingText = JSON.stringify(result?.data ?? {}, null, 2);
+      setMsg(`CHECKOUT URL MISSING:\n${missingText}`);
+      alert(`CHECKOUT URL MISSING: ${missingText}`);
     } catch (e) {
       console.error("[PADDLE BUTTON] exception", e);
 
+      const exceptionText = e instanceof Error ? e.message : String(e);
+      setMsg(`PADDLE EXCEPTION:\n${exceptionText}`);
+      alert(`PADDLE EXCEPTION: ${exceptionText}`);
     } finally {
       setIsLoading(false);
     }
