@@ -349,7 +349,7 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!isActivationBgRunning) return;
     if (blockingUiLoggedRef.current) return;
-    console.warn("[tracker-blocking-ui] disabled", { source: "TrackerGpsPage" });
+    console.warn("[tracker-activation-ui] background sync running without blocking UI", { source: "TrackerGpsPage" });
     blockingUiLoggedRef.current = true;
   }, [isActivationBgRunning]);
 
@@ -357,7 +357,7 @@ export default function TrackerGpsPage() {
     const t = setTimeout(() => {
       console.warn("[tracker-init] force unblock");
       setIsActivationBgRunning(false);
-      setMembershipStatus((prev) => (prev === "pending" ? "ok" : prev));
+      // Eliminado: setMembershipStatus((prev) => (prev === "pending" ? "ok" : prev));
     }, 1000);
     return () => clearTimeout(t);
   }, []);
