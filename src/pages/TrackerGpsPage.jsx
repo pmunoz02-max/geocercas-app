@@ -456,12 +456,14 @@ export default function TrackerGpsPage() {
           setAssignmentWindowStatus("active");
           setAssignmentLoadState("active");
           setStatus("Tracker ready");
+          setAssignmentLoadError("");
         } else if (result.ok && !result.active) {
           console.log("[assignment-window] inactive");
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
           setAssignmentLoadState("inactive");
           setStatus("No active assignment");
+          setAssignmentLoadError("");
         } else {
           throw new Error(result.error || "unknown_error");
         }
@@ -474,6 +476,8 @@ export default function TrackerGpsPage() {
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
           setAssignmentLoadState("inactive");
+          setStatus("No active assignment");
+          setAssignmentLoadError(error?.message || "Assignment load failed");
         }
       } finally {
         console.log("[assignment-window] done");
@@ -486,7 +490,7 @@ export default function TrackerGpsPage() {
   }, [trackerReady, orgId, trackerAccessToken]);
 
   useEffect(() => {
-    if (assignmentWindowStatus !== "inactive") return;
+    if (assignmentWindowStatus !== "inactive" && assignmentWindowStatus !== "active") return;
 
     if (watchIdRef.current != null && "geolocation" in navigator) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -501,9 +505,13 @@ export default function TrackerGpsPage() {
       watchdogIntervalRef.current = null;
     }
 
-    setStatus("Assignment ended");
+    if (assignmentWindowStatus === "inactive") {
+      setStatus("No active assignment");
+    } else if (assignmentWindowStatus === "active" && !activeAssignment) {
+      setStatus("Assignment ended");
+    }
     console.log("[assignment-window] tracking stopped");
-  }, [assignmentWindowStatus]);
+  }, [assignmentWindowStatus, activeAssignment]);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
