@@ -1,10 +1,8 @@
+
 import { useEffect, useMemo, useRef, useState } from "react";
-import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
-  const [acceptError, setAcceptError] = useState("");
-  const [acceptErrorCode, setAcceptErrorCode] = useState("");
-  const [upgradeRequired, setUpgradeRequired] = useState(false);
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
