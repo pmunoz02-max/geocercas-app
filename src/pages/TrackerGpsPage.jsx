@@ -420,42 +420,48 @@ export default function TrackerGpsPage() {
   }, [trackerReady, PRIMARY, lang]);
 
   useEffect(() => {
-    if (!trackerReady || !PRIMARY || !orgId || !session?.user?.id) return;
+    if (!trackerReady || !orgId || !trackerAccessToken) return;
 
     let cancelled = false;
 
     (async () => {
       try {
         console.log("[assignment-window] loading");
-        console.log("[assignment-window] query:start", { orgId, userId: session?.user?.id });
+        console.log("[assignment-window] query:start", { orgId });
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("assignment_load_timeout")), 8000)
         );
         console.log("[assignment-window] query:before-await");
-        const { data, error } = await Promise.race([
-          PRIMARY
-            .from("tracker_assignments")
-            .select("id, org_id, tracker_user_id, start_date, end_date, frequency_minutes, active")
-            .eq("org_id", orgId)
-            .eq("tracker_user_id", session.user.id)
-            .eq("active", true)
-            .order("start_date", { ascending: false }),
-          timeoutPromise,
-        ]);
-        console.log("[assignment-window] query:after-await", { data, error });
+        const fetchPromise = fetch("/api/tracker-active-assignment", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${trackerAccessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ org_id: orgId }),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`backend_error_${res.status}`);
+            return res.json();
+          });
+        const result = await Promise.race([fetchPromise, timeoutPromise]);
+        console.log("[assignment-window] query:after-await", result);
 
         if (cancelled) return;
-        const rows = Array.isArray(data) ? data : [];
-        const activeRow = rows.find((row) => isAssignmentActiveNow(row));
-
-        if (activeRow) {
-          console.log("[assignment-window] active", activeRow);
-          setActiveAssignment(activeRow);
+        if (result.ok && result.active && result.assignment) {
+          console.log("[assignment-window] active", result.assignment);
+          setActiveAssignment(result.assignment);
           setAssignmentWindowStatus("active");
-        } else {
+          setAssignmentLoadState("active");
+          setStatus("Tracker ready");
+        } else if (result.ok && !result.active) {
           console.log("[assignment-window] inactive");
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
+          setAssignmentLoadState("inactive");
+          setStatus("No active assignment");
+        } else {
+          throw new Error(result.error || "unknown_error");
         }
       } catch (error) {
         if (error?.message === "assignment_load_timeout") {
@@ -465,6 +471,7 @@ export default function TrackerGpsPage() {
         if (!cancelled) {
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
+          setAssignmentLoadState("inactive");
         }
       } finally {
         console.log("[assignment-window] done");
@@ -474,7 +481,7 @@ export default function TrackerGpsPage() {
     return () => {
       cancelled = true;
     };
-  }, [trackerReady, PRIMARY, orgId, session?.user?.id]);
+  }, [trackerReady, orgId, trackerAccessToken]);
 
   useEffect(() => {
     if (assignmentWindowStatus !== "inactive") return;
