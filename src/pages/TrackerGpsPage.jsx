@@ -1,3 +1,12 @@
+// Helper para status visual del tracker
+function resolveTrackerStatus(assignmentWindowStatus, hasError, hasTimeout) {
+  if (hasError) return "Assignment error";
+  if (hasTimeout) return "Assignment timeout";
+  if (assignmentWindowStatus === "inactive") return "No active assignment";
+  if (assignmentWindowStatus === "active") return "Tracker ready";
+  if (assignmentWindowStatus === "expired") return "Assignment ended";
+  return "Preparing tracker...";
+}
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -193,8 +202,9 @@ export default function TrackerGpsPage() {
     return Number.isFinite(n) && n > 0 ? n * 60 * 1000 : CLIENT_MIN_INTERVAL_MS;
   }, [activeAssignment]);
 
+  // Solo status inicial
   useEffect(() => {
-    setStatus(tt("trackerGps.status.initializing", "Starting tracker…"));
+    setStatus("Preparing tracker...");
   }, [lang]);
 
   useEffect(() => {
@@ -202,15 +212,10 @@ export default function TrackerGpsPage() {
       setTrackerReady(false);
       setHasSession(false);
       setSession(null);
-      setStatus(
-        tt("trackerGps.errors.notConfigured", "Tracker is not configured in this deployment.")
-      );
-      setLastError(
-        tt("trackerGps.errors.noSupabaseClient", "Tracker Supabase client not found.")
-      );
+      setStatus("Assignment error");
+      setLastError("Tracker Supabase client not found.");
       return;
     }
-
     setTrackerReady(true);
     setDebug((d) => ({
       ...d,
@@ -455,14 +460,12 @@ export default function TrackerGpsPage() {
           setActiveAssignment(result.assignment);
           setAssignmentWindowStatus("active");
           setAssignmentLoadState("active");
-          setStatus("Tracker ready");
           setAssignmentLoadError("");
         } else if (result.ok && !result.active) {
           console.log("[assignment-window] inactive");
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
           setAssignmentLoadState("inactive");
-          setStatus("No active assignment");
           setAssignmentLoadError("");
         } else {
           throw new Error(result.error || "unknown_error");
@@ -476,7 +479,6 @@ export default function TrackerGpsPage() {
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
           setAssignmentLoadState("inactive");
-          setStatus("No active assignment");
           setAssignmentLoadError(error?.message || "Assignment load failed");
         }
       } finally {
@@ -488,6 +490,14 @@ export default function TrackerGpsPage() {
       cancelled = true;
     };
   }, [trackerReady, orgId, trackerAccessToken]);
+
+  // Centraliza el status visual según assignmentWindowStatus y errores
+  useEffect(() => {
+    // Detecta error o timeout
+    const hasError = assignmentLoadError && assignmentLoadError !== "assignment_load_timeout";
+    const hasTimeout = assignmentLoadError === "assignment_load_timeout";
+    setStatus(resolveTrackerStatus(assignmentWindowStatus, hasError, hasTimeout));
+  }, [assignmentWindowStatus, assignmentLoadError]);
 
   useEffect(() => {
     if (assignmentWindowStatus !== "inactive" && assignmentWindowStatus !== "active") return;
@@ -503,13 +513,6 @@ export default function TrackerGpsPage() {
     if (watchdogIntervalRef.current) {
       clearInterval(watchdogIntervalRef.current);
       watchdogIntervalRef.current = null;
-    }
-
-    // Solo actualizar status si no está ya en 'No active assignment'
-    if (assignmentWindowStatus === "inactive") {
-      setStatus((prev) => prev === "No active assignment" ? prev : "No active assignment");
-    } else if (assignmentWindowStatus === "active" && !activeAssignment) {
-      setStatus("Assignment ended");
     }
     console.log("[assignment-window] tracking stopped");
   }, [assignmentWindowStatus, activeAssignment]);
