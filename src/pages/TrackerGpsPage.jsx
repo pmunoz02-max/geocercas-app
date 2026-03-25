@@ -427,22 +427,24 @@ export default function TrackerGpsPage() {
     (async () => {
       try {
         console.log("[assignment-window] loading");
-        const { data, error } = await PRIMARY
-          .from("tracker_assignments")
-          .select("id, org_id, tracker_user_id, start_date, end_date, frequency_minutes, active")
-          .eq("org_id", orgId)
-          .eq("tracker_user_id", session.user.id)
-          .eq("active", true)
-          .order("start_date", { ascending: false });
+        console.log("[assignment-window] query:start", { orgId, userId: session?.user?.id });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("assignment_load_timeout")), 8000)
+        );
+        console.log("[assignment-window] query:before-await");
+        const { data, error } = await Promise.race([
+          PRIMARY
+            .from("tracker_assignments")
+            .select("id, org_id, tracker_user_id, start_date, end_date, frequency_minutes, active")
+            .eq("org_id", orgId)
+            .eq("tracker_user_id", session.user.id)
+            .eq("active", true)
+            .order("start_date", { ascending: false }),
+          timeoutPromise,
+        ]);
+        console.log("[assignment-window] query:after-await", { data, error });
 
         if (cancelled) return;
-        if (error) {
-          console.error("[assignment-window] load failed", error);
-          setActiveAssignment(null);
-          setAssignmentWindowStatus("inactive");
-          return;
-        }
-
         const rows = Array.isArray(data) ? data : [];
         const activeRow = rows.find((row) => isAssignmentActiveNow(row));
 
@@ -456,11 +458,16 @@ export default function TrackerGpsPage() {
           setAssignmentWindowStatus("inactive");
         }
       } catch (error) {
+        if (error?.message === "assignment_load_timeout") {
+          console.error("[assignment-window] timeout");
+        }
         console.error("[assignment-window] load failed", error);
         if (!cancelled) {
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
         }
+      } finally {
+        console.log("[assignment-window] done");
       }
     })();
 
