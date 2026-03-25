@@ -64,14 +64,33 @@ serve(async (req) => {
     // 1. Leer raw body
     const rawBody = await req.text();
     // 2. Leer header
-    const signature = req.headers.get("paddle-signature");
-
-    if (!signature) {
+    const signatureHeader = req.headers.get("Paddle-Signature");
+    console.log("[WEBHOOK] signature header exists:", !!signatureHeader);
+    if (!signatureHeader) {
       return json(401, { ok: false, error: "Missing Paddle-Signature header" });
     }
 
-    // 3. Validar firma usando Web Crypto API (Deno)
-    let validSig = false;
+    // 3. Parsear header Paddle-Signature para extraer ts y h1
+    let ts = null;
+    let h1 = null;
+    try {
+      const parts = signatureHeader.split(",").map((s) => s.trim());
+      for (const part of parts) {
+        if (part.startsWith("ts:")) ts = part.slice(3);
+        if (part.startsWith("v1:")) h1 = part.slice(3);
+      }
+    } catch {}
+    console.log("[WEBHOOK] ts:", ts);
+    console.log("[WEBHOOK] has h1:", !!h1);
+    if (!ts || !h1) {
+      return json(401, { ok: false, error: "Invalid Paddle-Signature format" });
+    }
+
+    // 4. Construir signed payload EXACTO
+    const signedPayload = `${ts}:${rawBody}`;
+
+    // 5. Calcular HMAC SHA-256 usando Web Crypto API
+    let computedSig = "";
     try {
       const enc = new TextEncoder();
       const key = await crypto.subtle.importKey(
@@ -79,18 +98,22 @@ serve(async (req) => {
         enc.encode(PADDLE_WEBHOOK_SECRET),
         { name: "HMAC", hash: "SHA-256" },
         false,
-        ["verify"]
+        ["sign"]
       );
-      validSig = await crypto.subtle.verify(
+      const sigBuf = await crypto.subtle.sign(
         "HMAC",
         key,
-        base64ToBytes(signature),
-        enc.encode(rawBody)
+        enc.encode(signedPayload)
       );
+      computedSig = Array.from(new Uint8Array(sigBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
     } catch (err) {
       console.log("[WEBHOOK] signature valid:", false);
       return json(401, { ok: false, error: "Invalid signature (exception)" });
     }
+    console.log("[WEBHOOK] computed signature prefix:", computedSig.slice(0, 12));
+
+    // 7. Comparar el digest calculado contra h1
+    const validSig = computedSig === h1;
     console.log("[WEBHOOK] signature valid:", validSig);
     if (!validSig) {
       return json(401, { ok: false, error: "Invalid signature" });
