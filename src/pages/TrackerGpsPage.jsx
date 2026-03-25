@@ -505,8 +505,9 @@ export default function TrackerGpsPage() {
       watchdogIntervalRef.current = null;
     }
 
+    // Solo actualizar status si no está ya en 'No active assignment'
     if (assignmentWindowStatus === "inactive") {
-      setStatus("No active assignment");
+      setStatus((prev) => prev === "No active assignment" ? prev : "No active assignment");
     } else if (assignmentWindowStatus === "active" && !activeAssignment) {
       setStatus("Assignment ended");
     }
