@@ -162,6 +162,15 @@ export default function TrackerGpsPage() {
   const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
   const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
+  const hasFinalAssignmentStatus = ["inactive", "active", "expired", "error"].includes(
+    assignmentWindowStatus
+  );
+
+  const setPreparingStatus = (message) => {
+    if (hasFinalAssignmentStatus) return;
+    setStatus(message);
+  };
+
   const [debug, setDebug] = useState({
     session_exists: null,
     token_looks_jwt: null,
@@ -202,10 +211,12 @@ export default function TrackerGpsPage() {
     return Number.isFinite(n) && n > 0 ? n * 60 * 1000 : CLIENT_MIN_INTERVAL_MS;
   }, [activeAssignment]);
 
-  // Solo status inicial
+  // Solo status inicial mientras no exista un resultado final de assignment
   useEffect(() => {
-    setStatus("Preparing tracker...");
-  }, [lang]);
+    if (!hasFinalAssignmentStatus) {
+      setStatus("Preparing tracker...");
+    }
+  }, [lang, hasFinalAssignmentStatus]);
 
   useEffect(() => {
     if (!PRIMARY) {
@@ -285,7 +296,7 @@ export default function TrackerGpsPage() {
         );
 
         setLastError(null);
-        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+        setPreparingStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
       } catch (e) {
         setLastError(
           `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(e?.message || e)}`
@@ -365,7 +376,9 @@ export default function TrackerGpsPage() {
     };
 
     (async () => {
-      setStatus(tt("trackerGps.status.readingSession", "Reading tracker session…"));
+      if (!hasFinalAssignmentStatus) {
+        setStatus(tt("trackerGps.status.readingSession", "Reading tracker session…"));
+      }
 
       let nextSession = null;
       for (let i = 0; i < 15; i++) {
@@ -397,7 +410,7 @@ export default function TrackerGpsPage() {
 
       setSession(nextSession);
       setHasSession(true);
-      setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+      setPreparingStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
       setLastError(null);
     })();
 
@@ -409,7 +422,7 @@ export default function TrackerGpsPage() {
       if (tokenB && looksLikeJwt(tokenB)) {
         setSession(nextSession);
         setHasSession(true);
-        setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+        setPreparingStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
         setLastError(null);
       } else {
         setSession(null);
@@ -493,11 +506,20 @@ export default function TrackerGpsPage() {
 
   // Centraliza el status visual según assignmentWindowStatus y errores
   useEffect(() => {
-    // Detecta error o timeout
-    const hasError = assignmentLoadError && assignmentLoadError !== "assignment_load_timeout";
+    if (!trackerReady || !hasSession || !orgId) return;
+
+    const hasError = Boolean(assignmentLoadError) && assignmentLoadError !== "assignment_load_timeout";
     const hasTimeout = assignmentLoadError === "assignment_load_timeout";
-    setStatus(resolveTrackerStatus(assignmentWindowStatus, hasError, hasTimeout));
-  }, [assignmentWindowStatus, assignmentLoadError]);
+    const nextStatus = resolveTrackerStatus(assignmentWindowStatus, hasError, hasTimeout);
+
+    console.log("[tracker-ui] resolved status", {
+      assignmentWindowStatus,
+      assignmentLoadError,
+      nextStatus,
+    });
+
+    setStatus(nextStatus);
+  }, [assignmentWindowStatus, assignmentLoadError, hasSession, orgId, trackerReady, lang]);
 
   useEffect(() => {
     if (assignmentWindowStatus !== "inactive" && assignmentWindowStatus !== "active") return;
@@ -1166,7 +1188,7 @@ export default function TrackerGpsPage() {
             onClick={() => {
               setDisclosureAccepted(true);
               setLastError(null);
-              setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
+              setPreparingStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
             }}
             className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-slate-950 font-semibold hover:bg-emerald-400 transition"
           >
