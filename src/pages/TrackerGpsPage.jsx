@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
+  const [acceptError, setAcceptError] = useState("");
+  const [acceptErrorCode, setAcceptErrorCode] = useState("");
+  const [upgradeRequired, setUpgradeRequired] = useState(false);
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
@@ -575,6 +579,9 @@ export default function TrackerGpsPage() {
   }
 
   const tryAcceptInvite = async (reason = "unknown") => {
+    setAcceptError("");
+    setAcceptErrorCode("");
+    setUpgradeRequired(false);
     try {
       const params = new URLSearchParams(window.location.search);
       const urlOrgId = params.get("org_id");
@@ -630,21 +637,38 @@ export default function TrackerGpsPage() {
           signal: controller.signal,
         });
 
-        const bodyText = await response.text();
-        console.log("[accept-invite] response", response.status, bodyText);
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+        console.log("[accept-invite] response", response.status, payload);
 
-        if (response.ok) {
-          localStorage.setItem(dedupeKey, "1");
-          return true;
+        if (!response.ok || payload?.ok === false) {
+          if (payload?.code === "TRACKER_LIMIT_REACHED") {
+            setAcceptError("Has alcanzado el límite de trackers de tu plan. Actualiza a PRO para agregar más trackers.");
+            setAcceptErrorCode("TRACKER_LIMIT_REACHED");
+            setUpgradeRequired(true);
+            return false;
+          }
+          setAcceptError(payload?.message || payload?.error || `HTTP ${response.status}`);
+          setAcceptErrorCode(payload?.code || "");
+          setUpgradeRequired(false);
+          return false;
         }
 
-        return false;
+        localStorage.setItem(dedupeKey, "1");
+        return true;
       } catch (error) {
         if (error?.name === "AbortError") {
           console.warn("[accept-invite] timeout");
           return false;
         }
         console.error("[accept-invite] failed", error);
+        setAcceptError(String(error?.message || error));
+        setAcceptErrorCode("");
+        setUpgradeRequired(false);
         return false;
       } finally {
         clearTimeout(timer);
@@ -1129,7 +1153,17 @@ export default function TrackerGpsPage() {
               </div>
             ) : null}
 
-            {lastError ? (
+            {acceptError ? (
+              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
+                {acceptError}
+              </div>
+            ) : null}
+            {upgradeRequired ? (
+              <div className="mt-3">
+                <UpgradeToProButton />
+              </div>
+            ) : null}
+            {lastError && !acceptError ? (
               <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
                 {lastError}
               </div>
