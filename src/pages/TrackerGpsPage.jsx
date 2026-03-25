@@ -1,5 +1,34 @@
+  // PASO 1 — agregar refs nuevas
+  const heartbeatIntervalRef = useRef(null);
+  const watchdogIntervalRef = useRef(null);
+  const lastSendOkAtRef = useRef(0);
 
 import { useEffect, useMemo, useRef, useState } from "react";
+// --- ASIGNACIÓN: Simulación mínima de ventana activa ---
+// En producción, estos datos vendrían de la API o JWT. Aquí, simulamos fechas.
+const ASSIGNMENT_WINDOW_SIM = {
+  // Simula una asignación activa por 2 horas desde el primer mount
+  start: (() => {
+    const v = localStorage.getItem("geocercas_assignment_start");
+    if (v) return Number(v);
+    const now = Date.now();
+    localStorage.setItem("geocercas_assignment_start", String(now));
+    return now;
+  })(),
+  end: (() => {
+    const v = localStorage.getItem("geocercas_assignment_end");
+    if (v) return Number(v);
+    const now = Date.now() + 2 * 60 * 60 * 1000; // +2h
+    localStorage.setItem("geocercas_assignment_end", String(now));
+    return now;
+  })(),
+};
+
+function isAssignmentWindowActive(assignment) {
+  if (!assignment || !assignment.start || !assignment.end) return false;
+  const now = Date.now();
+  return now >= assignment.start && now <= assignment.end;
+}
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
@@ -476,6 +505,12 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
+    // Validar ventana de asignación antes de enviar
+    if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+      console.warn("[assignment-window] inactive: sendPosition bloqueado");
+      setStatus("Assignment ended");
+      return null;
+    }
     console.log("[gps] sendPosition entered");
     console.log("[gps-auth] token from state present", !!trackerAccessToken);
     console.log(
@@ -795,10 +830,37 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, hasSession, orgId]);
 
+
   useEffect(() => {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
 
+    // --- ASIGNACIÓN: Validar ventana activa ---
+    if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+      setStatus("Assignment ended");
+      console.warn("[assignment-window] tracking stopped");
+      // Limpiar cualquier watcher/interval residual
+      if (watchIdRef.current) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      if (watchdogIntervalRef.current) {
+        clearInterval(watchdogIntervalRef.current);
+        watchdogIntervalRef.current = null;
+      }
+      return;
+    }
+
     async function startTracking() {
+      // Validar ventana de asignación antes de iniciar tracking
+      if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+        setStatus("Assignment ended");
+        console.warn("[assignment-window] tracking stopped");
+        return;
+      }
       console.log("[gps] startTracking called");
 
       if (!("geolocation" in navigator)) {
@@ -1000,10 +1062,146 @@ export default function TrackerGpsPage() {
         }
 
         if (!cancelled) {
-          lastSentAtRef.current = Date.now();
+          const now = Date.now();
+          lastSentAtRef.current = now;
+          lastSendOkAtRef.current = now;
           setLastSend(new Date());
           setLastError(null);
         }
+        // PASO 3 — heartbeat loop
+        useEffect(() => {
+          if (!trackerReady || !hasSession || !orgId || !disclosureAccepted || membershipStatus !== "ok") return;
+          if (heartbeatIntervalRef.current) return;
+          if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+            setStatus("Assignment ended");
+            console.warn("[assignment-window] inactive: heartbeat detenido");
+            return;
+          }
+          console.log("[heartbeat] started");
+          heartbeatIntervalRef.current = setInterval(async () => {
+            if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+              setStatus("Assignment ended");
+              console.warn("[assignment-window] inactive: heartbeat detenido");
+              if (heartbeatIntervalRef.current) {
+                clearInterval(heartbeatIntervalRef.current);
+                heartbeatIntervalRef.current = null;
+              }
+              if (watchIdRef.current) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+                watchIdRef.current = null;
+              }
+              if (watchdogIntervalRef.current) {
+                clearInterval(watchdogIntervalRef.current);
+                watchdogIntervalRef.current = null;
+              }
+              return;
+            }
+            const coords = lastCoordsRef.current;
+            if (!coords) {
+              return;
+            }
+            const now = Date.now();
+            if (now - lastSentAtRef.current < CLIENT_MIN_INTERVAL_MS) {
+              return;
+            }
+            // Forzar envío
+            console.log("[heartbeat] forcing send");
+            try {
+              await invokeSendPosition({
+                org_id: orgId,
+                lat: coords.lat,
+                lng: coords.lng,
+                accuracy: coords.accuracy,
+                timestamp: Date.now(),
+                source: "tracker-heartbeat",
+              });
+              const now2 = Date.now();
+              lastSentAtRef.current = now2;
+              lastSendOkAtRef.current = now2;
+            } catch (e) {
+              console.warn("[heartbeat] send failed", e);
+            }
+          }, 30000);
+          return () => {
+            clearInterval(heartbeatIntervalRef.current);
+            heartbeatIntervalRef.current = null;
+          };
+        }, [trackerReady, hasSession, orgId, disclosureAccepted, membershipStatus]);
+
+        // PASO 4 — watchdog autocurativo
+        useEffect(() => {
+          if (!trackerReady || !hasSession || !disclosureAccepted) return;
+          if (watchdogIntervalRef.current) return;
+          if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+            setStatus("Assignment ended");
+            console.warn("[assignment-window] inactive: watchdog detenido");
+            return;
+          }
+          console.log("[watchdog] started");
+          watchdogIntervalRef.current = setInterval(() => {
+            if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
+              setStatus("Assignment ended");
+              console.warn("[assignment-window] inactive: watchdog detenido");
+              if (heartbeatIntervalRef.current) {
+                clearInterval(heartbeatIntervalRef.current);
+                heartbeatIntervalRef.current = null;
+              }
+              if (watchIdRef.current) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+                watchIdRef.current = null;
+              }
+              if (watchdogIntervalRef.current) {
+                clearInterval(watchdogIntervalRef.current);
+                watchdogIntervalRef.current = null;
+              }
+              return;
+            }
+            const now = Date.now();
+            if (now - lastSendOkAtRef.current > CLIENT_MIN_INTERVAL_MS * 3) {
+              console.warn("[watchdog] no sends detected → restarting GPS");
+              // Reiniciar watcher
+              try {
+                if (watchIdRef.current != null) {
+                  navigator.geolocation.clearWatch(watchIdRef.current);
+                }
+                watchIdRef.current = navigator.geolocation.watchPosition(
+                  (pos) => {
+                    // Success callback
+                    lastCoordsRef.current = {
+                      lat: pos.coords.latitude,
+                      lng: pos.coords.longitude,
+                      accuracy: pos.coords.accuracy ?? null,
+                    };
+                    setCoords(lastCoordsRef.current);
+                    setLastPosition({
+                      lat: pos.coords.latitude,
+                      lng: pos.coords.longitude,
+                      accuracy: pos.coords.accuracy ?? null,
+                      speed: pos.coords.speed ?? null,
+                      heading: pos.coords.heading ?? null,
+                      timestamp: pos.timestamp,
+                    });
+                    console.log("[watchdog] recovered GPS");
+                  },
+                  (err) => {
+                    console.warn("[watchdog] restart error", err);
+                  },
+                  {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 20000,
+                  }
+                );
+              } catch (err) {
+                console.warn("[watchdog] restart failed", err);
+              }
+            }
+          }, 60000);
+          return () => {
+            clearInterval(watchdogIntervalRef.current);
+            watchdogIntervalRef.current = null;
+          };
+        }, [trackerReady, hasSession, disclosureAccepted]);
       } finally {
         isSendingRef.current = false;
       }
