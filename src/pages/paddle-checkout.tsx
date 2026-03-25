@@ -28,18 +28,22 @@ export default function PaddleCheckoutPage() {
 
         console.log("[PADDLE PAGE] Paddle loaded");
 
-        // 1. Set environment
-        window.Paddle.Environment.set("sandbox");
-        // 2. Log token
+        // DEBUG: Log token completo y seguro (solo preview)
         const token = import.meta.env.VITE_PADDLE_CLIENT_TOKEN;
-        console.log("[PADDLE PAGE] using token", token?.slice(0, 20));
+        console.log("[PADDLE DEBUG] TOKEN:", token);
+        console.log("[PADDLE DEBUG] TOKEN prefix:", token?.slice(0, 10));
 
-        // 3. Reset seguro antes de Initialize
-        if (typeof window.Paddle.Setup === "function") {
-          window.Paddle.Setup({});
+        if (!token) {
+          setMsg("Error: Paddle client token no configurado");
+          return;
         }
 
-        // 4. Inicializar Paddle
+        // 1. Set environment
+        window.Paddle.Environment.set("sandbox");
+        // 2. Log token (mantener log requerido)
+        console.log("[PADDLE PAGE] using token", token?.slice(0, 20));
+
+        // 3. Inicializar Paddle
         window.Paddle.Initialize({
           token,
           eventCallback: (event) => {
@@ -71,10 +75,10 @@ export default function PaddleCheckoutPage() {
           },
         });
 
-        // 5. Espera async tras Initialize
+        // 4. Espera async tras Initialize
         await new Promise((resolve) => setTimeout(resolve, 300));
 
-        // 6. Abrir checkout SOLO después de la espera
+        // 5. Abrir checkout SOLO después de la espera
         console.log("[PADDLE CHECKOUT] opening", txn);
         setMsg("Abriendo checkout...");
         window.Paddle.Checkout.open({ transactionId: txn });
