@@ -1,29 +1,15 @@
   // PASO 1 — agregar refs nuevas
+    const heartbeatIntervalRef = useRef(null);
+    const watchdogIntervalRef = useRef(null);
+    const lastSendOkAtRef = useRef(0);
   const heartbeatIntervalRef = useRef(null);
   const watchdogIntervalRef = useRef(null);
   const lastSendOkAtRef = useRef(0);
 
 import { useEffect, useMemo, useRef, useState } from "react";
-// --- ASIGNACIÓN: Simulación mínima de ventana activa ---
-// En producción, estos datos vendrían de la API o JWT. Aquí, simulamos fechas.
-const ASSIGNMENT_WINDOW_SIM = {
-  // Simula una asignación activa por 2 horas desde el primer mount
-  start: (() => {
-    const v = localStorage.getItem("geocercas_assignment_start");
-    if (v) return Number(v);
-    const now = Date.now();
-    localStorage.setItem("geocercas_assignment_start", String(now));
-    return now;
-  })(),
-  end: (() => {
-    const v = localStorage.getItem("geocercas_assignment_end");
-    if (v) return Number(v);
-    const now = Date.now() + 2 * 60 * 60 * 1000; // +2h
-    localStorage.setItem("geocercas_assignment_end", String(now));
-    return now;
-  })(),
-};
 
+// TODO: replace local simulated assignment window with real assignment start/end from backend
+// Helper para futura lógica de vigencia de asignación:
 function isAssignmentWindowActive(assignment) {
   if (!assignment || !assignment.start || !assignment.end) return false;
   const now = Date.now();
@@ -505,7 +491,7 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
-    // Validar ventana de asignación antes de enviar
+    // PASO 5 — bloquear envío si no hay asignación activa
     if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
       console.warn("[assignment-window] inactive: sendPosition bloqueado");
       setStatus("Assignment ended");
@@ -831,28 +817,12 @@ export default function TrackerGpsPage() {
   }, [trackerReady, hasSession, orgId]);
 
 
-  useEffect(() => {
-    if (!trackerReady || !hasSession || !disclosureAccepted) return;
 
-    // --- ASIGNACIÓN: Validar ventana activa ---
-    if (!isAssignmentWindowActive(ASSIGNMENT_WINDOW_SIM)) {
-      setStatus("Assignment ended");
-      console.warn("[assignment-window] tracking stopped");
-      // Limpiar cualquier watcher/interval residual
-      if (watchIdRef.current) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
-        heartbeatIntervalRef.current = null;
-      }
-      if (watchdogIntervalRef.current) {
-        clearInterval(watchdogIntervalRef.current);
-        watchdogIntervalRef.current = null;
-      }
-      return;
-    }
+  useEffect(() => {
+    // PASO 5 — bloquear tracking si no hay asignación activa
+    if (!trackerReady || !hasSession || !disclosureAccepted || membershipStatus !== "ok" || assignmentWindowStatus !== "active") return;
+
+    let cancelled = false;
 
     async function startTracking() {
       // Validar ventana de asignación antes de iniciar tracking
@@ -1166,59 +1136,60 @@ export default function TrackerGpsPage() {
                 }
                 watchIdRef.current = navigator.geolocation.watchPosition(
                   (pos) => {
-                    // Success callback
-                    lastCoordsRef.current = {
-                      lat: pos.coords.latitude,
-                      lng: pos.coords.longitude,
-                      accuracy: pos.coords.accuracy ?? null,
-                    };
-                    setCoords(lastCoordsRef.current);
-                    setLastPosition({
-                      lat: pos.coords.latitude,
-                      lng: pos.coords.longitude,
-                      accuracy: pos.coords.accuracy ?? null,
-                      speed: pos.coords.speed ?? null,
-                      heading: pos.coords.heading ?? null,
-                      timestamp: pos.timestamp,
-                    });
-                    console.log("[watchdog] recovered GPS");
-                  },
-                  (err) => {
-                    console.warn("[watchdog] restart error", err);
-                  },
-                  {
-                    enableHighAccuracy: true,
-                    maximumAge: 0,
-                    timeout: 20000,
-                  }
-                );
-              } catch (err) {
-                console.warn("[watchdog] restart failed", err);
-              }
-            }
-          }, 60000);
-          return () => {
-            clearInterval(watchdogIntervalRef.current);
-            watchdogIntervalRef.current = null;
-          };
-        }, [trackerReady, hasSession, disclosureAccepted]);
-      } finally {
-        isSendingRef.current = false;
-      }
-    })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    lastPosition,
-    session?.user?.id,
-    orgId,
-    trackerReady,
-    hasSession,
-    disclosureAccepted,
-    membershipStatus,
-  ]);
+                    useEffect(() => {
+                      if (!trackerReady || !hasSession || !orgId || !disclosureAccepted || membershipStatus !== "ok" || assignmentWindowStatus !== "active") return;
+                      if (heartbeatIntervalRef.current) return;
+                      console.log("[heartbeat] started");
+                      heartbeatIntervalRef.current = setInterval(async () => {
+                        if (assignmentWindowStatus !== "active") {
+                          setStatus("Assignment ended");
+                          console.warn("[assignment-window] inactive: heartbeat detenido");
+                          if (heartbeatIntervalRef.current) {
+                            clearInterval(heartbeatIntervalRef.current);
+                            heartbeatIntervalRef.current = null;
+                          }
+                          if (watchIdRef.current) {
+                            navigator.geolocation.clearWatch(watchIdRef.current);
+                            watchIdRef.current = null;
+                          }
+                          if (watchdogIntervalRef.current) {
+                            clearInterval(watchdogIntervalRef.current);
+                            watchdogIntervalRef.current = null;
+                          }
+                          return;
+                        }
+                        const coords = lastCoordsRef.current;
+                        if (!coords) {
+                          return;
+                        }
+                        const now = Date.now();
+                        if (now - lastSentAtRef.current < resolvedSendIntervalMs) {
+                          return;
+                        }
+                        // Forzar envío
+                        console.log("[heartbeat] forcing send");
+                        try {
+                          await invokeSendPosition({
+                            org_id: orgId,
+                            lat: coords.lat,
+                            lng: coords.lng,
+                            accuracy: coords.accuracy,
+                            timestamp: Date.now(),
+                            source: "tracker-heartbeat",
+                          });
+                          const now2 = Date.now();
+                          lastSentAtRef.current = now2;
+                          lastSendOkAtRef.current = now2;
+                        } catch (e) {
+                          console.warn("[heartbeat] send failed", e);
+                        }
+                      }, resolvedSendIntervalMs);
+                      return () => {
+                        clearInterval(heartbeatIntervalRef.current);
+                        heartbeatIntervalRef.current = null;
+                      };
+                    }, [trackerReady, hasSession, orgId, disclosureAccepted, membershipStatus, assignmentWindowStatus, resolvedSendIntervalMs]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
 
@@ -1249,74 +1220,93 @@ export default function TrackerGpsPage() {
           <button
             type="button"
             onClick={() => {
-              setDisclosureAccepted(true);
-              setLastError(null);
-              setStatus(tt("trackerGps.status.sessionOkPreparing", "Session OK. Preparing tracker…"));
-            }}
-            className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-slate-950 font-semibold hover:bg-emerald-400 transition"
-          >
-            {tt("trackerGps.disclosure.continue", "Continue")}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
-      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
-        <h1 className="text-lg font-semibold text-center">
-          {tt("trackerGps.title", "Tracker GPS")}
-        </h1>
-
-        {trackerReady && hasSession && (
-          <>
-            {showTrackerDebug && (
-              <>
-                <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
-                  <div>
-                    {tt("trackerGps.lastSend", "Last send")}: {formattedLastSend}
-                  </div>
-
-                  <div className="mt-2 text-[11px] text-slate-400 break-all">
-                    {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt ({debug.send_fn})
-                  </div>
-                  <div className="mt-2 text-[11px] text-slate-400 break-all">
-                    {tt("trackerGps.debugLabels.accept", "accept")}: proxy ({debug.accept_fn})
-                  </div>
-
-                  <div className="mt-2 text-[11px] text-slate-400 break-all">
-                    {tt("trackerGps.debugLabels.orgId", "org_id")}: {orgId || "—"}
-                  </div>
-                  <div className="mt-2 text-[11px] text-slate-400 break-all">
-                    {tt("trackerGps.debugLabels.membership", "membership")}: {membershipStatus}
-                  </div>
-
-                  {tokenIss ? (
-                    <div className="mt-2 text-[11px] text-slate-400 break-all">
-                      {tt("trackerGps.debugLabels.tokenIss", "token_iss")}: {tokenIss}
-                    </div>
-                  ) : null}
-
-                  {debug.last_token_ttl_sec != null ? (
-                    <div className="mt-2 text-[11px] text-slate-400 break-all">
-                      {tt("trackerGps.debugLabels.tokenTtlSec", "token_ttl_sec")}: {debug.last_token_ttl_sec}
-                    </div>
-                  ) : null}
-
-                  {debug.last_http_status != null ? (
-                    <div className="mt-2 text-[11px] text-slate-400 break-all">
-                      {tt("trackerGps.debugLabels.lastHttpStatus", "last_http_status")}: {debug.last_http_status}
-                    </div>
-                  ) : null}
-
-                  {coords ? (
-                    <div className="mt-2 text-xs text-slate-300">
-                      {tt("trackerGps.debugLabels.lat", "lat")}: {coords.lat?.toFixed?.(6)} |{" "}
-                      {tt("trackerGps.debugLabels.lng", "lng")}: {coords.lng?.toFixed?.(6)} |{" "}
-                      {tt("trackerGps.debugLabels.acc", "acc")}: {coords.accuracy ?? "—"}
-                    </div>
-                  ) : (
+              useEffect(() => {
+                if (!trackerReady || !hasSession || !disclosureAccepted || assignmentWindowStatus !== "active") return;
+                if (watchdogIntervalRef.current) return;
+                console.log("[watchdog] started");
+                watchdogIntervalRef.current = setInterval(() => {
+                  if (assignmentWindowStatus !== "active") {
+                    setStatus("Assignment ended");
+                    console.warn("[assignment-window] inactive: watchdog detenido");
+                    if (heartbeatIntervalRef.current) {
+                      clearInterval(heartbeatIntervalRef.current);
+                      heartbeatIntervalRef.current = null;
+                    }
+                    if (watchIdRef.current) {
+                      navigator.geolocation.clearWatch(watchIdRef.current);
+                      watchIdRef.current = null;
+                    }
+                    if (watchdogIntervalRef.current) {
+                      clearInterval(watchdogIntervalRef.current);
+                      watchdogIntervalRef.current = null;
+                    }
+                    return;
+                  }
+                  const now = Date.now();
+                  if (now - lastSendOkAtRef.current > resolvedSendIntervalMs * 3) {
+                    console.warn("[watchdog] no sends detected → restarting GPS");
+                    // Reiniciar watcher
+                    try {
+                      if (watchIdRef.current != null) {
+                        navigator.geolocation.clearWatch(watchIdRef.current);
+                      }
+                      watchIdRef.current = navigator.geolocation.watchPosition(
+                        (pos) => {
+                          // Success callback
+                          lastCoordsRef.current = {
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy ?? null,
+                          };
+                          setCoords(lastCoordsRef.current);
+                          setLastPosition({
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            accuracy: pos.coords.accuracy ?? null,
+                            speed: pos.coords.speed ?? null,
+                            heading: pos.coords.heading ?? null,
+                            timestamp: pos.timestamp,
+                          });
+                          console.log("[watchdog] recovered GPS");
+                        },
+                        (err) => {
+                          console.warn("[watchdog] restart error", err);
+                        },
+                        {
+                          enableHighAccuracy: true,
+                          maximumAge: 0,
+                          timeout: 20000,
+                        }
+                      );
+                    } catch (err) {
+                      console.warn("[watchdog] restart failed", err);
+                    }
+                  }
+                }, resolvedSendIntervalMs);
+                return () => {
+                  clearInterval(watchdogIntervalRef.current);
+                  watchdogIntervalRef.current = null;
+                };
+              }, [trackerReady, hasSession, disclosureAccepted, assignmentWindowStatus, resolvedSendIntervalMs]);
+                    // PASO 6 — cleanup si la asignación no está activa
+                    useEffect(() => {
+                      if (assignmentWindowStatus !== "inactive") return;
+                      if (watchIdRef.current) {
+                        navigator.geolocation.clearWatch(watchIdRef.current);
+                        watchIdRef.current = null;
+                      }
+                      if (heartbeatIntervalRef.current) {
+                        clearInterval(heartbeatIntervalRef.current);
+                        heartbeatIntervalRef.current = null;
+                      }
+                      if (watchdogIntervalRef.current) {
+                        clearInterval(watchdogIntervalRef.current);
+                        watchdogIntervalRef.current = null;
+                      }
+                      setStatus("Assignment ended");
+                      console.warn("[assignment-window] tracking stopped");
+                    }, [assignmentWindowStatus]);
                     <div className="mt-2 text-xs text-slate-400">
                       {tt("trackerGps.waitingCoords", "Waiting for coordinates…")}
                     </div>
