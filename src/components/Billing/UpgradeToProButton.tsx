@@ -75,7 +75,7 @@ export default function UpgradeToProButton({
             : JSON.stringify(result.error, null, 2);
 
         setMsg(`PADDLE ERROR:\n${errorText}`);
-        alert(`PADDLE ERROR: ${errorText}`);
+        console.error("[billing] PADDLE ERROR:", errorText);
         return;
       }
 
@@ -88,7 +88,7 @@ export default function UpgradeToProButton({
           onStarted();
         }
 
-        alert(`CHECKOUT URL: ${checkoutUrl}`);
+        console.log("[billing] checkoutUrl:", checkoutUrl);
         window.location.href = checkoutUrl;
         return;
       }
@@ -97,13 +97,13 @@ export default function UpgradeToProButton({
 
       const missingText = JSON.stringify(result?.data ?? {}, null, 2);
       setMsg(`CHECKOUT URL MISSING:\n${missingText}`);
-      alert(`CHECKOUT URL MISSING: ${missingText}`);
+      console.warn("[billing] CHECKOUT URL MISSING:", missingText);
     } catch (e) {
       console.error("[PADDLE BUTTON] exception", e);
 
       const exceptionText = e instanceof Error ? e.message : String(e);
       setMsg(`PADDLE EXCEPTION:\n${exceptionText}`);
-      alert(`PADDLE EXCEPTION: ${exceptionText}`);
+      console.error("[billing] PADDLE EXCEPTION:", exceptionText);
     } finally {
       setIsLoading(false);
     }

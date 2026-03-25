@@ -10,17 +10,16 @@ export default async function handler(req, res) {
     }
     const rawBody = Buffer.concat(chunks).toString("utf8");
 
-    const supabaseUrl =
-      process.env.SUPABASE_URL ||
-      process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      process.env.VITE_SUPABASE_URL;
-    const anonKey =
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !anonKey) {
-      return res.status(500).json({ ok: false, error: "missing_supabase_env" });
+      return res.status(503).json({
+        build_tag: "send-position",
+        ok: false,
+        authenticated: false,
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY in server environment",
+      });
     }
 
     const authHeader = req.headers.authorization || "";
