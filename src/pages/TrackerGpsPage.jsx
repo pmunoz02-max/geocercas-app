@@ -150,6 +150,8 @@ export default function TrackerGpsPage() {
   const [upgradeRequired, setUpgradeRequired] = useState(false);
   const [activeAssignment, setActiveAssignment] = useState(null);
   const [assignmentWindowStatus, setAssignmentWindowStatus] = useState("unknown");
+  const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
+  const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
   const [debug, setDebug] = useState({
     session_exists: null,

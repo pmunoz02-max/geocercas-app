@@ -6,11 +6,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: 'method_not_allowed', message: 'Only POST allowed' });
   }
 
-  const { authorization } = req.headers;
-  if (!authorization || !authorization.startsWith('Bearer ')) {
-    return res.status(401).json({ ok: false, error: 'missing_auth', message: 'Missing or invalid Authorization header' });
+  const authHeader = req.headers.authorization || "";
+  if (!authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ ok: false, error: "missing_bearer_token" });
   }
-  const jwt = authorization.replace('Bearer ', '').trim();
+  const jwt = authHeader.slice("Bearer ".length).trim();
 
   let org_id;
   try {
@@ -26,36 +26,48 @@ export default async function handler(req, res) {
     return res.status(500).json({ ok: false, error: 'missing_env', message: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY' });
   }
 
-  // Consultar el usuario del JWT
-  let userId;
-  try {
-    const userResp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${jwt}` },
-    });
-    if (!userResp.ok) throw new Error('Invalid tracker JWT');
-    const userData = await userResp.json();
-    userId = userData.id;
-    if (!userId) throw new Error('No user id in JWT');
-  } catch (e) {
-    return res.status(401).json({ ok: false, error: 'invalid_jwt', message: e.message });
+  // Decodificar sub del JWT
+  function decodeJwtPayload(token) {
+    try {
+      const part = String(token || "").split(".")[1];
+      if (!part) return null;
+      const json = Buffer.from(part.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
   }
+  const payload = decodeJwtPayload(jwt);
+  const trackerUserId = payload?.sub;
+  if (!trackerUserId) {
+    return res.status(401).json({ ok: false, error: "invalid_tracker_jwt" });
+  }
+
+  console.log("[api/tracker-active-assignment] start", { hasAuth: !!authHeader, org_id });
+  console.log("[api/tracker-active-assignment] tracker_user_id", trackerUserId);
 
   // Consultar tracker_assignments
   try {
     const query = [
       `org_id=eq.${encodeURIComponent(org_id)}`,
-      'active=is.true',
-      `tracker_user_id=eq.${encodeURIComponent(userId)}`,
+      `tracker_user_id=eq.${encodeURIComponent(trackerUserId)}`,
+      `active=eq.true`,
     ].join('&');
     const url = `${SUPABASE_URL}/rest/v1/tracker_assignments?${query}&select=id,org_id,tracker_user_id,start_date,end_date,frequency_minutes,active`;
-    const resp = await fetch(url, {
+    const upstream = await fetch(url, {
       headers: {
         Authorization: `Bearer ${jwt}`,
         apikey: SUPABASE_ANON_KEY,
       },
     });
-    if (!resp.ok) throw new Error('Supabase REST error');
-    const rows = await resp.json();
+    console.log("[api/tracker-active-assignment] supabase_status", upstream.status);
+    if (upstream.status === 401) {
+      return res.status(401).json({ ok: false, error: "backend_error_401" });
+    }
+    if (!upstream.ok) {
+      return res.status(500).json({ ok: false, error: 'backend_error', message: `Supabase REST error: ${upstream.status}` });
+    }
+    const rows = await upstream.json();
     // Determinar si hay asignación activa hoy
     const today = new Date();
     const todayISO = today.toISOString().slice(0, 10); // YYYY-MM-DD
