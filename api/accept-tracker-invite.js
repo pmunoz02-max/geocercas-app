@@ -199,6 +199,35 @@ export default async function handler(req, res) {
             attempts,
           });
         }
+
+        // --- [plan-enforcement][tracker-create] Interceptar error comercial TRACKER_LIMIT_REACHED ---
+        if (!result.ok && result.data) {
+          // 1) Si viene en result.data.detail como string JSON serializado
+          if (typeof result.data.detail === 'string') {
+            try {
+              const parsed = JSON.parse(result.data.detail);
+              if (parsed && parsed.code === 'TRACKER_LIMIT_REACHED') {
+                return json(res, 403, {
+                  ok: false,
+                  code: 'TRACKER_LIMIT_REACHED',
+                  message: 'Límite de trackers alcanzado para el plan actual.',
+                  upgrade_required: true,
+                  detail: parsed,
+                });
+              }
+            } catch {}
+          }
+          // 2) Si viene en result.data.code directamente
+          if (result.data.code === 'TRACKER_LIMIT_REACHED') {
+            return json(res, 403, {
+              ok: false,
+              code: 'TRACKER_LIMIT_REACHED',
+              message: 'Límite de trackers alcanzado para el plan actual.',
+              upgrade_required: true,
+              detail: result.data,
+            });
+          }
+        }
       } catch (e) {
         attempts.push({
           ok: false,
