@@ -2,111 +2,163 @@
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
   const parts = raw.split(";").map((s) => s.trim());
-  for (const p of parts) {
-    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
-  }
-  return null;
-}
+  export default async function handler(req, res) {
+    try {
+      if (req.method === "OPTIONS") {
+        setHeaders(res);
+        res.statusCode = 204;
+        return res.end();
+      }
+      if (req.method === "HEAD") {
+        setHeaders(res);
+        res.statusCode = 200;
+        return res.end();
+      }
 
-function getEnv(keys) {
-  for (const k of keys) {
-    const v = process.env[k];
-    if (v && String(v).trim()) return String(v).trim();
-  }
-  return null;
-}
-// api/geofences.js
-import { createClient } from "@supabase/supabase-js";
+      const q = getQuery(req);
+      const requestedOrgId = q.org_id || q.orgId || null;
+      const ctxRes = await resolveContext(req, { requestedOrgId });
+      if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
+      const { ctx, sbDb, user } = ctxRes;
+      const org_id = String(ctx.org_id);
+      const user_id = String(user.id);
 
-// === Helpers ===
-function setHeaders(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS,HEAD");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Api-Version");
-}
+      if (req.method === "GET") {
+        const action = String(q.action || "list").toLowerCase();
+        if (action === "list") {
+          const onlyActive = q.onlyActive === "true" || q.onlyActive === true;
+          let query = sbDb.from("geofences").select("*").eq("org_id", org_id);
+          if (onlyActive) query = query.eq("active", true);
+          const { data, error } = await query.order("name", { ascending: true });
+          if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
+          return ok(res, { ok: true, items: data });
+        }
+        if (action === "get") {
+          const id = String(q.id || "").trim();
+          if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+          const { data, error } = await sbDb.from("geofences").select("*").eq("id", id).eq("org_id", org_id).maybeSingle();
+          if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
+          if (!data?.id) return send(res, 404, { ok: false, error: "not_found" });
+          return ok(res, { ok: true, item: data });
+        }
+        return send(res, 400, { ok: false, error: "invalid_action" });
+      }
 
-function send(res, status, obj) {
-  setHeaders(res);
-  res.statusCode = status;
-  res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(obj));
-}
+      if (req.method === "POST") {
+        const rawPayload = await readBody(req);
+        const action = String(rawPayload?.action || "upsert").toLowerCase();
+        const payload = stripServerOwned(rawPayload);
 
-function ok(res, obj) {
-  return send(res, 200, obj);
-}
+        if (action === "upsert") {
+          const explicitOrgId = String(rawPayload?.org_id || rawPayload?.orgId || "").trim();
+          if (explicitOrgId && explicitOrgId !== org_id) {
+            return send(res, 403, {
+              ok: false,
+              error: "org_id_mismatch",
+              message: "org_id del payload no coincide con la organización activa."
+            });
+          }
+          const clean = pickAllowed(payload);
+          const now = new Date().toISOString();
+          const normalizedGeojson =
+            ensureFeatureCollection(clean.geojson) ||
+            ensureFeatureCollection(clean.polygon_geojson) ||
+            (clean.lat !== undefined && clean.lng !== undefined ? buildPointFC(clean.lat, clean.lng) : null);
+          if (!normalizedGeojson) {
+            return send(res, 400, { ok: false, error: "missing_geometry", message: "Falta geojson o lat/lng" });
+          }
+          const row = {
+            ...clean,
+            org_id,
+            user_id,
+            geojson: normalizedGeojson,
+            active: clean.active ?? true,
+            is_default: clean.is_default ?? false,
+            updated_at: now,
+            updated_by: user_id
+          };
+          let data;
+          if (!row.id) {
+            row.created_at = now;
+            row.created_by = user_id;
+            const resInsert = await sbDb.from("geofences").insert(row).select("*").single();
+            if (resInsert.error) return send(res, 500, { ok: false, error: "Supabase error", details: resInsert.error.message });
+            data = resInsert.data;
+          } else {
+            const { data: existing, error: existingErr } = await sbDb.from("geofences").select("id,org_id").eq("id", row.id).maybeSingle();
+            if (existingErr) return send(res, 500, { ok: false, error: "Supabase error", details: existingErr.message });
+            if (!existing?.id || String(existing.org_id) !== org_id) {
+              return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
+            }
+            const resUpdate = await sbDb.from("geofences").update(row).eq("id", row.id).eq("org_id", org_id).select("*").single();
+            if (resUpdate.error) return send(res, 500, { ok: false, error: "Supabase error", details: resUpdate.error.message });
+            data = resUpdate.data;
+          }
+          return ok(res, { ok: true, item: data });
+        }
 
-function getQuery(req) {
-  // Next.js/Node: req.query, Vercel: req.query, fallback: parse from url
-  if (req.query) return req.query;
-  try {
-    const u = new URL(req.url, "http://localhost");
-    const out = {};
-    for (const [k, v] of u.searchParams.entries()) out[k] = v;
-    return out;
-  } catch {
-    return {};
-  }
-}
+        if (action === "delete") {
+          const id = String(payload?.id || "").trim();
+          if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+          // Ownership check
+          const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
+          if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
+          if (!gf?.id || String(gf.org_id) !== org_id) {
+            return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
+          }
+          // Check references
+          const refTables = [
+            "asignaciones",
+            "tracker_assignments",
+            "attendance_events",
+            "geofence_events",
+            "geofence_members",
+            "position_events",
+            "user_geofence_state"
+          ];
+          let hasReferences = false;
+          for (const table of refTables) {
+            const { count, error } = await sbDb.from(table).select("*", { count: "exact", head: true }).eq("geofence_id", id);
+            if (error) {
+              console.error("[api/geofences delete] refs error", { table, message: error?.message, code: error?.code, details: error?.details, hint: error?.hint });
+              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error.message });
+            }
+            if (Number(count || 0) > 0) {
+              hasReferences = true;
+              break;
+            }
+          }
+          const now = new Date().toISOString();
+          if (hasReferences) {
+            await sbDb.from("geofences").update({ active: false, updated_at: now }).eq("id", id).eq("org_id", org_id);
+            return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
+          }
+          // Try physical delete
+          try {
+            await sbDb.from("geofences").delete().eq("id", id).eq("org_id", org_id);
+            return ok(res, { ok: true, mode: "deleted" });
+          } catch (error) {
+            if (error?.code && String(error.code).toLowerCase().includes("foreign")) {
+              await sbDb.from("geofences").update({ active: false, updated_at: now }).eq("id", id).eq("org_id", org_id);
+              return ok(res, { ok: true, mode: "deactivated", reason: "fk_blocked" });
+            }
+            throw error;
+          }
+        }
+        return send(res, 400, { ok: false, error: "invalid_action" });
+      }
 
-async function readBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-async function insertMetricsEventSilent(sbDb, { org_id, user_id, event_type, meta = {} }) {
-  try {
-    await sbDb.from("org_metrics_events").insert({
-      org_id,
-      user_id,
-      event_type,
-      meta,
-    });
-  } catch (_) {
-    // ignore metrics errors
-  }
-}
-
-/* =========================
-   Sanitizers + Whitelist
-========================= */
-
-function stripServerOwned(payload) {
-  const p = payload && typeof payload === "object" ? payload : {};
-  const out = { ...p };
-
-  // 🔒 NO permitir que se cuele en row
-  delete out.action;
-
-  // server-owned / generated / audit (no enviar desde cliente)
-  delete out.bbox;
-  delete out.geom;
-  delete out.created_at;
-  delete out.updated_at;
-  delete out.deleted_at;
-  delete out.revoked_at;
-  delete out.created_by;
-  delete out.updated_by;
-
-  // multi-tenant / ownership (siempre desde ctx)
-  delete out.org_id;
-  delete out.tenant_id; // ⛔ NO existe en tabla (legacy)
-  delete out.user_id;
-  delete out.owner_id;
-  delete out.usuario_id;
-
-  // compat: NO permitir orgId enviado
-  delete out.orgId;
-
-  return out;
+      return send(res, 405, { ok: false, error: "Method not allowed", method: req.method });
+    } catch (error) {
+      console.error("[api/geofences] fatal", {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint,
+        stack: error?.stack
+      });
+      return send(res, 500, { ok: false, error: "server_error", details: String(error?.message || error) });
+    }
 }
 
 // Solo permitir columnas reales (evita 500 por schema cache)
@@ -370,7 +422,7 @@ export default async function handler(req, res) {
               hint: error?.hint
             });
             // Retornar error estructurado como pide el usuario
-            return send(res, 500, { ok: false, error: `Supabase error in ${table}", details: error.message });
+            return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error?.message });
           }
           refResult = { table, hasRefs: Number(count || 0) > 0 };
         } catch (error) {
@@ -382,18 +434,8 @@ export default async function handler(req, res) {
             hint: error?.hint
           });
           // Retornar error estructurado como pide el usuario
-          return send(res, 500, { ok: false, error: `Supabase error in ${table}", details: error?.message });
-        try {
-          if (req.method === "OPTIONS") {
-            setHeaders(res);
-            res.statusCode = 204;
-            return res.end();
-          }
-          if (req.method === "HEAD") {
-            setHeaders(res);
-            res.statusCode = 200;
-            return res.end();
-          }
+          return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error?.message });
+        // (Eliminado bloque try anidado y líneas sobrantes)
 
           const q = getQuery(req);
           const requestedOrgId = q.org_id || q.orgId || null;
@@ -476,14 +518,7 @@ export default async function handler(req, res) {
             }
             return ok(res, { ok: true, item: savedRow });
           }
-          // ...existing code for GET and other methods...
-        } catch (error) {
-          console.error("[api/geofences] fatal", {
-            message: error?.message,
-            code: error?.code,
-            details: error?.details,
-            hint: error?.hint,
-            stack: error?.stack
-          });
-          return send(res, 500, { ok: false, error: "server_error", details: String(error?.message || error) });
+          // Fin de bloque POST upsert
         }
+        // Fin de handler
+      }
