@@ -152,10 +152,19 @@ export default async function handler(req, res) {
       .eq("tenant_id", orgId);
 
     if (error1 || error2) {
-      console.error("[ACTIVIDADES GET ERROR]", { error1, error2 });
+      const err = error1 || error2;
+      console.error("[ACTIVIDADES GET ERROR FULL]", {
+        message: err?.message,
+        code: err?.code,
+        hint: err?.hint,
+        details: err?.details,
+      });
       return res.status(500).json({
         error: "activities_fetch_failed",
-        details: error1?.message || error2?.message,
+        message: err?.message || null,
+        code: err?.code || null,
+        hint: err?.hint || null,
+        details: err?.details || null,
       });
     }
 
