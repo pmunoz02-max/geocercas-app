@@ -181,12 +181,23 @@ function pickAllowed(item) {
       // =========================
       if (action === "upsert") {
         try {
+          console.log("[geofences upsert] start", { hasRawPayload: !!rawPayload, org_id, user_id });
+
           const clean = pickAllowed(payload);
+          console.log("[geofences upsert] clean ok", { keys: Object.keys(clean || {}) });
 
           const normalizedGeojson =
             ensureFeatureCollection(clean.geojson) ||
             ensureFeatureCollection(clean.polygon_geojson) ||
             buildPointFC(clean.lat, clean.lng);
+
+          console.log("[geofences upsert] geometry ok", {
+            hasGeojson: !!clean.geojson,
+            hasPolygonGeojson: !!clean.polygon_geojson,
+            lat: clean.lat,
+            lng: clean.lng,
+            normalized: !!normalizedGeojson,
+          });
 
           if (!normalizedGeojson) {
             return send(res, 400, {
@@ -196,6 +207,7 @@ function pickAllowed(item) {
           }
 
           const now = new Date().toISOString();
+          console.log("[geofences upsert] timestamp ok", { now });
 
           const row = {
             ...clean,
@@ -208,8 +220,14 @@ function pickAllowed(item) {
             updated_by: user_id,
           };
 
+          console.log("[geofences upsert] row built", {
+            hasId: !!row.id,
+            keys: Object.keys(row || {}),
+          });
+
           // INSERT
           if (!row.id) {
+            console.log("[geofences upsert] insert branch");
             const { data, error } = await sbDb
               .from("geofences")
               .insert({
@@ -233,6 +251,7 @@ function pickAllowed(item) {
           }
 
           // UPDATE
+          console.log("[geofences upsert] update branch", { id: row.id });
           const { data: existing } = await sbDb
             .from("geofences")
             .select("id, org_id")
@@ -266,7 +285,13 @@ function pickAllowed(item) {
           return ok(res, { ok: true, item: data });
 
         } catch (err) {
-          console.error("[geofences upsert fatal]", err);
+          console.error("[geofences upsert fatal]", {
+            message: err?.message,
+            stack: err?.stack,
+            code: err?.code,
+            details: err?.details,
+            hint: err?.hint,
+          });
           return send(res, 500, {
             ok: false,
             error: "server_error",
