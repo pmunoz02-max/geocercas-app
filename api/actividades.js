@@ -140,20 +140,34 @@ export default async function handler(req, res) {
 
   // GET
   if (req.method === "GET") {
-    const { data, error } = await supabase
+    const { data: data1, error: error1 } = await supabase
       .from("activities")
       .select("*")
-      .or(
-        `org_id.eq.${orgId},and(org_id.is.null,tenant_id.eq.${orgId})`
-      )
-      .order("active", { ascending: false })
-      .order("name", { ascending: true });
+      .eq("org_id", orgId);
 
-    if (error) {
-      return res.status(500).json({ error: error.message });
+    const { data: data2, error: error2 } = await supabase
+      .from("activities")
+      .select("*")
+      .is("org_id", null)
+      .eq("tenant_id", orgId);
+
+    if (error1 || error2) {
+      console.error("[ACTIVIDADES GET ERROR]", { error1, error2 });
+      return res.status(500).json({
+        error: "activities_fetch_failed",
+        details: error1?.message || error2?.message,
+      });
     }
 
-    return res.status(200).json(data);
+    const combined = [...(data1 || []), ...(data2 || [])];
+
+    // ordenar: active DESC, name ASC
+    combined.sort((a, b) => {
+      if (a.active !== b.active) return b.active - a.active;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
+    return res.status(200).json(combined);
   }
 
   // PATCH (toggle active)
