@@ -193,7 +193,7 @@ function buildPointFC(lat, lng) {
    Context Resolver (CANÓNICO)
 ========================= */
 
-async function resolveContext(req) {
+async function resolveContext(req, { requestedOrgId = null } = {}) {
   const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
   const SUPABASE_ANON_KEY = getEnv([
     "SUPABASE_ANON_KEY",
@@ -260,6 +260,11 @@ async function resolveContext(req) {
   if (!currentOrgId) {
     const r2 = await tryMaybeSingle(sbUser, ucoQuery);
     if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
+  }
+
+  // Permitir override seguro por requestedOrgId
+  if (requestedOrgId && String(requestedOrgId).length > 0) {
+    currentOrgId = String(requestedOrgId);
   }
 
   const membershipForOrg = (orgId) => (c) =>
@@ -333,7 +338,9 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const ctxRes = await resolveContext(req);
+    const q = getQuery(req);
+    const requestedOrgId = q.org_id || q.orgId || null;
+    const ctxRes = await resolveContext(req, { requestedOrgId });
     if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
 
     const { ctx, sbDb, user } = ctxRes;
@@ -342,7 +349,6 @@ export default async function handler(req, res) {
 
     // GET
     if (req.method === "GET") {
-      const q = getQuery(req);
       const action = String(q.action || "list");
 
       if (action === "list") {
