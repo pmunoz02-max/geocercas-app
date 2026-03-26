@@ -1157,7 +1157,7 @@ export default function NuevaGeocerca() {
           )}
         </div>
 
-        <div className="pointer-events-none hidden md:block absolute right-3 top-3 z-[500]">
+        <div className="pointer-events-none hidden md:block absolute left-4 top-24 z-[500]">
           <div className="rounded-xl bg-white/85 px-3 py-2 text-xs backdrop-blur-md border border-black/10 shadow-md">
             <div>
               <span className="text-gray-500">{t("geocercas.lat", { defaultValue: "Lat" })} </span>
