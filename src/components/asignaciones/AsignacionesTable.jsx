@@ -97,6 +97,7 @@ export default function AsignacionesTable({
   loading,
   onEdit,
   onDelete,
+  onToggleStatus,
   people,
   geofences,
   activities,
@@ -269,17 +270,39 @@ export default function AsignacionesTable({
                     </td>
 
                     <td className="px-4 py-3 whitespace-nowrap align-top">
-                      <span
-                        className={
-                          estado === "activa"
-                            ? "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200"
-                            : "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200"
-                        }
-                      >
-                        {estado === "activa"
-                          ? t("asignaciones.actions.activate", { defaultValue: "Active" })
-                          : t("asignaciones.actions.deactivate", { defaultValue: "Inactive" })}
-                      </span>
+                      {onToggleStatus ? (
+                        <button
+                          type="button"
+                          onClick={() => onToggleStatus(row)}
+                          className={
+                            (estado === "activa"
+                              ? "bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
+                              : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200") +
+                            " inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          }
+                          title={
+                            estado === "activa"
+                              ? t("asignaciones.actions.deactivate", { defaultValue: "Deactivate" })
+                              : t("asignaciones.actions.activate", { defaultValue: "Activate" })
+                          }
+                        >
+                          {estado === "activa"
+                            ? t("asignaciones.actions.activate", { defaultValue: "Active" })
+                            : t("asignaciones.actions.deactivate", { defaultValue: "Inactive" })}
+                        </button>
+                      ) : (
+                        <span
+                          className={
+                            estado === "activa"
+                              ? "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200"
+                              : "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200"
+                          }
+                        >
+                          {estado === "activa"
+                            ? t("asignaciones.actions.activate", { defaultValue: "Active" })
+                            : t("asignaciones.actions.deactivate", { defaultValue: "Inactive" })}
+                        </span>
+                      )}
                     </td>
 
                     <td className="px-4 py-3 whitespace-nowrap text-right align-top">

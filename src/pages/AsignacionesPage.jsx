@@ -840,6 +840,21 @@ export default function AsignacionesPage() {
                   loadAll();
                 }
               }}
+              onToggleStatus={async (row) => {
+                // Toggle status between 'activa' and 'inactiva'
+                const newStatus = (row.status || row.estado) === "activa" ? "inactiva" : "activa";
+                const resp = await updateAsignacion(row.id, { status: newStatus });
+                if (resp.error) {
+                  setError(tt("asignaciones.messages.saveGenericError", "Error updating status."));
+                } else {
+                  setSuccessMessage(
+                    newStatus === "activa"
+                      ? tt("asignaciones.banner.activated", "Assignment activated.")
+                      : tt("asignaciones.banner.deactivated", "Assignment deactivated.")
+                  );
+                  loadAll();
+                }
+              }}
             />
           </div>
         </div>
