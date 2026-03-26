@@ -327,72 +327,41 @@ export default async function handler(req, res) {
       res.statusCode = 204;
       return res.end();
     }
-    if (req.method === "HEAD") {
-      setHeaders(res);
-      res.statusCode = 200;
-      return res.end();
-    }
-
-    const q = getQuery(req);
-    const requestedOrgId = q.org_id || q.orgId || null;
-    const ctxRes = await resolveContext(req, { requestedOrgId });
-    if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
-    const sbDb = ctxRes.sbDb;
     const body = await readBody(req);
-    const orgId = String(body?.org_id || body?.orgId || q?.org_id || q?.orgId || "").trim();
-    if (!orgId) {
-      return send(res, 400, { ok: false, error: "missing_org_id" });
-    }
+    // Para DELETE, org_id es obligatorio y se valida estrictamente
+    if (req.method === "POST" && String(body?.action || "upsert").toLowerCase() === "delete") {
+      const orgId = String(body?.org_id || body?.orgId || q?.org_id || q?.orgId || "").trim();
+      const id = body?.id ? String(body.id) : null;
+      if (!orgId) return send(res, 400, { ok: false, error: "missing_org_id" });
+      if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+      console.log("[api/geofences delete] start", { id, orgId, method: req.method });
 
-    // ...existing context resolution if needed...
-    // ...existing code for GET and upsert...
+      // Validar ownership seguro por org_id
+      const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
+      if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
+      if (!gf?.id || String(gf.org_id) !== String(orgId)) {
+        return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
+      }
 
-    if (req.method === "POST") {
-      const action = String(body?.action || "upsert").toLowerCase();
-      if (action === "delete") {
-        // BLINDAJE DELETE UNIVERSAL
-        const id = body?.id ? String(body.id) : null;
-        if (!id) return send(res, 400, { ok: false, error: "missing_id" });
-        console.log("[api/geofences delete] start", { id, orgId, method: req.method });
-
-        // Validar ownership seguro por org_id
-        const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
-        if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
-        if (!gf?.id || String(gf.org_id) !== String(orgId)) {
-          return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
-        }
-
-        // Revisar referencias en tablas relevantes (universal, sin asumir columna id)
-        const refTables = [
-          "asignaciones",
-          "tracker_assignments",
-          "attendance_events",
-          "geofence_events",
-          "geofence_members",
-          "position_events",
-          "user_geofence_state"
-        ];
-        let hasReferences = false;
-        for (const table of refTables) {
-          let refResult;
-          try {
-            const { count, error } = await sbDb
-              .from(table)
-              .select("*", { count: "exact", head: true })
-              .eq("geofence_id", id);
-            if (error) {
-              console.error("[api/geofences delete] refs error", {
-                table,
-                message: error?.message,
-                code: error?.code,
-                details: error?.details,
-                hint: error?.hint
-              });
-              // Retornar error estructurado como pide el usuario
-              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error.message });
-            }
-            refResult = { table, hasRefs: Number(count || 0) > 0 };
-          } catch (error) {
+      // Revisar referencias en tablas relevantes (universal, sin asumir columna id)
+      const refTables = [
+        "asignaciones",
+        "tracker_assignments",
+        "attendance_events",
+        "geofence_events",
+        "geofence_members",
+        "position_events",
+        "user_geofence_state"
+      ];
+      let hasReferences = false;
+      for (const table of refTables) {
+        let refResult;
+        try {
+          const { count, error } = await sbDb
+            .from(table)
+            .select("*", { count: "exact", head: true })
+            .eq("geofence_id", id);
+          if (error) {
             console.error("[api/geofences delete] refs error", {
               table,
               message: error?.message,
@@ -401,24 +370,59 @@ export default async function handler(req, res) {
               hint: error?.hint
             });
             // Retornar error estructurado como pide el usuario
-            return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error?.message });
+            return send(res, 500, { ok: false, error: `Supabase error in ${table}", details: error.message });
           }
-          if (refResult.hasRefs) {
-            hasReferences = true;
-            break;
-          }
-        }
-
-        if (hasReferences) {
-          await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
-          return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
-        }
-
-        // Intentar delete físico
-        try {
-          await sbDb.from("geofences").delete().eq("id", id).eq("org_id", orgId);
-          return ok(res, { ok: true, mode: "deleted" });
+          refResult = { table, hasRefs: Number(count || 0) > 0 };
         } catch (error) {
+          console.error("[api/geofences delete] refs error", {
+            table,
+            message: error?.message,
+            code: error?.code,
+            details: error?.details,
+            hint: error?.hint
+          });
+          // Retornar error estructurado como pide el usuario
+          return send(res, 500, { ok: false, error: `Supabase error in ${table}", details: error?.message });
+        }
+        if (refResult.hasRefs) {
+          hasReferences = true;
+          break;
+        }
+      }
+
+      if (hasReferences) {
+        await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
+        return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
+      }
+
+      // Intentar delete físico
+      try {
+        await sbDb.from("geofences").delete().eq("id", id).eq("org_id", orgId);
+        return ok(res, { ok: true, mode: "deleted" });
+      } catch (error) {
+        // Si delete real falla por FK, fallback a soft delete
+        if (error?.code && String(error.code).toLowerCase().includes("foreign")) {
+          await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
+          return ok(res, { ok: true, mode: "deactivated", reason: "fk_blocked" });
+        }
+        throw error;
+      }
+    }
+
+    // Para upsert, usar org_id del contexto y validar mismatch solo si viene explícito
+    if (req.method === "POST" && String(body?.action || "upsert").toLowerCase() === "upsert") {
+      const rawPayload = body;
+      const explicitOrgId = String(rawPayload?.org_id || rawPayload?.orgId || "").trim();
+      if (explicitOrgId && explicitOrgId !== String(ctxRes.ctx.org_id)) {
+        return send(res, 403, {
+          ok: false,
+          error: "org_id_mismatch",
+          message: "org_id del payload no coincide con la organización activa."
+        });
+      }
+      const org_id = String(ctxRes.ctx.org_id);
+      // ...aquí continúa la lógica de upsert usando org_id...
+    }
           // Si delete real falla por FK, fallback a soft delete
           if (error?.code && String(error.code).toLowerCase().includes("foreign")) {
             await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
