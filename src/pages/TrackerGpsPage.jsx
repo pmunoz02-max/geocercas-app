@@ -503,21 +503,21 @@ export default function TrackerGpsPage() {
 
 
   useEffect(() => {
-    if (assignmentWindowStatus !== "inactive" && assignmentWindowStatus !== "active") return;
-
-    if (watchIdRef.current != null && "geolocation" in navigator) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    if (assignmentWindowStatus !== "active") {
+      if (watchIdRef.current != null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+      if (watchdogIntervalRef.current) {
+        clearInterval(watchdogIntervalRef.current);
+        watchdogIntervalRef.current = null;
+      }
+      console.log("[assignment-window] tracking stopped");
     }
-    if (heartbeatIntervalRef.current) {
-      clearInterval(heartbeatIntervalRef.current);
-      heartbeatIntervalRef.current = null;
-    }
-    if (watchdogIntervalRef.current) {
-      clearInterval(watchdogIntervalRef.current);
-      watchdogIntervalRef.current = null;
-    }
-    console.log("[assignment-window] tracking stopped");
   }, [assignmentWindowStatus, activeAssignment]);
 
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
