@@ -357,7 +357,7 @@ export default function TrackerGpsPage() {
     const t = setTimeout(() => {
       console.warn("[tracker-init] force unblock");
       setIsActivationBgRunning(false);
-      // Eliminado: setMembershipStatus((prev) => (prev === "pending" ? "ok" : prev));
+      setMembershipStatus((prev) => (prev === "pending" ? "ok" : prev));
     }, 1000);
     return () => clearTimeout(t);
   }, []);
