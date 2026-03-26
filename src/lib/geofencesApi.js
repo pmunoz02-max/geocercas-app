@@ -107,12 +107,10 @@ export async function deleteGeofence({ orgId = null, id = null } = {}) {
   const payload = { action: "delete", id: String(id) };
   if (orgId) payload.orgId = String(orgId);
   const data = await requestJson(`/api/geofences`, { method: "POST", body: payload });
-  console.log("[deleteGeofence]", data);
-  if (data?.mode === "deactivated") {
-    return { ok: true, mode: "deactivated" };
-  }
-  if (data?.mode === "deleted") {
-    return { ok: true, mode: "deleted" };
-  }
-  return { ok: !!data?.ok };
+  console.log("[deleteGeofence response]", data);
+  return {
+    ok: data?.ok === true,
+    mode: data?.mode || null,
+    reason: data?.reason || null,
+  };
 }

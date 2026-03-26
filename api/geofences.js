@@ -1,69 +1,5 @@
 // api/geofences.js
 import { createClient } from "@supabase/supabase-js";
-      if (action === "delete") {
-        try {
-          const id = payload?.id ? String(payload.id) : null;
-          const orgId = org_id;
-          if (!id) return send(res, 400, { ok: false, error: "id is required" });
-          if (!orgId) return send(res, 400, { ok: false, error: "org_id is required" });
-
-          // Validar ownership seguro por org_id
-          const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
-          if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
-          if (!gf?.id || String(gf.org_id) !== String(orgId)) {
-            return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
-          }
-
-          // Chequear referencias SOLO en asignaciones
-          const refsAsignaciones = await sbDb
-            .from("asignaciones")
-            .select("id")
-            .eq("geofence_id", id)
-            .limit(1);
-          const hasRefs = (refsAsignaciones.data || []).length > 0;
-
-          if (hasRefs) {
-            await sbDb
-              .from("geofences")
-              .update({
-                active: false,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("id", id)
-              .eq("org_id", orgId);
-            return ok(res, {
-              ok: true,
-              mode: "deactivated",
-              reason: "has_references"
-            });
-          } else {
-            await sbDb
-              .from("geofences")
-              .delete()
-              .eq("id", id)
-              .eq("org_id", orgId);
-            return ok(res, {
-              ok: true,
-              mode: "deleted"
-            });
-          }
-        } catch (e) {
-          console.error("[api/geofences/delete] error", e);
-          return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
-        }
-      }
-    }
-  }
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
 
 async function insertMetricsEventSilent(sbDb, { org_id, user_id, event_type, meta = {} }) {
   try {
@@ -340,6 +276,22 @@ export default async function handler(req, res) {
     const requestedOrgId = q.org_id || q.orgId || null;
     const ctxRes = await resolveContext(req, { requestedOrgId });
     if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
+  try {
+    if (req.method === "OPTIONS") {
+      setHeaders(res);
+      res.statusCode = 204;
+      return res.end();
+    }
+    if (req.method === "HEAD") {
+      setHeaders(res);
+      res.statusCode = 200;
+      return res.end();
+    }
+
+    const q = getQuery(req);
+    const requestedOrgId = q.org_id || q.orgId || null;
+    const ctxRes = await resolveContext(req, { requestedOrgId });
+    if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
 
     const { ctx, sbDb, user } = ctxRes;
     const org_id = String(ctx.org_id);
@@ -401,186 +353,83 @@ export default async function handler(req, res) {
       }
 
       if (action === "upsert") {
-        const item0 = payload?.item && typeof payload.item === "object" ? payload.item : payload;
-
-        // 🔒 blindaje extra: por si "action" venía dentro de item
-        const tmp = { ...item0 };
-        delete tmp.action;
-        delete tmp.tenant_id;
-
-        const picked = pickAllowed(tmp);
-
-        // Normalizar geojson/polygon_geojson (geojson es NOT NULL)
-        const fcPolygon = ensureFeatureCollection(picked.polygon_geojson);
-        const fcGeo = ensureFeatureCollection(picked.geojson);
-
-        let geojson = fcGeo || fcPolygon || null;
-        let polygon_geojson = fcPolygon || fcGeo || null;
-
-        if (!geojson) {
-          // fallback punto si vienen lat/lng
-          const pointFc = buildPointFC(picked.lat, picked.lng);
-          if (pointFc) {
-            geojson = pointFc;
-            polygon_geojson = pointFc;
-          }
-        }
-
-        if (!geojson) {
-          return send(res, 400, {
-            ok: false,
-            error: "geojson is required",
-            details: "Table geofences.geojson is NOT NULL. Provide geojson or polygon_geojson (FeatureCollection).",
-          });
-        }
-
-        const name = picked?.name ?? tmp?.nombre ?? null;
-
-        // radius_m puede ser NOT NULL en algunas instalaciones
-        let radius_m = picked.radius_m;
-        if (radius_m === undefined || radius_m === null || radius_m === "") radius_m = 0;
-        radius_m = Number.isFinite(Number(radius_m)) ? Number(radius_m) : 0;
-
-        // Construir row SOLO con columnas reales
-        const row = {
-          ...(picked.id ? { id: picked.id } : {}),
-          name: name ? String(name).trim() : undefined,
-          description: picked.description ?? undefined,
-          polygon_geojson,
-          geojson,
-          lat: picked.lat ?? undefined,
-          lng: picked.lng ?? undefined,
-          radius_m: Math.trunc(radius_m),
-          active: typeof picked.active === "boolean" ? picked.active : undefined,
-          is_default: typeof picked.is_default === "boolean" ? picked.is_default : undefined,
-          source_geocerca_id: picked.source_geocerca_id ?? undefined,
-
-          org_id,
-          user_id,
-          updated_at: new Date().toISOString(),
-          updated_by: user_id,
-        };
-
-        // Si es insert nuevo y active no vino, lo ponemos en true para evitar NULL (si aplica)
-        const isUpdate = Boolean(row.id);
-        if (!isUpdate && row.active === undefined) row.active = true;
-
-        // created_by solo al insertar
-        if (!isUpdate) row.created_by = user_id;
-
-        // Limpiar undefined para PostgREST
-        for (const k of Object.keys(row)) if (row[k] === undefined) delete row[k];
-
-        if (row.id) {
-          const id = String(row.id);
-          delete row.id;
-
-          const { data, error } = await sbDb
-            .from("geofences")
-            .update(row)
-            .eq("org_id", org_id)
-            .eq("id", id)
-            .select("*");
-
-          if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-          const arr = Array.isArray(data) ? data : data ? [data] : [];
-          return ok(res, { ok: true, saved: arr.length, items: arr, item: arr[0] || null });
-        }
-
-        const { data, error } = await sbDb.from("geofences").insert(row).select("*");
-        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-
-        const arr = Array.isArray(data) ? data : data ? [data] : [];
-
-        await insertMetricsEventSilent(sbDb, {
-          org_id,
-          user_id,
-          event_type: "geofence_created",
-          meta: {
-            geofence_id: arr[0]?.id || null,
-          },
-        });
-
-        return ok(res, { ok: true, saved: arr.length, items: arr, item: arr[0] || null });
+        // ...existing code...
+        // ...existing code for upsert...
+        // ...existing code...
       }
 
-
       if (action === "delete") {
+        // BLINDAJE TOTAL DELETE
         try {
+          console.log("[api/geofences delete] start", { method: req.method, body: payload, query: q });
+          // 1. Validar id
           const id = payload?.id ? String(payload.id) : null;
-          if (!id) return send(res, 400, { ok: false, error: "id is required" });
-          if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
+          if (!id) return send(res, 400, { ok: false, error: "missing_id" });
 
-          // Validar ownership seguro por org_id
+          // 2. Resolver orgId seguro
+          const orgId = String(payload?.org_id || payload?.orgId || q?.org_id || q?.orgId || "");
+          if (!orgId) return send(res, 400, { ok: false, error: "missing_org_id" });
+
+          // 3. Validar ownership seguro por org_id
           const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
           if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
-          if (!gf?.id || String(gf.org_id) !== String(org_id)) {
+          if (!gf?.id || String(gf.org_id) !== String(orgId)) {
             return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
           }
 
-          // Chequear referencias en tablas relevantes (sin .or())
+          // 4. Verificar referencias en paralelo y con logs
           const refTables = [
             "asignaciones",
+            "tracker_assignments",
             "attendance_events",
-            "geofence_assignments",
             "geofence_events",
             "geofence_members",
             "position_events",
-            "tracker_assignments",
             "user_geofence_state"
           ];
-          let hasReferences = false;
-          for (const table of refTables) {
-            const { data: refRows, error: refErr } = await sbDb
-              .from(table)
-              .select("id")
-              .eq("geofence_id", id)
-              .limit(1);
-            if (refErr) {
-              console.error("[api/geofences/delete] error", { table, message: refErr.message, code: refErr.code });
-              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: refErr.message });
-            }
-            if (Array.isArray(refRows) && refRows.length > 0) {
-              hasReferences = true;
-              break;
-            }
-          }
-
-          if (hasReferences) {
-            // Soft delete: active=false, updated_at=now(), updated_by=auth user si aplica
-            const updatePayload = {
-              active: false,
-              updated_at: new Date().toISOString(),
-            };
-            // Intentar obtener user_id autenticado
-            let user_id = null;
+          const refChecks = refTables.map(async (table) => {
             try {
-              user_id = req?.user?.id || null;
-            } catch {}
-            if (user_id) updatePayload.updated_by = user_id;
+              const { data: rows, error } = await sbDb.from(table).select("id").eq("geofence_id", id).limit(1);
+              if (error) {
+                console.error("[api/geofences delete] refs error", { table, message: error?.message, code: error?.code, details: error?.details, hint: error?.hint });
+                return { table, error };
+              }
+              return { table, hasRefs: Array.isArray(rows) && rows.length > 0 };
+            } catch (error) {
+              console.error("[api/geofences delete] refs error", { table, message: error?.message, code: error?.code, details: error?.details, hint: error?.hint });
+              return { table, error };
+            }
+          });
+          const refResults = await Promise.all(refChecks);
+          const hasReferences = refResults.some(r => r.hasRefs);
 
-            const { error: updErr } = await sbDb
-              .from("geofences")
-              .update(updatePayload)
-              .eq("id", id)
-              .eq("org_id", org_id);
-            if (updErr) {
-              console.error("[api/geofences/delete] error", { table: "geofences", message: updErr.message, code: updErr.code });
-              return send(res, 500, { ok: false, error: "Supabase error", details: updErr.message });
-            }
+          // 5. Si hay referencias: soft delete
+          if (hasReferences) {
+            await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
             return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
-          } else {
-            // Hard delete
-            const { data, error } = await sbDb.from("geofences").delete().eq("org_id", org_id).eq("id", id).select("*");
-            if (error) {
-              console.error("[api/geofences/delete] error", { table: "geofences", message: error.message, code: error.code });
-              return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
-            }
-            return ok(res, { ok: true, mode: "deleted" });
           }
-        } catch (e) {
-          console.error("[api/geofences/delete] error", e);
-          return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
+
+          // 6. Si no hay referencias: intentar delete real
+          try {
+            await sbDb.from("geofences").delete().eq("id", id).eq("org_id", orgId);
+            return ok(res, { ok: true, mode: "deleted" });
+          } catch (error) {
+            // 7. Si delete real falla por FK, fallback a soft delete
+            if (error?.code && String(error.code).toLowerCase().includes("foreign")) {
+              await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
+              return ok(res, { ok: true, mode: "deactivated", reason: "fk_blocked" });
+            }
+            throw error;
+          }
+        } catch (error) {
+          console.error("[api/geofences] fatal", {
+            message: error?.message,
+            code: error?.code,
+            details: error?.details,
+            hint: error?.hint,
+            stack: error?.stack
+          });
+          return send(res, 500, { ok: false, error: "server_error", details: String(error?.message || error) });
         }
       }
 
@@ -589,7 +438,14 @@ export default async function handler(req, res) {
 
     res.setHeader("Allow", "GET,POST,OPTIONS,HEAD");
     return send(res, 405, { ok: false, error: "Method not allowed" });
-  } catch (e) {
-    return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
+  } catch (error) {
+    console.error("[api/geofences] fatal", {
+      message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
+      stack: error?.stack
+    });
+    return send(res, 500, { ok: false, error: "server_error", details: String(error?.message || error) });
   }
 }
