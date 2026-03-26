@@ -230,4 +230,57 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ error: "method_not_allowed" });
+  try {
+    res.setHeader("X-Api-Version", VERSION);
+
+    const supabase = getSupabase(req);
+
+    const requestedOrgIdRaw = req.query?.org_id || req.query?.orgId || null;
+    const requestedOrgId = requestedOrgIdRaw
+      ? String(requestedOrgIdRaw).trim()
+      : null;
+
+    const idRaw = typeof req.query?.id === "string" ? req.query.id : null;
+    const id = idRaw ? String(idRaw).trim() : null;
+
+    console.log("[ACTIVIDADES] incoming", {
+      method: req.method,
+      query: req.query,
+      requestedOrgIdRaw,
+      requestedOrgId,
+      idRaw,
+      id,
+      version: VERSION,
+    });
+
+    const { orgId, user, errorResponse } = await resolveContext(
+      req,
+      supabase,
+      requestedOrgId
+    );
+
+    if (errorResponse) {
+      return res.status(errorResponse.status).json(errorResponse.body);
+    }
+
+    console.log("[ACTIVIDADES] context", {
+      method: req.method,
+      orgId,
+      userId: user?.id || null,
+      requestedOrgId,
+      id,
+    });
+
+    // ...resto del handler...
+
+  } catch (e) {
+    console.error("[ACTIVIDADES FATAL]", {
+      message: e?.message || String(e),
+      stack: e?.stack || null,
+    });
+    return res.status(500).json({
+      error: "activities_fatal_error",
+      message: e?.message || "unknown_error",
+    });
+  }
 }
