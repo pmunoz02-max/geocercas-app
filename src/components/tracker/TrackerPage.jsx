@@ -321,7 +321,7 @@ export default function TrackerPage() {
           {error && <div className="text-red-600">Error: {error}</div>}
         </div>
 
-        {/* Lista compacta */}
+        {/* Lista compacta con botón Invitar */}
         <div className="max-h-[40vh] overflow-auto border rounded-md p-2 bg-white">
           {positionsFiltered.length === 0 ? (
             <div className="text-sm text-slate-600">Sin posiciones recientes.</div>
@@ -329,12 +329,21 @@ export default function TrackerPage() {
             <ul className="space-y-1">
               {positionsFiltered.map(pos => {
                 const per = personaById.get(pos.personal_id);
+                // Suponiendo que pos.has_active_assignment viene del backend/listado
+                const hasActive = pos.has_active_assignment !== false;
                 return (
-                  <li key={pos.personal_id} className="text-sm text-slate-800">
+                  <li key={pos.personal_id} className="text-sm text-slate-800 flex items-center gap-2">
                     <span className="font-medium">
                       {per ? `${per.nombre} ${per.apellido || ''}` : pos.personal_id}
                     </span>
                     <span className="text-slate-500"> · {fmtTs(pos.ts)}</span>
+                    <button
+                      className="ml-2 px-2 py-1 rounded bg-blue-600 text-white text-xs font-semibold disabled:bg-gray-300"
+                      disabled={!hasActive}
+                      title={!hasActive ? "Solo se puede invitar a trackers con asignaciones activas" : "Invitar tracker"}
+                    >
+                      Invitar
+                    </button>
                   </li>
                 );
               })}

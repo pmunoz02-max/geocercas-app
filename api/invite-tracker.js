@@ -35,15 +35,17 @@ export default async function handler(req, res) {
 
     if (req.method === "OPTIONS") return res.status(200).send("ok");
 
-    const supabaseUrl =
-      process.env.SUPABASE_URL ||
-      process.env.VITE_SUPABASE_URL ||
-      process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const anonKey = process.env.SUPABASE_ANON_KEY;
 
-    const anonKey =
-      process.env.SUPABASE_ANON_KEY ||
-      process.env.VITE_SUPABASE_ANON_KEY ||
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !anonKey) {
+      return res.status(503).json({
+        build_tag: BUILD_TAG,
+        ok: false,
+        authenticated: false,
+        error: "Missing SUPABASE_URL / SUPABASE_ANON_KEY in server environment",
+      });
+    }
 
     const proxySecret =
       process.env.INVITE_PROXY_SECRET ||
@@ -77,6 +79,7 @@ export default async function handler(req, res) {
       });
     }
 
+
     const body = req.body || {};
     const org_id = toStr(body.org_id).trim();
     const invite_id = toStr(body.invite_id).trim();
@@ -101,6 +104,74 @@ export default async function handler(req, res) {
 
     if (assignment_id && !isUuid(assignment_id)) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid assignment_id" });
+    }
+
+    // --- Validación: solo invitar si tiene asignación activa ---
+    // Buscar tracker_user_id por email en tabla trackers (o personal)
+    let trackerUserId = null;
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const anonKey = process.env.SUPABASE_ANON_KEY;
+      const url = `${supabaseUrl}/rest/v1/trackers?email=eq.${encodeURIComponent(email)}&select=id,user_id,email`;
+      const resp = await fetch(url, {
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        },
+      });
+      if (!resp.ok) throw new Error(`No se pudo resolver tracker_user_id para email: ${email}`);
+      const rows = await resp.json();
+      trackerUserId = rows && rows[0] && (rows[0].user_id || rows[0].id);
+    } catch (e) {
+      // Si no se puede resolver, bloquear
+      console.warn(`[invite-tracker] blocked: no tracker_user_id for email ${email}`);
+      return res.status(422).json({
+        ok: false,
+        build: BUILD_TAG,
+        code: "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
+        message: "Solo se puede invitar a trackers con asignaciones activas",
+        error: "No tracker_user_id found"
+      });
+    }
+
+    // Consultar tracker_assignments para asignación activa
+    try {
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const anonKey = process.env.SUPABASE_ANON_KEY;
+      const query = [
+        `org_id=eq.${encodeURIComponent(org_id)}`,
+        `tracker_user_id=eq.${encodeURIComponent(trackerUserId)}`,
+        `active=eq.true`,
+        `start_date=lte.${today}`,
+        `end_date=gte.${today}`
+      ].join('&');
+      const url = `${supabaseUrl}/rest/v1/tracker_assignments?${query}&select=id`;
+      const resp = await fetch(url, {
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        },
+      });
+      if (!resp.ok) throw new Error(`No se pudo consultar tracker_assignments`);
+      const rows = await resp.json();
+      if (!rows || rows.length === 0) {
+        console.warn(`[invite-tracker] blocked: no active assignment for tracker_user_id ${trackerUserId}`);
+        return res.status(422).json({
+          ok: false,
+          build: BUILD_TAG,
+          code: "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
+          message: "Solo se puede invitar a trackers con asignaciones activas"
+        });
+      }
+      // Si pasa, log allowed
+      console.log(`[invite-tracker] allowed: tracker_user_id ${trackerUserId} tiene asignación activa`);
+    } catch (e) {
+      return res.status(500).json({
+        ok: false,
+        build: BUILD_TAG,
+        error: String(e?.message || e),
+      });
     }
 
     const ts = String(Date.now());
