@@ -130,7 +130,10 @@ export default function Personal() {
     setMsg("");
 
     try {
-      const item = await upsertPersonal({ ...form, vigente: !!form.vigente });
+      const item = await upsertPersonal(
+        { ...form, vigente: !!form.vigente },
+        activeOrgId
+      );
 
       // âœ… Si el backend no devolviÃ³ item, tratamos como error real
       const newId = getRowId(item);

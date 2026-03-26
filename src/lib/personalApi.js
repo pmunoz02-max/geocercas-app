@@ -114,8 +114,11 @@ export async function listPersonal({
   return data.items || [];
 }
 
-export async function upsertPersonal(payload) {
-  const data = await request("POST", "", payload);
+export async function upsertPersonal(payload, orgId = null) {
+  const data = await request("POST", "", {
+    ...payload,
+    ...(orgId ? { org_id: String(orgId) } : {}),
+  });
   return data.item;
 }
 
