@@ -124,18 +124,20 @@ export async function upsertPersonal(payload) {
  * (backend /api/personal solo soporta POST/GET)
  */
 
-export async function toggleVigente(id) {
+export async function toggleVigente(id, orgId = null) {
   const data = await request("POST", "", {
     id,
     action: "toggle",
+    ...(orgId ? { org_id: String(orgId) } : {}),
   });
   return data.item;
 }
 
-export async function deletePersonal(id) {
+export async function deletePersonal(id, orgId = null) {
   const data = await request("POST", "", {
     id,
     action: "delete",
+    ...(orgId ? { org_id: String(orgId) } : {}),
   });
   return data.item;
 }

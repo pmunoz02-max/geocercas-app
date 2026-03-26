@@ -326,7 +326,13 @@ async function handleList(req, res) {
 }
 
 async function handlePost(req, res) {
-  const ctxRes = await resolveContext(req);
+  const payload = (await readBody(req)) || {};
+  const requestedOrgId =
+    payload.org_id ||
+    payload.orgId ||
+    null;
+
+  const ctxRes = await resolveContext(req, { requestedOrgId });
   if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
 
   const { ctx, user, supaSrv } = ctxRes;
@@ -335,7 +341,6 @@ async function handlePost(req, res) {
     return json(res, 403, { ok: false, error: "Sin permisos", details: "Requiere rol admin u owner" });
   }
 
-  const payload = (await readBody(req)) || {};
   const nowIso = new Date().toISOString();
 
   const action = String(payload.action || "").toLowerCase();

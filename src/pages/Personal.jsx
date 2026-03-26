@@ -198,7 +198,7 @@ export default function Personal() {
 
     try {
       setBusy(true);
-      const item = await toggleVigente(id);
+      const item = await toggleVigente(id, activeOrgId);
       if (item && getRowId(item)) {
         setItems((curr) => upsertIntoList(curr, item));
       } else {
@@ -245,7 +245,7 @@ export default function Personal() {
 
     try {
       setBusy(true);
-      await deletePersonal(id);
+      await deletePersonal(id, activeOrgId);
       // NO hacemos load() aquÃ­ para evitar que reaparezca si el backend es soft-delete + list cache.
       setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
