@@ -355,7 +355,7 @@ export default async function handler(req, res) {
         .select(
           "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
         )
-        .single();
+        .maybeSingle();
 
       const { data, error } = await q;
 
@@ -366,7 +366,6 @@ export default async function handler(req, res) {
             message: "Ya existe una actividad activa con ese nombre",
           });
         }
-
         return json(res, 500, {
           error: "activities_update_failed",
           details: error.message,
@@ -374,7 +373,9 @@ export default async function handler(req, res) {
           hint: error.hint,
         });
       }
-
+      if (!data) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
       return json(res, 200, { data });
     }
 
@@ -393,7 +394,7 @@ export default async function handler(req, res) {
         .select(
           "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
         )
-        .single();
+        .maybeSingle();
 
       if (error) {
         return json(res, 500, {
@@ -403,19 +404,23 @@ export default async function handler(req, res) {
           hint: error.hint,
         });
       }
-
+      if (!data) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
       return json(res, 200, { data });
     }
 
     // ---------- DELETE ----------
     if (req.method === "DELETE") {
-      const { error } = await applyOrgCompatFilter(
+      const { data, error } = await applyOrgCompatFilter(
         supabase
           .from("activities")
           .delete()
           .eq("id", id),
         orgId
-      );
+      )
+        .select("id")
+        .maybeSingle();
 
       if (error) {
         return json(res, 500, {
@@ -425,7 +430,9 @@ export default async function handler(req, res) {
           hint: error.hint,
         });
       }
-
+      if (!data) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
       return json(res, 200, { ok: true });
     }
 
