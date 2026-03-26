@@ -224,16 +224,32 @@ export default function AsignacionesPage() {
     const params = new URLSearchParams({ onlyActive: "1", limit: "500", org_id: String(orgId) });
     const rP = await fetchJsonSafe(`/api/personal?${params.toString()}`);
     const personalRaw = extractArray(rP.payload);
-    const personalNorm = personalRaw
-      .map(normalizePersonRow)
-      .filter((p) => p.id);
+      const personalNorm = personalRaw
+        .filter((r) => {
+          const rowOrg =
+            r?.org_id ||
+            r?.tenant_id ||
+            r?.organization_id ||
+            null;
+          return !rowOrg || String(rowOrg) === String(orgId);
+        })
+        .map(normalizePersonRow)
+        .filter((p) => p.id);
 
     const geofenceParams = new URLSearchParams({ action: "list", onlyActive: "true", org_id: String(orgId) });
     const rG = await fetchJsonSafe(`/api/geofences?${geofenceParams.toString()}`);
     const geofencesRaw = extractArray(rG.payload);
-    const geofencesNorm = geofencesRaw
-      .map(normalizeGeofenceRow)
-      .filter((g) => g.id);
+      const geofencesNorm = geofencesRaw
+        .filter((r) => {
+          const rowOrg =
+            r?.org_id ||
+            r?.tenant_id ||
+            r?.organization_id ||
+            null;
+          return !rowOrg || String(rowOrg) === String(orgId);
+        })
+        .map(normalizeGeofenceRow)
+        .filter((g) => g.id);
 
     const dominantCatalogOrgId = detectDominantOrgId([...personalRaw, ...geofencesRaw]);
     if (dominantCatalogOrgId && String(dominantCatalogOrgId) !== String(orgId)) {
