@@ -312,8 +312,8 @@ export default function NuevaGeocerca() {
   const [banner, setBanner] = useState(null);
   const [geofenceName, setGeofenceName] = useState("");
   const [geofenceList, setGeofenceList] = useState([]);
-  const [selectedNames, setSelectedNames] = useState(new Set());
-  const [lastSelectedName, setLastSelectedName] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [lastSelectedId, setLastSelectedId] = useState(null);
 
   const [coordModalOpen, setCoordModalOpen] = useState(false);
   const [coordText, setCoordText] = useState("");
@@ -695,7 +695,7 @@ export default function NuevaGeocerca() {
   ]);
 
   const handleDeleteSelected = useCallback(async () => {
-    if (!selectedNames || selectedNames.size === 0) {
+    if (!selectedIds || selectedIds.size === 0) {
       showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
       return;
     }
@@ -706,18 +706,16 @@ export default function NuevaGeocerca() {
     if (!confirmed) return;
 
     const orgId = currentOrg?.id || null;
-    const names = Array.from(selectedNames).map((x) => String(x || "").trim()).filter(Boolean);
+    const ids = Array.from(selectedIds).map((x) => String(x || "").trim()).filter(Boolean);
 
     try {
-      for (const nm of names) {
-        const row = geofenceList.find((g) => String(g.name) === nm);
-        const id = row?.id;
+      for (const id of ids) {
         if (!orgId || !id || String(id).startsWith("optim-")) continue;
         await deleteGeofence({ orgId, id });
       }
 
-      setSelectedNames(() => new Set());
-      setLastSelectedName(null);
+      setSelectedIds(() => new Set());
+      setLastSelectedId(null);
       setViewFeature(null);
       setViewCentroid(null);
 
@@ -725,33 +723,33 @@ export default function NuevaGeocerca() {
       clearCanvas();
       setDraftFeature(null);
 
-      showOk(t("geocercas.deletedCount", { count: names.length, defaultValue: `Deleted: ${names.length}` }));
+      showOk(t("geocercas.deletedCount", { count: ids.length, defaultValue: `Deleted: ${ids.length}` }));
     } catch (e) {
       showErr(t("geocercas.deleteError", { defaultValue: "Could not delete. Please try again." }), e);
     }
-  }, [selectedNames, currentOrg?.id, refreshGeofenceList, refreshEntitlements, clearCanvas, t, showErr, showOk, geofenceList]);
+  }, [selectedIds, currentOrg?.id, refreshGeofenceList, refreshEntitlements, clearCanvas, t, showErr, showOk, geofenceList]);
 
   const handleShowSelected = useCallback(async () => {
     setShowLoading(true);
     try {
       const orgId = currentOrg?.id || null;
 
-      const selected = Array.from(selectedNames || [])
+      const selected = Array.from(selectedIds || [])
         .map((x) => String(x || "").trim())
         .filter(Boolean);
 
-      let namesToShow = selected;
-      if (namesToShow.length === 0) {
-        const one = lastSelectedName || geofenceList?.[0]?.name || null;
+      let idsToShow = selected;
+      if (idsToShow.length === 0) {
+        const one = lastSelectedId || geofenceList?.[0]?.id || null;
         if (!one) {
           showErr(t("geocercas.errorSelectAtLeastOne", { defaultValue: "Select at least one geofence." }));
           return;
         }
-        namesToShow = [one];
+        idsToShow = [one];
       }
 
-      const items = namesToShow
-        .map((nm) => geofenceList.find((g) => String(g.name) === nm))
+      const items = idsToShow
+        .map((id) => geofenceList.find((g) => String(g.id) === id))
         .filter(Boolean);
 
       if (!items.length) return;
@@ -806,8 +804,8 @@ export default function NuevaGeocerca() {
       setShowLoading(false);
     }
   }, [
-    selectedNames,
-    lastSelectedName,
+    selectedIds,
+    lastSelectedId,
     geofenceList,
     currentOrg?.id,
     t,
@@ -1254,22 +1252,22 @@ export default function NuevaGeocerca() {
                       <label
                         key={`api-${g.id || ""}-${g.name}`}
                         className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition ${
-                          selectedNames.has(g.name)
+                          selectedIds.has(String(g.id))
                             ? "border-sky-500/50 bg-sky-950/30"
                             : "border-slate-800 bg-slate-900/70 hover:bg-slate-800/80"
                         }`}
                       >
                         <input
                           type="checkbox"
-                          checked={selectedNames.has(g.name)}
+                          checked={selectedIds.has(String(g.id))}
                           onChange={() => {
-                            setSelectedNames((prev) => {
+                            setSelectedIds((prev) => {
                               const next = new Set(prev);
-                              if (next.has(g.name)) next.delete(g.name);
-                              else next.add(g.name);
+                              if (next.has(String(g.id))) next.delete(String(g.id));
+                              else next.add(String(g.id));
                               return next;
                             });
-                            setLastSelectedName(g.name);
+                            setLastSelectedId(String(g.id));
                           }}
                         />
                         <div className="min-w-0">
