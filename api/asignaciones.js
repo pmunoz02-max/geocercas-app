@@ -1,3 +1,131 @@
+// =========================
+// Sincronización tracker_assignments
+// =========================
+
+function isValidUUID(str) {
+  return typeof str === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+}
+
+async function syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion, action }) {
+  try {
+    if (!asignacion || !orgId || !asignacion.personal_id) {
+      console.warn("[tracker-sync] skip: datos incompletos", { orgId, asignacion });
+      return;
+    }
+    // A. Resolver tracker_user_id
+    const { data: personalRow, error: personalError } = await sbDb
+      .from("personal")
+      .select("id, user_id")
+      .eq("id", asignacion.personal_id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (personalError || !personalRow?.user_id) {
+      console.warn("[tracker-sync] skip: no user_id", { personal_id: asignacion.personal_id, error: personalError });
+      return;
+    }
+    const trackerUserId = personalRow.user_id;
+    if (!isValidUUID(trackerUserId)) {
+      console.warn("[tracker-sync] skip: tracker_user_id no es UUID", { trackerUserId });
+      return;
+    }
+
+    // B. Mapear campos
+    const start_date = asignacion.start_time ? String(asignacion.start_time).slice(0, 10) : null;
+    const end_date = asignacion.end_time ? String(asignacion.end_time).slice(0, 10) : null;
+    let freqMin = 5;
+    if (asignacion.frecuencia_envio_sec && !isNaN(asignacion.frecuencia_envio_sec)) {
+      freqMin = Math.max(5, Math.round(Number(asignacion.frecuencia_envio_sec) / 60));
+    }
+    const trackerAssignmentRow = {
+      org_id: orgId,
+      tracker_user_id: trackerUserId,
+      start_date,
+      end_date,
+      frequency_minutes: freqMin,
+      active: (asignacion.status || asignacion.estado) === "activa",
+    };
+
+    // C. Lógica
+    if (action === "delete" || trackerAssignmentRow.active === false) {
+      await sbDb
+        .from("tracker_assignments")
+        .update({ active: false })
+        .eq("org_id", orgId)
+        .eq("tracker_user_id", trackerUserId)
+        .eq("start_date", start_date)
+        .eq("end_date", end_date);
+      console.log("[tracker-sync] delete/inactiva", trackerAssignmentRow);
+      return;
+    }
+
+    // UPSERT (idempotente)
+    await sbDb
+      .from("tracker_assignments")
+      .upsert(trackerAssignmentRow, { onConflict: "org_id,tracker_user_id,start_date,end_date" });
+    console.log("[tracker-sync] create/update", trackerAssignmentRow);
+  } catch (err) {
+    console.error("[tracker-sync] error", err);
+  }
+}
+// =========================
+// Sincronización tracker_assignments
+// =========================
+
+/**
+ * Sincroniza una fila de tracker_assignments a partir de una asignación.
+ * - action: "create" | "update" | "delete"
+ * - Idempotente: upsert para create/update, update (active=false) para delete
+ */
+async function syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion, action }) {
+  try {
+    if (!asignacion || !orgId || !asignacion.personal_id) return;
+    // 1. Resolver tracker_user_id desde personal
+    const { data: personalRow, error: personalError } = await sbDb
+      .from("personal")
+      .select("id, user_id")
+      .eq("id", asignacion.personal_id)
+      .eq("org_id", orgId)
+      .maybeSingle();
+    if (personalError || !personalRow?.user_id) {
+      console.warn("[syncTrackerAssignment] No se pudo resolver user_id para personal_id", asignacion.personal_id, personalError);
+      return;
+    }
+    const trackerUserId = personalRow.user_id;
+    if (!trackerUserId) return;
+
+    // 2. Mapear campos
+    const trackerAssignmentRow = {
+      org_id: orgId,
+      tracker_user_id: trackerUserId,
+      start_date: asignacion.start_date,
+      end_date: asignacion.end_date,
+      frequency_minutes: asignacion.frecuencia_envio_sec ? Math.round(asignacion.frecuencia_envio_sec / 60) : null,
+      active: (asignacion.status || asignacion.estado) === "activa",
+    };
+
+    // 3. Acción según tipo
+    if (action === "delete" || trackerAssignmentRow.active === false) {
+      // Desactivar (no borrar físico)
+      await sbDb
+        .from("tracker_assignments")
+        .update({ active: false })
+        .eq("org_id", orgId)
+        .eq("tracker_user_id", trackerUserId)
+        .eq("start_date", trackerAssignmentRow.start_date)
+        .eq("end_date", trackerAssignmentRow.end_date);
+      console.log("[syncTrackerAssignment] Desactivada tracker_assignment", trackerAssignmentRow);
+      return;
+    }
+
+    // 4. Upsert (idempotente)
+    await sbDb
+      .from("tracker_assignments")
+      .upsert(trackerAssignmentRow, { onConflict: "org_id,tracker_user_id,start_date,end_date" });
+    console.log("[syncTrackerAssignment] Upsert tracker_assignment", trackerAssignmentRow);
+  } catch (e) {
+    console.warn("[syncTrackerAssignment] Error:", e);
+  }
+}
 // api/asignaciones.js
 import { createClient } from "@supabase/supabase-js";
 
@@ -651,6 +779,8 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
       }
 
+      await syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion: r.data, action: "create" });
+
       if (userId) {
         await insertMetricsEventSilent(sbDb, {
           org_id: orgId,
@@ -714,6 +844,8 @@ export default async function handler(req, res) {
       const r = await sbDb.from("asignaciones").update(patch).eq("id", id).eq("org_id", orgId).select("*").single();
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
+      await syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion: r.data, action: "update" });
+
       if (shouldTrackCompleted && userId) {
         await insertMetricsEventSilent(sbDb, {
           org_id: orgId,
@@ -732,6 +864,14 @@ export default async function handler(req, res) {
       const id = String(body?.id || "");
       if (!id) return send(res, 400, { ok: false, error: "id is required" });
 
+      // Leer fila previa antes de borrar
+      const prev = await sbDb
+        .from("asignaciones")
+        .select("*")
+        .eq("id", id)
+        .eq("org_id", orgId)
+        .maybeSingle();
+
       const r = await sbDb
         .from("asignaciones")
         .update({ is_deleted: true })
@@ -741,6 +881,8 @@ export default async function handler(req, res) {
         .single();
 
       if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+
+      await syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion: prev.data, action: "delete" });
 
       return ok(res, { ok: true, data: r.data });
     }
