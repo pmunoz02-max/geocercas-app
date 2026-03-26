@@ -498,34 +498,87 @@ export default async function handler(req, res) {
     const action = String(q.action || "bundle");
     const requestedOrgId = q?.org_id || q?.orgId || null;
 
+    // Validar org_id explícito
+    if (!requestedOrgId) {
+      return send(res, 400, { ok: false, error: "missing_org_id", message: "org_id es requerido" });
+    }
+
     const rc = await resolveContext(req, { requestedOrgId });
     if (!rc.ok) return send(res, rc.status || 500, { ok: false, error: rc.error, details: rc.details });
 
-    const orgId = rc.ctx.org_id;
+    const orgId = String(requestedOrgId);
+    if (!orgId) {
+      return send(res, 400, { ok: false, error: "missing_org_id" });
+    }
     const sbDb = rc.sbDb;
     const userId = rc?.user?.id || null;
 
     // GET bundle/list SOLO LECTURA
     if (req.method === "GET" && (action === "bundle" || action === "list")) {
       try {
-        const r = await sbDb
+        // Compatibilidad legacy: dos queries y merge
+        const q1 = await sbDb
           .from("asignaciones")
-          .select(
-            "id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at"
-          )
+          .select("id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at")
           .eq("org_id", orgId)
           .eq("is_deleted", false)
           .order("created_at", { ascending: false })
           .limit(500);
+        const q2 = await sbDb
+          .from("asignaciones")
+          .select("id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at")
+          .is("org_id", null)
+          .eq("tenant_id", orgId)
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: false })
+          .limit(500);
 
-        if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+        if (q1.error || q2.error) {
+          const err = q1.error || q2.error;
+          console.error("[api/asignaciones] error", {
+            message: err?.message,
+            details: err?.details,
+            hint: err?.hint,
+            code: err?.code,
+            orgId
+          });
+          return send(res, 500, { ok: false, error: "Supabase error", details: err.message });
+        }
 
-        if (action === "list") return ok(res, { ok: true, data: r.data || [] });
+        // Merge y dedup por id
+        const rows = [...(q1.data || []), ...(q2.data || [])];
+        const seen = new Set();
+        const merged = rows.filter(r => {
+          if (!r?.id) return false;
+          if (seen.has(r.id)) return false;
+          seen.add(r.id);
+          return true;
+        });
 
-        const catalogs = await loadCatalogs(sbDb, orgId);
-        return ok(res, { ok: true, data: { asignaciones: r.data || [], catalogs } });
+        if (action === "list") return ok(res, { ok: true, data: merged });
+
+        // Catálogos: aislar cada lectura
+        let catalogs = {};
+        try {
+          catalogs = await loadCatalogs(sbDb, orgId);
+        } catch (e) {
+          console.error("[api/asignaciones] error loadCatalogs", {
+            message: e?.message,
+            details: e?.details,
+            hint: e?.hint,
+            code: e?.code,
+            orgId
+          });
+        }
+        return ok(res, { ok: true, data: { asignaciones: merged, catalogs } });
       } catch (error) {
-        console.error("[api/asignaciones][GET] error", error);
+        console.error("[api/asignaciones] error", {
+          message: error?.message,
+          details: error?.details,
+          hint: error?.hint,
+          code: error?.code,
+          orgId
+        });
         return send(res, 500, { ok: false, error: "Server error", details: String(error?.message || error) });
       }
     }

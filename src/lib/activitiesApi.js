@@ -36,7 +36,7 @@ async function http(path, { method = "GET", body } = {}) {
   };
 
   if (accessToken) {
-    headers["Authorization"] = `Bearer ${accessToken}`;
+    headers.Authorization = `Bearer ${accessToken}`;
   }
 
   const res = await fetch(path, {

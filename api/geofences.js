@@ -1,83 +1,57 @@
 // api/geofences.js
 import { createClient } from "@supabase/supabase-js";
+      if (action === "delete") {
+        try {
+          const id = payload?.id ? String(payload.id) : null;
+          const orgId = org_id;
+          if (!id) return send(res, 400, { ok: false, error: "id is required" });
+          if (!orgId) return send(res, 400, { ok: false, error: "org_id is required" });
 
-const VERSION = "geofences-api-v3-orgid-geojson-notnull";
+          // Validar ownership seguro por org_id
+          const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
+          if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
+          if (!gf?.id || String(gf.org_id) !== String(orgId)) {
+            return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
+          }
 
-/* =========================
-   Cookies + Headers
-========================= */
+          // Chequear referencias SOLO en asignaciones
+          const refsAsignaciones = await sbDb
+            .from("asignaciones")
+            .select("id")
+            .eq("geofence_id", id)
+            .limit(1);
+          const hasRefs = (refsAsignaciones.data || []).length > 0;
 
-function getCookie(req, name) {
-  const raw = req.headers.cookie || "";
-  const parts = raw.split(";").map((s) => s.trim());
-  for (const p of parts) {
-    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
-  }
-  return null;
-}
-
-function setHeaders(res) {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
-
-  res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("CDN-Cache-Control", "no-store");
-  res.setHeader("Surrogate-Control", "no-store");
-
-  res.setHeader("Vary", "Cookie");
-  res.setHeader("X-Api-Version", VERSION);
-}
-
-function send(res, status, body) {
-  setHeaders(res);
-  res.statusCode = status;
-  res.end(JSON.stringify({ ...body, version: VERSION }));
-}
-
-function ok(res, body) {
-  return send(res, 200, body);
-}
-
-function getEnv(nameList) {
-  for (const n of nameList) {
-    const v = process.env[n];
-    if (v && String(v).trim()) return String(v).trim();
-  }
-  return null;
-}
-
-function requireWriteRole(role) {
-  const r = String(role || "").toLowerCase();
-  return r === "owner" || r === "admin";
-}
-
-function getQuery(req) {
-  try {
-    const url = new URL(req.url, "http://localhost");
-    const q = {};
-    url.searchParams.forEach((v, k) => (q[k] = v));
-    return q;
-  } catch {
-    return {};
-  }
-}
-
-function normalizeBoolFlag(v, defaultValue) {
-  if (v === undefined || v === null || v === "") return defaultValue;
-  const s = String(v).toLowerCase();
-  if (["1", "true", "yes", "y", "on"].includes(s)) return true;
-  if (["0", "false", "no", "n", "off"].includes(s)) return false;
-  return defaultValue;
-}
-
-async function readBody(req) {
-  if (req.body && typeof req.body === "object") return req.body;
-  if (typeof req.body === "string") {
-    try {
-      return JSON.parse(req.body);
-    } catch {
-      return {};
+          if (hasRefs) {
+            await sbDb
+              .from("geofences")
+              .update({
+                active: false,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", id)
+              .eq("org_id", orgId);
+            return ok(res, {
+              ok: true,
+              mode: "deactivated",
+              reason: "has_references"
+            });
+          } else {
+            await sbDb
+              .from("geofences")
+              .delete()
+              .eq("id", id)
+              .eq("org_id", orgId);
+            return ok(res, {
+              ok: true,
+              mode: "deleted"
+            });
+          }
+        } catch (e) {
+          console.error("[api/geofences/delete] error", e);
+          return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
+        }
+      }
     }
   }
   const chunks = [];
@@ -530,16 +504,84 @@ export default async function handler(req, res) {
         return ok(res, { ok: true, saved: arr.length, items: arr, item: arr[0] || null });
       }
 
+
       if (action === "delete") {
-        const id = payload?.id ? String(payload.id) : null;
-        if (!id) return send(res, 400, { ok: false, error: "id is required" });
+        try {
+          const id = payload?.id ? String(payload.id) : null;
+          if (!id) return send(res, 400, { ok: false, error: "id is required" });
+          if (!org_id) return send(res, 400, { ok: false, error: "org_id is required" });
 
-        const { data, error } = await sbDb.from("geofences").delete().eq("org_id", org_id).eq("id", id).select("*");
+          // Validar ownership seguro por org_id
+          const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
+          if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
+          if (!gf?.id || String(gf.org_id) !== String(org_id)) {
+            return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
+          }
 
-        if (error) return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
+          // Chequear referencias en tablas relevantes (sin .or())
+          const refTables = [
+            "asignaciones",
+            "attendance_events",
+            "geofence_assignments",
+            "geofence_events",
+            "geofence_members",
+            "position_events",
+            "tracker_assignments",
+            "user_geofence_state"
+          ];
+          let hasReferences = false;
+          for (const table of refTables) {
+            const { data: refRows, error: refErr } = await sbDb
+              .from(table)
+              .select("id")
+              .eq("geofence_id", id)
+              .limit(1);
+            if (refErr) {
+              console.error("[api/geofences/delete] error", { table, message: refErr.message, code: refErr.code });
+              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: refErr.message });
+            }
+            if (Array.isArray(refRows) && refRows.length > 0) {
+              hasReferences = true;
+              break;
+            }
+          }
 
-        const arr = Array.isArray(data) ? data : data ? [data] : [];
-        return ok(res, { ok: true, deleted: arr.length, items: arr });
+          if (hasReferences) {
+            // Soft delete: active=false, updated_at=now(), updated_by=auth user si aplica
+            const updatePayload = {
+              active: false,
+              updated_at: new Date().toISOString(),
+            };
+            // Intentar obtener user_id autenticado
+            let user_id = null;
+            try {
+              user_id = req?.user?.id || null;
+            } catch {}
+            if (user_id) updatePayload.updated_by = user_id;
+
+            const { error: updErr } = await sbDb
+              .from("geofences")
+              .update(updatePayload)
+              .eq("id", id)
+              .eq("org_id", org_id);
+            if (updErr) {
+              console.error("[api/geofences/delete] error", { table: "geofences", message: updErr.message, code: updErr.code });
+              return send(res, 500, { ok: false, error: "Supabase error", details: updErr.message });
+            }
+            return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
+          } else {
+            // Hard delete
+            const { data, error } = await sbDb.from("geofences").delete().eq("org_id", org_id).eq("id", id).select("*");
+            if (error) {
+              console.error("[api/geofences/delete] error", { table: "geofences", message: error.message, code: error.code });
+              return send(res, 500, { ok: false, error: "Supabase error", details: error.message });
+            }
+            return ok(res, { ok: true, mode: "deleted" });
+          }
+        } catch (e) {
+          console.error("[api/geofences/delete] error", e);
+          return send(res, 500, { ok: false, error: "Server error", details: String(e?.message || e) });
+        }
       }
 
       return send(res, 400, { ok: false, error: "Unsupported action", action });
