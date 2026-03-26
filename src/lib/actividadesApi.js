@@ -13,14 +13,17 @@
 
 // Manejo robusto de errores HTTP y parseo, mostrando detalle real del backend
 async function http(path, { method = "GET", body } = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+  };
+  // Si hay accessToken explícito, agrega Authorization
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
   const res = await fetch(path, {
     method,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      "cache-control": "no-cache",
-      pragma: "no-cache",
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const raw = await res.text();

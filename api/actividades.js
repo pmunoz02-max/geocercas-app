@@ -1,3 +1,11 @@
+// Extrae Bearer token del header Authorization
+function getBearerToken(req) {
+  const auth = req.headers?.authorization || "";
+  if (typeof auth === "string" && auth.startsWith("Bearer ")) {
+    return auth.slice(7).trim();
+  }
+  return null;
+}
 import { createClient } from "@supabase/supabase-js";
 
 const VERSION = "actividades-v3-debug";
@@ -18,23 +26,27 @@ function getSupabase(req) {
 }
 
 async function resolveContext(req, supabase, requestedOrgId) {
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
-
+  // Auth resolver compatible con cookie tg_at y Authorization Bearer
+  const cookieToken = getCookie(req, "tg_at");
+  const bearerToken = getBearerToken(req);
+  const accessToken = cookieToken || bearerToken;
+  const hasCookieToken = !!cookieToken;
+  const hasBearerToken = !!bearerToken;
+  const hasAccessToken = !!accessToken;
+  console.log("[ACTIVIDADES AUTH] token sources", { hasCookieToken, hasBearerToken, hasAccessToken, method: req.method, url: req.url });
+  if (!accessToken) {
+    return { errorResponse: { status: 401, body: { error: "No session token (cookie tg_at or Authorization Bearer)" } } };
+  }
+  const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
   if (userError || !user) {
     return { errorResponse: { status: 401, body: { error: "unauthorized" } } };
   }
-
   const orgId = requestedOrgId;
-
   if (!orgId) {
     return {
       errorResponse: { status: 400, body: { error: "missing_org_id" } },
     };
   }
-
   return { orgId, user };
 }
 
