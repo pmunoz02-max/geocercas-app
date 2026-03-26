@@ -34,14 +34,15 @@ async function http(path, { method = "GET", body } = {}) {
     if (parsed?.hint) msg += ` - hint=${parsed.hint}`;
     throw new Error(msg);
   }
-  return parsed ?? raw;
+  return parsed;
 }
 
 export async function listActividades(options = {}) {
   const params = new URLSearchParams();
   if (options.includeInactive) params.set("includeInactive", "true");
   if (options.orgId) params.set("org_id", options.orgId);
-  return await http(`/api/actividades?${params.toString()}`, { method: "GET" });
+  const parsed = await http(`/api/actividades?${params.toString()}`, { method: "GET" });
+  return Array.isArray(parsed?.data) ? parsed.data : [];
 }
 
 export async function createActividad(payload, { orgId = null } = {}) {
@@ -49,16 +50,18 @@ export async function createActividad(payload, { orgId = null } = {}) {
   const qs = new URLSearchParams();
   qs.set("org_id", String(orgId));
   const url = `/api/actividades?${qs}`;
-  return await http(url, { method: "POST", body: payload });
+  const parsed = await http(url, { method: "POST", body: payload });
+  return parsed?.data ?? parsed;
 }
 
 export async function updateActividad(id, payload, { orgId = null } = {}) {
   if (!orgId) throw new Error("[updateActividad] Falta orgId en options");
   const qs = new URLSearchParams({ id: String(id), org_id: String(orgId) });
-  return await http(`/api/actividades?${qs.toString()}`, {
+  const parsed = await http(`/api/actividades?${qs.toString()}`, {
     method: "PUT",
     body: payload,
   });
+  return parsed?.data ?? parsed;
 }
 
 export async function deleteActividad(id, { orgId = null } = {}) {
@@ -71,5 +74,6 @@ export async function deleteActividad(id, { orgId = null } = {}) {
 }
 
 export async function toggleActividadActiva(id, active, options = {}) {
-  return updateActividad(id, { active }, options);
+  const parsed = await updateActividad(id, { active }, options);
+  return parsed;
 }
