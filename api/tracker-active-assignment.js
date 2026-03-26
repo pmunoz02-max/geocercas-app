@@ -46,40 +46,47 @@ export default async function handler(req, res) {
   console.log("[api/tracker-active-assignment] start", { hasAuth: !!authHeader, org_id });
   console.log("[api/tracker-active-assignment] tracker_user_id", trackerUserId);
 
-  // Consultar tracker_assignments
+  // Nueva lógica: asignaciones + personal
   try {
-    const query = [
-      `org_id=eq.${encodeURIComponent(org_id)}`,
-      `tracker_user_id=eq.${encodeURIComponent(trackerUserId)}`,
-      `active=eq.true`,
-    ].join('&');
-    const url = `${SUPABASE_URL}/rest/v1/tracker_assignments?${query}&select=id,org_id,tracker_user_id,start_date,end_date,frequency_minutes,active`;
-    const upstream = await fetch(url, {
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SERVICE_KEY ||
+      SUPABASE_ANON_KEY;
+
+    // 1. Buscar en tabla personal
+    const personalUrl = `${SUPABASE_URL}/rest/v1/personal?user_id=eq.${encodeURIComponent(trackerUserId)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id`;
+    const personalResp = await fetch(personalUrl, {
       headers: {
-        Authorization: `Bearer ${jwt}`,
-        apikey: SUPABASE_ANON_KEY,
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
       },
     });
-    console.log("[api/tracker-active-assignment] supabase_status", upstream.status);
-    if (upstream.status === 401) {
-      return res.status(401).json({ ok: false, error: "backend_error_401" });
+    if (!personalResp.ok) {
+      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando personal' });
     }
-    if (!upstream.ok) {
-      return res.status(500).json({ ok: false, error: 'backend_error', message: `Supabase REST error: ${upstream.status}` });
+    const personalRows = await personalResp.json();
+    const personal = personalRows && personalRows[0];
+    if (!personal || !personal.id) {
+      return res.status(200).json({ ok: true, active: false, assignment: null });
     }
-    const rows = await upstream.json();
-    // Determinar si hay asignación activa hoy
-    const today = new Date();
-    const todayISO = today.toISOString().slice(0, 10); // YYYY-MM-DD
-    const active = rows.find(a => {
-      return (
-        a.start_date && a.end_date &&
-        a.start_date <= todayISO &&
-        a.end_date >= todayISO
-      );
+    const personal_id = personal.id;
+
+    // 2. Buscar asignación activa
+    const nowIso = new Date().toISOString();
+    const asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?org_id=eq.${encodeURIComponent(org_id)}&personal_id=eq.${encodeURIComponent(personal_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=*`;
+    const asignacionesResp = await fetch(asignacionesUrl, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
     });
-    if (active) {
-      return res.status(200).json({ ok: true, active: true, assignment: active });
+    if (!asignacionesResp.ok) {
+      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando asignaciones' });
+    }
+    const asignacionesRows = await asignacionesResp.json();
+    const asignacion = asignacionesRows && asignacionesRows[0];
+    if (asignacion) {
+      return res.status(200).json({ ok: true, active: true, assignment: asignacion });
     } else {
       return res.status(200).json({ ok: true, active: false, assignment: null });
     }
