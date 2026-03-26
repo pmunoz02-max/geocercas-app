@@ -948,14 +948,30 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
-    if (!lastPosition) return;
-    if (!session?.user?.id) return;
-    if (!orgId) return;
-    if (!trackerReady || !hasSession) return;
-    if (!disclosureAccepted) return;
-    if (membershipStatus !== "ok") return;
-    if (assignmentWindowStatus !== "active") return;
-    if (isSendingRef.current) return;
+
+    console.log("[send-gate] evaluate", {
+      hasLastPosition: !!lastPosition,
+      sessionUserId: session?.user?.id || "",
+      orgId: orgId || "",
+      trackerReady,
+      hasSession,
+      disclosureAccepted,
+      membershipStatus,
+      assignmentWindowStatus,
+      isSending: isSendingRef.current,
+      resolvedSendIntervalMs,
+      lastSentAt: lastSentAtRef.current || 0,
+      now: Date.now(),
+    });
+    if (!lastPosition) { console.log("[send-gate] blocked:no-lastPosition"); return; }
+    if (!session?.user?.id) { console.log("[send-gate] blocked:no-session-user"); return; }
+    if (!orgId) { console.log("[send-gate] blocked:no-org"); return; }
+    if (!trackerReady) { console.log("[send-gate] blocked:not-ready"); return; }
+    if (!hasSession) { console.log("[send-gate] blocked:no-session"); return; }
+    if (!disclosureAccepted) { console.log("[send-gate] blocked:no-disclosure"); return; }
+    if (membershipStatus !== "ok") { console.log("[send-gate] blocked:membership-not-ok"); return; }
+    if (assignmentWindowStatus !== "active") { console.log("[send-gate] blocked:assignment-not-active"); return; }
+    if (isSendingRef.current) { console.log("[send-gate] blocked:already-sending"); return; }
 
     const c = {
       lat: lastPosition.lat,
@@ -987,6 +1003,13 @@ export default function TrackerGpsPage() {
           source: "tracker-gps-web",
         });
 
+        console.log("[send-gate] sending", {
+          org_id: orgId,
+          lat: c.lat,
+          lng: c.lng,
+          timestamp: lastPosition.timestamp ?? Date.now(),
+          source: "tracker-gps-web",
+        });
         try {
           await invokeSendPosition(payload);
         } catch (e) {
