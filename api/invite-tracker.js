@@ -88,6 +88,10 @@ export default async function handler(req, res) {
     const name = toStr(body.name).trim();
     const role = toStr(body.role || "tracker").trim().toLowerCase();
     const assignment_id = toStr(body.assignment_id).trim();
+    const serviceKey =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_SERVICE_KEY ||
+      anonKey;
 
     const caller_jwt = toStr(body.caller_jwt).trim();
     if (!caller_jwt) {
@@ -106,73 +110,89 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid assignment_id" });
     }
 
-    // --- Validación: solo invitar si tiene asignación activa ---
-    // Buscar tracker_user_id por email en tabla trackers (o personal)
-    let trackerUserId = null;
-    try {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const anonKey = process.env.SUPABASE_ANON_KEY;
-      const url = `${supabaseUrl}/rest/v1/trackers?email=eq.${encodeURIComponent(email)}&select=id,user_id,email`;
-      const resp = await fetch(url, {
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
-        },
-      });
-      if (!resp.ok) throw new Error(`No se pudo resolver tracker_user_id para email: ${email}`);
-      const rows = await resp.json();
-      trackerUserId = rows && rows[0] && (rows[0].user_id || rows[0].id);
-    } catch (e) {
-      // Si no se puede resolver, bloquear
-      console.warn(`[invite-tracker] blocked: no tracker_user_id for email ${email}`);
+    // --- Validación QUIRÚRGICA: solo invitar si assignment_id es válido y corresponde al email ---
+    if (!assignment_id) {
       return res.status(422).json({
         ok: false,
         build: BUILD_TAG,
         code: "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
         message: "Solo se puede invitar a trackers con asignaciones activas",
-        error: "No tracker_user_id found"
+        error: "assignment_id requerido"
       });
     }
 
-    // Consultar tracker_assignments para asignación activa
+    const nowIso = new Date().toISOString();
+    let asignacion = null;
     try {
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const supabaseUrl = process.env.SUPABASE_URL;
-      const anonKey = process.env.SUPABASE_ANON_KEY;
-      const query = [
-        `org_id=eq.${encodeURIComponent(org_id)}`,
-        `tracker_user_id=eq.${encodeURIComponent(trackerUserId)}`,
-        `active=eq.true`,
-        `start_date=lte.${today}`,
-        `end_date=gte.${today}`
-      ].join('&');
-      const url = `${supabaseUrl}/rest/v1/tracker_assignments?${query}&select=id`;
+      // status o estado = activa
+      const url = `${supabaseUrl}/rest/v1/asignaciones?id=eq.${encodeURIComponent(assignment_id)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=id,org_id,personal_id,status,estado,start_time,end_time`;
       const resp = await fetch(url, {
         headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${anonKey}`,
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
         },
       });
-      if (!resp.ok) throw new Error(`No se pudo consultar tracker_assignments`);
+      if (!resp.ok) throw new Error(`[invite-tracker] no se pudo consultar asignaciones`);
       const rows = await resp.json();
-      if (!rows || rows.length === 0) {
-        console.warn(`[invite-tracker] blocked: no active assignment for tracker_user_id ${trackerUserId}`);
+      asignacion = rows && rows[0];
+      if (!asignacion || !asignacion.personal_id) {
+        console.warn(`[invite-tracker] blocked: asignación inválida o sin personal_id`);
         return res.status(422).json({
           ok: false,
           build: BUILD_TAG,
           code: "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
-          message: "Solo se puede invitar a trackers con asignaciones activas"
+          message: "Solo se puede invitar a trackers con asignaciones activas",
+          error: "Invalid or inactive assignment_id"
         });
       }
-      // Si pasa, log allowed
-      console.log(`[invite-tracker] allowed: tracker_user_id ${trackerUserId} tiene asignación activa`);
     } catch (e) {
+      console.warn(`[invite-tracker] blocked: error consultando asignaciones`, e);
       return res.status(500).json({
         ok: false,
         build: BUILD_TAG,
         error: String(e?.message || e),
       });
     }
+
+    // Consultar personal y validar email
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const url = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(asignacion.personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,email`;
+      const resp = await fetch(url, {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+      });
+      if (!resp.ok) throw new Error(`[invite-tracker] no se pudo consultar personal`);
+      const rows = await resp.json();
+      const personal = rows && rows[0];
+      if (!personal || !personal.email || toStr(personal.email).trim().toLowerCase() !== email) {
+        console.warn(`[invite-tracker] blocked: email de personal no coincide con invitado`);
+        return res.status(422).json({
+          ok: false,
+          build: BUILD_TAG,
+          code: "TRACKER_ASSIGNMENT_EMAIL_MISMATCH",
+          message: "La asignación no corresponde al email seleccionado"
+        });
+      }
+    } catch (e) {
+      console.warn(`[invite-tracker] blocked: error consultando personal`, e);
+      return res.status(500).json({
+        ok: false,
+        build: BUILD_TAG,
+        error: String(e?.message || e),
+      });
+    }
+
+    // Log validación exitosa antes del fetch al edge
+    console.log("[invite-tracker] validated assignment/email", {
+      org_id,
+      email,
+      assignment_id,
+      personal_id: asignacion.personal_id,
+    });
 
     const ts = String(Date.now());
     const sig = hmacHex(proxySecret, `${ts}\n${org_id}\n${email}`);
