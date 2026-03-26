@@ -119,8 +119,20 @@ export async function deleteActividad(id, { orgId = null } = {}) {
   return true;
 }
 
-export async function toggleActividadActiva(id, active, options = {}) {
-  if (!options.orgId) throw new Error("Missing orgId");
-  const parsed = await updateActividad(id, { active }, options);
-  return parsed;
+export async function toggleActividadActiva(id, active, { orgId = null } = {}) {
+  if (!orgId) throw new Error("[toggleActividadActiva] Falta orgId en options");
+
+  const qs = new URLSearchParams({
+    id: String(id),
+    org_id: String(orgId),
+  });
+
+  const parsed = await http(`/api/actividades?${qs.toString()}`,
+    {
+      method: "PATCH",
+      body: { active },
+    }
+  );
+
+  return parsed?.data ?? parsed;
 }
