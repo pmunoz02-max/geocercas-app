@@ -2,6 +2,8 @@
 // API-first (server-owned) - Geofences v1 ctx-org
 // Blindaje: NUNCA enviar columnas computadas / generated (bbox, geom, audit)
 
+import { supabase } from "./supabaseClient";
+
 function getJsonHeaders(extra = {}) {
   return {
     "Content-Type": "application/json",
@@ -18,10 +20,38 @@ function safeJsonParse(text) {
   }
 }
 
+async function getAccessToken() {
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  if (error) {
+    const err = new Error(error.message || "session_error");
+    err.status = 401;
+    throw err;
+  }
+
+  const accessToken = session?.access_token || null;
+
+  if (!accessToken) {
+    const err = new Error("missing_token");
+    err.status = 401;
+    throw err;
+  }
+
+  return accessToken;
+}
+
 async function requestJson(url, { method = "GET", body = null, headers = {} } = {}) {
+  const accessToken = await getAccessToken();
+
   const res = await fetch(url, {
     method,
-    headers: getJsonHeaders(headers),
+    headers: getJsonHeaders({
+      Authorization: `Bearer ${accessToken}`,
+      ...headers,
+    }),
     credentials: "include",
     body: body ? JSON.stringify(body) : null,
   });
@@ -75,28 +105,37 @@ export async function listGeofences({ orgId = null, onlyActive = true, limit = 5
   params.set("onlyActive", String(!!onlyActive));
   params.set("limit", String(limit));
   if (orgId) params.set("orgId", String(orgId)); // compat (ctx manda)
-  const data = await requestJson(`/api/geofences?${params.toString()}`, { method: "GET" });
+
+  const data = await requestJson(`/api/geofences?${params.toString()}`, {
+    method: "GET",
+  });
+
   return data?.items || [];
 }
 
 export async function getGeofence({ id, orgId = null } = {}) {
   if (!id) throw new Error("id requerido");
+
   const params = new URLSearchParams();
   params.set("action", "get");
   params.set("id", String(id));
   if (orgId) params.set("orgId", String(orgId));
-  const data = await requestJson(`/api/geofences?${params.toString()}`, { method: "GET" });
+
+  const data = await requestJson(`/api/geofences?${params.toString()}`, {
+    method: "GET",
+  });
+
   return data?.item || null;
 }
 
 export async function upsertGeofence(payload = {}) {
   const clean = stripComputedFields(payload);
+
   const data = await requestJson(`/api/geofences`, {
     method: "POST",
     body: { action: "upsert", ...clean },
   });
 
-  // api/geofences.js retorna item (y también items[])
   if (data?.item) return data.item;
   if (Array.isArray(data?.items) && data.items.length) return data.items[0];
   return null;
@@ -104,10 +143,17 @@ export async function upsertGeofence(payload = {}) {
 
 export async function deleteGeofence({ orgId = null, id = null } = {}) {
   if (!id) throw new Error("deleteGeofence: requiere id");
+
   const payload = { action: "delete", id: String(id) };
   if (orgId) payload.orgId = String(orgId);
-  const data = await requestJson(`/api/geofences`, { method: "POST", body: payload });
+
+  const data = await requestJson(`/api/geofences`, {
+    method: "POST",
+    body: payload,
+  });
+
   console.log("[deleteGeofence response]", data);
+
   return {
     ok: data?.ok === true,
     mode: data?.mode || null,
