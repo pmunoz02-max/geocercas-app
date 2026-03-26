@@ -1,3 +1,15 @@
+// Helper universal para buscar actividad compatible legacy
+async function findActivityByIdCompat(supabase, id, orgId) {
+  const { data, error } = await supabase
+    .from("activities")
+    .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
+    .eq("id", id)
+    .or(`org_id.eq.${orgId},and(org_id.is.null,tenant_id.eq.${orgId})`)
+    .maybeSingle();
+
+  if (error) return { data: null, error };
+  return { data: data || null, error: null };
+}
 // api/actividades.js
 //
 // Actividades API (multi-tenant) - MEMBERSHIPS CANONICAL
@@ -322,6 +334,8 @@ export default async function handler(req, res) {
 
     // ---------- PUT ----------
     if (req.method === "PUT") {
+      if (!orgId) return json(res, 400, { error: "missing_org_id" });
+
       const body = safeJson(req.body);
 
       const patch = {
@@ -345,19 +359,25 @@ export default async function handler(req, res) {
         return json(res, 400, { error: "invalid_name" });
       }
 
-      let q = applyOrgCompatFilter(
-        supabase
-          .from("activities")
-          .update(patch)
-          .eq("id", id),
-        orgId
-      )
-        .select(
-          "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
-        )
-        .maybeSingle();
+      const { data: found, error: findError } = await findActivityByIdCompat(supabase, id, orgId);
+      if (findError) {
+        return json(res, 500, {
+          error: "activities_lookup_failed",
+          details: findError.message,
+          code: findError.code,
+          hint: findError.hint,
+        });
+      }
+      if (!found) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
 
-      const { data, error } = await q;
+      const { data, error } = await supabase
+        .from("activities")
+        .update(patch)
+        .eq("id", found.id)
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
+        .maybeSingle();
 
       if (error) {
         if (error.code === "23505") {
@@ -381,19 +401,29 @@ export default async function handler(req, res) {
 
     // ---------- PATCH ----------
     if (req.method === "PATCH") {
+      if (!orgId) return json(res, 400, { error: "missing_org_id" });
+
       const body = safeJson(req.body);
       const active = Boolean(body?.active);
 
-      const { data, error } = await applyOrgCompatFilter(
-        supabase
-          .from("activities")
-          .update({ active })
-          .eq("id", id),
-        orgId
-      )
-        .select(
-          "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
-        )
+      const { data: found, error: findError } = await findActivityByIdCompat(supabase, id, orgId);
+      if (findError) {
+        return json(res, 500, {
+          error: "activities_lookup_failed",
+          details: findError.message,
+          code: findError.code,
+          hint: findError.hint,
+        });
+      }
+      if (!found) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
+
+      const { data, error } = await supabase
+        .from("activities")
+        .update({ active })
+        .eq("id", found.id)
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
         .maybeSingle();
 
       if (error) {
@@ -412,13 +442,25 @@ export default async function handler(req, res) {
 
     // ---------- DELETE ----------
     if (req.method === "DELETE") {
-      const { data, error } = await applyOrgCompatFilter(
-        supabase
-          .from("activities")
-          .delete()
-          .eq("id", id),
-        orgId
-      )
+      if (!orgId) return json(res, 400, { error: "missing_org_id" });
+
+      const { data: found, error: findError } = await findActivityByIdCompat(supabase, id, orgId);
+      if (findError) {
+        return json(res, 500, {
+          error: "activities_lookup_failed",
+          details: findError.message,
+          code: findError.code,
+          hint: findError.hint,
+        });
+      }
+      if (!found) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
+
+      const { data, error } = await supabase
+        .from("activities")
+        .delete()
+        .eq("id", found.id)
         .select("id")
         .maybeSingle();
 
