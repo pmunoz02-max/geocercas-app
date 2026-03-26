@@ -57,7 +57,7 @@ function getCookie(req, name) {
               error: "org_id_mismatch",
               message: "org_id del payload no coincide con la organización activa."
             });
-          }
+          
           const clean = pickAllowed(payload);
           const now = new Date().toISOString();
           const normalizedGeojson =
@@ -66,7 +66,7 @@ function getCookie(req, name) {
             (clean.lat !== undefined && clean.lng !== undefined ? buildPointFC(clean.lat, clean.lng) : null);
           if (!normalizedGeojson) {
             return send(res, 400, { ok: false, error: "missing_geometry", message: "Falta geojson o lat/lng" });
-          }
+          
           const row = {
             ...clean,
             org_id,
@@ -149,17 +149,7 @@ function getCookie(req, name) {
       }
 
       return send(res, 405, { ok: false, error: "Method not allowed", method: req.method });
-    } catch (error) {
-      console.error("[api/geofences] fatal", {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        hint: error?.hint,
-        stack: error?.stack
-      });
-      return send(res, 500, { ok: false, error: "server_error", details: String(error?.message || error) });
-    }
-}
+    
 
 // Solo permitir columnas reales (evita 500 por schema cache)
 const ALLOWED_FIELDS = new Set([
@@ -180,138 +170,114 @@ function pickAllowed(item) {
   const src = item && typeof item === "object" ? item : {};
   const out = {};
   for (const k of Object.keys(src)) {
-    if (ALLOWED_FIELDS.has(k)) out[k] = src[k];
-  }
-  return out;
-}
+    if (req.method === "POST") {
+      const rawPayload = await readBody(req);
+      const action = String(rawPayload?.action || "upsert").toLowerCase();
 
-function ensureFeatureCollection(input) {
-  if (!input) return null;
-  if (input.type === "FeatureCollection" && Array.isArray(input.features)) return input;
-  if (input.type === "Feature") return { type: "FeatureCollection", features: [input] };
-  // si viene geometry suelta
-  if (input.type && typeof input.type === "string" && input.coordinates) {
-    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: input }] };
-  }
-  return null;
-}
+      const payload = stripServerOwned(rawPayload);
 
-function buildPointFC(lat, lng) {
-  const la = Number(lat);
-  const lo = Number(lng);
-  if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: {},
-        geometry: { type: "Point", coordinates: [lo, la] },
-      },
-    ],
-  };
-}
+      // =========================
+      // UPSERT
+      // =========================
+      if (action === "upsert") {
+        try {
+          const clean = pickAllowed(payload);
 
-/* =========================
-   Context Resolver (CANÓNICO)
-========================= */
+          const normalizedGeojson =
+            ensureFeatureCollection(clean.geojson) ||
+            ensureFeatureCollection(clean.polygon_geojson) ||
+            buildPointFC(clean.lat, clean.lng);
 
-async function resolveContext(req, { requestedOrgId = null } = {}) {
-  const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-  const SUPABASE_ANON_KEY = getEnv([
-    "SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  ]);
+          if (!normalizedGeojson) {
+            return send(res, 400, {
+              ok: false,
+              error: "missing_geometry",
+            });
+          }
 
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv(["SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SERVICE_KEY"]);
+          const now = new Date().toISOString();
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Server misconfigured",
-      details: {
-        has: {
-          SUPABASE_URL: Boolean(SUPABASE_URL),
-          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
-        },
-      },
-    };
-  }
+          const row = {
+            ...clean,
+            org_id,
+            user_id,
+            geojson: normalizedGeojson,
+            active: clean.active ?? true,
+            is_default: clean.is_default ?? false,
+            updated_at: now,
+            updated_by: user_id,
+          };
 
-  const accessToken = getCookie(req, "tg_at");
-  if (!accessToken) {
-    return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
-  }
+          // INSERT
+          if (!row.id) {
+            const { data, error } = await sbDb
+              .from("geofences")
+              .insert({
+                ...row,
+                created_at: now,
+                created_by: user_id,
+              })
+              .select("*")
+              .single();
 
-  const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+            if (error) {
+              console.error("[geofences insert error]", error);
+              return send(res, 500, {
+                ok: false,
+                error: "insert_failed",
+                details: error.message,
+              });
+            }
 
-  const { data: u1, error: uerr } = await sbUser.auth.getUser();
-  const user = u1?.user ? { id: u1.user.id, email: u1.user.email } : null;
-  if (!user || uerr) {
-    return { ok: false, status: 401, error: "Invalid session", details: uerr?.message || "No user" };
-  }
+            return ok(res, { ok: true, item: data });
+          }
 
-  const sbSrv = SUPABASE_SERVICE_ROLE_KEY
-    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      })
-    : null;
+          // UPDATE
+          const { data: existing } = await sbDb
+            .from("geofences")
+            .select("id, org_id")
+            .eq("id", row.id)
+            .maybeSingle();
 
-  async function tryMaybeSingle(client, builderFn) {
-    try {
-      const { data, error } = await builderFn(client);
-      if (error) return { ok: false, error };
-      return { ok: true, data };
-    } catch (e) {
-      return { ok: false, error: { message: String(e?.message || e) } };
-    }
-  }
+          if (!existing || String(existing.org_id) !== String(org_id)) {
+            return send(res, 403, {
+              ok: false,
+              error: "forbidden",
+            });
+          }
 
-  let currentOrgId = null;
-  const ucoQuery = (c) => c.from("user_current_org").select("org_id").eq("user_id", user.id).maybeSingle();
-  if (requestedOrgId) {
-    // Regla: si se pidió org explícita y no hay membership válida, 403 sin fallback
-    const membershipForOrg = (orgId) => (c) =>
-      c
-        .from("memberships")
-        .select("org_id, role, is_default, revoked_at")
-        .eq("user_id", user.id)
-        .eq("org_id", orgId)
-        .is("revoked_at", null)
-        .maybeSingle();
-    let m = null;
-    if (sbSrv) {
-      const r = await tryMaybeSingle(sbSrv, membershipForOrg(requestedOrgId));
-      if (r.ok && r.data?.org_id) m = r.data;
-    }
-    if (!m) {
-      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(requestedOrgId));
-      if (r2.ok && r2.data?.org_id) m = r2.data;
-    }
-    if (!m) {
-      return {
-        ok: false,
-        status: 403,
-        error: "Requested org is not available for current user",
-        details: "No valid membership for requestedOrgId; fallback is forbidden by security policy."
-      };
-    }
-    currentOrgId = String(requestedOrgId);
-  } else {
-    if (sbSrv) {
-      const r1 = await tryMaybeSingle(sbSrv, ucoQuery);
-      if (r1.ok && r1.data?.org_id) currentOrgId = String(r1.data.org_id);
-    }
-    if (!currentOrgId) {
-      const r2 = await tryMaybeSingle(sbUser, ucoQuery);
-      if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
-    }
+          const { data, error } = await sbDb
+            .from("geofences")
+            .update(row)
+            .eq("id", row.id)
+            .eq("org_id", org_id)
+            .select("*")
+            .single();
+
+          if (error) {
+            console.error("[geofences update error]", error);
+            return send(res, 500, {
+              ok: false,
+              error: "update_failed",
+              details: error.message,
+            });
+          }
+
+          return ok(res, { ok: true, item: data });
+
+        } catch (err) {
+          console.error("[geofences upsert fatal]", err);
+          return send(res, 500, {
+            ok: false,
+            error: "server_error",
+            details: err.message,
+          });
+        }
+      }
+
+      // =========================
+      // DELETE (dejar intacto)
+      // =========================
   }
 
   const membershipForOrg = (orgId) => (c) =>
@@ -518,7 +484,3 @@ export default async function handler(req, res) {
             }
             return ok(res, { ok: true, item: savedRow });
           }
-          // Fin de bloque POST upsert
-        }
-        // Fin de handler
-      }
