@@ -11,7 +11,7 @@
 //  - deleteActividad
 //  - toggleActividadActiva
 
-// Manejo robusto de errores HTTP y parseo
+// Manejo robusto de errores HTTP y parseo, mostrando detalle real del backend
 async function http(path, { method = "GET", body } = {}) {
   const res = await fetch(path, {
     method,
@@ -24,41 +24,24 @@ async function http(path, { method = "GET", body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const raw = await res.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
-    try {
-      const parsed = raw ? JSON.parse(raw) : null;
-      if (parsed?.error) msg += ` - ${parsed.error}`;
-      else if (raw) msg += ` - ${raw}`;
-    } catch {
-      if (raw) msg += ` - ${raw}`;
-    }
+    if (parsed?.error) msg += ` - ${parsed.error}`;
+    if (parsed?.details) msg += ` - ${parsed.details}`;
+    if (parsed?.code) msg += ` - code=${parsed.code}`;
+    if (parsed?.hint) msg += ` - hint=${parsed.hint}`;
     throw new Error(msg);
   }
-  try {
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    throw new Error(`HTTP ${res.status} - invalid JSON response: ${raw}`);
-  }
+  return parsed ?? raw;
 }
 
 export async function listActividades(options = {}) {
   const params = new URLSearchParams();
   if (options.includeInactive) params.set("includeInactive", "true");
   if (options.orgId) params.set("org_id", options.orgId);
-  const res = await fetch(`/api/actividades?${params.toString()}`, {
-    method: "GET",
-    credentials: "include",
-  });
-  const raw = await res.text();
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status} - ${raw || "unknown backend error"}`);
-  }
-  try {
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    throw new Error(`HTTP ${res.status} - invalid JSON response: ${raw}`);
-  }
+  return await http(`/api/actividades?${params.toString()}`, { method: "GET" });
 }
 
 export async function createActividad(payload, { orgId = null } = {}) {
