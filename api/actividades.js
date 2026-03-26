@@ -144,87 +144,6 @@ async function findActivityByIdCompat(supabase, id, orgId) {
 }
 
 export default async function handler(req, res) {
-
-      // POST (crear actividad)
-      if (req.method === "POST") {
-        const name = String(req.body?.name || "").trim();
-        const description = req.body?.description ? String(req.body.description).trim() : null;
-        const hourly_cost =
-          req.body?.hourly_cost === "" || req.body?.hourly_cost == null
-            ? null
-            : Number(req.body.hourly_cost);
-        const currency = req.body?.currency ? String(req.body.currency).trim() : "USD";
-        const active =
-          typeof req.body?.active === "boolean" ? req.body.active : true;
-
-        if (!name) {
-          return res.status(400).json({ error: "missing_name" });
-        }
-
-        if (hourly_cost != null && Number.isNaN(hourly_cost)) {
-          return res.status(400).json({ error: "invalid_hourly_cost" });
-        }
-
-        // validar duplicado compatible legacy por org_id / tenant_id
-        const { data: byOrg, error: dupErr1 } = await supabase
-          .from("activities")
-          .select("id,name")
-          .eq("org_id", orgId)
-          .ilike("name", name)
-          .limit(1);
-
-        const { data: byTenant, error: dupErr2 } = await supabase
-          .from("activities")
-          .select("id,name")
-          .is("org_id", null)
-          .eq("tenant_id", orgId)
-          .ilike("name", name)
-          .limit(1);
-
-        if (dupErr1 || dupErr2) {
-          const err = dupErr1 || dupErr2;
-          return res.status(500).json({
-            error: "activity_duplicate_check_failed",
-            message: err?.message || null,
-            code: err?.code || null,
-            hint: err?.hint || null,
-            details: err?.details || null,
-          });
-        }
-
-        const duplicate = (byOrg && byOrg.length > 0) || (byTenant && byTenant.length > 0);
-        if (duplicate) {
-          return res.status(409).json({ error: "activity_already_exists" });
-        }
-
-        const insertPayload = {
-          tenant_id: orgId,
-          org_id: orgId,
-          name,
-          description,
-          hourly_cost,
-          currency,
-          active,
-        };
-
-        const { data, error } = await supabase
-          .from("activities")
-          .insert(insertPayload)
-          .select()
-          .single();
-
-        if (error) {
-          return res.status(500).json({
-            error: "activity_create_failed",
-            message: error?.message || null,
-            code: error?.code || null,
-            hint: error?.hint || null,
-            details: error?.details || null,
-          });
-        }
-
-        return res.status(201).json(data);
-      }
   try {
     res.setHeader("X-Api-Version", VERSION);
 
@@ -265,6 +184,87 @@ export default async function handler(req, res) {
       requestedOrgId,
       id,
     });
+
+    // POST (crear actividad)
+    if (req.method === "POST") {
+      const name = String(req.body?.name || "").trim();
+      const description = req.body?.description ? String(req.body.description).trim() : null;
+      const hourly_cost =
+        req.body?.hourly_cost === "" || req.body?.hourly_cost == null
+          ? null
+          : Number(req.body.hourly_cost);
+      const currency = req.body?.currency ? String(req.body.currency).trim() : "USD";
+      const active =
+        typeof req.body?.active === "boolean" ? req.body.active : true;
+
+      if (!name) {
+        return res.status(400).json({ error: "missing_name" });
+      }
+
+      if (hourly_cost != null && Number.isNaN(hourly_cost)) {
+        return res.status(400).json({ error: "invalid_hourly_cost" });
+      }
+
+      // validar duplicado compatible legacy por org_id / tenant_id
+      const { data: byOrg, error: dupErr1 } = await supabase
+        .from("activities")
+        .select("id,name")
+        .eq("org_id", orgId)
+        .ilike("name", name)
+        .limit(1);
+
+      const { data: byTenant, error: dupErr2 } = await supabase
+        .from("activities")
+        .select("id,name")
+        .is("org_id", null)
+        .eq("tenant_id", orgId)
+        .ilike("name", name)
+        .limit(1);
+
+      if (dupErr1 || dupErr2) {
+        const err = dupErr1 || dupErr2;
+        return res.status(500).json({
+          error: "activity_duplicate_check_failed",
+          message: err?.message || null,
+          code: err?.code || null,
+          hint: err?.hint || null,
+          details: err?.details || null,
+        });
+      }
+
+      const duplicate = (byOrg && byOrg.length > 0) || (byTenant && byTenant.length > 0);
+      if (duplicate) {
+        return res.status(409).json({ error: "activity_already_exists" });
+      }
+
+      const insertPayload = {
+        tenant_id: orgId,
+        org_id: orgId,
+        name,
+        description,
+        hourly_cost,
+        currency,
+        active,
+      };
+
+      const { data, error } = await supabase
+        .from("activities")
+        .insert(insertPayload)
+        .select()
+        .single();
+
+      if (error) {
+        return res.status(500).json({
+          error: "activity_create_failed",
+          message: error?.message || null,
+          code: error?.code || null,
+          hint: error?.hint || null,
+          details: error?.details || null,
+        });
+      }
+
+      return res.status(201).json(data);
+    }
 
     // GET
     if (req.method === "GET") {
