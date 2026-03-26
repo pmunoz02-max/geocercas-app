@@ -5,17 +5,13 @@
     { "src": "/tracker-accept/(.*)", "dest": "/tracker-gps" },
 
     { "src": "/api/auth/(.*)", "dest": "/api/auth?route=$1" },
-
-    // 🔴 CRÍTICO: permitir funciones API
     { "src": "/api/(.*)", "dest": "/api/$1" },
 
     { "src": "/demo/mwea", "dest": "/demo/mwea-geofence-demo.html" },
     { "src": "/demo/quito", "dest": "/demo/quito-geofence-demo.html" },
 
-    // 🔵 dejar que Vercel sirva archivos reales (incluye /api)
     { "handle": "filesystem" },
 
-    // 🔵 SPA fallback (solo después de respetar API)
     { "src": "/(.*)", "dest": "/" }
   ],
   "headers": [
