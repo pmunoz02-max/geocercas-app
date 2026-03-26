@@ -310,7 +310,15 @@ export default function AsignacionesTable({
                         {onEdit ? (
                           <button
                             type="button"
-                            onClick={() => onEdit(row)}
+                            onClick={() =>
+                              onEdit({
+                                ...row,
+                                personal_id: str(pickPersonId(row)).trim(),
+                                geofence_id: str(pickGeofenceId(row)).trim(),
+                                activity_id: str(pickActivityId(row)).trim(),
+                                status: row?.status || row?.estado || "activa",
+                              })
+                            }
                             className="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             {t("asignaciones.actions.edit")}
