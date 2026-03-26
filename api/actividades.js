@@ -145,24 +145,22 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     return { data, error: null };
   };
 
+  // Regla universal: si requestedOrgId está presente, solo se permite continuar si hay membership válida en esa org
+  // Si no, se permite fallback a org activa o default
   let mRow = null;
-
   if (requestedOrgId) {
     mRow = await loadMembershipForOrg(String(requestedOrgId));
     if (!mRow) {
-      return { ok: false, status: 403, error: "Requested org is not available for current user" };
+      return { ok: false, status: 403, error: "Requested org is not available for current user", details: "No valid membership for requestedOrgId; fallback is forbidden by security policy." };
     }
-  }
-
-  if (!mRow) {
+  } else {
     const currentOrgId = await loadCurrentOrgFromUserCurrentOrg();
     if (currentOrgId) mRow = await loadMembershipForOrg(currentOrgId);
-  }
-
-  if (!mRow) {
-    const { data, error } = await loadDefaultMembership();
-    if (error) return { ok: false, status: 500, error: error.message || "memberships lookup failed" };
-    mRow = data || null;
+    if (!mRow) {
+      const { data, error } = await loadDefaultMembership();
+      if (error) return { ok: false, status: 500, error: error.message || "memberships lookup failed" };
+      mRow = data || null;
+    }
   }
 
   const orgId = mRow?.org_id || null;
@@ -211,6 +209,7 @@ export default async function handler(req, res) {
         .from("activities")
         .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
         .eq("tenant_id", tenantId)
+        .eq("org_id", orgId) // Hardening: multi-tenant isolation
         .order("name", { ascending: true });
 
       if (!includeInactive) q = q.eq("active", true);
@@ -272,7 +271,8 @@ export default async function handler(req, res) {
         .update(patch)
         .eq("id", id)
         .eq("tenant_id", tenantId)
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
+        .eq("org_id", orgId) // Hardening: multi-tenant isolation
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by");
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });
@@ -290,7 +290,8 @@ export default async function handler(req, res) {
         .update({ active })
         .eq("id", id)
         .eq("tenant_id", tenantId)
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
+        .eq("org_id", orgId) // Hardening: multi-tenant isolation
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by");
         .single();
 
       if (error) return json(res, 400, { ok: false, error: error.message });

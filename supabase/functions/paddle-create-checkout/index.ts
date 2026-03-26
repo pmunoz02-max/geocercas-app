@@ -47,6 +47,10 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 serve(async (req: Request) => {
   let stage = "init";
 
@@ -108,7 +112,14 @@ serve(async (req: Request) => {
 
     let body: Record<string, unknown>;
     try {
-      body = await req.json();
+      const parsed = await req.json();
+      if (!isPlainObject(parsed)) {
+        return json(400, {
+          ok: false,
+          error: "JSON body must be an object",
+        });
+      }
+      body = parsed;
     } catch {
       return json(400, {
         ok: false,
@@ -120,22 +131,22 @@ serve(async (req: Request) => {
       typeof body.org_id === "string"
         ? body.org_id
         : typeof body.orgId === "string"
-        ? body.orgId
-        : "";
+          ? body.orgId
+          : "";
 
     const returnUrlRaw =
       typeof body.return_url === "string"
         ? body.return_url
         : typeof body.returnUrl === "string"
-        ? body.returnUrl
-        : "";
+          ? body.returnUrl
+          : "";
 
     const requestedPriceId =
       typeof body.price_id === "string"
         ? body.price_id
         : typeof body.priceId === "string"
-        ? body.priceId
-        : "";
+          ? body.priceId
+          : "";
 
     const fallbackEmail =
       typeof body.email === "string" ? body.email.trim() : "";
@@ -222,7 +233,7 @@ serve(async (req: Request) => {
     const billingResult = await adminClient
       .from("org_billing")
       .select(
-        "org_id, billing_provider, paddle_customer_id, paddle_subscription_id, paddle_price_id, plan_code, plan_status"
+        "org_id, billing_provider, paddle_customer_id, paddle_subscription_id, paddle_price_id, plan_code, plan_status",
       )
       .eq("org_id", orgId)
       .maybeSingle();
@@ -255,6 +266,29 @@ serve(async (req: Request) => {
 
     const customerEmail = (user.email || fallbackEmail || "").trim();
 
+    let customData: Record<string, unknown> = {};
+    if (isPlainObject(body.custom_data)) {
+      customData = { ...body.custom_data };
+    }
+
+    customData = {
+      ...customData,
+      org_id: orgId,
+      user_id: user.id,
+      source: "geocercas_app",
+      requested_plan_code: "pro",
+    };
+
+    console.log("[paddle-create-checkout] org_id:", orgId);
+    console.log(
+      "[paddle-create-checkout] custom_data.org_id:",
+      String(customData.org_id ?? ""),
+    );
+    console.log(
+      "[paddle-create-checkout] customer email present:",
+      !!customerEmail,
+    );
+
     const payload: Record<string, unknown> = {
       items: [
         {
@@ -263,12 +297,7 @@ serve(async (req: Request) => {
         },
       ],
       collection_mode: "automatic",
-      custom_data: {
-        org_id: orgId,
-        user_id: user.id,
-        source: "geocercas_app",
-        requested_plan_code: "pro",
-      },
+      custom_data: customData,
     };
 
     if (
@@ -288,13 +317,25 @@ serve(async (req: Request) => {
       };
     }
 
+    console.log(
+      "[paddle-create-checkout] sending transaction payload:",
+      JSON.stringify({
+        items: payload.items,
+        collection_mode: payload.collection_mode,
+        custom_data: payload.custom_data,
+        customer_id: payload.customer_id ?? null,
+        customer: payload.customer ?? null,
+        checkout: payload.checkout ?? null,
+      }),
+    );
+
     stage = "call_paddle";
 
     const paddleResponse = await fetch(`${paddleApiBase}/transactions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${PADDLE_API_KEY}`,
+        Authorization: `Bearer ${PADDLE_API_KEY}`,
       },
       body: JSON.stringify(payload),
     });
@@ -303,12 +344,21 @@ serve(async (req: Request) => {
 
     let paddleJson: Record<string, unknown> = {};
     try {
-      paddleJson = JSON.parse(paddleText);
+      const parsed = JSON.parse(paddleText);
+      paddleJson = isPlainObject(parsed)
+        ? parsed
+        : { raw: parsed as JsonValue };
     } catch {
       paddleJson = { raw: paddleText };
     }
 
     if (!paddleResponse.ok) {
+      console.error(
+        "[paddle-create-checkout] Paddle error:",
+        paddleResponse.status,
+        paddleJson,
+      );
+
       return json(500, {
         ok: false,
         error: "Failed to create Paddle checkout transaction",
@@ -319,11 +369,9 @@ serve(async (req: Request) => {
     }
 
     const paddleData =
-      paddleJson &&
-      typeof paddleJson === "object" &&
-      "data" in paddleJson &&
-      typeof paddleJson.data === "object" &&
-      paddleJson.data !== null
+      isPlainObject(paddleJson) &&
+        "data" in paddleJson &&
+        isPlainObject(paddleJson.data)
         ? (paddleJson.data as Record<string, unknown>)
         : null;
 
@@ -331,9 +379,7 @@ serve(async (req: Request) => {
       paddleData && typeof paddleData.id === "string" ? paddleData.id : "";
 
     const checkoutObj =
-      paddleData &&
-      typeof paddleData.checkout === "object" &&
-      paddleData.checkout !== null
+      paddleData && isPlainObject(paddleData.checkout)
         ? (paddleData.checkout as Record<string, unknown>)
         : null;
 
@@ -347,6 +393,17 @@ serve(async (req: Request) => {
         ? paddleData.customer_id
         : "";
 
+    const returnedCustomData =
+      paddleData && isPlainObject(paddleData.custom_data)
+        ? (paddleData.custom_data as Record<string, unknown>)
+        : null;
+
+    console.log("[paddle-create-checkout] transaction_id:", transactionId);
+    console.log(
+      "[paddle-create-checkout] Paddle returned custom_data.org_id:",
+      returnedCustomData?.org_id ?? null,
+    );
+
     if (!transactionId || !checkoutUrl) {
       return json(500, {
         ok: false,
@@ -355,6 +412,46 @@ serve(async (req: Request) => {
         stage,
       });
     }
+
+    stage = "persist_transaction_mapping";
+
+    const mappingPayload = {
+      transaction_id: transactionId,
+      org_id: orgId,
+      created_at: new Date().toISOString(),
+    };
+
+
+
+    // Instrumentación detallada para diagnóstico
+    console.log("[paddle-create-checkout] stage:", stage);
+    console.log("[paddle-create-checkout] transactionId:", transactionId);
+    console.log("[paddle-create-checkout] orgId:", orgId);
+    console.log("[paddle-create-checkout] mapping payload:", mappingPayload);
+
+    const { error: mappingError } = await adminClient
+      .from("billing_transactions")
+      .upsert(mappingPayload, { onConflict: "transaction_id" });
+
+    if (mappingError) {
+      console.error("[paddle-create-checkout] mapping upsert error full:", mappingError);
+      console.error("[paddle-create-checkout] mapping upsert error message:", mappingError.message);
+      console.error("[paddle-create-checkout] mapping upsert error details:", mappingError.details);
+      console.error("[paddle-create-checkout] mapping upsert error hint:", mappingError.hint);
+      console.error("[paddle-create-checkout] mapping upsert error code:", mappingError.code);
+      console.error("[paddle-create-checkout] mapping upsert error transactionId:", transactionId);
+      console.error("[paddle-create-checkout] mapping upsert error orgId:", orgId);
+      console.error("[paddle-create-checkout] mapping upsert error payload:", mappingPayload);
+      return json(500, {
+        ok: false,
+        error: "Failed to persist billing transaction mapping",
+        details: mappingError.message,
+        transaction_id: transactionId,
+        org_id: orgId,
+        stage,
+      });
+    }
+    console.log("[paddle-create-checkout] mapping saved:", transactionId, orgId);
 
     stage = "persist_billing_metadata";
 
@@ -391,8 +488,16 @@ serve(async (req: Request) => {
       transaction_id: transactionId,
       transactionId,
       environment: PADDLE_ENV,
+      debug: {
+        org_id_sent: orgId,
+        custom_data_org_id_sent: customData.org_id ?? null,
+        custom_data_org_id_returned: returnedCustomData?.org_id ?? null,
+        mapping_saved: !mappingError,
+      },
     });
   } catch (error) {
+    console.error("[paddle-create-checkout] fatal error:", error);
+
     return json(500, {
       ok: false,
       error: error instanceof Error ? error.message : String(error),

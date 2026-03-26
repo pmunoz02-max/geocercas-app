@@ -2,6 +2,7 @@
 // API para asignar actividades a trackers/personas
 
 import { supabase } from "../supabaseClient";
+import { withActiveOrg } from "./withActiveOrg";
 
 /**
  * tenant_id = org_id, lo sacamos de my_org_ids
@@ -73,67 +74,39 @@ export async function listActivityAssignments(filters = {}) {
  * La constraint activity_assignments_no_overlap impedirá solapes
  * para el mismo tracker y tenant.
  */
-export async function createActivityAssignment(payload) {
-  const tenantId = await getCurrentTenantId();
-  const { tracker_user_id, activity_id, start_date, end_date } = payload || {};
-
-  if (!tracker_user_id || !activity_id || !start_date) {
+export async function createActivityAssignment(payload = {}, orgId = null) {
+  if (!payload.tracker_user_id || !payload.activity_id || !payload.start_date) {
     throw new Error("tracker, actividad y fecha de inicio son obligatorios");
   }
-
-  const insertRow = {
-    tenant_id: tenantId,
-    tracker_user_id,
-    activity_id,
-    start_date,
-    end_date: end_date || null,
-  };
-
+  const insertRow = withActiveOrg(payload, orgId);
   const { data, error } = await supabase
     .from("activity_assignments")
     .insert(insertRow)
     .select("*")
     .maybeSingle();
-
   if (error) {
     console.error("Error createActivityAssignment:", error);
     throw error;
   }
-
   return data;
 }
 
 /**
  * Actualiza una asignación de actividad.
  */
-export async function updateActivityAssignment(id, patch) {
+export async function updateActivityAssignment(id, patch = {}, orgId = null) {
   if (!id) throw new Error("updateActivityAssignment requiere id");
-
-  const updateRow = {};
-  ["tracker_user_id", "activity_id", "start_date", "end_date"].forEach(
-    (field) => {
-      if (typeof patch[field] !== "undefined") {
-        updateRow[field] = patch[field] || null;
-      }
-    }
-  );
-
-  if (Object.keys(updateRow).length === 0) {
-    throw new Error("No hay campos que actualizar en updateActivityAssignment");
-  }
-
+  const updateRow = withActiveOrg(patch, orgId);
   const { data, error } = await supabase
     .from("activity_assignments")
     .update(updateRow)
     .eq("id", id)
     .select("*")
     .maybeSingle();
-
   if (error) {
     console.error("Error updateActivityAssignment:", error);
     throw error;
   }
-
   return data;
 }
 
@@ -141,18 +114,16 @@ export async function updateActivityAssignment(id, patch) {
  * Elimina una asignación de actividad (DELETE real).
  * Si prefieres soft-delete, aquí se puede adaptar.
  */
-export async function deleteActivityAssignment(id) {
+export async function deleteActivityAssignment(id, orgId = null) {
   if (!id) throw new Error("deleteActivityAssignment requiere id");
-
   const { error } = await supabase
     .from("activity_assignments")
     .delete()
-    .eq("id", id);
-
+    .eq("id", id)
+    .eq("tenant_id", String(orgId));
   if (error) {
     console.error("Error deleteActivityAssignment:", error);
     throw error;
   }
-
   return true;
 }

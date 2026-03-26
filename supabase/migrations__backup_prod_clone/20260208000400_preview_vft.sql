@@ -10832,7 +10832,6 @@ $$;
 
 ALTER FUNCTION "public"."rpc_plan_tracker_vigente_usage"("org_id" "uuid") OWNER TO "postgres";
 
-CREATE OR REPLACE FUNCTION "public"."rpc_provision_tracker_and_assign"("p_tracker_user_id" "uuid", "p_geofence_id" "uuid", "p_frequency_minutes" integer DEFAULT 5, "p_active" boolean DEFAULT true) RETURNS TABLE("ok" boolean, "message" "text", "tracker_user_id" "uuid", "geofence_id" "uuid", "frequency_minutes" integer, "active" boolean)
     LANGUAGE "plpgsql" SECURITY DEFINER
     SET "search_path" TO 'public'
     AS $_$
@@ -10925,6 +10924,30 @@ begin
   values (p_tracker_user_id, v_geofence_org, 'tracker')
   on conflict (user_id, org_id) do update set
     role = excluded.role;
+
+  -- [plan-enforcement][tracker-create] Enforcement de límite de trackers por plan
+  select max_trackers, effective_plan_code
+    into v_max_trackers, v_plan_code
+  from public.org_entitlements
+  where org_id = v_geofence_org;
+
+  if v_max_trackers is null then
+    raise exception '[plan-enforcement][tracker-create] org_entitlements no tiene límite para org_id=%', v_geofence_org
+      using errcode = 'P0001';
+  end if;
+
+  select count(*) into v_current_count
+  from public.tracker_assignments
+  where org_id = v_geofence_org
+    and active = true;
+
+  if v_current_count >= v_max_trackers then
+    raise exception '[plan-enforcement][tracker-create] Tracker limit reached for current plan: org_id=%, plan_code=%, limit=%, current_count=%',
+      v_geofence_org, v_plan_code, v_max_trackers, v_current_count
+      using errcode = 'P0001',
+            detail = format('org_id=%s, plan_code=%s, limit=%s, current_count=%s, reason=tracker_limit_reached', v_geofence_org, v_plan_code, v_max_trackers, v_current_count),
+            hint = 'Tracker limit reached for current plan';
+  end if;
 
   -- Detectar columnas reales en tracker_assignments
   select exists (

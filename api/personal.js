@@ -238,7 +238,7 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
   r = await supaSrv
     .from("personal")
     .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
-    .eq("org_id", orgId)
+    .eq("org_id", orgId) // Hardening: multi-tenant isolation
     .or(orClause)
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
@@ -299,7 +299,7 @@ async function handleList(req, res) {
   let query = supaSrv
     .from("personal")
     .select("*")
-    .eq("org_id", ctx.org_id)
+    .eq("org_id", ctx.org_id) // Hardening: multi-tenant isolation
     .eq("is_deleted", false)
     .order("nombre", { ascending: true })
     .limit(limit);
@@ -368,6 +368,7 @@ async function handlePost(req, res) {
       .from("personal")
       .update({ vigente: nextVigente, updated_at: nowIso })
       .eq("id", id)
+      .eq("org_id", ctx.org_id) // Hardening: multi-tenant isolation
       .eq("org_id", ctx.org_id)
       .select("*")
       .limit(1);

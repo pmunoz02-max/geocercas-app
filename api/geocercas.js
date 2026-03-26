@@ -209,9 +209,10 @@ async function resolveContext(req) {
     if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
   }
 
-  // 2) Resolver membership: org activa si existe, si no default
+  // 2) Resolver membership según regla universal
+  // Si requestedOrgId está presente, solo se permite continuar si hay membership válida en esa org
+  // Si no, se permite fallback a org activa o default
   let mRow = null;
-
   const membershipForOrg = (orgId) => (c) =>
     c
       .from("memberships")
@@ -220,7 +221,6 @@ async function resolveContext(req) {
       .eq("org_id", orgId)
       .is("revoked_at", null)
       .maybeSingle();
-
   const membershipDefault = (c) =>
     c
       .from("memberships")
@@ -231,36 +231,56 @@ async function resolveContext(req) {
       .limit(1)
       .maybeSingle();
 
-  async function resolveMembership() {
-    // A) org activa
-    if (currentOrgId) {
+  if (requestedOrgId) {
+    // Regla: si se pidió org explícita y no hay membership válida, 403 sin fallback
+    let m = null;
+    if (sbSrv) {
+      const r = await tryMaybeSingle(sbSrv, membershipForOrg(requestedOrgId));
+      if (r.ok && r.data?.org_id) m = r.data;
+    }
+    if (!m) {
+      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(requestedOrgId));
+      if (r2.ok && r2.data?.org_id) m = r2.data;
+    }
+    if (!m) {
+      return {
+        ok: false,
+        status: 403,
+        error: "Requested org is not available for current user",
+        details: "No valid membership for requestedOrgId; fallback is forbidden by security policy."
+      };
+    }
+    mRow = m;
+  } else {
+    // Sin org explícita: permitir fallback a org activa o default
+    async function resolveMembership() {
+      // A) org activa
+      if (currentOrgId) {
+        if (sbSrv) {
+          const r = await tryMaybeSingle(sbSrv, membershipForOrg(currentOrgId));
+          if (r.ok && r.data?.org_id) return r.data;
+        }
+        const r2 = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
+        if (r2.ok && r2.data?.org_id) return r2.data;
+      }
+      // B) default
       if (sbSrv) {
-        const r = await tryMaybeSingle(sbSrv, membershipForOrg(currentOrgId));
+        const r = await tryMaybeSingle(sbSrv, membershipDefault);
         if (r.ok && r.data?.org_id) return r.data;
       }
-      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(currentOrgId));
+      const r2 = await tryMaybeSingle(sbUser, membershipDefault);
       if (r2.ok && r2.data?.org_id) return r2.data;
+      return null;
     }
-
-    // B) default
-    if (sbSrv) {
-      const r = await tryMaybeSingle(sbSrv, membershipDefault);
-      if (r.ok && r.data?.org_id) return r.data;
+    mRow = await resolveMembership();
+    if (!mRow?.org_id) {
+      return {
+        ok: false,
+        status: 403,
+        error: "No membership",
+        details: "User has no active membership",
+      };
     }
-    const r2 = await tryMaybeSingle(sbUser, membershipDefault);
-    if (r2.ok && r2.data?.org_id) return r2.data;
-
-    return null;
-  }
-
-  mRow = await resolveMembership();
-  if (!mRow?.org_id) {
-    return {
-      ok: false,
-      status: 403,
-      error: "No membership",
-      details: "User has no active membership",
-    };
   }
 
   const ctx = {
@@ -302,7 +322,13 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const ctxRes = await resolveContext(req);
+    // Multi-tenant hardening: extraer requestedOrgId universal
+    const query = getQuery(req);
+    const payload = req.method === "POST" ? (await readBody(req)) || {} : null;
+    // Import dinámico para evitar circularidad si aplica
+    const { extractRequestedOrgId } = await import("./_lib/extractRequestedOrgId.js");
+    const requestedOrgId = extractRequestedOrgId({ payload, query });
+    const ctxRes = await resolveContext(req, { requestedOrgId });
     if (!ctxRes.ok) {
       return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
     }

@@ -460,8 +460,8 @@ export default function AsignacionesPage() {
     };
 
     const resp = editingId
-      ? await updateAsignacion(editingId, payload)
-      : await createAsignacion(payload);
+      ? await updateAsignacion(editingId, payload, orgId)
+      : await createAsignacion(payload, orgId);
 
     if (resp.error) {
       console.error("[AsignacionesPage] save error:", resp.error);
@@ -841,7 +841,7 @@ export default function AsignacionesPage() {
                 );
                 if (!ok) return;
 
-                const resp = await deleteAsignacion(id);
+                const resp = await deleteAsignacion(id, orgId);
                 if (resp.error) {
                   setError(
                     tt(
@@ -859,7 +859,7 @@ export default function AsignacionesPage() {
               onToggleStatus={async (row) => {
                 // Toggle status between 'activa' and 'inactiva'
                 const newStatus = (row.status || row.estado) === "activa" ? "inactiva" : "activa";
-                const resp = await updateAsignacion(row.id, { status: newStatus });
+                const resp = await updateAsignacion(row.id, { status: newStatus }, orgId);
                 if (resp.error) {
                   setError(tt("asignaciones.messages.saveGenericError", "Error updating status."));
                 } else {

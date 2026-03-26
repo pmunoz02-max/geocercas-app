@@ -43,14 +43,16 @@ export async function getAsignacionesBundle(orgId = null) {
   return { data: payload?.data ?? null, error: null };
 }
 
-export async function createAsignacion(payload) {
-  return apiFetch("POST", payload);
+import { withActiveOrg } from "./withActiveOrg";
+
+export async function createAsignacion(payload = {}, orgId = null) {
+  return apiFetch("POST", withActiveOrg(payload, orgId));
 }
 
-export async function updateAsignacion(id, patch) {
-  return apiFetch("PATCH", { id, patch });
+export async function updateAsignacion(id, patch = {}, orgId = null) {
+  return apiFetch("PATCH", withActiveOrg({ id, patch }, orgId));
 }
 
-export async function deleteAsignacion(id) {
-  return apiFetch("DELETE", { id });
+export async function deleteAsignacion(id, orgId = null) {
+  return apiFetch("DELETE", withActiveOrg({ id }, orgId));
 }

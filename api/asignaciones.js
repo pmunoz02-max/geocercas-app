@@ -19,6 +19,7 @@ async function syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion, ac
       .from("personal")
       .select("id, user_id")
       .eq("id", asignacion.personal_id)
+      .eq("org_id", orgId) // Hardening: multi-tenant isolation
       .eq("org_id", orgId)
       .maybeSingle();
     if (personalError || !personalRow?.user_id) {
@@ -44,7 +45,7 @@ async function syncTrackerAssignmentFromAsignacion({ sbDb, orgId, asignacion, ac
       await sbDb
         .from("tracker_assignments")
         .update({ active: false })
-        .eq("org_id", orgId)
+        .eq("org_id", orgId) // Hardening: multi-tenant isolation
         .eq("tracker_user_id", trackerUserId)
         .eq("start_date", trackerAssignmentRow.start_date)
         .eq("end_date", trackerAssignmentRow.end_date);
@@ -286,6 +287,29 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     return data?.org_id ? String(data.org_id) : null;
   };
 
+  // Regla universal: si requestedOrgId está presente, solo se permite continuar si hay membership válida en esa org
+  // Si no, se permite fallback a org activa o default
+  const loadMembershipForOrg = async (orgId) => {
+    if (!orgId) return null;
+    const { data, error } = await sbDb
+      .from("memberships")
+      .select("org_id, role, is_default, revoked_at")
+      .eq("user_id", user.id)
+      .eq("org_id", orgId)
+      .is("revoked_at", null)
+      .maybeSingle();
+    if (error) return null;
+    return data?.org_id ? data : null;
+  };
+  const loadCurrentOrgFromUserCurrentOrg = async () => {
+    const { data, error } = await sbDb
+      .from("user_current_org")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) return null;
+    return data?.org_id ? String(data.org_id) : null;
+  };
   const loadDefaultMembership = async () => {
     const { data, error } = await sbDb
       .from("memberships")
@@ -298,49 +322,21 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     if (error) return { data: null, error };
     return { data, error: null };
   };
-
   let mRow = null;
-
   if (requestedOrgId) {
     mRow = await loadMembershipForOrg(String(requestedOrgId));
     if (!mRow) {
-      return { ok: false, status: 403, error: "Requested org is not available for current user" };
+      return { ok: false, status: 403, error: "Requested org is not available for current user", details: "No valid membership for requestedOrgId; fallback is forbidden by security policy." };
     }
-  }
-
-  if (!mRow) {
+  } else {
     const currentOrgId = await loadCurrentOrgFromUserCurrentOrg();
     if (currentOrgId) mRow = await loadMembershipForOrg(currentOrgId);
+    if (!mRow) {
+      const { data, error } = await loadDefaultMembership();
+      if (error) return { ok: false, status: 500, error: error.message || "memberships lookup failed" };
+      mRow = data || null;
+    }
   }
-
-  if (!mRow) {
-    const { data, error } = await loadDefaultMembership();
-    if (error) return { ok: false, status: 500, error: "Membership lookup failed", details: error.message };
-    mRow = data || null;
-  }
-
-  if (!mRow?.org_id) return { ok: false, status: 403, error: "No membership" };
-
-  return { ok: true, ctx: { org_id: String(mRow.org_id) }, user, sbDb };
-}
-
-/* =========================
-   Catalog loaders
-========================= */
-
-async function loadCatalogs(sbDb, orgId) {
-  const catalogs = { personal: [], geocercas: [], activities: [] };
-
-  try {
-    const r = await sbDb
-      .from("personal")
-      .select("id,nombre,apellido,email,org_id,active")
-      .eq("org_id", orgId)
-      .order("nombre", { ascending: true })
-      .limit(500);
-    if (!r.error) catalogs.personal = r.data || [];
-  } catch {}
-
   // UI usa geofences para escoger; devolvemos en geocercas por compat
   try {
     const r = await sbDb
@@ -365,7 +361,7 @@ async function loadCatalogs(sbDb, orgId) {
     const r = await sbDb
       .from("activities")
       .select("id,name,org_id,active")
-      .eq("org_id", orgId)
+      .eq("org_id", orgId) // Hardening: multi-tenant isolation
       .order("name", { ascending: true })
       .limit(500);
     if (!r.error) {

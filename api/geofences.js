@@ -252,19 +252,43 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
 
   let currentOrgId = null;
   const ucoQuery = (c) => c.from("user_current_org").select("org_id").eq("user_id", user.id).maybeSingle();
-
-  if (sbSrv) {
-    const r1 = await tryMaybeSingle(sbSrv, ucoQuery);
-    if (r1.ok && r1.data?.org_id) currentOrgId = String(r1.data.org_id);
-  }
-  if (!currentOrgId) {
-    const r2 = await tryMaybeSingle(sbUser, ucoQuery);
-    if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
-  }
-
-  // Permitir override seguro por requestedOrgId
-  if (requestedOrgId && String(requestedOrgId).length > 0) {
+  if (requestedOrgId) {
+    // Regla: si se pidió org explícita y no hay membership válida, 403 sin fallback
+    const membershipForOrg = (orgId) => (c) =>
+      c
+        .from("memberships")
+        .select("org_id, role, is_default, revoked_at")
+        .eq("user_id", user.id)
+        .eq("org_id", orgId)
+        .is("revoked_at", null)
+        .maybeSingle();
+    let m = null;
+    if (sbSrv) {
+      const r = await tryMaybeSingle(sbSrv, membershipForOrg(requestedOrgId));
+      if (r.ok && r.data?.org_id) m = r.data;
+    }
+    if (!m) {
+      const r2 = await tryMaybeSingle(sbUser, membershipForOrg(requestedOrgId));
+      if (r2.ok && r2.data?.org_id) m = r2.data;
+    }
+    if (!m) {
+      return {
+        ok: false,
+        status: 403,
+        error: "Requested org is not available for current user",
+        details: "No valid membership for requestedOrgId; fallback is forbidden by security policy."
+      };
+    }
     currentOrgId = String(requestedOrgId);
+  } else {
+    if (sbSrv) {
+      const r1 = await tryMaybeSingle(sbSrv, ucoQuery);
+      if (r1.ok && r1.data?.org_id) currentOrgId = String(r1.data.org_id);
+    }
+    if (!currentOrgId) {
+      const r2 = await tryMaybeSingle(sbUser, ucoQuery);
+      if (r2.ok && r2.data?.org_id) currentOrgId = String(r2.data.org_id);
+    }
   }
 
   const membershipForOrg = (orgId) => (c) =>

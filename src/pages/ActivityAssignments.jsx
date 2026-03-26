@@ -38,7 +38,8 @@ export default function ActivityAssignmentsPage() {
   const tt = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
-  const { user } = useAuth() || {};
+  const { user, activeOrgId } = useAuth() || {};
+  const orgId = activeOrgId || null;
 
   const [activities, setActivities] = useState([]);
   const [trackers, setTrackers] = useState([]);
@@ -261,7 +262,7 @@ export default function ActivityAssignmentsPage() {
           activity_id: form.activity_id,
           start_date: form.start_date,
           end_date: form.end_date || null,
-        });
+        }, orgId);
         setSuccessMsg(
           tt(
             "activityAssignments.messages.assignedSuccessfully",
@@ -274,7 +275,7 @@ export default function ActivityAssignmentsPage() {
           activity_id: form.activity_id,
           start_date: form.start_date,
           end_date: form.end_date || null,
-        });
+        }, orgId);
         setSuccessMsg(
           tt(
             "activityAssignments.messages.updatedSuccessfully",
@@ -341,7 +342,7 @@ export default function ActivityAssignmentsPage() {
     if (!ok) return;
 
     try {
-      await deleteActivityAssignment(row.id);
+      await deleteActivityAssignment(row.id, orgId);
       setSuccessMsg(
         tt(
           "activityAssignments.messages.deletedSuccessfully",

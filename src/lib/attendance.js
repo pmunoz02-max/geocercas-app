@@ -1,12 +1,13 @@
 // src/lib/attendance.js
 import { supabase } from "../supabaseClient.js";
+import { withActiveOrg } from "./withActiveOrg.js";
 
 /**
  * Obtiene (o crea) el registro de asistencia del usuario para una fecha dada.
  * @param {string} userId
  * @param {Date} dateObj  fecha local (no tz) del cliente
  */
-export async function getOrCreateTodayAttendance(userId, dateObj = new Date()) {
+export async function getOrCreateTodayAttendance(userId, dateObj = new Date(), orgId = null) {
   const fechaIso = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD (local->ISO)
   // Intentar obtener
   let { data, error } = await supabase
@@ -14,17 +15,18 @@ export async function getOrCreateTodayAttendance(userId, dateObj = new Date()) {
     .select('*')
     .eq('user_id', userId)
     .eq('fecha', fechaIso)
+    .eq('org_id', String(orgId))
     .maybeSingle();
 
   if (error && error.code !== 'PGRST116') throw error; // PGRST116: no row returned
 
   if (!data) {
     // Crear
-    const insert = {
+    const insert = withActiveOrg({
       user_id: userId,
       fecha: fechaIso,
       notas: null,
-    };
+    }, orgId);
     const ins = await supabase
       .from('asistencias')
       .insert(insert)
@@ -39,16 +41,17 @@ export async function getOrCreateTodayAttendance(userId, dateObj = new Date()) {
 /**
  * Marca entrada: guarda hora y geolocalización
  */
-export async function markCheckIn(attendanceId, coords) {
-  const payload = {
+export async function markCheckIn(attendanceId, coords, orgId = null) {
+  const payload = withActiveOrg({
     check_in: new Date().toISOString(),
     lat_in: coords?.latitude ?? null,
     lng_in: coords?.longitude ?? null,
-  };
+  }, orgId);
   const { data, error } = await supabase
     .from('asistencias')
     .update(payload)
     .eq('id', attendanceId)
+    .eq('org_id', String(orgId))
     .select('*')
     .single();
   if (error) throw error;
@@ -58,16 +61,17 @@ export async function markCheckIn(attendanceId, coords) {
 /**
  * Marca salida: guarda hora y geolocalización
  */
-export async function markCheckOut(attendanceId, coords) {
-  const payload = {
+export async function markCheckOut(attendanceId, coords, orgId = null) {
+  const payload = withActiveOrg({
     check_out: new Date().toISOString(),
     lat_out: coords?.latitude ?? null,
     lng_out: coords?.longitude ?? null,
-  };
+  }, orgId);
   const { data, error } = await supabase
     .from('asistencias')
     .update(payload)
     .eq('id', attendanceId)
+    .eq('org_id', String(orgId))
     .select('*')
     .single();
   if (error) throw error;

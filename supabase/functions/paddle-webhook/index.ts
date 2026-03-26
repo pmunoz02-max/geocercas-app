@@ -1,16 +1,19 @@
-﻿
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, paddle-signature",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, paddle-signature",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Content-Type": "application/json",
 };
 
 function json(status: number, body: Record<string, unknown>) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
 }
 
 function requireEnv(name: string): string {
@@ -19,31 +22,41 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function verifyPaddleSignature(rawBody: string, signature: string, secret: string): Promise<boolean> {
-  // Paddle v2: HMAC-SHA256, signature is base64
+function parseSignature(header: string) {
+  const normalized = header.replace(/,/g, ";");
+
+  const parts = normalized.split(";").map((p) => p.trim());
+
+  let ts: string | null = null;
+  let h1: string | null = null;
+
+  for (const part of parts) {
+    const [k, v] = part.split("=");
+    if (!k || !v) continue;
+
+    if (k === "ts") ts = v;
+    if (k === "h1" && !h1) h1 = v;
+  }
+
+  return { ts, h1 };
+}
+
+async function hmac(secret: string, payload: string) {
   const enc = new TextEncoder();
+
   const key = await crypto.subtle.importKey(
     "raw",
     enc.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["verify"]
+    ["sign"]
   );
-  const valid = await crypto.subtle.verify(
-    "HMAC",
-    key,
-    base64ToBytes(signature),
-    enc.encode(rawBody)
-  );
-  return valid;
-}
 
-function base64ToBytes(b64: string): Uint8Array {
-  // atob is not available in Deno Deploy, use Buffer
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payload));
+
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 serve(async (req) => {
@@ -57,138 +70,124 @@ serve(async (req) => {
     }
 
     const SUPABASE_URL = requireEnv("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-    const PADDLE_WEBHOOK_SECRET = requireEnv("PADDLE_WEBHOOK_SECRET");
+    const SERVICE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const SECRET = requireEnv("PADDLE_WEBHOOK_SECRET");
 
-
-    // 1. Leer raw body
     const rawBody = await req.text();
-    // 2. Leer header
-    const signatureHeader = req.headers.get("Paddle-Signature");
-    console.log("[WEBHOOK] signature header exists:", !!signatureHeader);
-    if (!signatureHeader) {
-      return json(401, { ok: false, error: "Missing Paddle-Signature header" });
+
+    const header =
+      req.headers.get("paddle-signature") ??
+      req.headers.get("Paddle-Signature");
+
+    if (!header) {
+      return json(401, { ok: false, error: "Missing signature" });
     }
 
-    // 3. Parsear header Paddle-Signature para extraer ts y h1
-    let ts = null;
-    let h1 = null;
-    try {
-      const parts = signatureHeader.split(",").map((s) => s.trim());
-      for (const part of parts) {
-        if (part.startsWith("ts:")) ts = part.slice(3);
-        if (part.startsWith("v1:")) h1 = part.slice(3);
-      }
-    } catch {}
-    console.log("[WEBHOOK] ts:", ts);
-    console.log("[WEBHOOK] has h1:", !!h1);
+    const { ts, h1 } = parseSignature(header);
+
     if (!ts || !h1) {
-      return json(401, { ok: false, error: "Invalid Paddle-Signature format" });
+      return json(401, { ok: false, error: "Invalid signature format" });
     }
 
-    // 4. Construir signed payload EXACTO
-    const signedPayload = `${ts}:${rawBody}`;
+    const computed = await hmac(SECRET, `${ts}:${rawBody}`);
 
-    // 5. Calcular HMAC SHA-256 usando Web Crypto API
-    let computedSig = "";
-    try {
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        "raw",
-        enc.encode(PADDLE_WEBHOOK_SECRET),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"]
-      );
-      const sigBuf = await crypto.subtle.sign(
-        "HMAC",
-        key,
-        enc.encode(signedPayload)
-      );
-      computedSig = Array.from(new Uint8Array(sigBuf)).map(b => b.toString(16).padStart(2, "0")).join("");
-    } catch (err) {
-      console.log("[WEBHOOK] signature valid:", false);
-      return json(401, { ok: false, error: "Invalid signature (exception)" });
-    }
-    console.log("[WEBHOOK] computed signature prefix:", computedSig.slice(0, 12));
-
-    // 7. Comparar el digest calculado contra h1
-    const validSig = computedSig === h1;
-    console.log("[WEBHOOK] signature valid:", validSig);
-    if (!validSig) {
+    if (computed !== h1) {
       return json(401, { ok: false, error: "Invalid signature" });
     }
 
-    const event = JSON.parse(rawBody);
-    const eventType = event?.event_type ?? event?.eventType ?? null;
+    // ---------------------------------
+    // EVENT
+    // ---------------------------------
 
-    if (eventType !== "transaction.completed") {
-      return json(200, { ok: true, ignored: true, eventType });
+    const event = JSON.parse(rawBody);
+    const type = event?.event_type;
+
+    if (type !== "transaction.completed") {
+      return json(200, { ok: true, ignored: true });
     }
 
-    const data = event?.data ?? {};
-    const orgId = data?.custom_data?.org_id ?? null;
+    const data = event.data;
+
     const transactionId = data?.id ?? null;
-    const customerId = data?.customer_id ?? null;
-    const subscriptionId = data?.subscription_id ?? null;
-    const priceId =
-      data?.items?.[0]?.price?.id ??
-      data?.items?.[0]?.price_id ??
-      null;
+
+    console.log("[WEBHOOK] transactionId:", transactionId);
+
+    const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
+      auth: { persistSession: false },
+    });
+
+    // ---------------------------------
+    // 🔥 RESOLVER org_id (NUEVO)
+    // ---------------------------------
+
+    let orgId: string | null = null;
+
+    // 1. intentar desde custom_data
+    if (data?.custom_data?.org_id) {
+      orgId = data.custom_data.org_id;
+      console.log("[WEBHOOK] orgId from custom_data:", orgId);
+    }
+
+    // 2. fallback → DB
+    if (!orgId && transactionId) {
+      const { data: tx } = await supabase
+        .from("billing_transactions")
+        .select("org_id")
+        .eq("transaction_id", transactionId)
+        .maybeSingle();
+
+      orgId = tx?.org_id ?? null;
+
+      console.log("[WEBHOOK] orgId from DB:", orgId);
+    }
 
     if (!orgId) {
       return json(400, {
         ok: false,
-        error: "Missing custom_data.org_id in transaction.completed",
+        error: "Cannot resolve org_id",
         transactionId,
       });
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false },
-    });
+    // ---------------------------------
+    // ACTIVAR PLAN
+    // ---------------------------------
 
-    const updatePayload: Record<string, unknown> = {
-      billing_provider: "paddle",
-      plan_code: "pro",
-      subscribed_plan_code: "pro",
-      plan_status: "active",
-      cancel_at_period_end: false,
-      canceled_at: null,
-      trial_ends_at: null,
-      updated_at: new Date().toISOString(),
-      last_paddle_event_at: new Date().toISOString(),
-    };
-
-    if (customerId) updatePayload.paddle_customer_id = customerId;
-    if (subscriptionId) updatePayload.paddle_subscription_id = subscriptionId;
-    if (priceId) updatePayload.paddle_price_id = priceId;
+    const now = new Date().toISOString();
 
     const { error } = await supabase
       .from("org_billing")
-      .update(updatePayload)
+      .update({
+        billing_provider: "paddle",
+        plan_code: "pro",
+        subscribed_plan_code: "pro",
+        plan_status: "active",
+        updated_at: now,
+        last_paddle_event_at: now,
+        paddle_subscription_id: data?.subscription_id ?? null,
+        paddle_customer_id: data?.customer_id ?? null,
+      })
       .eq("org_id", orgId);
 
     if (error) {
       return json(500, {
         ok: false,
-        error: "Failed to update org_billing",
+        error: "DB update failed",
         details: error.message,
-        orgId,
-        transactionId,
       });
     }
 
+    console.log("[WEBHOOK] SUCCESS → org activated:", orgId);
+
     return json(200, {
       ok: true,
-      eventType,
       orgId,
       transactionId,
     });
-  } catch (error) {
+  } catch (err) {
     return json(500, {
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: err instanceof Error ? err.message : String(err),
     });
   }
 });
