@@ -126,6 +126,12 @@ export default async function handler(req, res) {
         .single();
 
       if (error) {
+        if (error.code === "23505") {
+          return json(res, 409, {
+            error: "activity_already_exists",
+            message: "Ya existe una actividad activa con ese nombre",
+          });
+        }
         return json(res, 500, {
           error: "activities_create_failed",
           details: error.message,
