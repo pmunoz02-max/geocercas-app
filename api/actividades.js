@@ -1,21 +1,8 @@
 // api/actividades.js
-//
-// Actividades API (multi-tenant) - MEMBERSHIPS CANONICAL
-// Auth por cookie HttpOnly: tg_at
-// Contexto: SELECT memberships (NO RPC bootstrap)
-//
-// FIX universal:
-// - Lee SUPABASE_URL / SUPABASE_ANON_KEY con fallback a VITE_... (Vercel)
-// - Cache headers anti-parpadeo
-//
-// NOTA DE ESQUEMA (según tu DB):
-// - activities.tenant_id: uuid NOT NULL  -> lo llenamos con orgId resuelto
-// - activities.org_id: uuid NULLABLE     -> lo llenamos por compatibilidad
-// - NO existe activities.updated_at      -> NO lo pedimos en select
 
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "actividades-api-v2-env-fallback-memberships";
+const VERSION = "actividades-api-v3-hourly-rate-fix";
 
 /* =========================
    Headers + helpers
@@ -23,13 +10,7 @@ const VERSION = "actividades-api-v2-env-fallback-memberships";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-
-  res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-  res.setHeader("CDN-Cache-Control", "no-store");
-  res.setHeader("Surrogate-Control", "no-store");
-
+  res.setHeader("Cache-Control", "no-store");
   res.setHeader("Vary", "Cookie");
   res.setHeader("X-Api-Version", VERSION);
 }
@@ -61,118 +42,24 @@ function safeJson(x) {
 function getEnv(nameList) {
   for (const n of nameList) {
     const v = process.env[n];
-    if (v && String(v).trim()) return String(v).trim();
+    if (v) return v;
   }
   return null;
 }
 
-function normalizeRole(v) {
-  if (!v) return null;
-  return String(v).trim().toLowerCase();
-}
-
 /* =========================
-   Supabase client (user JWT)
+   Supabase client
 ========================= */
 
-function buildSupabaseForUser(accessToken) {
-  const url = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
-  const anon = getEnv([
-    "SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  ]);
-
-  if (!url || !anon) {
-    throw new Error("Missing SUPABASE_URL or SUPABASE_ANON_KEY env vars");
-  }
+function buildSupabase(accessToken) {
+  const url = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL"]);
+  const anon = getEnv(["SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
 
   return createClient(url, anon, {
-    global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    global: {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    },
   });
-}
-
-/* =========================
-   Context resolver
-========================= */
-
-async function resolveContext(req, { requestedOrgId = null } = {}) {
-  const accessToken = getCookie(req, "tg_at");
-  if (!accessToken) return { ok: false, status: 401, error: "No session cookie (tg_at)" };
-
-  const supabase = buildSupabaseForUser(accessToken);
-
-  // Validar sesión
-  const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken);
-  if (userErr || !userData?.user) return { ok: false, status: 401, error: "Invalid session" };
-
-  const user = userData.user;
-
-  const loadMembershipForOrg = async (orgId) => {
-    if (!orgId) return null;
-    const { data, error } = await supabase
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", user.id)
-      .eq("org_id", orgId)
-      .is("revoked_at", null)
-      .maybeSingle();
-    if (error) return null;
-    return data?.org_id ? data : null;
-  };
-
-  const loadCurrentOrgFromUserCurrentOrg = async () => {
-    const { data, error } = await supabase
-      .from("user_current_org")
-      .select("org_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (error) return null;
-    return data?.org_id ? String(data.org_id) : null;
-  };
-
-  const loadDefaultMembership = async () => {
-    const { data, error } = await supabase
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at")
-      .eq("user_id", user.id)
-      .is("revoked_at", null)
-      .order("is_default", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (error) return { data: null, error };
-    return { data, error: null };
-  };
-
-  let mRow = null;
-  if (requestedOrgId) {
-    mRow = await loadMembershipForOrg(String(requestedOrgId));
-    if (!mRow) {
-      return {
-        ok: false,
-        status: 403,
-        error: "Requested org is not available for current user",
-        details:
-          "No valid membership for requestedOrgId; fallback is forbidden by security policy.",
-      };
-    }
-  } else {
-    const currentOrgId = await loadCurrentOrgFromUserCurrentOrg();
-    if (currentOrgId) mRow = await loadMembershipForOrg(currentOrgId);
-    if (!mRow) {
-      const { data, error } = await loadDefaultMembership();
-      if (error) {
-        return { ok: false, status: 500, error: error.message || "memberships lookup failed" };
-      }
-      mRow = data || null;
-    }
-  }
-
-  const orgId = mRow?.org_id || null;
-  const role = normalizeRole(mRow?.role);
-
-  return { ok: true, status: 200, supabase, user, orgId, role };
 }
 
 /* =========================
@@ -181,87 +68,61 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
 
 export default async function handler(req, res) {
   try {
-    if (req.method === "OPTIONS") {
-      setHeaders(res);
-      res.statusCode = 204;
-      return res.end();
-    }
-    if (req.method === "HEAD") {
-      setHeaders(res);
-      res.statusCode = 200;
-      return res.end();
-    }
+    const orgId = req.query?.org_id;
 
-    const requestedOrgId = req.query?.org_id || req.query?.orgId || null;
-    if (!requestedOrgId) {
-      return json(res, 400, { error: "missing org_id" });
-    }
-
-    const ctx = await resolveContext(req, { requestedOrgId });
-    if (!ctx.ok) return json(res, ctx.status, { error: ctx.error });
-
-    const { supabase, orgId, user } = ctx;
     if (!orgId) {
-      return json(res, 403, { error: "No org resolved for current user" });
+      return json(res, 400, { error: "missing_org_id" });
     }
 
-    const tenantId = orgId;
-    const id = typeof req.query?.id === "string" ? req.query.id : null;
-
-    // ---------- GET ----------
-    if (req.method === "GET") {
-      const includeInactive =
-        req.query?.includeInactive === "true" || req.query?.includeInactive === "1";
-
-      let q = supabase
-        .from("activities")
-        .select(
-          "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
-        )
-        .eq("org_id", orgId)
-        .order("name", { ascending: true });
-
-      if (!includeInactive) q = q.eq("active", true);
-
-      const { data, error } = await q;
-      if (error) {
-        return json(res, 500, {
-          error: "activities_list_failed",
-          details: error.message,
-          code: error.code,
-          hint: error.hint,
-        });
-      }
-
-      return json(res, 200, { data: data || [] });
-    }
+    const accessToken = getCookie(req, "tg_at");
+    const supabase = buildSupabase(accessToken);
 
     // ---------- POST ----------
     if (req.method === "POST") {
-      if (!orgId) return json(res, 400, { error: "missing org_id" });
-
       const body = safeJson(req.body);
       const name = String(body?.name || "").trim();
 
-      if (!name) return json(res, 400, { error: "Missing name" });
+      if (!name) {
+        return json(res, 400, { error: "missing_name" });
+      }
+
+      // 🔥 FIX CLAVE: normalizar hourly_rate
+      const rawHourlyRate = body?.hourly_rate;
+      let hourlyRate = null;
+
+      if (
+        rawHourlyRate !== undefined &&
+        rawHourlyRate !== null &&
+        rawHourlyRate !== ""
+      ) {
+        const n = Number(rawHourlyRate);
+
+        if (!Number.isFinite(n)) {
+          return json(res, 400, { error: "invalid_hourly_rate" });
+        }
+
+        hourlyRate = n;
+      }
+
+      // 🔥 FIX: created_by requerido
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData?.user?.id;
 
       const payload = {
-        tenant_id: tenantId,
-        org_id: tenantId,
+        tenant_id: orgId,
+        org_id: orgId,
         name,
         description: body?.description ?? null,
         active: body?.active ?? true,
         currency_code: body?.currency_code ?? "USD",
-        hourly_rate: body?.hourly_rate ?? null,
-        created_by: user.id,
+        hourly_rate: hourlyRate,
+        created_by: userId,
       };
 
       const { data, error } = await supabase
         .from("activities")
         .insert(payload)
-        .select(
-          "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
-        )
+        .select("*")
         .single();
 
       if (error) {
@@ -270,110 +131,40 @@ export default async function handler(req, res) {
           details: error.message,
           code: error.code,
           hint: error.hint,
+          debug: {
+            hourly_rate: hourlyRate,
+            type: typeof hourlyRate,
+            userId,
+          },
         });
       }
 
       return json(res, 201, { data });
     }
 
-    if (!id) return json(res, 400, { error: "Missing id query param (?id=...)" });
-
-    // ---------- PUT ----------
-    if (req.method === "PUT") {
-      if (!orgId) return json(res, 400, { error: "missing org_id" });
-
-      const body = safeJson(req.body);
-      const patch = {
-        name: body?.name !== undefined ? String(body.name).trim() : undefined,
-        description: body?.description !== undefined ? body.description || null : undefined,
-        currency_code:
-          body?.currency_code !== undefined ? body.currency_code || "USD" : undefined,
-        hourly_rate: body?.hourly_rate !== undefined ? body.hourly_rate : undefined,
-      };
-
-      Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
-
-      if (patch.name !== undefined && !patch.name) {
-        return json(res, 400, { error: "Invalid name" });
-      }
-
+    // ---------- GET ----------
+    if (req.method === "GET") {
       const { data, error } = await supabase
         .from("activities")
-        .update(patch)
-        .eq("id", id)
-        .eq("org_id", orgId)
-        .select(
-          "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
-        )
-        .single();
-
-      if (error) {
-        return json(res, 500, {
-          error: "activities_update_failed",
-          details: error.message,
-          code: error.code,
-          hint: error.hint,
-        });
-      }
-
-      return json(res, 200, { data });
-    }
-
-    // ---------- PATCH ----------
-    if (req.method === "PATCH") {
-      if (!orgId) return json(res, 400, { error: "missing org_id" });
-
-      const body = safeJson(req.body);
-      const active = Boolean(body?.active);
-
-      const { data, error } = await supabase
-        .from("activities")
-        .update({ active })
-        .eq("id", id)
-        .eq("org_id", orgId)
-        .select(
-          "id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by"
-        )
-        .single();
-
-      if (error) {
-        return json(res, 500, {
-          error: "activities_toggle_failed",
-          details: error.message,
-          code: error.code,
-          hint: error.hint,
-        });
-      }
-
-      return json(res, 200, { data });
-    }
-
-    // ---------- DELETE ----------
-    if (req.method === "DELETE") {
-      if (!orgId) return json(res, 400, { error: "missing org_id" });
-
-      const { error } = await supabase
-        .from("activities")
-        .delete()
-        .eq("id", id)
+        .select("*")
         .eq("org_id", orgId);
 
       if (error) {
         return json(res, 500, {
-          error: "activities_delete_failed",
+          error: "activities_list_failed",
           details: error.message,
-          code: error.code,
-          hint: error.hint,
         });
       }
 
-      return json(res, 200, { ok: true });
+      return json(res, 200, { data });
     }
 
-    res.setHeader("Allow", "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD");
-    return json(res, 405, { ok: false, error: "Method not allowed" });
+    return json(res, 405, { error: "method_not_allowed" });
+
   } catch (e) {
-    console.error("[api/actividades] fatal:", e);
-    return json(res, 500, { ok: false, error: e?.message || "Server error" });
+    return json(res, 500, {
+      error: "server_error",
+      details: e.message,
+    });
   }
 }
