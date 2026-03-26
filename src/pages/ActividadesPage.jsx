@@ -27,8 +27,7 @@ const CURRENCIES = [
   { code: "GBP" },
 ];
 
-// Fallback razonable de locale sin depender del i18n (evita romper si no está config)
-// Puedes ajustar luego si quieres: "es-EC", "es", etc.
+// Fallback razonable de locale sin depender del i18n
 function getSafeLocale() {
   try {
     if (typeof navigator !== "undefined" && navigator.language) return navigator.language;
@@ -48,13 +47,12 @@ function formatMoney(amount, currency) {
       maximumFractionDigits: 2,
     }).format(n);
   } catch (_) {
-    // fallback si currency es inválida
     return `${currency || "USD"} ${n.toFixed(2)}`;
   }
 }
 
 export default function ActividadesPage() {
-  const { ready, currentOrg, activeOrgId, role, currentRole } = useAuth();
+  const { ready, activeOrgId, role, currentRole } = useAuth();
   const { t } = useTranslation();
 
   const effectiveRole = (currentRole || role || "").toLowerCase();
@@ -78,7 +76,6 @@ export default function ActividadesPage() {
     resetForm();
   }, [activeOrgId]);
 
-  // ✅ Estilos de inputs con alto contraste (universal dentro de esta pantalla)
   const inputClass =
     "border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
   const selectClass =
@@ -143,20 +140,27 @@ export default function ActividadesPage() {
 
     try {
       if (formMode === "create") {
-        await createActividad({
-          name: nombre.trim(),
-          description: descripcion.trim() || null,
-          active: true,
-          currency_code: currency,
-          hourly_rate: Number(hourlyRate),
-        }, { orgId: activeOrgId });
+        await createActividad(
+          {
+            name: nombre.trim(),
+            description: descripcion.trim() || null,
+            active: true,
+            currency_code: currency,
+            hourly_rate: Number(hourlyRate),
+          },
+          { orgId: activeOrgId }
+        );
       } else if (editingId) {
-        await updateActividad(editingId, {
-          name: nombre.trim(),
-          description: descripcion.trim() || null,
-          currency_code: currency,
-          hourly_rate: Number(hourlyRate),
-        }, { orgId: activeOrgId });
+        await updateActividad(
+          editingId,
+          {
+            name: nombre.trim(),
+            description: descripcion.trim() || null,
+            currency_code: currency,
+            hourly_rate: Number(hourlyRate),
+          },
+          { orgId: activeOrgId }
+        );
       }
 
       resetForm();
@@ -167,9 +171,47 @@ export default function ActividadesPage() {
     }
   }
 
+  async function handleToggle(a) {
+    if (!activeOrgId) {
+      setErrorMsg(t("actividades.errorMissingTenant"));
+      return;
+    }
+
+    try {
+      setErrorMsg("");
+      await toggleActividadActiva(a.id, !a.active, { orgId: activeOrgId });
+      await loadActividades();
+    } catch (err) {
+      console.error("[ActividadesPage] toggle error:", err);
+      setErrorMsg(err?.message || t("actividades.errorSave"));
+    }
+  }
+
+  async function handleDelete(a) {
+    if (!activeOrgId) {
+      setErrorMsg(t("actividades.errorMissingTenant"));
+      return;
+    }
+
+    const ok = window.confirm(
+      t("actividades.confirmDelete", {
+        defaultValue: `¿Eliminar la actividad "${a.name}"?`,
+      })
+    );
+    if (!ok) return;
+
+    try {
+      setErrorMsg("");
+      await deleteActividad(a.id, { orgId: activeOrgId });
+      await loadActividades();
+    } catch (err) {
+      console.error("[ActividadesPage] delete error:", err);
+      setErrorMsg(err?.message || t("actividades.errorSave"));
+    }
+  }
+
   const sortedActividades = useMemo(() => {
     const arr = Array.isArray(actividades) ? [...actividades] : [];
-    // Activas primero, luego por nombre
     return arr.sort((a, b) => {
       const aa = a?.active ? 0 : 1;
       const bb = b?.active ? 0 : 1;
@@ -206,7 +248,9 @@ export default function ActividadesPage() {
         <div>
           <h1 className="text-2xl font-semibold">{t("actividades.title")}</h1>
           <div className="text-sm text-gray-600 mt-1">
-            {t("actividades.subtitle", { defaultValue: "Catálogo de actividades con costo por hora." })}
+            {t("actividades.subtitle", {
+              defaultValue: "Catálogo de actividades con costo por hora.",
+            })}
           </div>
         </div>
       </div>
@@ -217,7 +261,6 @@ export default function ActividadesPage() {
         </div>
       )}
 
-      {/* FORMULARIO */}
       {canEdit && (
         <form onSubmit={handleSubmit} className="border rounded-xl p-4 mb-6 bg-white shadow-sm">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -251,7 +294,11 @@ export default function ActividadesPage() {
               <label className="text-sm font-medium text-gray-800">
                 {t("actividades.fieldCurrencyLabel", { defaultValue: "Moneda" })}
               </label>
-              <select className={selectClass} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              <select
+                className={selectClass}
+                value={currency}
+                onChange={(e) => setCurrency(e.target.value)}
+              >
                 {CURRENCIES.map((c) => (
                   <option key={c.code} value={c.code}>
                     {t(`actividades.currencies.${c.code}`, { defaultValue: c.code })}
@@ -262,7 +309,9 @@ export default function ActividadesPage() {
 
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-800">
-                {t("actividades.fieldDescriptionLabel", { defaultValue: "Descripción (opcional)" })}
+                {t("actividades.fieldDescriptionLabel", {
+                  defaultValue: "Descripción (opcional)",
+                })}
               </label>
               <input
                 className={inputClass}
@@ -278,7 +327,9 @@ export default function ActividadesPage() {
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
               type="submit"
             >
-              {formMode === "create" ? t("actividades.buttonCreate") : t("actividades.buttonSave")}
+              {formMode === "create"
+                ? t("actividades.buttonCreate")
+                : t("actividades.buttonSave")}
             </button>
 
             {formMode === "edit" && (
@@ -294,7 +345,6 @@ export default function ActividadesPage() {
         </form>
       )}
 
-      {/* LISTA */}
       {loading ? (
         <div className="border rounded-lg px-4 py-3 text-sm text-gray-700 bg-white">
           {t("actividades.loading")}
@@ -324,7 +374,6 @@ export default function ActividadesPage() {
                       {a.name}
                     </div>
 
-                    {/* Badge estado */}
                     <span
                       className={[
                         "text-xs font-semibold px-2 py-1 rounded-full border",
@@ -332,19 +381,30 @@ export default function ActividadesPage() {
                           ? "bg-green-50 text-green-800 border-green-200"
                           : "bg-gray-100 text-gray-700 border-gray-200",
                       ].join(" ")}
-                      title={isActive ? t("actividades.statusActive") : t("actividades.statusInactive")}
+                      title={
+                        isActive
+                          ? t("actividades.statusActive")
+                          : t("actividades.statusInactive")
+                      }
                     >
-                      {isActive ? t("actividades.statusActive") : t("actividades.statusInactive")}
+                      {isActive
+                        ? t("actividades.statusActive")
+                        : t("actividades.statusInactive")}
                     </span>
                   </div>
 
-                  {/* Meta (más legible y sin caracteres raros) */}
                   <div className="mt-1 text-sm text-gray-700">
-                    <span className="font-medium">{money || `${a.currency_code || "USD"} ${a.hourly_rate ?? ""}`}</span>
+                    <span className="font-medium">
+                      {money || `${a.currency_code || "USD"} ${a.hourly_rate ?? ""}`}
+                    </span>
                     <span className="mx-2 text-gray-400">|</span>
-                    <span className="text-gray-700">{t("actividades.ratePerHour", { defaultValue: "por hora" })}</span>
+                    <span className="text-gray-700">
+                      {t("actividades.ratePerHour", { defaultValue: "por hora" })}
+                    </span>
                     <span className="mx-2 text-gray-400">|</span>
-                    <span className="text-gray-700">{(a.currency_code || "USD").toUpperCase()}</span>
+                    <span className="text-gray-700">
+                      {(a.currency_code || "USD").toUpperCase()}
+                    </span>
                   </div>
 
                   {a.description && (
@@ -365,15 +425,17 @@ export default function ActividadesPage() {
                     </button>
 
                     <button
-                      onClick={() => toggleActividadActiva(a.id, !a.active).then(loadActividades)}
+                      onClick={() => handleToggle(a)}
                       className="text-sm px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
                       type="button"
                     >
-                      {a.active ? t("actividades.actionDeactivate") : t("actividades.actionActivate")}
+                      {a.active
+                        ? t("actividades.actionDeactivate")
+                        : t("actividades.actionActivate")}
                     </button>
 
                     <button
-                      onClick={() => deleteActividad(a.id).then(loadActividades)}
+                      onClick={() => handleDelete(a)}
                       className="text-sm px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
                       type="button"
                     >
