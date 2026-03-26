@@ -167,7 +167,7 @@ export default function TrackerGpsPage() {
   const [tokenIss, setTokenIss] = useState("");
   const [isActivationBgRunning, setIsActivationBgRunning] = useState(false);
   const [trackerAccessToken, setTrackerAccessToken] = useState("");
-  const [disclosureAccepted, setDisclosureAccepted] = useState(false);
+  const [disclosureAccepted, setDisclosureAccepted] = useState(true);
 
   const [acceptError, setAcceptError] = useState("");
   const [acceptErrorCode, setAcceptErrorCode] = useState("");
@@ -597,6 +597,12 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
+    console.log("[send-position] invoke:start", {
+      hasOrg: !!body?.org_id,
+      hasLat: Number.isFinite(Number(body?.lat)),
+      hasLng: Number.isFinite(Number(body?.lng)),
+      trackerTokenPresent: !!trackerAccessToken,
+    });
     let timeoutId = null;
     let controller = null;
     try {
@@ -973,6 +979,13 @@ export default function TrackerGpsPage() {
           timestamp: lastPosition.timestamp ?? Date.now(),
           source: "tracker-gps-web",
         };
+        console.log("[send-gate] sending", {
+          org_id: orgId,
+          lat: c.lat,
+          lng: c.lng,
+          timestamp: lastPosition.timestamp ?? Date.now(),
+          source: "tracker-gps-web",
+        });
 
         try {
           await invokeSendPosition(payload);
