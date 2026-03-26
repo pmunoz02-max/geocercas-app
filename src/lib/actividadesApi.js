@@ -48,15 +48,16 @@ export async function listActividades({ includeInactive = false, orgId = null } 
 }
 
 export async function createActividad(payload, { orgId = null } = {}) {
+  if (!orgId) throw new Error("[createActividad] Falta orgId en options");
   const qs = new URLSearchParams();
-  if (orgId) qs.set("org_id", String(orgId));
-  const url = `/api/actividades${qs.toString() ? `?${qs}` : ""}`;
+  qs.set("org_id", String(orgId));
+  const url = `/api/actividades?${qs}`;
   return await http(url, { method: "POST", body: payload });
 }
 
 export async function updateActividad(id, payload, { orgId = null } = {}) {
-  const qs = new URLSearchParams({ id: String(id) });
-  if (orgId) qs.set("org_id", String(orgId));
+  if (!orgId) throw new Error("[updateActividad] Falta orgId en options");
+  const qs = new URLSearchParams({ id: String(id), org_id: String(orgId) });
   return await http(`/api/actividades?${qs.toString()}`, {
     method: "PUT",
     body: payload,
@@ -64,8 +65,8 @@ export async function updateActividad(id, payload, { orgId = null } = {}) {
 }
 
 export async function deleteActividad(id, { orgId = null } = {}) {
-  const qs = new URLSearchParams({ id: String(id) });
-  if (orgId) qs.set("org_id", String(orgId));
+  if (!orgId) throw new Error("[deleteActividad] Falta orgId en options");
+  const qs = new URLSearchParams({ id: String(id), org_id: String(orgId) });
   await http(`/api/actividades?${qs.toString()}`, {
     method: "DELETE",
   });
@@ -73,10 +74,6 @@ export async function deleteActividad(id, { orgId = null } = {}) {
 }
 
 export async function toggleActividadActiva(id, active, { orgId = null } = {}) {
-  const qs = new URLSearchParams({ id: String(id) });
-  if (orgId) qs.set("org_id", String(orgId));
-  return await http(`/api/actividades?${qs.toString()}`, {
-    method: "PATCH",
-    body: { active },
-  });
+  // Delegar a updateActividad para mantener patrón canónico
+  return updateActividad(id, { active }, options);
 }
