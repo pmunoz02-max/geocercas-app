@@ -240,6 +240,7 @@ export default function InvitarTracker() {
       }
 
       try {
+        // 1. Cargar personas activas/vigentes
         const { data, error } = await supabase
           .from("personal")
           .select("id, org_id, nombre, apellido, email, vigente, activo, activo_bool, is_deleted")
@@ -251,20 +252,33 @@ export default function InvitarTracker() {
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
-
         const filtered = rows.filter((r) => {
           const ab = r?.activo_bool;
           const a = r?.activo;
           const v = r?.vigente;
-
           if (ab !== null && ab !== undefined) return isTruthy(ab);
           if (a !== null && a !== undefined) return isTruthy(a);
           if (v !== null && v !== undefined) return isTruthy(v);
           return true;
         });
 
-        filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
-        setPeople(filtered);
+        // 2. Consultar asignaciones activas y vigentes hoy
+        const nowIso = new Date().toISOString();
+        const { data: asigns, error: asignsErr } = await supabase
+          .from("asignaciones")
+          .select("personal_id")
+          .eq("org_id", orgId)
+          .eq("is_deleted", false)
+          .or("status.eq.activa,estado.eq.activa")
+          .lte("start_time", nowIso)
+          .gte("end_time", nowIso);
+        if (asignsErr) throw asignsErr;
+        const validPersonalIds = new Set((asigns || []).map(a => a.personal_id));
+
+        // 3. Filtrar personas que tengan al menos una asignación activa y vigente
+        const invitables = filtered.filter(p => validPersonalIds.has(p.id));
+        invitables.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
+        setPeople(invitables);
       } catch (e) {
         if (cancelled) return;
         setPeople([]);
@@ -300,6 +314,7 @@ export default function InvitarTracker() {
       setErrMsg(null);
 
       try {
+        const nowIso = new Date().toISOString();
         const { data: rows, error } = await supabase
           .from("asignaciones")
           .select(`
@@ -317,19 +332,22 @@ export default function InvitarTracker() {
           `)
           .eq("org_id", orgId)
           .eq("personal_id", selectedPerson.id)
+          .eq("is_deleted", false)
           .or("status.eq.activa,estado.eq.activa")
+          .lte("start_time", nowIso)
+          .gte("end_time", nowIso)
           .order("start_time", { ascending: false })
           .limit(100);
 
         if (error) throw error;
         if (cancelled) return;
 
-        const safeRows = (Array.isArray(rows) ? rows : []).filter((r) => !r?.is_deleted);
-          setAssignments(safeRows);
+        const safeRows = (Array.isArray(rows) ? rows : []);
+        setAssignments(safeRows);
 
-         if (safeRows.length === 1) {
+        if (safeRows.length === 1) {
           setSelectedAssignmentId(String(safeRows[0].id));
-      } else {
+        } else {
           setSelectedAssignmentId("");
         }
 
