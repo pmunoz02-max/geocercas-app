@@ -95,37 +95,32 @@ export async function createActividad(payload, { orgId = null } = {}) {
 }
 
 export async function updateActividad(id, payload, { orgId = null } = {}) {
-  if (!orgId) throw new Error("[updateActividad] Falta orgId en options");
-
+  if (!orgId) throw new Error("Missing orgId");
   const qs = new URLSearchParams({
     id: String(id),
     org_id: String(orgId),
   });
-
   const parsed = await http(`/api/actividades?${qs.toString()}`, {
     method: "PUT",
     body: payload,
   });
-
   return parsed?.data ?? parsed;
 }
 
 export async function deleteActividad(id, { orgId = null } = {}) {
-  if (!orgId) throw new Error("[deleteActividad] Falta orgId en options");
-
+  if (!orgId) throw new Error("Missing orgId");
   const qs = new URLSearchParams({
     id: String(id),
     org_id: String(orgId),
   });
-
   await http(`/api/actividades?${qs.toString()}`, {
     method: "DELETE",
   });
-
   return true;
 }
 
 export async function toggleActividadActiva(id, active, options = {}) {
+  if (!options.orgId) throw new Error("Missing orgId");
   const parsed = await updateActividad(id, { active }, options);
   return parsed;
 }
