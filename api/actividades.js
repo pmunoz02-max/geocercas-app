@@ -186,74 +186,68 @@ export default async function handler(req, res) {
       return res.end();
     }
 
+    // 1. Leer org_id de query (org_id u orgId)
     const requestedOrgId = req.query?.org_id || req.query?.orgId || null;
-    const ctx = await resolveContext(req, { requestedOrgId });
-    if (!ctx.ok) return json(res, ctx.status, { ok: false, error: ctx.error });
-
-    const { supabase, orgId } = ctx;
-
-    if (!orgId) {
-      return json(res, 403, { ok: false, error: "No org resolved for current user" });
+    if (!requestedOrgId) {
+      return json(res, 400, { error: "missing org_id" });
     }
-
-    // tenant real = tenant_id (NOT NULL)
+    // 2. Resolver contexto y membership
+    const ctx = await resolveContext(req, { requestedOrgId });
+    if (!ctx.ok) return json(res, ctx.status, { error: ctx.error });
+    const { supabase, orgId } = ctx;
+    if (!orgId) {
+      return json(res, 403, { error: "No org resolved for current user" });
+    }
     const tenantId = orgId;
-
     const id = typeof req.query?.id === "string" ? req.query.id : null;
 
     // ---------- GET ----------
     if (req.method === "GET") {
+      // 3. includeInactive: true = todas, false = solo activas
       const includeInactive = req.query?.includeInactive === "true" || req.query?.includeInactive === "1";
-
       let q = supabase
         .from("activities")
         .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
-        .eq("tenant_id", tenantId)
-        .eq("org_id", orgId) // Hardening: multi-tenant isolation
+        .eq("org_id", orgId)
         .order("name", { ascending: true });
-
       if (!includeInactive) q = q.eq("active", true);
-
       const { data, error } = await q;
-      if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 200, { ok: true, data: data || [] });
+      if (error) return json(res, 500, { error: "activities_list_failed", details: error.message, code: error.code, hint: error.hint });
+      return json(res, 200, { data: data || [] });
     }
 
     // ---------- POST ----------
     if (req.method === "POST") {
+      // 8. Exigir org_id explícito
+      if (!orgId) return json(res, 400, { error: "missing org_id" });
       const body = safeJson(req.body);
       const name = String(body?.name || "").trim();
-      if (!name) return json(res, 400, { ok: false, error: "Missing name" });
-
+      if (!name) return json(res, 400, { error: "Missing name" });
       const payload = {
-        tenant_id: tenantId, // ✅ NOT NULL
-        org_id: tenantId, // ✅ compat
+        tenant_id: tenantId,
+        org_id: tenantId,
         name,
         description: body?.description ?? null,
         active: body?.active ?? true,
         currency_code: body?.currency_code ?? "USD",
         hourly_rate: body?.hourly_rate ?? null,
       };
-
       const { data, error } = await supabase
         .from("activities")
         .insert(payload)
         .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
         .single();
-
-      if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 201, { ok: true, data });
+      if (error) return json(res, 500, { error: "activities_create_failed", details: error.message, code: error.code, hint: error.hint });
+      return json(res, 201, { data });
     }
 
     // Requiere id para PUT/PATCH/DELETE
-    if (!id) return json(res, 400, { ok: false, error: "Missing id query param (?id=...)" });
+    if (!id) return json(res, 400, { error: "Missing id query param (?id=...)" });
 
     // ---------- PUT ----------
     if (req.method === "PUT") {
+      if (!orgId) return json(res, 400, { error: "missing org_id" });
       const body = safeJson(req.body);
-
       const patch = {
         name: body?.name !== undefined ? String(body.name).trim() : undefined,
         description: body?.description !== undefined ? (body.description || null) : undefined,
@@ -261,50 +255,41 @@ export default async function handler(req, res) {
         hourly_rate: body?.hourly_rate !== undefined ? body.hourly_rate : undefined,
       };
       Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
-
       if (patch.name !== undefined && !patch.name) {
-        return json(res, 400, { ok: false, error: "Invalid name" });
+        return json(res, 400, { error: "Invalid name" });
       }
-
       const { data, error } = await supabase
         .from("activities")
         .update(patch)
         .eq("id", id)
-        .eq("tenant_id", tenantId)
-        .eq("org_id", orgId) // Hardening: multi-tenant isolation
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by");
+        .eq("org_id", orgId)
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
         .single();
-
-      if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 200, { ok: true, data });
+      if (error) return json(res, 500, { error: "activities_update_failed", details: error.message, code: error.code, hint: error.hint });
+      return json(res, 200, { data });
     }
 
     // ---------- PATCH (active) ----------
     if (req.method === "PATCH") {
+      if (!orgId) return json(res, 400, { error: "missing org_id" });
       const body = safeJson(req.body);
       const active = Boolean(body?.active);
-
       const { data, error } = await supabase
         .from("activities")
         .update({ active })
         .eq("id", id)
-        .eq("tenant_id", tenantId)
-        .eq("org_id", orgId) // Hardening: multi-tenant isolation
-        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by");
+        .eq("org_id", orgId)
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
         .single();
-
-      if (error) return json(res, 400, { ok: false, error: error.message });
-
-      return json(res, 200, { ok: true, data });
+      if (error) return json(res, 500, { error: "activities_toggle_failed", details: error.message, code: error.code, hint: error.hint });
+      return json(res, 200, { data });
     }
 
     // ---------- DELETE ----------
     if (req.method === "DELETE") {
-      const { error } = await supabase.from("activities").delete().eq("id", id).eq("tenant_id", tenantId);
-
-      if (error) return json(res, 400, { ok: false, error: error.message });
-
+      if (!orgId) return json(res, 400, { error: "missing org_id" });
+      const { error } = await supabase.from("activities").delete().eq("id", id).eq("org_id", orgId);
+      if (error) return json(res, 500, { error: "activities_delete_failed", details: error.message, code: error.code, hint: error.hint });
       return json(res, 200, { ok: true });
     }
 

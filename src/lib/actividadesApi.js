@@ -11,6 +11,7 @@
 //  - deleteActividad
 //  - toggleActividadActiva
 
+// Manejo robusto de errores HTTP y parseo
 async function http(path, { method = "GET", body } = {}) {
   const res = await fetch(path, {
     method,
@@ -22,29 +23,42 @@ async function http(path, { method = "GET", body } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-
   const raw = await res.text();
-  let json = null;
-  try {
-    json = raw ? JSON.parse(raw) : null;
-  } catch {
-    json = null;
-  }
-
-  if (!res.ok || !json?.ok) {
-    const msg = json?.error || `HTTP ${res.status}`;
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed?.error) msg += ` - ${parsed.error}`;
+      else if (raw) msg += ` - ${raw}`;
+    } catch {
+      if (raw) msg += ` - ${raw}`;
+    }
     throw new Error(msg);
   }
-
-  return json.data ?? null;
+  try {
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    throw new Error(`HTTP ${res.status} - invalid JSON response: ${raw}`);
+  }
 }
 
-export async function listActividades({ includeInactive = false, orgId = null } = {}) {
-  const qs = new URLSearchParams();
-  if (includeInactive) qs.set("includeInactive", "true");
-  if (orgId) qs.set("org_id", String(orgId));
-  const url = `/api/actividades${qs.toString() ? `?${qs}` : ""}`;
-  return (await http(url, { method: "GET" })) || [];
+export async function listActividades(options = {}) {
+  const params = new URLSearchParams();
+  if (options.includeInactive) params.set("includeInactive", "true");
+  if (options.orgId) params.set("org_id", options.orgId);
+  const res = await fetch(`/api/actividades?${params.toString()}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} - ${raw || "unknown backend error"}`);
+  }
+  try {
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    throw new Error(`HTTP ${res.status} - invalid JSON response: ${raw}`);
+  }
 }
 
 export async function createActividad(payload, { orgId = null } = {}) {
@@ -73,7 +87,6 @@ export async function deleteActividad(id, { orgId = null } = {}) {
   return true;
 }
 
-export async function toggleActividadActiva(id, active, { orgId = null } = {}) {
-  // Delegar a updateActividad para mantener patrón canónico
+export async function toggleActividadActiva(id, active, options = {}) {
   return updateActividad(id, { active }, options);
 }
