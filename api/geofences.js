@@ -181,33 +181,22 @@ function pickAllowed(item) {
       // =========================
       if (action === "upsert") {
         try {
-          console.log("[geofences upsert] start", { hasRawPayload: !!rawPayload, org_id, user_id });
-
           const clean = pickAllowed(payload);
-          console.log("[geofences upsert] clean ok", { keys: Object.keys(clean || {}) });
 
           const normalizedGeojson =
             ensureFeatureCollection(clean.geojson) ||
             ensureFeatureCollection(clean.polygon_geojson) ||
             buildPointFC(clean.lat, clean.lng);
 
-          console.log("[geofences upsert] geometry ok", {
-            hasGeojson: !!clean.geojson,
-            hasPolygonGeojson: !!clean.polygon_geojson,
-            lat: clean.lat,
-            lng: clean.lng,
-            normalized: !!normalizedGeojson,
-          });
-
           if (!normalizedGeojson) {
             return send(res, 400, {
               ok: false,
               error: "missing_geometry",
+              message: "Debe enviar geojson/polygon_geojson o lat/lng.",
             });
           }
 
           const now = new Date().toISOString();
-          console.log("[geofences upsert] timestamp ok", { now });
 
           const row = {
             ...clean,
@@ -220,14 +209,7 @@ function pickAllowed(item) {
             updated_by: user_id,
           };
 
-          console.log("[geofences upsert] row built", {
-            hasId: !!row.id,
-            keys: Object.keys(row || {}),
-          });
-
-          // INSERT
           if (!row.id) {
-            console.log("[geofences upsert] insert branch");
             const { data, error } = await sbDb
               .from("geofences")
               .insert({
@@ -239,7 +221,7 @@ function pickAllowed(item) {
               .single();
 
             if (error) {
-              console.error("[geofences insert error]", error);
+              console.error("[geofences upsert insert]", error);
               return send(res, 500, {
                 ok: false,
                 error: "insert_failed",
@@ -250,15 +232,22 @@ function pickAllowed(item) {
             return ok(res, { ok: true, item: data });
           }
 
-          // UPDATE
-          console.log("[geofences upsert] update branch", { id: row.id });
-          const { data: existing } = await sbDb
+          const { data: existing, error: existingError } = await sbDb
             .from("geofences")
             .select("id, org_id")
             .eq("id", row.id)
             .maybeSingle();
 
-          if (!existing || String(existing.org_id) !== String(org_id)) {
+          if (existingError) {
+            console.error("[geofences upsert existing]", existingError);
+            return send(res, 500, {
+              ok: false,
+              error: "existing_lookup_failed",
+              details: existingError.message,
+            });
+          }
+
+          if (!existing?.id || String(existing.org_id) !== String(org_id)) {
             return send(res, 403, {
               ok: false,
               error: "forbidden",
@@ -274,7 +263,7 @@ function pickAllowed(item) {
             .single();
 
           if (error) {
-            console.error("[geofences update error]", error);
+            console.error("[geofences upsert update]", error);
             return send(res, 500, {
               ok: false,
               error: "update_failed",
@@ -283,7 +272,6 @@ function pickAllowed(item) {
           }
 
           return ok(res, { ok: true, item: data });
-
         } catch (err) {
           console.error("[geofences upsert fatal]", {
             message: err?.message,
@@ -295,7 +283,7 @@ function pickAllowed(item) {
           return send(res, 500, {
             ok: false,
             error: "server_error",
-            details: err.message,
+            details: String(err?.message || err),
           });
         }
       }
