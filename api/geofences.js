@@ -362,7 +362,7 @@ export default async function handler(req, res) {
           return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
         }
 
-        // Revisar referencias en tablas relevantes (sin .or())
+        // Revisar referencias en tablas relevantes (universal, sin asumir columna id)
         const refTables = [
           "asignaciones",
           "tracker_assignments",
@@ -374,19 +374,38 @@ export default async function handler(req, res) {
         ];
         let hasReferences = false;
         for (const table of refTables) {
+          let refResult;
           try {
-            const { data: refRows, error: refErr } = await sbDb.from(table).select("id").eq("geofence_id", id).limit(1);
-            if (refErr) {
-              console.error("[api/geofences delete] refs error", { table, message: refErr.message, code: refErr.code, details: refErr.details, hint: refErr.hint });
-              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: refErr.message });
+            const { count, error } = await sbDb
+              .from(table)
+              .select("*", { count: "exact", head: true })
+              .eq("geofence_id", id);
+            if (error) {
+              console.error("[api/geofences delete] refs error", {
+                table,
+                message: error?.message,
+                code: error?.code,
+                details: error?.details,
+                hint: error?.hint
+              });
+              // Retornar error estructurado como pide el usuario
+              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error.message });
             }
-            if (Array.isArray(refRows) && refRows.length > 0) {
-              hasReferences = true;
-              break;
-            }
+            refResult = { table, hasRefs: Number(count || 0) > 0 };
           } catch (error) {
-            console.error("[api/geofences delete] refs error", { table, message: error?.message, code: error?.code, details: error?.details, hint: error?.hint });
+            console.error("[api/geofences delete] refs error", {
+              table,
+              message: error?.message,
+              code: error?.code,
+              details: error?.details,
+              hint: error?.hint
+            });
+            // Retornar error estructurado como pide el usuario
             return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error?.message });
+          }
+          if (refResult.hasRefs) {
+            hasReferences = true;
+            break;
           }
         }
 
