@@ -1,41 +1,82 @@
-﻿// src/lib/activitiesApi.js
+﻿// Helper para obtener accessToken de Supabase
+async function getAccessToken() {
+  const { data } = await supabase.auth.getSession();
+  return data?.session?.access_token || null;
+}
+// src/lib/activitiesApi.js
 import { supabase } from "../lib/supabaseClient";
 import { withActiveOrg } from "./withActiveOrg";
 
 const TABLE = "activities";
 
 export async function listActivities() {
-  const { data, error } = await supabase.from(TABLE).select("*");
-  if (error) throw error;
-  return data || [];
+  const accessToken = await getAccessToken();
+  const headers = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const res = await fetch(`/api/actividades`, {
+    method: "GET",
+    credentials: "include",
+    headers,
+  });
+  const raw = await res.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!res.ok) throw new Error(parsed?.error || raw || "Error");
+  return Array.isArray(parsed?.data) ? parsed.data : [];
 }
 
 export async function createActivity(payload = {}, orgId = null) {
-  const insertRow = withActiveOrg(payload, orgId);
-  const { data, error } = await supabase
-    .from(TABLE)
-    .insert(insertRow)
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data;
+  const accessToken = await getAccessToken();
+  const headers = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const qs = new URLSearchParams();
+  if (orgId) qs.set("org_id", String(orgId));
+  const res = await fetch(`/api/actividades?${qs}`, {
+    method: "POST",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(withActiveOrg(payload, orgId)),
+  });
+  const raw = await res.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!res.ok) throw new Error(parsed?.error || raw || "Error");
+  return parsed?.data ?? parsed;
 }
 
 export async function updateActivity(id, payload = {}, orgId = null) {
-  const updateRow = withActiveOrg(payload, orgId);
-  const { data, error } = await supabase
-    .from(TABLE)
-    .update(updateRow)
-    .eq("id", id)
-    .eq("org_id", String(orgId))
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data;
+  const accessToken = await getAccessToken();
+  const headers = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const qs = new URLSearchParams({ id: String(id) });
+  if (orgId) qs.set("org_id", String(orgId));
+  const res = await fetch(`/api/actividades?${qs}`, {
+    method: "PUT",
+    credentials: "include",
+    headers,
+    body: JSON.stringify(withActiveOrg(payload, orgId)),
+  });
+  const raw = await res.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!res.ok) throw new Error(parsed?.error || raw || "Error");
+  return parsed?.data ?? parsed;
 }
 
 export async function deleteActivity(id, orgId = null) {
-  const { error } = await supabase.from(TABLE).delete().eq("id", id).eq("org_id", String(orgId));
-  if (error) throw error;
+  const accessToken = await getAccessToken();
+  const headers = { "Content-Type": "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  const qs = new URLSearchParams({ id: String(id) });
+  if (orgId) qs.set("org_id", String(orgId));
+  const res = await fetch(`/api/actividades?${qs}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers,
+  });
+  const raw = await res.text();
+  let parsed = null;
+  try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+  if (!res.ok) throw new Error(parsed?.error || raw || "Error");
   return true;
 }
