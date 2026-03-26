@@ -1,14 +1,27 @@
-// Helper universal para buscar actividad compatible legacy
+// Helper universal para buscar actividad compatible legacy (lookup solo por id, validación manual de pertenencia)
 async function findActivityByIdCompat(supabase, id, orgId) {
   const { data, error } = await supabase
     .from("activities")
     .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
     .eq("id", id)
-    .or(`org_id.eq.${orgId},and(org_id.is.null,tenant_id.eq.${orgId})`)
     .maybeSingle();
 
   if (error) return { data: null, error };
-  return { data: data || null, error: null };
+  if (!data) return { data: null, error: null };
+
+  const rowOrgId = data.org_id ? String(data.org_id) : null;
+  const rowTenantId = data.tenant_id ? String(data.tenant_id) : null;
+  const wantedOrgId = orgId ? String(orgId) : null;
+
+  const allowed =
+    rowOrgId === wantedOrgId ||
+    (rowOrgId == null && rowTenantId === wantedOrgId);
+
+  if (!allowed) {
+    return { data: null, error: null };
+  }
+
+  return { data, error: null };
 }
 // api/actividades.js
 //
