@@ -574,24 +574,29 @@ export default async function handler(req, res) {
     const sbDb = rc.sbDb;
     const userId = rc?.user?.id || null;
 
-    // GET bundle/list
+    // GET bundle/list SOLO LECTURA
     if (req.method === "GET" && (action === "bundle" || action === "list")) {
-      const r = await sbDb
-        .from("asignaciones")
-        .select(
-          "id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at"
-        )
-        .eq("org_id", orgId)
-        .eq("is_deleted", false)
-        .order("created_at", { ascending: false })
-        .limit(500);
+      try {
+        const r = await sbDb
+          .from("asignaciones")
+          .select(
+            "id,org_id,personal_id,geocerca_id,geofence_id,activity_id,start_time,end_time,estado,status,frecuencia_envio_sec,is_deleted,created_at"
+          )
+          .eq("org_id", orgId)
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: false })
+          .limit(500);
 
-      if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
+        if (r.error) return send(res, 500, { ok: false, error: "Supabase error", details: r.error.message });
 
-      if (action === "list") return ok(res, { ok: true, data: r.data || [] });
+        if (action === "list") return ok(res, { ok: true, data: r.data || [] });
 
-      const catalogs = await loadCatalogs(sbDb, orgId);
-      return ok(res, { ok: true, data: { asignaciones: r.data || [], catalogs } });
+        const catalogs = await loadCatalogs(sbDb, orgId);
+        return ok(res, { ok: true, data: { asignaciones: r.data || [], catalogs } });
+      } catch (error) {
+        console.error("[api/asignaciones][GET] error", error);
+        return send(res, 500, { ok: false, error: "Server error", details: String(error?.message || error) });
+      }
     }
 
     // POST create

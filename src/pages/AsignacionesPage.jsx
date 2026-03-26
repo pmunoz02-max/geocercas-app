@@ -360,6 +360,13 @@ export default function AsignacionesPage() {
   }
 
   async function handleSubmit(e) {
+        e.preventDefault();
+        setError(null);
+        setSuccessMessage(null);
+        if (startTime && endTime && endTime < startTime) {
+          setError("La fecha final no puede ser anterior a la fecha inicial");
+          return;
+        }
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
@@ -669,6 +676,7 @@ export default function AsignacionesPage() {
                     value={endTime}
                     onChange={(e) => setEndTime(e.target.value)}
                     required
+                    min={startTime || undefined}
                   />
                 </div>
               </div>
