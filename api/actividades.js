@@ -187,6 +187,7 @@ export default async function handler(req, res) {
 
     // POST (crear actividad)
     if (req.method === "POST") {
+      // Leer del body los campos legacy
       const name = String(req.body?.name || "").trim();
       const description = req.body?.description ? String(req.body.description).trim() : null;
       const hourly_cost =
@@ -197,15 +198,15 @@ export default async function handler(req, res) {
       const active =
         typeof req.body?.active === "boolean" ? req.body.active : true;
 
+      // Validaciones
       if (!name) {
         return res.status(400).json({ error: "missing_name" });
       }
-
       if (hourly_cost != null && Number.isNaN(hourly_cost)) {
         return res.status(400).json({ error: "invalid_hourly_cost" });
       }
 
-      // validar duplicado compatible legacy por org_id / tenant_id
+      // Validar duplicado compatible legacy por org_id / tenant_id
       const { data: byOrg, error: dupErr1 } = await supabase
         .from("activities")
         .select("id,name")
@@ -237,14 +238,16 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: "activity_already_exists" });
       }
 
+      // Mapear correctamente hacia la DB
       const insertPayload = {
         tenant_id: orgId,
         org_id: orgId,
         name,
         description,
-        hourly_cost,
-        currency,
+        hourly_rate: hourly_cost,
+        currency_code: currency,
         active,
+        created_by: user?.id || null,
       };
 
       const { data, error } = await supabase
