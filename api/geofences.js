@@ -1,3 +1,20 @@
+// === Helpers faltantes (copiados de asignaciones.js) ===
+function getCookie(req, name) {
+  const raw = req.headers.cookie || "";
+  const parts = raw.split(";").map((s) => s.trim());
+  for (const p of parts) {
+    if (p.startsWith(name + "=")) return decodeURIComponent(p.slice(name.length + 1));
+  }
+  return null;
+}
+
+function getEnv(keys) {
+  for (const k of keys) {
+    const v = process.env[k];
+    if (v && String(v).trim()) return String(v).trim();
+  }
+  return null;
+}
 // api/geofences.js
 import { createClient } from "@supabase/supabase-js";
 
@@ -320,19 +337,7 @@ export default async function handler(req, res) {
     const requestedOrgId = q.org_id || q.orgId || null;
     const ctxRes = await resolveContext(req, { requestedOrgId });
     if (!ctxRes.ok) return send(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
-  try {
-    if (req.method === "OPTIONS") {
-      setHeaders(res);
-      res.statusCode = 204;
-      return res.end();
-    }
-    if (req.method === "HEAD") {
-      setHeaders(res);
-      res.statusCode = 200;
-      return res.end();
-    }
-
-    const q = getQuery(req);
+    const sbDb = ctxRes.sbDb;
     const body = await readBody(req);
     const orgId = String(body?.org_id || body?.orgId || q?.org_id || q?.orgId || "").trim();
     if (!orgId) {
@@ -346,72 +351,61 @@ export default async function handler(req, res) {
       const action = String(body?.action || "upsert").toLowerCase();
       if (action === "delete") {
         // BLINDAJE DELETE UNIVERSAL
-        try {
-          const id = body?.id ? String(body.id) : null;
-          if (!id) return send(res, 400, { ok: false, error: "missing_id" });
-          console.log("[api/geofences delete] start", { id, orgId, method: req.method });
+        const id = body?.id ? String(body.id) : null;
+        if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+        console.log("[api/geofences delete] start", { id, orgId, method: req.method });
 
-          // Validar ownership seguro por org_id
-          const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
-          if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
-          if (!gf?.id || String(gf.org_id) !== String(orgId)) {
-            return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
-          }
+        // Validar ownership seguro por org_id
+        const { data: gf, error: gfErr } = await sbDb.from("geofences").select("id,org_id").eq("id", id).maybeSingle();
+        if (gfErr) return send(res, 500, { ok: false, error: "Supabase error", details: gfErr.message });
+        if (!gf?.id || String(gf.org_id) !== String(orgId)) {
+          return send(res, 403, { ok: false, error: "forbidden", message: "No ownership or not found" });
+        }
 
-          // Revisar referencias en tablas relevantes (sin .or())
-          const refTables = [
-            "asignaciones",
-            "tracker_assignments",
-            "attendance_events",
-            "geofence_events",
-            "geofence_members",
-            "position_events",
-            "user_geofence_state"
-          ];
-          let hasReferences = false;
-          for (const table of refTables) {
-            try {
-              const { data: refRows, error: refErr } = await sbDb.from(table).select("id").eq("geofence_id", id).limit(1);
-              if (refErr) {
-                console.error("[api/geofences delete] refs error", { table, message: refErr.message, code: refErr.code, details: refErr.details, hint: refErr.hint });
-                return send(res, 500, { ok: false, error: `Supabase error in ${table}", details: refErr.message });
-              }
-              if (Array.isArray(refRows) && refRows.length > 0) {
-                hasReferences = true;
-                break;
-              }
-            } catch (error) {
-              console.error("[api/geofences delete] refs error", { table, message: error?.message, code: error?.code, details: error?.details, hint: error?.hint });
-              return send(res, 500, { ok: false, error: `Supabase error in ${table}", details: error?.message });
-            }
-          }
-
-          if (hasReferences) {
-            await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
-            return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
-          }
-
-          // Intentar delete físico
+        // Revisar referencias en tablas relevantes (sin .or())
+        const refTables = [
+          "asignaciones",
+          "tracker_assignments",
+          "attendance_events",
+          "geofence_events",
+          "geofence_members",
+          "position_events",
+          "user_geofence_state"
+        ];
+        let hasReferences = false;
+        for (const table of refTables) {
           try {
-            await sbDb.from("geofences").delete().eq("id", id).eq("org_id", orgId);
-            return ok(res, { ok: true, mode: "deleted" });
-          } catch (error) {
-            // Si delete real falla por FK, fallback a soft delete
-            if (error?.code && String(error.code).toLowerCase().includes("foreign")) {
-              await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
-              return ok(res, { ok: true, mode: "deactivated", reason: "fk_blocked" });
+            const { data: refRows, error: refErr } = await sbDb.from(table).select("id").eq("geofence_id", id).limit(1);
+            if (refErr) {
+              console.error("[api/geofences delete] refs error", { table, message: refErr.message, code: refErr.code, details: refErr.details, hint: refErr.hint });
+              return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: refErr.message });
             }
-            throw error;
+            if (Array.isArray(refRows) && refRows.length > 0) {
+              hasReferences = true;
+              break;
+            }
+          } catch (error) {
+            console.error("[api/geofences delete] refs error", { table, message: error?.message, code: error?.code, details: error?.details, hint: error?.hint });
+            return send(res, 500, { ok: false, error: `Supabase error in ${table}`, details: error?.message });
           }
+        }
+
+        if (hasReferences) {
+          await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
+          return ok(res, { ok: true, mode: "deactivated", reason: "has_references" });
+        }
+
+        // Intentar delete físico
+        try {
+          await sbDb.from("geofences").delete().eq("id", id).eq("org_id", orgId);
+          return ok(res, { ok: true, mode: "deleted" });
         } catch (error) {
-          console.error("[api/geofences] fatal", {
-            message: error?.message,
-            code: error?.code,
-            details: error?.details,
-            hint: error?.hint,
-            stack: error?.stack
-          });
-          return send(res, 500, { ok: false, error: "server_error", details: String(error?.message || error) });
+          // Si delete real falla por FK, fallback a soft delete
+          if (error?.code && String(error.code).toLowerCase().includes("foreign")) {
+            await sbDb.from("geofences").update({ active: false, updated_at: new Date().toISOString() }).eq("id", id).eq("org_id", orgId);
+            return ok(res, { ok: true, mode: "deactivated", reason: "fk_blocked" });
+          }
+          throw error;
         }
       }
       // ...existing code for upsert and other actions...
