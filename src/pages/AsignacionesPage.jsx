@@ -363,7 +363,17 @@ export default function AsignacionesPage() {
         e.preventDefault();
         setError(null);
         setSuccessMessage(null);
-        if (startTime && endTime && endTime < startTime) {
+        if (!startTime || !endTime) {
+          // Validación existente para fechas faltantes
+          setError(
+            tt(
+              "asignaciones.messages.selectDates",
+              "You must enter start and end date/time."
+            )
+          );
+          return;
+        }
+        if (endTime < startTime) {
           setError("La fecha final no puede ser anterior a la fecha inicial");
           return;
         }
@@ -661,7 +671,11 @@ export default function AsignacionesPage() {
                     type="datetime-local"
                     className={inputBase}
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
+                    onChange={(e) => {
+                      const nuevoStart = e.target.value;
+                      setStartTime(nuevoStart);
+                      if (endTime && endTime < nuevoStart) setEndTime("");
+                    }}
                     required
                   />
                 </div>
