@@ -81,33 +81,26 @@ export default async function handler(req, res) {
     if (req.method === "POST") {
       const body = safeJson(req.body);
       const name = String(body?.name || "").trim();
-
       if (!name) {
         return json(res, 400, { error: "missing_name" });
       }
-
-      // 🔥 FIX CLAVE: normalizar hourly_rate
+      // Normalizar hourly_rate
       const rawHourlyRate = body?.hourly_rate;
       let hourlyRate = null;
-
       if (
         rawHourlyRate !== undefined &&
         rawHourlyRate !== null &&
         rawHourlyRate !== ""
       ) {
         const n = Number(rawHourlyRate);
-
         if (!Number.isFinite(n)) {
           return json(res, 400, { error: "invalid_hourly_rate" });
         }
-
         hourlyRate = n;
       }
-
-      // 🔥 FIX: created_by requerido
+      // created_by requerido
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData?.user?.id;
-
       const payload = {
         tenant_id: orgId,
         org_id: orgId,
@@ -118,13 +111,11 @@ export default async function handler(req, res) {
         hourly_rate: hourlyRate,
         created_by: userId,
       };
-
       const { data, error } = await supabase
         .from("activities")
         .insert(payload)
         .select("*")
         .single();
-
       if (error) {
         if (error.code === "23505") {
           return json(res, 409, {
@@ -144,27 +135,48 @@ export default async function handler(req, res) {
           },
         });
       }
-
       return json(res, 201, { data });
     }
 
     // ---------- GET ----------
     if (req.method === "GET") {
+      // Compatibilidad universal: org_id = orgId OR (org_id IS NULL AND tenant_id = orgId)
       const { data, error } = await supabase
         .from("activities")
-        .select("*")
-        .eq("org_id", orgId);
-
+        .select("id, tenant_id, org_id, name, description, active, currency_code, hourly_rate, created_at, created_by")
+        .or(`org_id.eq.${orgId},and(org_id.is.null,tenant_id.eq.${orgId})`)
+        .order("name", { ascending: true });
       if (error) {
         return json(res, 500, {
           error: "activities_list_failed",
           details: error.message,
         });
       }
-
       return json(res, 200, { data });
     }
 
+    // ---------- PUT/PATCH/DELETE ----------
+    // Compatibilidad universal para encontrar la fila: id + (org_id = orgId OR (org_id IS NULL AND tenant_id = orgId))
+    if (["PUT", "PATCH", "DELETE"].includes(req.method)) {
+      const id = req.query?.id;
+      if (!id) {
+        return json(res, 400, { error: "missing_id" });
+      }
+      let q = supabase
+        .from("activities")
+        .select("*")
+        .eq("id", id)
+        .or(`org_id.eq.${orgId},and(org_id.is.null,tenant_id.eq.${orgId})`)
+        .single();
+      const { data, error } = await q;
+      if (error || !data) {
+        return json(res, 404, { error: "activity_not_found" });
+      }
+      // Aquí puedes agregar la lógica específica de PUT/PATCH/DELETE según tu implementación actual,
+      // usando 'data' como la fila encontrada.
+      // Ejemplo placeholder:
+      return json(res, 200, { data });
+    }
     return json(res, 405, { error: "method_not_allowed" });
 
   } catch (e) {
