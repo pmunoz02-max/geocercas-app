@@ -43,12 +43,14 @@ export default async function handler(req, res) {
 
   // Consulta mínima a personal
   let personal = [];
+  let geocercas = [];
   const requested_org_id = q.org_id || q.orgId || null;
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     if (requested_org_id) {
-      const { data, error } = await supabase
+      // Personal
+      const { data: personalData, error: personalError } = await supabase
         .from("personal")
         .select("id,nombre,apellido,email,org_id")
         .eq("org_id", requested_org_id)
@@ -56,12 +58,31 @@ export default async function handler(req, res) {
         .eq("vigente", true)
         .order("apellido", { ascending: true })
         .order("nombre", { ascending: true });
-      if (!error && Array.isArray(data)) {
-        personal = data;
+      if (!personalError && Array.isArray(personalData)) {
+        personal = personalData;
+      }
+      // Geocercas
+      let geocercasQuery = supabase
+        .from("geofences")
+        .select("id,name,is_deleted")
+        .eq("org_id", requested_org_id);
+      // Excluir eliminadas si existe is_deleted
+      try {
+        const { data: testData } = await supabase
+          .from("geofences")
+          .select("is_deleted")
+          .limit(1);
+        if (Array.isArray(testData) && testData.length > 0 && testData[0] && typeof testData[0].is_deleted !== "undefined") {
+          geocercasQuery = geocercasQuery.eq("is_deleted", false);
+        }
+      } catch {}
+      const { data: geocercasData, error: geocercasError } = await geocercasQuery;
+      if (!geocercasError && Array.isArray(geocercasData)) {
+        geocercas = geocercasData.map(g => ({ id: g.id, name: g.name }));
       }
     }
   } catch (e) {
-    // Si hay error, personal queda como []
+    // Si hay error, personal y geocercas quedan como []
   }
 
   return send(res, 200, {
@@ -69,6 +90,7 @@ export default async function handler(req, res) {
     data: {
       catalogs: {
         personal,
+        geocercas,
       },
       debug: {
         requested_org_id,
