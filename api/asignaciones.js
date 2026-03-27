@@ -665,19 +665,30 @@ export default async function handler(req, res) {
       return res.end();
     }
 
-    const q = getQuery(req);
-    const action = String(q.action || "bundle");
-    const requestedOrgId = q?.org_id || q?.orgId || null;
+const q = getQuery(req);
+const action = String(q.action || "bundle");
 
-    if (!requestedOrgId) {
-      return send(res, 400, {
-        ok: false,
-        error: "missing_org_id",
-        message: "org_id es requerido",
-      });
-    }
+let body = null;
+if (req.method === "POST" || req.method === "PATCH" || req.method === "DELETE") {
+  body = await readBody(req);
+}
 
-    const rc = await resolveContext(req, { requestedOrgId });
+const requestedOrgId =
+  q?.org_id ||
+  q?.orgId ||
+  body?.org_id ||
+  body?.orgId ||
+  null;
+
+if (!requestedOrgId) {
+  return send(res, 400, {
+    ok: false,
+    error: "missing_org_id",
+    message: "org_id es requerido",
+  });
+}
+
+const rc = await resolveContext(req, { requestedOrgId });
     if (!rc.ok) {
       return send(res, rc.status || 500, {
         ok: false,
