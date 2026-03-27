@@ -1,6 +1,7 @@
 ﻿// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
 import { listGeofences } from "../lib/geofencesApi";
+
 function normalizeGeofenceRow(g) {
   const id = g?.id || "";
   const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
@@ -10,16 +11,6 @@ function normalizeGeofenceRow(g) {
     source_geocerca_id: g?.source_geocerca_id || null,
   };
 }
-function normalizeGeofenceRow(g) {
-  const id = g?.id || "";
-  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
-  return {
-    id,
-    nombre: nombre || id,
-    source_geocerca_id: g?.source_geocerca_id || null,
-  };
-}
-import { listGeofences } from "../lib/geofencesApi";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 
