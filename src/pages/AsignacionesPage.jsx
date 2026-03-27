@@ -245,46 +245,42 @@ export default function AsignacionesPage() {
             null;
           return !rowOrg || String(rowOrg) === String(orgId);
         })
-        .map(normalizePersonRow)
-        .filter((p) => p.id);
-    } catch (e) {
-      console.warn("[AsignacionesPage] Failed to load personal catalog:", e);
-      personalRaw = [];
-      personalNorm = [];
-    }
-
-    // Load geofence options with robust error handling
-    try {
-      geofencesRaw = await listGeofences(orgId, true);
-      geofencesNorm = geofencesRaw
-        .map(normalizeGeofenceRow)
-        .filter((g) => g.id && g.source_geocerca_id); // Solo mostrar geofences con id y source_geocerca_id
-    } catch (e) {
-      console.warn("[AsignacionesPage] Failed to load geofences catalog:", e);
-      geofencesRaw = [];
-      geofencesNorm = [];
-    }
-
-    // Detect dominant orgId from whatever data we have
-    const dominantCatalogOrgId = detectDominantOrgId([
-      ...personalRaw,
-      ...geofencesRaw,
-    ]);
-    if (dominantCatalogOrgId && String(dominantCatalogOrgId) !== String(orgId)) {
-      setCatalogOrgId(String(dominantCatalogOrgId));
-    } else {
-      setCatalogOrgId(null);
-    }
-
-    setPersonalOptions(personalNorm);
-    setGeocercaOptions(geofencesNorm);
-  }
-
-  async function loadAll() {
-    if (!isAuthenticated || !orgId) {
-      setAsignaciones([]);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
+        function normalizePersonRow(p) {
+          const personal_id = p?.personal_id || p?.id || p?.org_people_id || p?.uuid || "";
+          const user_id = p?.user_id || "";
+          const org_id = p?.org_id || p?.tenant_id || p?.organization_id || "";
+          const nombre =
+            p?.nombre ||
+            p?.first_name ||
+            p?.firstname ||
+            (typeof p?.full_name === "string" ? p.full_name.split(" ")[0] : "") ||
+            "";
+          const apellido =
+            p?.apellido ||
+            p?.last_name ||
+            p?.lastname ||
+            (typeof p?.full_name === "string"
+              ? p.full_name.split(" ").slice(1).join(" ")
+              : "") ||
+            "";
+          const label = String(
+            p?.display_name ||
+              p?.full_name ||
+              `${nombre} ${apellido}`.trim() ||
+              p?.email ||
+              personal_id
+          ).trim();
+          return {
+            id: personal_id,
+            personal_id,
+            user_id,
+            org_id,
+            nombre: String(nombre || "").trim(),
+            apellido: String(apellido || "").trim(),
+            email: String(p?.email || "").trim(),
+            label,
+          };
+        }
       setActivityOptions([]);
       setCatalogOrgId(null);
       setLoading(false);
@@ -425,7 +421,22 @@ export default function AsignacionesPage() {
       return;
     }
 
-    if (!selectedPersonalId || !selectedGeocercaId) {
+
+    // Validar persona seleccionada
+    const selectedPerson = personalOptions.find((p) => p.personal_id === selectedPersonalId);
+    if (!selectedPerson) {
+      setError(tt("asignaciones.error.personNotFound", "Selected person not found."));
+      return;
+    }
+    if (!selectedPerson.user_id) {
+      setError(tt("asignaciones.error.personNoUserId", "Selected person does not have a linked user account (user_id)."));
+      return;
+    }
+    if (selectedPerson.org_id && String(selectedPerson.org_id) !== String(orgId)) {
+      setError(tt("asignaciones.error.personOrgMismatch", "Selected person does not belong to the active organization."));
+      return;
+    }
+    if (!selectedGeocercaId) {
       setError(
         tt(
           "asignaciones.messages.selectPersonAndFence",
@@ -466,8 +477,11 @@ export default function AsignacionesPage() {
       return;
     }
 
+
     const payload = {
-      personal_id: selectedPersonalId,
+      personal_id: selectedPerson.personal_id,
+      tracker_user_id: selectedPerson.user_id,
+      org_id: selectedPerson.org_id,
       geofence_id: selectedGeocercaId,
       geocerca_id: null,
       activity_id: selectedActivityId,
