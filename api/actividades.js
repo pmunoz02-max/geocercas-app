@@ -318,6 +318,63 @@ export default async function handler(req, res) {
       return res.status(200).json(combined);
     }
 
+    // PUT (update activity)
+    if (req.method === "PUT") {
+      // Validar id
+      if (!id) {
+        return res.status(400).json({ error: "missing_id" });
+      }
+      // Buscar actividad y validar ownership
+      const found = await findActivityByIdCompat(supabase, id, orgId);
+      if (found.error) {
+        return res.status(500).json({
+          error: "lookup_failed",
+          details: found.error.message || null,
+        });
+      }
+      if (!found.data) {
+        return res.status(404).json({ error: "activity_not_found" });
+      }
+      // No permitir cambiar org_id
+      if (
+        req.body?.org_id && String(req.body.org_id) !== String(found.data.org_id)
+      ) {
+        return res.status(400).json({ error: "cannot_change_org_id" });
+      }
+      // Construir updatePayload solo con campos definidos
+      const allowedFields = [
+        "name",
+        "description",
+        "hourly_rate",
+        "currency_code",
+        "active",
+      ];
+      const updatePayload = {};
+      for (const field of allowedFields) {
+        if (typeof req.body[field] !== "undefined") {
+          updatePayload[field] = req.body[field];
+        }
+      }
+      if (Object.keys(updatePayload).length === 0) {
+        return res.status(400).json({ error: "no_fields_to_update" });
+      }
+      const { data, error } = await supabase
+        .from("activities")
+        .update(updatePayload)
+        .eq("id", found.data.id)
+        .select()
+        .single();
+      if (error) {
+        return res.status(500).json({
+          error: error.message,
+          code: error.code || null,
+          hint: error.hint || null,
+          details: error.details || null,
+        });
+      }
+      return res.status(200).json(data);
+    }
+
     // PATCH (toggle active)
     if (req.method === "PATCH") {
       const found = await findActivityByIdCompat(supabase, id, orgId);
