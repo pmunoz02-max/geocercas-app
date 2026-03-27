@@ -806,13 +806,15 @@ const rc = await resolveContext(req, { requestedOrgId });
           console.warn("[api/asignaciones] refuerzo personal/org_people exception:", e);
         }
 
+        // Asegura variable local para el org activo
+        const requestedOrgId = (typeof searchParams !== "undefined" && searchParams.get) ? searchParams.get("org_id") || null : (typeof orgId !== "undefined" ? orgId : null);
         return ok(res, {
           ok: true,
           data: {
             asignaciones: merged,
             catalogs,
             debug: {
-              org_id,
+              org_id: requestedOrgId,
               personal_count: Array.isArray(catalogs.personal) ? catalogs.personal.length : -1,
               geocercas_count: Array.isArray(catalogs.geocercas) ? catalogs.geocercas.length : -1,
               activities_count: Array.isArray(catalogs.activities) ? catalogs.activities.length : -1
