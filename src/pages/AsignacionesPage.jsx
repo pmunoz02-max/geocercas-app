@@ -140,6 +140,15 @@ export default function AsignacionesPage() {
     <div className="p-4 max-w-3xl">
       <h2 className="text-xl font-semibold mb-4">Nueva asignación</h2>
 
+
+      {/* DEBUG TEMPORAL */}
+      <div className="mb-3 rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <div>activeOrgId: {String(activeOrgId || "")}</div>
+        <div>personas: {personas.length}</div>
+        <div>geocercas: {geocercas.length}</div>
+        <div>actividades: {actividades.length}</div>
+      </div>
+
       {personasDisponibles.length === 0 && (
         <p className="text-amber-700 text-sm mb-3">
           No hay personas disponibles para esta organización.
