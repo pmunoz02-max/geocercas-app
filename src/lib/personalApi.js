@@ -110,7 +110,7 @@ export async function listPersonal({
   params.set("limit", String(limit));
   if (orgId) params.set("org_id", String(orgId));
 
-  const data = await request("GET", `?${params.toString()}`);
+  const data = await request("GET", `?${params.toString()}`); // SOURCE_PERSONAL_OK
   return data.items || [];
 }
 

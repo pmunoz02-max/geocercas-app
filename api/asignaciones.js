@@ -428,35 +428,21 @@ async function loadCatalogs(sbDb, orgId) {
 
   // Personas: usar org_people si existe, si no, usar join en personal con owner_id
   try {
-    // Obtener organizaciones de la sesión backend (AuthContext)
-    const organizations = (typeof user !== "undefined" && user && Array.isArray(user.organizations)) ? user.organizations : [];
-    // requestedOrgId debe estar disponible en el contexto donde se llama loadCatalogs
-    const orgUserIds = organizations
-      .filter(o => o.id === requestedOrgId)
-      .flatMap(o => o.users || [])
-      .map(u => u.user_id);
-
-    const { data: personal } = await sbDb
-      .from("personal")
-      .select("*")
-      .in("user_id", orgUserIds);
-
-    // LOGS TEMPORALES PARA DEBUG
-    const { data: testPersonal } = await sbDb
-      .from("personal")
-      .select("*")
-      .limit(5);
-    const { data: testOrgPeople } = await sbDb
-      .from("org_people")
-      .select("*")
-      .limit(5);
-    console.log("[DEBUG personal table]", testPersonal);
-    console.log("[DEBUG org_people table]", testOrgPeople);
-
-    catalogs.personal = personal || [];
+    // Usar la misma fuente que el módulo Personal: API interna /api/personal
+    const fetch = await import('node-fetch').then(m => m.default || m);
+    const apiUrl = `/api/personal?org_id=${encodeURIComponent(requestedOrgId || orgId)}&onlyActive=0&limit=1000`;
+    // Si hay req.headers.cookie disponible, pásala para mantener sesión
+    const headers = req && req.headers && req.headers.cookie ? { cookie: req.headers.cookie } : {};
+    const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const res = await fetch(baseUrl + apiUrl, { headers });
+    const json = await res.json();
+    // Excluye eliminados
+    catalogs.personal = Array.isArray(json.items)
+      ? json.items.filter(p => !p.is_deleted)
+      : [];
   } catch (e) {
     catalogs.personal = [];
-    console.warn("[loadCatalogs] personal/org_people exception:", e);
+    console.warn("[loadCatalogs] personal API exception:", e);
   }
 
   // Geocercas (sin cambios)
@@ -742,6 +728,10 @@ const rc = await resolveContext(req, { requestedOrgId });
     }
 
     if (req.method === "GET" && (action === "bundle" || action === "list")) {
+        // DEBUG TEMPORAL antes de responder
+        console.log("[DEBUG/ASIGNACIONES] org_id:", requestedOrgId);
+        console.log("[DEBUG/ASIGNACIONES] tablas consultadas: personal, org_people");
+        console.log("[DEBUG/ASIGNACIONES] cantidad personal devuelto:", Array.isArray(catalogs.personal) ? catalogs.personal.length : -1);
       try {
         const merged = await listAssignmentsCanonical(sbDb, orgId);
 
