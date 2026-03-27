@@ -428,39 +428,18 @@ async function loadCatalogs(sbDb, orgId) {
 
   // Personas: usar org_people si existe, si no, usar join en personal con owner_id
   try {
-    let personal = [];
-    let orgPeopleExists = false;
-    try {
-      // Verificar si existe la tabla org_people
-      const { data: orgPeopleCheck, error: orgPeopleError } = await sbDb
-        .from("org_people")
-        .select("id")
-        .limit(1);
-      if (!orgPeopleError) orgPeopleExists = true;
-    } catch (e) {
-      orgPeopleExists = false;
-    }
+    // Obtener organizaciones de la sesión backend (AuthContext)
+    const organizations = (typeof user !== "undefined" && user && Array.isArray(user.organizations)) ? user.organizations : [];
+    // requestedOrgId debe estar disponible en el contexto donde se llama loadCatalogs
+    const orgUserIds = organizations
+      .filter(o => o.id === requestedOrgId)
+      .flatMap(o => o.users || [])
+      .map(u => u.user_id);
 
-    if (orgPeopleExists) {
-      const { data } = await sbDb
-        .from("org_people")
-        .select("*")
-        .eq("org_id", orgId);
-      personal = data || [];
-    } else {
-      // Si no existe org_people, usar join en personal con owner_id
-      // NOTA: user.id debe estar disponible en el contexto donde se llama loadCatalogs
-      // Aquí se asume que userId está disponible como parámetro o variable accesible
-      if (typeof userId !== "undefined" && userId) {
-        const { data } = await sbDb
-          .from("personal")
-          .select("*")
-          .eq("owner_id", userId);
-        personal = data || [];
-      } else {
-        personal = [];
-      }
-    }
+    const { data: personal } = await sbDb
+      .from("personal")
+      .select("*")
+      .in("user_id", orgUserIds);
 
     // LOGS TEMPORALES PARA DEBUG
     const { data: testPersonal } = await sbDb
