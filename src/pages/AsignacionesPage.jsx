@@ -1,13 +1,8 @@
-﻿import { useEffect, useState } from "react";
-import {
-  listAsignaciones,
-  createAsignacion,
-} from "../lib/asignacionesApi";
-
+﻿import { useEffect, useMemo, useState } from "react";
+import { createAsignacion } from "../lib/asignacionesApi";
 import { listGeofences } from "../lib/geofencesApi";
 import { listActividades } from "../lib/actividadesApi";
 import { listPersonal } from "../lib/personalApi";
-
 import { useAuth } from "@/context/auth.js";
 
 export default function AsignacionesPage() {
@@ -28,18 +23,10 @@ export default function AsignacionesPage() {
   const [freqMin, setFreqMin] = useState(5);
 
   const [error, setError] = useState("");
-
-  // 🔥 FILTRO CANÓNICO DE TRACKERS
-  const validPersonas = (personas || []).filter(
-    (p) =>
-      p &&
-      p.user_id &&
-      String(p.org_id) === String(activeOrgId)
-  );
+  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     if (!activeOrgId) return;
-
     loadAll();
   }, [activeOrgId]);
 
@@ -51,51 +38,98 @@ export default function AsignacionesPage() {
         listActividades({ orgId: activeOrgId }),
       ]);
 
-      setPersonas(p || []);
-      setGeocercas(g || []);
-      setActividades(a || []);
+      setPersonas(Array.isArray(p) ? p : []);
+      setGeocercas(Array.isArray(g) ? g : []);
+      setActividades(Array.isArray(a) ? a : []);
     } catch (e) {
       console.error(e);
+      setError("Error al cargar datos de asignaciones");
     }
   }
+
+  const personasEnOrg = useMemo(() => {
+    return (personas || []).filter((p) => {
+      if (!p) return false;
+
+      const personOrgId = p.org_id ?? p.tenant_id ?? null;
+
+      if (!activeOrgId) return true;
+      if (!personOrgId) return true;
+
+      return String(personOrgId) === String(activeOrgId);
+    });
+  }, [personas, activeOrgId]);
+
+  const selectedPerson = useMemo(() => {
+    return personasEnOrg.find(
+      (p) =>
+        String(p?.id ?? p?.personal_id ?? "") === String(selectedPersonId)
+    ) ?? null;
+  }, [personasEnOrg, selectedPersonId]);
+
+  const resolvedSelectedPersonId =
+    selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
+
+  const selectedTrackerUserId = selectedPerson?.user_id ?? null;
+
+  const showNoTrackerWarning = !!selectedPerson && !selectedTrackerUserId;
 
   function localDateTimeToISO(val) {
     if (!val) return null;
     return new Date(val).toISOString();
   }
 
+  function resetForm() {
+    setSelectedPersonId("");
+    setSelectedGeocercaId("");
+    setSelectedActivityId("");
+    setStartTime("");
+    setEndTime("");
+    setStatus("active");
+    setFreqMin(5);
+  }
+
   async function handleSubmit() {
     setError("");
+    setSuccess("");
 
-    const selectedPerson = validPersonas.find(
-      (p) => String(p.id) === String(selectedPersonId)
-    );
+    if (!resolvedSelectedPersonId) {
+      setError("Debe seleccionar una persona válida.");
+      return;
+    }
 
-    // 🔥 VALIDACIÓN CRÍTICA
-    if (!selectedPerson) {
-      setError("Selecciona un tracker válido.");
+    const parsedFreqMin = Number(freqMin);
+
+    if (!Number.isFinite(parsedFreqMin) || parsedFreqMin <= 0) {
+      setError("La frecuencia debe ser mayor que 0.");
       return;
     }
 
     const payload = {
-      personal_id: selectedPerson.id,
-      tracker_user_id: selectedPerson.user_id,
+      personal_id: resolvedSelectedPersonId,
       org_id: activeOrgId,
       tenant_id: activeOrgId,
-      geofence_id: selectedGeocercaId,
+      geofence_id: selectedGeocercaId || null,
       geocerca_id: null,
-      activity_id: selectedActivityId,
+      activity_id: selectedActivityId || null,
       start_time: localDateTimeToISO(startTime),
       end_time: localDateTimeToISO(endTime),
-      frecuencia_envio_sec: freqMin * 60,
+      frecuencia_envio_sec: parsedFreqMin * 60,
       status,
+      ...(selectedTrackerUserId
+        ? { tracker_user_id: selectedTrackerUserId }
+        : {}),
     };
 
     try {
       await createAsignacion(payload);
       await loadAll();
-      setSelectedPersonId("");
-      setError("");
+      resetForm();
+      setSuccess(
+        selectedTrackerUserId
+          ? "Asignación guardada correctamente."
+          : "Asignación guardada correctamente. El tracking se activará cuando esta persona tenga un usuario/tracker vinculado."
+      );
     } catch (e) {
       console.error(e);
       setError(e?.message || "Error al guardar asignación");
@@ -106,30 +140,51 @@ export default function AsignacionesPage() {
     <div className="p-4 max-w-3xl">
       <h2 className="text-xl font-semibold mb-4">Nueva asignación</h2>
 
-      {/* PERSONA */}
       <div className="mb-3">
         <label>Persona</label>
         <select
           className="w-full border p-2 rounded"
           value={selectedPersonId}
-          onChange={(e) => setSelectedPersonId(e.target.value)}
+          onChange={(e) => {
+            setSelectedPersonId(e.target.value);
+            setError("");
+            setSuccess("");
+          }}
         >
           <option value="">Seleccionar</option>
-          {validPersonas.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
-            </option>
-          ))}
+          {personasEnOrg.map((p) => {
+            const personId = p?.id ?? p?.personal_id ?? "";
+            const nombre =
+              p?.nombre ??
+              p?.name ??
+              p?.full_name ??
+              p?.email ??
+              `Persona ${personId}`;
+
+            return (
+              <option key={personId} value={personId}>
+                {nombre}
+                {!p?.user_id ? " — sin tracker" : ""}
+              </option>
+            );
+          })}
         </select>
 
-        {validPersonas.length === 0 && (
-          <p className="text-red-600 text-sm mt-1">
-            No hay trackers disponibles en esta organización.
+        {personasEnOrg.length === 0 && (
+          <p className="text-amber-700 text-sm mt-1">
+            No hay personas disponibles en esta organización.
           </p>
+        )}
+
+        {showNoTrackerWarning && (
+          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Esta persona aún no tiene tracker vinculado. La asignación se
+            guardará, pero el tracking no se activará hasta vincular un
+            usuario/tracker.
+          </div>
         )}
       </div>
 
-      {/* GEO */}
       <div className="mb-3">
         <label>Geocerca</label>
         <select
@@ -146,7 +201,6 @@ export default function AsignacionesPage() {
         </select>
       </div>
 
-      {/* ACTIVIDAD */}
       <div className="mb-3">
         <label>Actividad</label>
         <select
@@ -163,7 +217,6 @@ export default function AsignacionesPage() {
         </select>
       </div>
 
-      {/* FECHAS */}
       <div className="mb-3">
         <label>Fecha/hora inicio</label>
         <input
@@ -184,7 +237,6 @@ export default function AsignacionesPage() {
         />
       </div>
 
-      {/* STATUS */}
       <div className="mb-3">
         <label>Estado</label>
         <select
@@ -197,7 +249,6 @@ export default function AsignacionesPage() {
         </select>
       </div>
 
-      {/* FRECUENCIA */}
       <div className="mb-3">
         <label>Frecuencia (minutos)</label>
         <input
@@ -209,8 +260,8 @@ export default function AsignacionesPage() {
         />
       </div>
 
-      {/* ERROR */}
       {error && <div className="text-red-600 mb-3">{error}</div>}
+      {success && <div className="text-green-600 mb-3">{success}</div>}
 
       <button
         onClick={handleSubmit}
