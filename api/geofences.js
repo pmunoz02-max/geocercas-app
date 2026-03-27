@@ -8,7 +8,7 @@ async function geofencesHasTenantId(sbDb) {
 
   const { error } = await sbDb
     .from("geofences")
-    .select("tenant_id", { head: true, count: "exact" })
+    .select("tenant_id")
     .limit(1);
 
   if (!error) {
@@ -16,19 +16,8 @@ async function geofencesHasTenantId(sbDb) {
     return true;
   }
 
-  const message = String(error.message || "").toLowerCase();
-  const missingColumn =
-    error.code === "42703" ||
-    message.includes('column "tenant_id" does not exist') ||
-    message.includes("could not find the 'tenant_id' column") ||
-    message.includes("column geofences.tenant_id does not exist");
-
-  if (missingColumn) {
-    __geofencesTenantIdExists = false;
-    return false;
-  }
-
-  throw new Error(`schema_probe_failed:geofences.tenant_id:${error.message}`);
+  __geofencesTenantIdExists = false;
+  return false;
 }
 import { createClient } from "@supabase/supabase-js";
 
@@ -853,3 +842,4 @@ export default async function handler(req, res) {
     });
   }
 }
+
