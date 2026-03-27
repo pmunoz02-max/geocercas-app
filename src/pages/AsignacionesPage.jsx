@@ -28,91 +28,17 @@ export default function AsignacionesPage() {
     loadAll();
   }, [activeOrgId]);
 
-async function loadAll() {
-  try {
-    const { data, error } = await getAsignacionesBundle(activeOrgId);
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    const catalogs = data?.catalogs || {};
-
-    setPersonas(catalogs.personal || []);
-    setGeocercas(catalogs.geocercas || []);
-    setActividades(catalogs.activities || []);
-    setError("");
-  } catch (e) {
-    console.error(e);
-    setError("Error al cargar datos de asignaciones.");
-  }
-}
-
-  const personasDisponibles = useMemo(() => {
-    return (personas || []).filter((p) => {
-      const id = p?.id ?? p?.personal_id;
-      if (!id) return false;
-      const org = p?.org_id ?? p?.tenant_id;
-      return !org || String(org) === String(activeOrgId);
-    });
-  }, [personas, activeOrgId]);
-
-  const selectedPerson = useMemo(() => {
-    return personasDisponibles.find(
-      (p) =>
-        String(p?.id ?? p?.personal_id ?? "") === String(selectedPersonId)
-    );
-  }, [personasDisponibles, selectedPersonId]);
-
-  const resolvedSelectedPersonId =
-    selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
-
-  const trackerUserId = selectedPerson?.user_id ?? null;
-
-  const showNoTrackerWarning = !!selectedPerson && !trackerUserId;
-
-  async function handleSubmit() {
-    setError("");
-    setSuccess("");
-
-    if (!resolvedSelectedPersonId) {
-      setError("Debe seleccionar una persona válida.");
-      return;
-    }
-
-    const payload = {
-      personal_id: resolvedSelectedPersonId,
-      org_id: activeOrgId,
-      tenant_id: activeOrgId,
-      geofence_id: selectedGeocercaId || null,
-      activity_id: selectedActivityId || null,
-      start_time: startTime ? new Date(startTime).toISOString() : null,
-      end_time: endTime ? new Date(endTime).toISOString() : null,
-      frecuencia_envio_sec: Number(freqMin) * 60,
-      status,
-      ...(trackerUserId ? { tracker_user_id: trackerUserId } : {}),
-    };
-
-    try {
-      await createAsignacion(payload);
-      await loadAll();
-      setSuccess("Asignación guardada correctamente.");
-    } catch (e) {
-      console.error(e);
-      setError("Error al guardar asignación.");
-    }
-  }
-
   return (
     <div className="p-4 max-w-3xl">
-      <h2 className="text-xl font-semibold mb-4">
-        Nueva asignación
-      </h2>
+      <h2 className="text-xl font-semibold mb-4">Nueva asignación</h2>
 
-      {/* Persona */}
-      {personasDisponibles.length === 0 ? (
+      {/* mensaje si no hay personas */}
+      {personasDisponibles.length === 0 && (
         <div className="mb-4 text-red-600">No hay personas disponibles para esta organización.</div>
-      ) : (
+      )}
+
+      {/* selector de persona */}
+      {personasDisponibles.length > 0 && (
         <select
           className="w-full border p-2 rounded mb-2"
           value={selectedPersonId}
@@ -125,17 +51,21 @@ async function loadAll() {
           <option value="">Seleccionar persona</option>
           {personasDisponibles.map((p) => {
             const personaId = p.id || p.personal_id;
-            const nombre = p.nombre || p.name || p.full_name || p.email || personaId;
+            const visible =
+              p.full_name
+                || [p.nombre, p.apellido].filter(Boolean).join(" ")
+                || p.email
+                || `Persona ${personaId}`;
             return (
               <option key={personaId} value={personaId}>
-                {nombre}{!p.user_id ? " — sin tracker" : ""}
+                {visible}{!p.user_id ? " — sin tracker" : ""}
               </option>
             );
           })}
         </select>
       )}
 
-      {/* Warning de tracker faltante */}
+      {/* warning de tracker faltante */}
       {selectedPersonId && personasDisponibles.length > 0 && (() => {
         const persona = personasDisponibles.find(p => (p.id || p.personal_id) === selectedPersonId);
         return persona && !persona.user_id ? (
@@ -145,7 +75,7 @@ async function loadAll() {
         ) : null;
       })()}
 
-      {/* Geocerca */}
+      {/* selector de geocerca */}
       <select
         className="w-full border p-2 rounded mb-2"
         value={selectedGeocercaId}
@@ -163,12 +93,12 @@ async function loadAll() {
         })}
       </select>
 
-      {/* Mensaje si no hay geocercas */}
+      {/* mensaje si no hay geocercas */}
       {geocercas.length === 0 && (
         <div className="mb-4 text-red-600">No hay geocercas disponibles para esta organización.</div>
       )}
 
-      {/* Actividad */}
+      {/* selector de actividad */}
       <select
         className="w-full border p-2 rounded mb-2"
         value={selectedActivityId}
@@ -182,6 +112,74 @@ async function loadAll() {
             <option key={a.id} value={a.id}>
               {nombre}
             </option>
+          );
+        })}
+      </select>
+
+      {/* mensaje si no hay actividades */}
+      {actividades.length === 0 && (
+        <div className="mb-4 text-red-600">No hay actividades disponibles para esta organización.</div>
+      )}
+
+      {/* fecha/hora inicio */}
+      <input
+        type="datetime-local"
+        className="w-full border p-2 rounded mb-2"
+        value={startTime}
+        onChange={(e) => setStartTime(e.target.value)}
+      />
+
+      {/* fecha/hora fin */}
+      <input
+        type="datetime-local"
+        className="w-full border p-2 rounded mb-2"
+        value={endTime}
+        onChange={(e) => setEndTime(e.target.value)}
+      />
+
+      {/* estado */}
+      <select
+        className="w-full border p-2 rounded mb-2"
+        value={status}
+        onChange={(e) => setStatus(e.target.value)}
+      >
+        <option value="active">Activa</option>
+        <option value="inactive">Inactiva</option>
+        // Paso 10: personas prioridad y normalización
+        const rawPersonas = catalogs.personal || catalogs.people || [];
+        const normalizedPersonas = (rawPersonas || []).map((p) => ({
+          ...p,
+          id: p?.id ?? p?.personal_id ?? p?.org_people_id ?? null,
+          personal_id: p?.personal_id ?? p?.id ?? p?.org_people_id ?? null,
+          nombre: p?.nombre ?? p?.name ?? p?.first_name ?? "",
+          apellido: p?.apellido ?? p?.last_name ?? "",
+          full_name: p?.full_name ?? [p?.nombre ?? p?.name ?? p?.first_name ?? "", p?.apellido ?? p?.last_name ?? ""].filter(Boolean).join(" "),
+        }));
+        setPersonas(normalizedPersonas);
+
+      {/* frecuencia */}
+      <input
+        type="number"
+        className="w-full border p-2 rounded mb-2"
+        value={freqMin}
+        min={1}
+        onChange={(e) => setFreqMin(e.target.value)}
+      />
+
+      const personasDisponibles = (personas || []).filter(
+        (p) => {
+          if (!p) return false;
+          const id = p.id ?? p.personal_id;
+          return !!id;
+        }
+      );
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+        onClick={handleSubmit}
+      >
+        Guardar asignación
+      </button>
+    </div>
+  );
           );
         })}
       </select>
