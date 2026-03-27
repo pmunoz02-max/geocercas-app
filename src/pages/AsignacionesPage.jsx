@@ -106,21 +106,245 @@ async function loadAll() {
   return (
     <div className="p-4 max-w-3xl">
       <h2 className="text-xl font-semibold mb-4">
-        Nueva asignación DEBUG OK
+        Nueva asignación
       </h2>
 
+      {/* Persona */}
+      {personasDisponibles.length === 0 ? (
+        <div className="mb-4 text-red-600">No hay personas disponibles para esta organización.</div>
+      ) : (
+        <select
+          className="w-full border p-2 rounded mb-2"
+          value={selectedPersonId}
+          onChange={(e) => {
+            setSelectedPersonId(e.target.value);
+            setError("");
+            setSuccess("");
+          }}
+        >
+          <option value="">Seleccionar persona</option>
+          {personasDisponibles.map((p) => {
+            const personaId = p.id || p.personal_id;
+            const nombre = p.nombre || p.name || p.full_name || p.email || personaId;
+            return (
+              <option key={personaId} value={personaId}>
+                {nombre}{!p.user_id ? " — sin tracker" : ""}
+              </option>
+            );
+          })}
+        </select>
+      )}
+
+      {/* Warning de tracker faltante */}
+      {selectedPersonId && personasDisponibles.length > 0 && (() => {
+        const persona = personasDisponibles.find(p => (p.id || p.personal_id) === selectedPersonId);
+        return persona && !persona.user_id ? (
+          <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Esta persona aún no tiene tracker vinculado. La asignación se guardará, pero el tracking no se activará hasta vincular un usuario/tracker.
+          </div>
+        ) : null;
+      })()}
+
+      {/* Geocerca */}
       <select
         className="w-full border p-2 rounded mb-2"
-        value={selectedPersonId}
-        onChange={(e) => setSelectedPersonId(e.target.value)}
+        value={selectedGeocercaId}
+        onChange={(e) => setSelectedGeocercaId(e.target.value)}
+        disabled={geocercas.length === 0}
       >
-        <option value="">Seleccionar persona</option>
-        {personasDisponibles.map((p) => (
-          <option key={p.id || p.personal_id} value={p.id || p.personal_id}>
-            {p.nombre || p.email} {!p.user_id && " (sin tracker)"}
-          </option>
-        ))}
+        <option value="">Seleccionar geocerca</option>
+        {geocercas.map((g) => {
+          const nombre = g.name || g.nombre || g.title || g.id;
+          return (
+            <option key={g.id} value={g.id}>
+              {nombre}
+            </option>
+          );
+        })}
       </select>
+
+      {/* Mensaje si no hay geocercas */}
+      {geocercas.length === 0 && (
+        <div className="mb-4 text-red-600">No hay geocercas disponibles para esta organización.</div>
+      )}
+
+      {/* Actividad */}
+      <select
+        className="w-full border p-2 rounded mb-2"
+        value={selectedActivityId}
+        onChange={(e) => setSelectedActivityId(e.target.value)}
+        disabled={actividades.length === 0}
+      >
+        <option value="">Seleccionar actividad</option>
+        {actividades.map((a) => {
+          const nombre = a.name || a.nombre || a.title || a.id;
+          return (
+            <option key={a.id} value={a.id}>
+              {nombre}
+            </option>
+          );
+        })}
+      </select>
+
+      {/* Mensaje si no hay actividades */}
+      {actividades.length === 0 && (
+        <div className="mb-4 text-red-600">No hay actividades disponibles para esta organización.</div>
+      )}
+
+      {/* Fecha/hora inicio */}
+      <input
+        type="datetime-local"
+        className="w-full border p-2 rounded mb-2"
+        value={startTime}
+        onChange={(e) => setStartTime(e.target.value)}
+      />
+
+      {/* Fecha/hora fin */}
+      <input
+        type="datetime-local"
+        className="w-full border p-2 rounded mb-2"
+        value={endTime}
+        onChange={(e) => setEndTime(e.target.value)}
+      />
+
+      {/* Estado */}
+      <select
+        className="w-full border p-2 rounded mb-2"
+        value={status}
+        onChange={(e) => setStatus(e.target.value)}
+      >
+        <option value="active">Activa</option>
+        <option value="inactive">Inactiva</option>
+      </select>
+
+      {/* Frecuencia (minutos) */}
+      <input
+        type="number"
+        className="w-full border p-2 rounded mb-2"
+        value={freqMin}
+        min={1}
+        onChange={(e) => setFreqMin(e.target.value)}
+      />
+
+      {/* error */}
+      {error && <div className="text-red-600 mb-2">{error}</div>}
+
+      {/* success */}
+      {success && <div className="text-green-600 mb-2">{success}</div>}
+
+      {/* botón Guardar asignación */}
+      <button
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+        onClick={handleSubmit}
+      >
+        Guardar asignación
+      </button>
+
+      {/* 4) Warning visible si la persona elegida no tiene tracker */}
+      {selectedPersonId && personasDisponibles.length > 0 && (() => {
+        const persona = personasDisponibles.find(p => (p.id || p.personal_id) === selectedPersonId);
+        return persona && !persona.user_id ? (
+          <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            Esta persona aún no tiene tracker vinculado. La asignación se guardará, pero el tracking no se activará hasta vincular un usuario/tracker.
+          </div>
+        ) : null;
+      })()}
+
+      {/* 1) Warning visible si la persona no tiene tracker */}
+      {showNoTrackerWarning && (
+        <div className="mb-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Esta persona aún no tiene tracker vinculado. La asignación se guardará, pero el tracking no se activará hasta vincular un usuario/tracker.
+        </div>
+      )}
+
+      {/* 3) Si geocercas está vacío, mostrar mensaje */}
+      {geocercas.length === 0 ? (
+        <div className="mb-4 text-red-600">No hay geocercas disponibles para esta organización.</div>
+      ) : (
+        <select
+          className="w-full border p-2 rounded mb-2"
+          value={selectedGeocercaId}
+          onChange={(e) => setSelectedGeocercaId(e.target.value)}
+        >
+          <option value="">Seleccionar geocerca</option>
+          {geocercas.map((g) => {
+            const nombre = g.name || g.nombre || g.title || g.id;
+            return (
+              <option key={g.id} value={g.id}>
+                {nombre}
+              </option>
+            );
+          })}
+        </select>
+      )}
+
+      {/* 4) Si actividades está vacío, mostrar mensaje */}
+      {actividades.length === 0 ? (
+        <div className="mb-4 text-red-600">No hay actividades disponibles para esta organización.</div>
+      ) : (
+        <select
+          className="w-full border p-2 rounded mb-2"
+          value={selectedActivityId}
+          onChange={(e) => setSelectedActivityId(e.target.value)}
+        >
+          <option value="">Seleccionar actividad</option>
+          {actividades.map((a) => {
+            const nombre = a.name || a.nombre || a.title || a.id;
+            return (
+              <option key={a.id} value={a.id}>
+                {nombre}
+              </option>
+            );
+          })}
+        </select>
+      )}
+
+      {/* 4) Input datetime-local para startTime */}
+      <input
+        type="datetime-local"
+        className="w-full border p-2 rounded mb-2"
+        value={startTime}
+        onChange={(e) => setStartTime(e.target.value)}
+      />
+
+      {/* 5) Input datetime-local para endTime */}
+      <input
+        type="datetime-local"
+        className="w-full border p-2 rounded mb-2"
+        value={endTime}
+        onChange={(e) => setEndTime(e.target.value)}
+      />
+
+      {/* 6) Select de status */}
+      <select
+        className="w-full border p-2 rounded mb-2"
+        value={status}
+        onChange={(e) => setStatus(e.target.value)}
+      >
+        <option value="active">Activa</option>
+        <option value="inactive">Inactiva</option>
+      </select>
+
+      {/* 7) Input number para freqMin */}
+      <input
+        type="number"
+        className="w-full border p-2 rounded mb-2"
+        value={freqMin}
+        min={1}
+        onChange={(e) => setFreqMin(e.target.value)}
+      />
+
+      {/* 8) Mensajes de error y success */}
+      {error && <div className="text-red-600 mb-2">{error}</div>}
+      {success && <div className="text-green-600 mb-2">{success}</div>}
+
+      {/* 9) Botón Guardar asignación */}
+      <button
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+        onClick={handleSubmit}
+      >
+        Guardar asignación
+      </button>
 
       {showNoTrackerWarning && (
         <div className="text-yellow-600 text-sm mb-2">
