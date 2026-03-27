@@ -1,3 +1,19 @@
+// Helper para detectar columnas dinámicamente
+async function tableHasColumn(sbDb, table, column) {
+  const { data, error } = await sbDb
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", table)
+    .eq("column_name", column)
+    .limit(1);
+
+  if (error) {
+    throw new Error(`schema_check_failed:${table}.${column}:${error.message}`);
+  }
+
+  return Array.isArray(data) && data.length > 0;
+}
 import { createClient } from "@supabase/supabase-js";
 
 /**
@@ -392,6 +408,7 @@ async function listGeofences(sbDb, orgId, onlyActive) {
   const items = [];
   const seen = new Set();
 
+  // Query principal por org_id
   let q1 = sbDb.from("geofences").select("*").eq("org_id", orgId);
   if (onlyActive) q1 = q1.eq("active", true);
 
@@ -406,22 +423,26 @@ async function listGeofences(sbDb, orgId, onlyActive) {
     }
   }
 
-  let q2 = sbDb
-    .from("geofences")
-    .select("*")
-    .is("org_id", null)
-    .eq("tenant_id", orgId);
+  // Compatibilidad legacy: solo si existe tenant_id
+  const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+  if (hasTenantId) {
+    let q2 = sbDb
+      .from("geofences")
+      .select("*")
+      .is("org_id", null)
+      .eq("tenant_id", orgId);
 
-  if (onlyActive) q2 = q2.eq("active", true);
+    if (onlyActive) q2 = q2.eq("active", true);
 
-  const r2 = await q2.order("name", { ascending: true });
+    const r2 = await q2.order("name", { ascending: true });
 
-  if (!r2.error) {
-    for (const row of r2.data || []) {
-      const id = row?.id ? String(row.id) : JSON.stringify(row);
-      if (!seen.has(id)) {
-        seen.add(id);
-        items.push(row);
+    if (!r2.error) {
+      for (const row of r2.data || []) {
+        const id = row?.id ? String(row.id) : JSON.stringify(row);
+        if (!seen.has(id)) {
+          seen.add(id);
+          items.push(row);
+        }
       }
     }
   }
@@ -505,9 +526,13 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "missing_id" });
         }
 
+        // Select dinámico según schema
+        const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+        const selectCols = hasTenantId ? "id, org_id, tenant_id, *" : "id, org_id, *";
+
         const { data, error } = await sbDb
           .from("geofences")
-          .select("*")
+          .select(selectCols)
           .eq("id", id)
           .maybeSingle();
 
@@ -600,9 +625,13 @@ export default async function handler(req, res) {
 
           savedRow = data;
         } else {
+          // Select dinámico según schema
+          const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+          const selectCols = hasTenantId ? "id, org_id, tenant_id" : "id, org_id";
+
           const { data: existing, error: existingErr } = await sbDb
             .from("geofences")
-            .select("id, org_id, tenant_id")
+            .select(selectCols)
             .eq("id", row.id)
             .maybeSingle();
 
@@ -652,9 +681,13 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "missing_id" });
         }
 
+        // Select dinámico según schema
+        const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+        const selectCols = hasTenantId ? "id, org_id, tenant_id" : "id, org_id";
+
         const { data: gf, error: gfErr } = await sbDb
           .from("geofences")
-          .select("id, org_id, tenant_id")
+          .select(selectCols)
           .eq("id", id)
           .maybeSingle();
 
