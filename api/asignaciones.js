@@ -240,9 +240,16 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     };
   }
 
-  const accessToken = getCookie(req, "tg_at");
+  const bearerHeader = req.headers.authorization || "";
+  const bearerToken = bearerHeader.startsWith("Bearer ")
+    ? bearerHeader.slice(7)
+    : null;
+
+  const cookieToken = getCookie(req, "tg_at");
+
+  const accessToken = bearerToken || cookieToken;
   if (!accessToken) {
-    return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
+    return { ok: false, status: 401, error: "Not authenticated", details: "Missing access token (Bearer or cookie)" };
   }
 
   const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -337,44 +344,7 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
       mRow = data || null;
     }
   }
-  // UI usa geofences para escoger; devolvemos en geocercas por compat
-  try {
-    const r = await sbDb
-      .from("geofences")
-      .select("id,name,org_id,active,source_geocerca_id")
-      .eq("org_id", orgId)
-      .eq("active", true)
-      .order("name", { ascending: true })
-      .limit(500);
-    if (!r.error) {
-      catalogs.geocercas = (r.data || []).map((g) => ({
-        id: g.id,
-        nombre: g.name,
-        org_id: g.org_id,
-        active: g.active,
-        source_geocerca_id: g.source_geocerca_id || null,
-      }));
-    }
-  } catch {}
-
-  try {
-    const r = await sbDb
-      .from("activities")
-      .select("id,name,org_id,active")
-      .eq("org_id", orgId) // Hardening: multi-tenant isolation
-      .order("name", { ascending: true })
-      .limit(500);
-    if (!r.error) {
-      catalogs.activities = (r.data || []).map((a) => ({
-        id: a.id,
-        nombre: a.name,
-        org_id: a.org_id,
-        active: a.active,
-      }));
-    }
-  } catch {}
-
-  return catalogs;
+  // ...existing code...
 }
 
 /* =========================
