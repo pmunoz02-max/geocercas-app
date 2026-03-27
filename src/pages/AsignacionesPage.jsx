@@ -61,26 +61,45 @@ function extractArray(payload) {
   if (Array.isArray(payload)) return payload;
   if (!payload || typeof payload !== "object") return [];
 
-  const keys = ["data", "rows", "items", "personal", "people", "geocercas", "geofences"];
+  const keys = [
+    "data",
+    "rows",
+    "items",
+    "personal",
+    "people",
+    "geocercas",
+    "geofences",
+  ];
+
   for (const k of keys) {
     if (Array.isArray(payload[k])) return payload[k];
   }
+
   if (payload.data && typeof payload.data === "object") {
     for (const k of keys) {
       if (Array.isArray(payload.data[k])) return payload.data[k];
     }
   }
+
   return [];
 }
 
 function normalizePersonRow(p) {
-  const id =
-    p?.id ||
+  const personal_id =
     p?.personal_id ||
+    p?.id ||
     p?.org_people_id ||
-    p?.user_id ||
     p?.uuid ||
     "";
+
+  const user_id = p?.user_id || null;
+  const org_id =
+    p?.org_id ||
+    p?.tenant_id ||
+    p?.organization_id ||
+    p?.orgId ||
+    p?.tenantId ||
+    null;
 
   const nombre =
     p?.nombre ||
@@ -103,11 +122,14 @@ function normalizePersonRow(p) {
       p?.full_name ||
       `${nombre} ${apellido}`.trim() ||
       p?.email ||
-      id
+      personal_id
   ).trim();
 
   return {
-    id,
+    id: personal_id,
+    personal_id,
+    user_id,
+    org_id,
     nombre: String(nombre || "").trim(),
     apellido: String(apellido || "").trim(),
     email: String(p?.email || "").trim(),
@@ -122,9 +144,9 @@ function normalizeGeofenceRow(g) {
     id,
     nombre: nombre || id,
     source_geocerca_id: g?.source_geocerca_id || null,
-    // ...puedes agregar más campos si necesitas compatibilidad futura
   };
 }
+
 function detectDominantOrgId(items) {
   const counts = new Map();
 
@@ -231,9 +253,12 @@ export default function AsignacionesPage() {
     let geofencesRaw = [];
     let geofencesNorm = [];
 
-    // Load personal options with robust error handling
     try {
-      const params = new URLSearchParams({ onlyActive: "1", limit: "500", org_id: String(orgId) });
+      const params = new URLSearchParams({
+        onlyActive: "1",
+        limit: "500",
+        org_id: String(orgId),
+      });
       const rP = await fetchJsonSafe(`/api/personal?${params.toString()}`);
       personalRaw = extractArray(rP.payload);
       personalNorm = personalRaw
@@ -245,42 +270,45 @@ export default function AsignacionesPage() {
             null;
           return !rowOrg || String(rowOrg) === String(orgId);
         })
-        function normalizePersonRow(p) {
-          const personal_id = p?.personal_id || p?.id || p?.org_people_id || p?.uuid || "";
-          const user_id = p?.user_id || "";
-          const org_id = p?.org_id || p?.tenant_id || p?.organization_id || "";
-          const nombre =
-            p?.nombre ||
-            p?.first_name ||
-            p?.firstname ||
-            (typeof p?.full_name === "string" ? p.full_name.split(" ")[0] : "") ||
-            "";
-          const apellido =
-            p?.apellido ||
-            p?.last_name ||
-            p?.lastname ||
-            (typeof p?.full_name === "string"
-              ? p.full_name.split(" ").slice(1).join(" ")
-              : "") ||
-            "";
-          const label = String(
-            p?.display_name ||
-              p?.full_name ||
-              `${nombre} ${apellido}`.trim() ||
-              p?.email ||
-              personal_id
-          ).trim();
-          return {
-            id: personal_id,
-            personal_id,
-            user_id,
-            org_id,
-            nombre: String(nombre || "").trim(),
-            apellido: String(apellido || "").trim(),
-            email: String(p?.email || "").trim(),
-            label,
-          };
-        }
+        .map(normalizePersonRow)
+        .filter((p) => p.id);
+    } catch (e) {
+      console.warn("[AsignacionesPage] Failed to load personal catalog:", e);
+      personalRaw = [];
+      personalNorm = [];
+    }
+
+    try {
+      geofencesRaw = await listGeofences(orgId, true);
+      geofencesNorm = geofencesRaw
+        .map(normalizeGeofenceRow)
+        .filter((g) => g.id && g.source_geocerca_id);
+    } catch (e) {
+      console.warn("[AsignacionesPage] Failed to load geofences catalog:", e);
+      geofencesRaw = [];
+      geofencesNorm = [];
+    }
+
+    const dominantCatalogOrgId = detectDominantOrgId([
+      ...personalRaw,
+      ...geofencesRaw,
+    ]);
+
+    if (dominantCatalogOrgId && String(dominantCatalogOrgId) !== String(orgId)) {
+      setCatalogOrgId(String(dominantCatalogOrgId));
+    } else {
+      setCatalogOrgId(null);
+    }
+
+    setPersonalOptions(personalNorm);
+    setGeocercaOptions(geofencesNorm);
+  }
+
+  async function loadAll() {
+    if (!isAuthenticated || !orgId) {
+      setAsignaciones([]);
+      setPersonalOptions([]);
+      setGeocercaOptions([]);
       setActivityOptions([]);
       setCatalogOrgId(null);
       setLoading(false);
@@ -292,47 +320,55 @@ export default function AsignacionesPage() {
 
     try {
       await loadCatalogsCanonical();
+
+      const { data, error: bundleError } = await getAsignacionesBundle(orgId);
+
+      if (bundleError) {
+        console.error("[AsignacionesPage] bundle error:", bundleError);
+        setAsignaciones([]);
+        setActivityOptions([]);
+        setError(
+          bundleError.message ||
+            t("asignaciones.messages.loadError", {
+              defaultValue: "Error loading assignments.",
+            })
+        );
+        return;
+      }
+
+      const bundle = data || {};
+      const rows = Array.isArray(bundle.asignaciones)
+        ? bundle.asignaciones.filter((a) => keepIfSameOrgOrUnknown(a))
+        : [];
+      const catalogs = bundle.catalogs || {};
+
+      setAsignaciones(rows);
+
+      const activitiesRaw = Array.isArray(catalogs.activities)
+        ? catalogs.activities.filter((a) => keepIfSameOrgOrUnknown(a))
+        : [];
+      setActivityOptions(activitiesRaw);
+
+      if (!selectedActivityId && activitiesRaw.length === 1) {
+        setSelectedActivityId(activitiesRaw[0].id);
+      }
     } catch (e) {
       console.error("[AsignacionesPage] canonical catalogs crash:", e);
       setPersonalOptions([]);
       setGeocercaOptions([]);
       setCatalogOrgId(null);
-    }
-
-    const { data, error: bundleError } = await getAsignacionesBundle(orgId);
-
-    if (bundleError) {
-      console.error("[AsignacionesPage] bundle error:", bundleError);
       setAsignaciones([]);
       setActivityOptions([]);
       setError(
-        bundleError.message ||
-          t("asignaciones.messages.loadError", {
-            defaultValue: "Error loading assignments.",
-          })
+        e?.message ||
+          tt(
+            "asignaciones.messages.loadError",
+            "Error loading assignments."
+          )
       );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const bundle = data || {};
-    const rows = Array.isArray(bundle.asignaciones)
-      ? bundle.asignaciones.filter((a) => keepIfSameOrgOrUnknown(a))
-      : [];
-    const catalogs = bundle.catalogs || {};
-
-    setAsignaciones(rows);
-
-    const activitiesRaw = Array.isArray(catalogs.activities)
-      ? catalogs.activities.filter((a) => keepIfSameOrgOrUnknown(a))
-      : [];
-    setActivityOptions(activitiesRaw);
-
-    if (!selectedActivityId && activitiesRaw.length === 1) {
-      setSelectedActivityId(activitiesRaw[0].id);
-    }
-
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -374,7 +410,9 @@ export default function AsignacionesPage() {
     if (estadoFilter !== "todos") {
       rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
     }
-    if (selectedPersonalId) rows = rows.filter((a) => a.personal_id === selectedPersonalId);
+    if (selectedPersonalId) {
+      rows = rows.filter((a) => a.personal_id === selectedPersonalId);
+    }
     return rows;
   }, [asignaciones, estadoFilter, selectedPersonalId]);
 
@@ -390,23 +428,6 @@ export default function AsignacionesPage() {
   }
 
   async function handleSubmit(e) {
-        e.preventDefault();
-        setError(null);
-        setSuccessMessage(null);
-        if (!startTime || !endTime) {
-          // Validación existente para fechas faltantes
-          setError(
-            tt(
-              "asignaciones.messages.selectDates",
-              "You must enter start and end date/time."
-            )
-          );
-          return;
-        }
-        if (endTime < startTime) {
-          setError("La fecha final no puede ser anterior a la fecha inicial");
-          return;
-        }
     e.preventDefault();
     setError(null);
     setSuccessMessage(null);
@@ -421,22 +442,7 @@ export default function AsignacionesPage() {
       return;
     }
 
-
-    // Validar persona seleccionada
-    const selectedPerson = personalOptions.find((p) => p.personal_id === selectedPersonalId);
-    if (!selectedPerson) {
-      setError(tt("asignaciones.error.personNotFound", "Selected person not found."));
-      return;
-    }
-    if (!selectedPerson.user_id) {
-      setError(tt("asignaciones.error.personNoUserId", "Selected person does not have a linked user account (user_id)."));
-      return;
-    }
-    if (selectedPerson.org_id && String(selectedPerson.org_id) !== String(orgId)) {
-      setError(tt("asignaciones.error.personOrgMismatch", "Selected person does not belong to the active organization."));
-      return;
-    }
-    if (!selectedGeocercaId) {
+    if (!selectedPersonalId || !selectedGeocercaId) {
       setError(
         tt(
           "asignaciones.messages.selectPersonAndFence",
@@ -466,6 +472,11 @@ export default function AsignacionesPage() {
       return;
     }
 
+    if (endTime < startTime) {
+      setError("La fecha final no puede ser anterior a la fecha inicial");
+      return;
+    }
+
     const freqMin = Number(frecuenciaEnvioMin) || 0;
     if (freqMin < 5) {
       setError(
@@ -477,11 +488,34 @@ export default function AsignacionesPage() {
       return;
     }
 
+    const selectedPerson = personalOptions.find(
+      (p) => String(p.personal_id || p.id) === String(selectedPersonalId)
+    );
+
+    if (!selectedPerson) {
+      setError("No se pudo resolver la persona seleccionada.");
+      return;
+    }
+
+    if (!selectedPerson.user_id) {
+      setError("La persona seleccionada no tiene user_id canónico para tracker.");
+      return;
+    }
+
+    if (
+      selectedPerson.org_id &&
+      orgId &&
+      String(selectedPerson.org_id) !== String(orgId)
+    ) {
+      setError("La persona seleccionada pertenece a otra organización.");
+      return;
+    }
 
     const payload = {
       personal_id: selectedPerson.personal_id,
       tracker_user_id: selectedPerson.user_id,
-      org_id: selectedPerson.org_id,
+      org_id: orgId,
+      tenant_id: orgId,
       geofence_id: selectedGeocercaId,
       geocerca_id: null,
       activity_id: selectedActivityId,
@@ -491,11 +525,23 @@ export default function AsignacionesPage() {
       status,
     };
 
-    const resp = editingId
-      ? await updateAsignacion(editingId, payload, orgId)
-      : await createAsignacion(payload, orgId);
+    let resp;
+    try {
+      resp = editingId
+        ? await updateAsignacion(editingId, payload, orgId)
+        : await createAsignacion(payload, orgId);
+    } catch (err) {
+      setError(
+        err?.message ||
+          tt(
+            "asignaciones.messages.saveGenericError",
+            "Error saving assignment."
+          )
+      );
+      return;
+    }
 
-    if (resp.error) {
+    if (resp?.error) {
       console.error("[AsignacionesPage] save error:", resp.error);
       setError(
         resp.error.message ||
@@ -558,7 +604,9 @@ export default function AsignacionesPage() {
     return v;
   };
 
-  const hasCatalogOrgMismatch = Boolean(catalogOrgId && String(catalogOrgId) !== String(orgId));
+  const hasCatalogOrgMismatch = Boolean(
+    catalogOrgId && String(catalogOrgId) !== String(orgId)
+  );
 
   return (
     <div className="w-full px-3 md:px-6 py-4">
@@ -624,7 +672,9 @@ export default function AsignacionesPage() {
             <form onSubmit={handleSubmit} className="space-y-3">
               {hasCatalogOrgMismatch && (
                 <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  La organización activa no coincide con la organización de personas/geocercas cargadas. Cambia la organización antes de guardar.
+                  La organización activa no coincide con la organización de
+                  personas/geocercas cargadas. Cambia la organización antes de
+                  guardar.
                 </div>
               )}
 
@@ -655,7 +705,9 @@ export default function AsignacionesPage() {
                   </option>
                   {personalOptions.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.label || `${p.nombre || ""} ${p.apellido || ""}`.trim() || p.id}
+                      {p.label ||
+                        `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
+                        p.id}
                     </option>
                   ))}
                 </select>
@@ -771,7 +823,9 @@ export default function AsignacionesPage() {
                     className={inputBase}
                     min={5}
                     value={frecuenciaEnvioMin}
-                    onChange={(e) => setFrecuenciaEnvioMin(Number(e.target.value) || 5)}
+                    onChange={(e) =>
+                      setFrecuenciaEnvioMin(Number(e.target.value) || 5)
+                    }
                   />
                   <p className="mt-1 text-[11px] text-gray-500">
                     {tt(
@@ -889,16 +943,33 @@ export default function AsignacionesPage() {
                 }
               }}
               onToggleStatus={async (row) => {
-                // Toggle status between 'activa' and 'inactiva'
-                const newStatus = (row.status || row.estado) === "activa" ? "inactiva" : "activa";
-                const resp = await updateAsignacion(row.id, { status: newStatus }, orgId);
+                const newStatus =
+                  (row.status || row.estado) === "activa"
+                    ? "inactiva"
+                    : "activa";
+                const resp = await updateAsignacion(
+                  row.id,
+                  { status: newStatus },
+                  orgId
+                );
                 if (resp.error) {
-                  setError(tt("asignaciones.messages.saveGenericError", "Error updating status."));
+                  setError(
+                    tt(
+                      "asignaciones.messages.saveGenericError",
+                      "Error updating status."
+                    )
+                  );
                 } else {
                   setSuccessMessage(
                     newStatus === "activa"
-                      ? tt("asignaciones.banner.activated", "Assignment activated.")
-                      : tt("asignaciones.banner.deactivated", "Assignment deactivated.")
+                      ? tt(
+                          "asignaciones.banner.activated",
+                          "Assignment activated."
+                        )
+                      : tt(
+                          "asignaciones.banner.deactivated",
+                          "Assignment deactivated."
+                        )
                   );
                   loadAll();
                 }
