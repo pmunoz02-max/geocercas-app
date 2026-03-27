@@ -95,9 +95,15 @@ export default function ActividadesPage() {
       setActividades(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("[ActividadesPage] load error:", err);
-      setErrorMsg(err?.message || t("actividades.errorLoad"));
+      setErrorMsg(
+        err?.message ||
+          t("actividades.errorLoad", {
+            defaultValue: "No se pudieron cargar las actividades.",
+          })
+      );
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -121,20 +127,46 @@ export default function ActividadesPage() {
     setNombre(a.name || "");
     setDescripcion(a.description || "");
     setCurrency(a.currency_code || "USD");
-    setHourlyRate(a.hourly_rate ?? "");
+    setHourlyRate(
+      a.hourly_rate == null || Number.isNaN(Number(a.hourly_rate))
+        ? ""
+        : String(a.hourly_rate)
+    );
+    setErrorMsg("");
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setErrorMsg("");
 
-    if (!nombre.trim()) {
-      setErrorMsg(t("actividades.errorNameRequired"));
+    const cleanName = nombre.trim();
+    const cleanDescription = descripcion.trim() || null;
+    const parsedHourlyRate = Number(hourlyRate);
+
+    if (!cleanName) {
+      setErrorMsg(
+        t("actividades.errorNameRequired", {
+          defaultValue: "El nombre es obligatorio.",
+        })
+      );
       return;
     }
 
-    if (!hourlyRate || Number(hourlyRate) <= 0) {
-      setErrorMsg(t("actividades.errorRatePositive"));
+    if (!hourlyRate || !Number.isFinite(parsedHourlyRate)) {
+      setErrorMsg(
+        t("actividades.errorRateInvalid", {
+          defaultValue: "Ingresa un costo por hora válido.",
+        })
+      );
+      return;
+    }
+
+    if (parsedHourlyRate <= 0) {
+      setErrorMsg(
+        t("actividades.errorRatePositive", {
+          defaultValue: "El costo por hora debe ser mayor que 0.",
+        })
+      );
       return;
     }
 
@@ -142,11 +174,11 @@ export default function ActividadesPage() {
       if (formMode === "create") {
         await createActividad(
           {
-            name: nombre.trim(),
-            description: descripcion.trim() || null,
+            name: cleanName,
+            description: cleanDescription,
             active: true,
-            currency_code: currency,
-            hourly_rate: Number(hourlyRate),
+            currency,
+            hourly_cost: parsedHourlyRate,
           },
           { orgId: activeOrgId }
         );
@@ -154,10 +186,10 @@ export default function ActividadesPage() {
         await updateActividad(
           editingId,
           {
-            name: nombre.trim(),
-            description: descripcion.trim() || null,
-            currency_code: currency,
-            hourly_rate: Number(hourlyRate),
+            name: cleanName,
+            description: cleanDescription,
+            currency,
+            hourly_cost: parsedHourlyRate,
           },
           { orgId: activeOrgId }
         );
@@ -167,13 +199,22 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error("[ActividadesPage] save error:", err);
-      setErrorMsg(err?.message || t("actividades.errorSave"));
+      setErrorMsg(
+        err?.message ||
+          t("actividades.errorSave", {
+            defaultValue: "No se pudo guardar la actividad.",
+          })
+      );
     }
   }
 
   async function handleToggle(a) {
     if (!activeOrgId) {
-      setErrorMsg(t("actividades.errorMissingTenant"));
+      setErrorMsg(
+        t("actividades.errorMissingTenant", {
+          defaultValue: "No hay una organización activa.",
+        })
+      );
       return;
     }
 
@@ -183,13 +224,22 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error("[ActividadesPage] toggle error:", err);
-      setErrorMsg(err?.message || t("actividades.errorSave"));
+      setErrorMsg(
+        err?.message ||
+          t("actividades.errorSave", {
+            defaultValue: "No se pudo actualizar la actividad.",
+          })
+      );
     }
   }
 
   async function handleDelete(a) {
     if (!activeOrgId) {
-      setErrorMsg(t("actividades.errorMissingTenant"));
+      setErrorMsg(
+        t("actividades.errorMissingTenant", {
+          defaultValue: "No hay una organización activa.",
+        })
+      );
       return;
     }
 
@@ -206,7 +256,12 @@ export default function ActividadesPage() {
       await loadActividades();
     } catch (err) {
       console.error("[ActividadesPage] delete error:", err);
-      setErrorMsg(err?.message || t("actividades.errorSave"));
+      setErrorMsg(
+        err?.message ||
+          t("actividades.errorSave", {
+            defaultValue: "No se pudo eliminar la actividad.",
+          })
+      );
     }
   }
 
@@ -226,7 +281,9 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-5xl mx-auto">
         <div className="border rounded-lg px-4 py-3 text-sm text-gray-700 bg-white">
-          {t("common.actions.loading")}
+          {t("common.actions.loading", {
+            defaultValue: "Cargando...",
+          })}
         </div>
       </div>
     );
@@ -236,7 +293,9 @@ export default function ActividadesPage() {
     return (
       <div className="p-4 max-w-3xl mx-auto">
         <div className="border rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t("actividades.errorMissingTenant")}
+          {t("actividades.errorMissingTenant", {
+            defaultValue: "No hay una organización activa.",
+          })}
         </div>
       </div>
     );
@@ -246,7 +305,9 @@ export default function ActividadesPage() {
     <div className="p-4 max-w-5xl mx-auto">
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
-          <h1 className="text-2xl font-semibold">{t("actividades.title")}</h1>
+          <h1 className="text-2xl font-semibold">
+            {t("actividades.title", { defaultValue: "Actividades" })}
+          </h1>
           <div className="text-sm text-gray-600 mt-1">
             {t("actividades.subtitle", {
               defaultValue: "Catálogo de actividades con costo por hora.",
@@ -270,7 +331,9 @@ export default function ActividadesPage() {
               </label>
               <input
                 className={inputClass}
-                placeholder={t("actividades.fieldNamePlaceholder")}
+                placeholder={t("actividades.fieldNamePlaceholder", {
+                  defaultValue: "Ej. Siembra, Riego, Cosecha",
+                })}
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
               />
@@ -282,8 +345,12 @@ export default function ActividadesPage() {
               </label>
               <input
                 className={inputClass}
-                placeholder={t("actividades.fieldHourlyRatePlaceholder")}
+                placeholder={t("actividades.fieldHourlyRatePlaceholder", {
+                  defaultValue: "Ej. 3.50",
+                })}
                 type="number"
+                min="0.01"
+                step="0.01"
                 inputMode="decimal"
                 value={hourlyRate}
                 onChange={(e) => setHourlyRate(e.target.value)}
@@ -315,7 +382,9 @@ export default function ActividadesPage() {
               </label>
               <input
                 className={inputClass}
-                placeholder={t("actividades.fieldDescriptionPlaceholder")}
+                placeholder={t("actividades.fieldDescriptionPlaceholder", {
+                  defaultValue: "Descripción breve de la actividad...",
+                })}
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
               />
@@ -328,8 +397,8 @@ export default function ActividadesPage() {
               type="submit"
             >
               {formMode === "create"
-                ? t("actividades.buttonCreate")
-                : t("actividades.buttonSave")}
+                ? t("actividades.buttonCreate", { defaultValue: "Crear actividad" })
+                : t("actividades.buttonSave", { defaultValue: "Guardar cambios" })}
             </button>
 
             {formMode === "edit" && (
@@ -338,7 +407,7 @@ export default function ActividadesPage() {
                 onClick={resetForm}
                 className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-sm font-medium"
               >
-                {t("actividades.buttonCancel")}
+                {t("actividades.buttonCancel", { defaultValue: "Cancelar" })}
               </button>
             )}
           </div>
@@ -347,12 +416,14 @@ export default function ActividadesPage() {
 
       {loading ? (
         <div className="border rounded-lg px-4 py-3 text-sm text-gray-700 bg-white">
-          {t("actividades.loading")}
+          {t("actividades.loading", { defaultValue: "Cargando actividades..." })}
         </div>
       ) : (
         <div className="space-y-3">
           {sortedActividades.length === 0 && (
-            <div className="text-sm text-gray-600">{t("actividades.empty")}</div>
+            <div className="text-sm text-gray-600">
+              {t("actividades.empty", { defaultValue: "No hay actividades registradas." })}
+            </div>
           )}
 
           {sortedActividades.map((a) => {
@@ -383,13 +454,13 @@ export default function ActividadesPage() {
                       ].join(" ")}
                       title={
                         isActive
-                          ? t("actividades.statusActive")
-                          : t("actividades.statusInactive")
+                          ? t("actividades.statusActive", { defaultValue: "Activa" })
+                          : t("actividades.statusInactive", { defaultValue: "Inactiva" })
                       }
                     >
                       {isActive
-                        ? t("actividades.statusActive")
-                        : t("actividades.statusInactive")}
+                        ? t("actividades.statusActive", { defaultValue: "Activa" })
+                        : t("actividades.statusInactive", { defaultValue: "Inactiva" })}
                     </span>
                   </div>
 
@@ -421,7 +492,7 @@ export default function ActividadesPage() {
                       className="text-sm px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium"
                       type="button"
                     >
-                      {t("actividades.actionEdit")}
+                      {t("actividades.actionEdit", { defaultValue: "Editar" })}
                     </button>
 
                     <button
@@ -430,8 +501,8 @@ export default function ActividadesPage() {
                       type="button"
                     >
                       {a.active
-                        ? t("actividades.actionDeactivate")
-                        : t("actividades.actionActivate")}
+                        ? t("actividades.actionDeactivate", { defaultValue: "Desactivar" })
+                        : t("actividades.actionActivate", { defaultValue: "Activar" })}
                     </button>
 
                     <button
@@ -439,7 +510,7 @@ export default function ActividadesPage() {
                       className="text-sm px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
                       type="button"
                     >
-                      {t("actividades.actionDelete")}
+                      {t("actividades.actionDelete", { defaultValue: "Eliminar" })}
                     </button>
                   </div>
                 )}
