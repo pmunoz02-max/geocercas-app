@@ -41,19 +41,17 @@ export default async function handler(req, res) {
     });
   }
 
-  // Consulta a Supabase para personal activo y no eliminado
+  // Consulta mínima a personal
   let personal = [];
+  const requested_org_id = q.org_id || q.orgId || null;
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const orgId = q.org_id || q.orgId || null;
-    if (orgId) {
+    if (requested_org_id) {
       const { data, error } = await supabase
         .from("personal")
-        .select("id,nombre,apellido")
-        .eq("org_id", orgId)
-        .eq("activo_bool", true)
-        .eq("is_deleted", false);
+        .select("id,nombre,apellido,email,org_id")
+        .eq("org_id", requested_org_id);
       if (!error && Array.isArray(data)) {
         personal = data;
       }
@@ -65,12 +63,12 @@ export default async function handler(req, res) {
   return send(res, 200, {
     ok: true,
     data: {
-      org_id: q.org_id || q.orgId || null,
-      asignaciones: [],
       catalogs: {
         personal,
-        geocercas: [],
-        activities: [],
+      },
+      debug: {
+        personal_count: Array.isArray(personal) ? personal.length : -1,
+        requested_org_id,
       },
     },
   });
