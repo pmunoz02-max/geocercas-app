@@ -469,15 +469,34 @@ async function countReferences(sbDb, table, id) {
       .eq(col, id);
 
     if (error) {
-      const message = String(error.message || "").toLowerCase();
+      const probeText = [
+        error?.message || "",
+        error?.details || "",
+        error?.hint || "",
+        error?.code || "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .trim();
+
       const missingColumn =
-        message.includes(`column "${col}" does not exist`) ||
-        message.includes(`could not find the '${col}' column`) ||
-        error.code === "42703";
+        !probeText ||
+        error?.code === "42703" ||
+        probeText.includes(`column "${col}" does not exist`) ||
+        probeText.includes(`could not find the '${col}' column`) ||
+        probeText.includes(`column ${table}.${col} does not exist`) ||
+        probeText.includes(col);
 
-      if (missingColumn) continue;
+      if (missingColumn) {
+        continue;
+      }
 
-      throw new Error(`${table}:${col}:${error.message}`);
+      throw new Error(`${table}:${col}:${JSON.stringify({
+        message: error?.message || "",
+        details: error?.details || "",
+        hint: error?.hint || "",
+        code: error?.code || "",
+      })}`);
     }
 
     if (Number(count || 0) > 0) return true;
