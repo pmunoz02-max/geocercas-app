@@ -51,7 +51,11 @@ export default async function handler(req, res) {
       const { data, error } = await supabase
         .from("personal")
         .select("id,nombre,apellido,email,org_id")
-        .eq("org_id", requested_org_id);
+        .eq("org_id", requested_org_id)
+        .eq("is_deleted", false)
+        .eq("vigente", true)
+        .order("apellido", { ascending: true })
+        .order("nombre", { ascending: true });
       if (!error && Array.isArray(data)) {
         personal = data;
       }
