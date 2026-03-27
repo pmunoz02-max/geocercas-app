@@ -1,8 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { createAsignacion, listAsignaciones } from "../lib/asignacionesApi";
-import { listGeofences } from "../lib/geofencesApi";
-import { listActividades } from "../lib/actividadesApi";
-import { listPersonal } from "../lib/personalApi";
+import { createAsignacion, getAsignacionesBundle, listAsignaciones } from "../lib/asignacionesApi";
 import { useAuth } from "@/context/auth.js";
 
 export default function AsignacionesPage() {
@@ -31,25 +28,25 @@ export default function AsignacionesPage() {
     loadAll();
   }, [activeOrgId]);
 
-  async function loadAll() {
-    try {
-      const [p, g, a, asig] = await Promise.all([
-        listPersonal(),
-        listGeofences(activeOrgId, true),
-        listActividades({ orgId: activeOrgId }),
-        listAsignaciones(activeOrgId), // 🔥 FIX
-      ]);
+async function loadAll() {
+  try {
+    const { data, error } = await getAsignacionesBundle(activeOrgId);
 
-      setPersonas(Array.isArray(p) ? p : []);
-      setGeocercas(Array.isArray(g) ? g : []);
-      setActividades(Array.isArray(a) ? a : []);
-      setAsignaciones(Array.isArray(asig) ? asig : []);
-      setError("");
-    } catch (e) {
-      console.error(e);
-      setError("Error al cargar datos de asignaciones.");
+    if (error) {
+      throw new Error(error.message);
     }
+
+    const catalogs = data?.catalogs || {};
+
+    setPersonas(catalogs.personal || []);
+    setGeocercas(catalogs.geocercas || []);
+    setActividades(catalogs.activities || []);
+    setError("");
+  } catch (e) {
+    console.error(e);
+    setError("Error al cargar datos de asignaciones.");
   }
+}
 
   const personasDisponibles = useMemo(() => {
     return (personas || []).filter((p) => {
