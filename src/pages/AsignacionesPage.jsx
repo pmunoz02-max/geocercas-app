@@ -33,6 +33,14 @@ export default function AsignacionesPage() {
 
       const catalogs = data?.catalogs || {};
 
+      // LOGS TEMPORALES
+      console.log("[AsignacionesPage] activeOrgId", activeOrgId);
+      console.log("[AsignacionesPage] bundle data", data);
+      console.log("[AsignacionesPage] catalogs", catalogs);
+      console.log("[AsignacionesPage] rawPersonas", catalogs.personal || catalogs.people || []);
+      console.log("[AsignacionesPage] rawGeocercas", catalogs.geocercas || catalogs.geofences || []);
+      console.log("[AsignacionesPage] rawActividades", catalogs.activities || catalogs.actividades || []);
+
       const rawPersonas = catalogs.personal || catalogs.people || [];
       const normalizedPersonas = (rawPersonas || []).map((p) => ({
         ...p,
