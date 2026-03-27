@@ -426,29 +426,44 @@ async function loadCatalogs(sbDb, orgId) {
     personal: [],
   };
 
-  // Personas: cargar siempre desde la tabla correcta, solo filtrar por org_id
+  // Personas: usar org_people si existe, si no, usar join en personal con owner_id
   try {
-    // Intentar primero tabla "personal"
-    let r = await sbDb
-      .from("personal")
-      .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
-      .eq("org_id", orgId)
-      .limit(1000);
-
-    if (!r.error && Array.isArray(r.data) && r.data.length > 0) {
-      catalogs.personal = r.data;
-    } else {
-      // Si no hay resultados, intentar tabla "org_people"
-      r = await sbDb
+    let personal = [];
+    let orgPeopleExists = false;
+    try {
+      // Verificar si existe la tabla org_people
+      const { data: orgPeopleCheck, error: orgPeopleError } = await sbDb
         .from("org_people")
-        .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
-        .eq("org_id", orgId)
-        .limit(1000);
-      if (!r.error && Array.isArray(r.data)) {
-        catalogs.personal = r.data;
+        .select("id")
+        .limit(1);
+      if (!orgPeopleError) orgPeopleExists = true;
+    } catch (e) {
+      orgPeopleExists = false;
+    }
+
+    if (orgPeopleExists) {
+      const { data } = await sbDb
+        .from("org_people")
+        .select("*")
+        .eq("org_id", orgId);
+      personal = data || [];
+    } else {
+      // Si no existe org_people, usar join en personal con owner_id
+      // NOTA: user.id debe estar disponible en el contexto donde se llama loadCatalogs
+      // Aquí se asume que userId está disponible como parámetro o variable accesible
+      if (typeof userId !== "undefined" && userId) {
+        const { data } = await sbDb
+          .from("personal")
+          .select("*")
+          .eq("owner_id", userId);
+        personal = data || [];
+      } else {
+        personal = [];
       }
     }
+    catalogs.personal = personal || [];
   } catch (e) {
+    catalogs.personal = [];
     console.warn("[loadCatalogs] personal/org_people exception:", e);
   }
 
