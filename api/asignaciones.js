@@ -742,7 +742,7 @@ const rc = await resolveContext(req, { requestedOrgId });
           return ok(res, { ok: true, data: merged });
         }
 
-        let catalogs = { geocercas: [], activities: [] };
+        let catalogs = { geocercas: [], activities: [], personal: [] };
         try {
           catalogs = await loadCatalogs(sbDb, orgId);
         } catch (e) {
@@ -753,6 +753,29 @@ const rc = await resolveContext(req, { requestedOrgId });
             code: e?.code,
             orgId,
           });
+        }
+
+        // Refuerza que catalogs.personal siempre se cargue correctamente antes de responder
+        try {
+          let r = await sbDb
+            .from("personal")
+            .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
+            .eq("org_id", orgId)
+            .limit(1000);
+          if (!r.error && Array.isArray(r.data) && r.data.length > 0) {
+            catalogs.personal = r.data;
+          } else {
+            r = await sbDb
+              .from("org_people")
+              .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
+              .eq("org_id", orgId)
+              .limit(1000);
+            if (!r.error && Array.isArray(r.data)) {
+              catalogs.personal = r.data;
+            }
+          }
+        } catch (e) {
+          console.warn("[api/asignaciones] refuerzo personal/org_people exception:", e);
         }
 
         return ok(res, {
