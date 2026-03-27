@@ -51,14 +51,12 @@ function ok(res, obj) {
 function getCookie(req, name) {
   const raw = req.headers.cookie || "";
   export default async function handler(req, res) {
-    if (req.method === "GET") {
-      return res.status(200).json({
-        ok: true,
-        route: 'asignaciones-clean-02',
-        org_id: req.query?.org_id || null
-      });
-    }
-    res.status(405).json({ ok: false, error: "method_not_allowed" });
+    res.status(200).json({
+      ok: true,
+      route: 'asignaciones-minimal',
+      method: req.method,
+      org_id: req.query?.org_id || null
+    });
   }
 
         let catalogs = { geocercas: [], activities: [], personal: [] };
