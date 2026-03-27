@@ -13,6 +13,7 @@ import {
   updateAsignacion,
   deleteAsignacion,
 } from "../lib/asignacionesApi";
+import { listGeofences } from "../lib/geofencesApi";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
 
 function localDateTimeToISO(localDateTime) {
@@ -221,10 +222,17 @@ export default function AsignacionesPage() {
       return;
     }
 
-    const params = new URLSearchParams({ onlyActive: "1", limit: "500", org_id: String(orgId) });
-    const rP = await fetchJsonSafe(`/api/personal?${params.toString()}`);
-    const personalRaw = extractArray(rP.payload);
-      const personalNorm = personalRaw
+    let personalRaw = [];
+    let personalNorm = [];
+    let geofencesRaw = [];
+    let geofencesNorm = [];
+
+    // Load personal options with robust error handling
+    try {
+      const params = new URLSearchParams({ onlyActive: "1", limit: "500", org_id: String(orgId) });
+      const rP = await fetchJsonSafe(`/api/personal?${params.toString()}`);
+      personalRaw = extractArray(rP.payload);
+      personalNorm = personalRaw
         .filter((r) => {
           const rowOrg =
             r?.org_id ||
@@ -235,23 +243,29 @@ export default function AsignacionesPage() {
         })
         .map(normalizePersonRow)
         .filter((p) => p.id);
+    } catch (e) {
+      console.warn("[AsignacionesPage] Failed to load personal catalog:", e);
+      personalRaw = [];
+      personalNorm = [];
+    }
 
-    const geofenceParams = new URLSearchParams({ action: "list", onlyActive: "true", org_id: String(orgId) });
-    const rG = await fetchJsonSafe(`/api/geofences?${geofenceParams.toString()}`);
-    const geofencesRaw = extractArray(rG.payload);
-      const geofencesNorm = geofencesRaw
-        .filter((r) => {
-          const rowOrg =
-            r?.org_id ||
-            r?.tenant_id ||
-            r?.organization_id ||
-            null;
-          return !rowOrg || String(rowOrg) === String(orgId);
-        })
+    // Load geofence options with robust error handling
+    try {
+      geofencesRaw = await listGeofences(orgId, true);
+      geofencesNorm = geofencesRaw
         .map(normalizeGeofenceRow)
         .filter((g) => g.id);
+    } catch (e) {
+      console.warn("[AsignacionesPage] Failed to load geofences catalog:", e);
+      geofencesRaw = [];
+      geofencesNorm = [];
+    }
 
-    const dominantCatalogOrgId = detectDominantOrgId([...personalRaw, ...geofencesRaw]);
+    // Detect dominant orgId from whatever data we have
+    const dominantCatalogOrgId = detectDominantOrgId([
+      ...personalRaw,
+      ...geofencesRaw,
+    ]);
     if (dominantCatalogOrgId && String(dominantCatalogOrgId) !== String(orgId)) {
       setCatalogOrgId(String(dominantCatalogOrgId));
     } else {
