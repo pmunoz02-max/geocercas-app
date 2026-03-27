@@ -1,18 +1,34 @@
-// Helper para detectar columnas dinámicamente
-async function tableHasColumn(sbDb, table, column) {
-  const { data, error } = await sbDb
-    .from("information_schema.columns")
-    .select("column_name")
-    .eq("table_schema", "public")
-    .eq("table_name", table)
-    .eq("column_name", column)
-    .limit(1);
+﻿// Helper para detectar columnas dinÃ¡micamente
+let __geofencesTenantIdExists = null;
 
-  if (error) {
-    throw new Error(`schema_check_failed:${table}.${column}:${error.message}`);
+async function geofencesHasTenantId(sbDb) {
+  if (__geofencesTenantIdExists !== null) {
+    return __geofencesTenantIdExists;
   }
 
-  return Array.isArray(data) && data.length > 0;
+  const { error } = await sbDb
+    .from("geofences")
+    .select("tenant_id", { head: true, count: "exact" })
+    .limit(1);
+
+  if (!error) {
+    __geofencesTenantIdExists = true;
+    return true;
+  }
+
+  const message = String(error.message || "").toLowerCase();
+  const missingColumn =
+    error.code === "42703" ||
+    message.includes('column "tenant_id" does not exist') ||
+    message.includes("could not find the 'tenant_id' column") ||
+    message.includes("column geofences.tenant_id does not exist");
+
+  if (missingColumn) {
+    __geofencesTenantIdExists = false;
+    return false;
+  }
+
+  throw new Error(`schema_probe_failed:geofences.tenant_id:${error.message}`);
 }
 import { createClient } from "@supabase/supabase-js";
 
@@ -20,7 +36,7 @@ import { createClient } from "@supabase/supabase-js";
  * api/geofences.js
  * Entorno: preview
  * Objetivo:
- * - handler único y estable
+ * - handler Ãºnico y estable
  * - POST con readBody(req) una sola vez
  * - sin ramas duplicadas
  * - org_id controlado por backend
@@ -424,7 +440,7 @@ async function listGeofences(sbDb, orgId, onlyActive) {
   }
 
   // Compatibilidad legacy: solo si existe tenant_id
-  const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+  const hasTenantId = await geofencesHasTenantId(sbDb);
   if (hasTenantId) {
     let q2 = sbDb
       .from("geofences")
@@ -526,8 +542,8 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "missing_id" });
         }
 
-        // Select dinámico según schema
-        const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+        // Select dinÃ¡mico segÃºn schema
+        const hasTenantId = await geofencesHasTenantId(sbDb);
         const selectCols = hasTenantId ? "id, org_id, tenant_id, *" : "id, org_id, *";
 
         const { data, error } = await sbDb
@@ -568,7 +584,7 @@ export default async function handler(req, res) {
           return send(res, 403, {
             ok: false,
             error: "org_id_mismatch",
-            message: "org_id del payload no coincide con la organización activa.",
+            message: "org_id del payload no coincide con la organizaciÃ³n activa.",
           });
         }
 
@@ -625,8 +641,8 @@ export default async function handler(req, res) {
 
           savedRow = data;
         } else {
-          // Select dinámico según schema
-          const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+          // Select dinÃ¡mico segÃºn schema
+          const hasTenantId = await geofencesHasTenantId(sbDb);
           const selectCols = hasTenantId ? "id, org_id, tenant_id" : "id, org_id";
 
           const { data: existing, error: existingErr } = await sbDb
@@ -681,8 +697,8 @@ export default async function handler(req, res) {
           return send(res, 400, { ok: false, error: "missing_id" });
         }
 
-        // Select dinámico según schema
-        const hasTenantId = await tableHasColumn(sbDb, "geofences", "tenant_id");
+        // Select dinÃ¡mico segÃºn schema
+        const hasTenantId = await geofencesHasTenantId(sbDb);
         const selectCols = hasTenantId ? "id, org_id, tenant_id" : "id, org_id";
 
         const { data: gf, error: gfErr } = await sbDb

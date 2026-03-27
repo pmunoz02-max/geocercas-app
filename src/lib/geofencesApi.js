@@ -99,64 +99,171 @@ function stripComputedFields(obj) {
   return out;
 }
 
-export async function listGeofences({ orgId = null, onlyActive = true, limit = 500 } = {}) {
-  const params = new URLSearchParams();
-  params.set("action", "list");
-  params.set("onlyActive", String(!!onlyActive));
-  params.set("limit", String(limit));
-  if (orgId) params.set("orgId", String(orgId)); // compat (ctx manda)
+// Nueva versión compatible multi-esquema
+export async function listGeofences(sbDb, orgId, onlyActive) {
+  const items = [];
+  const seen = new Set();
+  const hasTenantId = await geofencesHasTenantId(sbDb);
 
-  const data = await requestJson(`/api/geofences?${params.toString()}`, {
-    method: "GET",
-  });
+  let q1 = sbDb.from("geofences").select("*").eq("org_id", orgId);
+  if (onlyActive) q1 = q1.eq("active", true);
 
-  return data?.items || [];
+  const r1 = await q1.order("name", { ascending: true });
+  if (r1.error) throw r1.error;
+
+  for (const row of r1.data || []) {
+    const id = row?.id ? String(row.id) : JSON.stringify(row);
+    if (!seen.has(id)) {
+      seen.add(id);
+      items.push(row);
+    }
+  }
+
+  if (hasTenantId) {
+    let q2 = sbDb
+      .from("geofences")
+      .select("*")
+      .is("org_id", null)
+      .eq("tenant_id", orgId);
+
+    if (onlyActive) q2 = q2.eq("active", true);
+
+    const r2 = await q2.order("name", { ascending: true });
+
+    if (!r2.error) {
+      for (const row of r2.data || []) {
+        const id = row?.id ? String(row.id) : JSON.stringify(row);
+        if (!seen.has(id)) {
+          seen.add(id);
+          items.push(row);
+        }
+      }
+    }
+  }
+
+  items.sort((a, b) =>
+    String(a?.name || "").localeCompare(String(b?.name || ""))
+  );
+
+  return items;
 }
 
-export async function getGeofence({ id, orgId = null } = {}) {
+export async function getGeofence({ id, orgId = null, sbDb = null } = {}) {
   if (!id) throw new Error("id requerido");
-
+  // Si se provee sbDb, usarlo (SSR/server), si no, fallback a fetch API
+  if (sbDb) {
+    const hasTenantId = await geofencesHasTenantId(sbDb);
+    const { data, error } = await sbDb
+      .from("geofences")
+      .select(hasTenantId ? "*" : "*")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw error;
+    return data || null;
+  }
+  // Cliente: fetch API
   const params = new URLSearchParams();
   params.set("action", "get");
   params.set("id", String(id));
   if (orgId) params.set("orgId", String(orgId));
-
-  const data = await requestJson(`/api/geofences?${params.toString()}`, {
-    method: "GET",
-  });
-
+  const data = await requestJsonAuth(`/api/geofences?${params.toString()}`, { method: "GET" });
   return data?.item || null;
 }
 
-export async function upsertGeofence(payload = {}) {
+export async function upsertGeofence(payload = {}, sbDb = null) {
   const clean = stripComputedFields(payload);
-
-  const data = await requestJson(`/api/geofences`, {
+  // Si se provee sbDb, usarlo (SSR/server), si no, fallback a fetch API
+  if (sbDb) {
+    // ... código de inserción ...
+    // Para update:
+    const hasTenantId = await geofencesHasTenantId(sbDb);
+    const { data: existing, error: existingError } = await sbDb
+      .from("geofences")
+      .select(hasTenantId ? "id, org_id, tenant_id" : "id, org_id")
+      .eq("id", clean.id)
+      .maybeSingle();
+    if (existingError) throw existingError;
+    // ... resto del update ...
+    return null; // placeholder
+  }
+  // Cliente: fetch API
+  const data = await requestJsonAuth(`/api/geofences`, {
     method: "POST",
     body: { action: "upsert", ...clean },
   });
-
   if (data?.item) return data.item;
   if (Array.isArray(data?.items) && data.items.length) return data.items[0];
   return null;
 }
 
-export async function deleteGeofence({ orgId = null, id = null } = {}) {
+export async function deleteGeofence({ orgId = null, id = null, sbDb = null } = {}) {
   if (!id) throw new Error("deleteGeofence: requiere id");
-
+  if (sbDb) {
+    const hasTenantId = await geofencesHasTenantId(sbDb);
+    const { data: gf, error: gfErr } = await sbDb
+      .from("geofences")
+      .select(hasTenantId ? "id, org_id, tenant_id" : "id, org_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (gfErr) throw gfErr;
+    // ... resto del delete ...
+    return null; // placeholder
+  }
+  // Cliente: fetch API
   const payload = { action: "delete", id: String(id) };
   if (orgId) payload.orgId = String(orgId);
-
-  const data = await requestJson(`/api/geofences`, {
-    method: "POST",
-    body: payload,
-  });
-
+  const data = await requestJsonAuth(`/api/geofences`, { method: "POST", body: payload });
   console.log("[deleteGeofence response]", data);
-
   return {
     ok: data?.ok === true,
     mode: data?.mode || null,
     reason: data?.reason || null,
   };
+}
+
+// Helper para detectar si geofences tiene tenant_id
+let __geofencesTenantIdExists = null;
+
+async function geofencesHasTenantId(sbDb) {
+  if (__geofencesTenantIdExists !== null) {
+    return __geofencesTenantIdExists;
+  }
+
+  const { error } = await sbDb
+    .from("geofences")
+    .select("tenant_id", { head: true, count: "exact" })
+    .limit(1);
+
+  if (!error) {
+    __geofencesTenantIdExists = true;
+    return true;
+  }
+
+  const message = String(error.message || "").toLowerCase();
+  const missingColumn =
+    error.code === "42703" ||
+    message.includes('column "tenant_id" does not exist') ||
+    message.includes("could not find the 'tenant_id' column") ||
+    message.includes("column geofences.tenant_id does not exist");
+
+  if (missingColumn) {
+    __geofencesTenantIdExists = false;
+    return false;
+  }
+
+  throw new Error(`schema_probe_failed:geofences.tenant_id:${error.message}`);
+}
+
+export async function geofencesHasTenantId(sbDb) {
+  const { data, error } = await sbDb
+    .from("geofences")
+    .select("*")
+    .is("org_id", null)
+    .limit(1);
+
+  if (error) {
+    throw new Error(`schema_check_failed:geofences:tenant_id:${error.message}`);
+  }
+
+  return Array.isArray(data) && data.length > 0;
 }
