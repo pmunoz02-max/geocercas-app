@@ -461,6 +461,19 @@ async function loadCatalogs(sbDb, orgId) {
         personal = [];
       }
     }
+
+    // LOGS TEMPORALES PARA DEBUG
+    const { data: testPersonal } = await sbDb
+      .from("personal")
+      .select("*")
+      .limit(5);
+    const { data: testOrgPeople } = await sbDb
+      .from("org_people")
+      .select("*")
+      .limit(5);
+    console.log("[DEBUG personal table]", testPersonal);
+    console.log("[DEBUG org_people table]", testOrgPeople);
+
     catalogs.personal = personal || [];
   } catch (e) {
     catalogs.personal = [];
