@@ -811,6 +811,12 @@ const rc = await resolveContext(req, { requestedOrgId });
           data: {
             asignaciones: merged,
             catalogs,
+            debug: {
+              org_id,
+              personal_count: Array.isArray(catalogs.personal) ? catalogs.personal.length : -1,
+              geocercas_count: Array.isArray(catalogs.geocercas) ? catalogs.geocercas.length : -1,
+              activities_count: Array.isArray(catalogs.activities) ? catalogs.activities.length : -1
+            }
           },
         });
       } catch (error) {
