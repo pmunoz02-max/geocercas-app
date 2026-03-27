@@ -1,521 +1,87 @@
-﻿// src/pages/AsignacionesPage.jsx
-// DEFINITIVO (preview): catálogos canónicos para selects
-// - Personas: /api/personal
-// - Geocercas: /api/geofences?action=list&onlyActive=true  (misma fuente que /geocerca)
-// Bundle /api/asignaciones queda para listado + activities (si existe)
-
-import React, { useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useAuth } from "@/context/auth.js";
+﻿import { useEffect, useState } from "react";
 import {
-  getAsignacionesBundle,
+  listAsignaciones,
   createAsignacion,
-  updateAsignacion,
-  deleteAsignacion,
 } from "../lib/asignacionesApi";
+
 import { listGeofences } from "../lib/geofencesApi";
-import AsignacionesTable from "../components/asignaciones/AsignacionesTable";
+import { listActividades } from "../lib/actividadesApi";
+import { listPersonal } from "../lib/personalApi";
 
-function localDateTimeToISO(localDateTime) {
-  if (!localDateTime) return null;
-  const [d, t] = String(localDateTime).split("T");
-  if (!d || !t) return null;
-  const [y, m, day] = d.split("-").map(Number);
-  const [hh, mm] = t.split(":").map(Number);
-  return new Date(y, m - 1, day, hh, mm, 0, 0).toISOString();
-}
-
-const ESTADOS = ["todos", "activa", "inactiva"];
-
-const inputBase =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
-  "placeholder:text-gray-400 shadow-sm " +
-  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
-  "disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed";
-
-const selectBase =
-  "w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
-  "shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
-  "disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed";
-
-const cardBase = "rounded-xl border border-gray-200 bg-white shadow-sm";
-
-async function fetchJsonSafe(url) {
-  const res = await fetch(url, { credentials: "include" });
-  const txt = await res.text();
-  let payload = null;
-  try {
-    payload = txt ? JSON.parse(txt) : null;
-  } catch {
-    payload = null;
-  }
-
-  if (!res.ok || payload?.ok === false) {
-    const msg = payload?.error || payload?.message || `HTTP ${res.status}`;
-    return { payload, error: { message: msg, status: res.status } };
-  }
-  return { payload, error: null };
-}
-
-function extractArray(payload) {
-  if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== "object") return [];
-
-  const keys = [
-    "data",
-    "rows",
-    "items",
-    "personal",
-    "people",
-    "geocercas",
-    "geofences",
-  ];
-
-  for (const k of keys) {
-    if (Array.isArray(payload[k])) return payload[k];
-  }
-
-  if (payload.data && typeof payload.data === "object") {
-    for (const k of keys) {
-      if (Array.isArray(payload.data[k])) return payload.data[k];
-    }
-  }
-
-  return [];
-}
-
-function normalizePersonRow(p) {
-  const personal_id =
-    p?.personal_id ||
-    p?.id ||
-    p?.org_people_id ||
-    p?.uuid ||
-    "";
-
-  const user_id = p?.user_id || null;
-  const org_id =
-    p?.org_id ||
-    p?.tenant_id ||
-    p?.organization_id ||
-    p?.orgId ||
-    p?.tenantId ||
-    null;
-
-  const nombre =
-    p?.nombre ||
-    p?.first_name ||
-    p?.firstname ||
-    (typeof p?.full_name === "string" ? p.full_name.split(" ")[0] : "") ||
-    "";
-
-  const apellido =
-    p?.apellido ||
-    p?.last_name ||
-    p?.lastname ||
-    (typeof p?.full_name === "string"
-      ? p.full_name.split(" ").slice(1).join(" ")
-      : "") ||
-    "";
-
-  const label = String(
-    p?.display_name ||
-      p?.full_name ||
-      `${nombre} ${apellido}`.trim() ||
-      p?.email ||
-      personal_id
-  ).trim();
-
-  return {
-    id: personal_id,
-    personal_id,
-    user_id,
-    org_id,
-    nombre: String(nombre || "").trim(),
-    apellido: String(apellido || "").trim(),
-    email: String(p?.email || "").trim(),
-    label,
-  };
-}
-
-function normalizeGeofenceRow(g) {
-  const id = g?.id || "";
-  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
-  return {
-    id,
-    nombre: nombre || id,
-    source_geocerca_id: g?.source_geocerca_id || null,
-  };
-}
-
-function detectDominantOrgId(items) {
-  const counts = new Map();
-
-  for (const item of Array.isArray(items) ? items : []) {
-    const rawOrgId =
-      item?.org_id ??
-      item?.tenant_id ??
-      item?.organization_id ??
-      item?.orgId ??
-      item?.tenantId ??
-      null;
-
-    if (!rawOrgId) continue;
-
-    const normalizedOrgId = String(rawOrgId);
-    counts.set(normalizedOrgId, (counts.get(normalizedOrgId) || 0) + 1);
-  }
-
-  let dominantOrgId = null;
-  let dominantCount = 0;
-
-  for (const [candidateOrgId, candidateCount] of counts.entries()) {
-    if (candidateCount > dominantCount) {
-      dominantOrgId = candidateOrgId;
-      dominantCount = candidateCount;
-    }
-  }
-
-  return dominantOrgId;
-}
+import { useAuth } from "@/context/auth.js";
 
 export default function AsignacionesPage() {
-  const { t } = useTranslation();
-  const tt = (key, fallback, options = {}) =>
-    t(key, { defaultValue: fallback, ...options });
+  const { activeOrgId } = useAuth();
 
-  const { ready, isAuthenticated, currentOrg, activeOrgId } = useAuth();
-  const orgId = activeOrgId || null;
+  const [personas, setPersonas] = useState([]);
+  const [geocercas, setGeocercas] = useState([]);
+  const [actividades, setActividades] = useState([]);
 
-  const [asignaciones, setAsignaciones] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
-
-  const [estadoFilter, setEstadoFilter] = useState("todos");
-
-  const [selectedPersonalId, setSelectedPersonalId] = useState("");
+  const [selectedPersonId, setSelectedPersonId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState("");
+
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [frecuenciaEnvioMin, setFrecuenciaEnvioMin] = useState(5);
-  const [status, setStatus] = useState("activa");
-  const [editingId, setEditingId] = useState(null);
 
-  const [personalOptions, setPersonalOptions] = useState([]);
-  const [geocercaOptions, setGeocercaOptions] = useState([]);
-  const [activityOptions, setActivityOptions] = useState([]);
-  const [catalogOrgId, setCatalogOrgId] = useState(null);
+  const [status, setStatus] = useState("active");
+  const [freqMin, setFreqMin] = useState(5);
 
-  const [showForm, setShowForm] = useState(true);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    setAsignaciones([]);
-    setPersonalOptions([]);
-    setGeocercaOptions([]);
-    setActivityOptions([]);
-    setCatalogOrgId(null);
-    setSelectedPersonalId("");
-    setSelectedGeocercaId("");
-    setSelectedActivityId("");
-    setEditingId(null);
-    setError(null);
-    setSuccessMessage(null);
-  }, [orgId]);
-
-  function keepIfSameOrgOrUnknown(row) {
-    if (!row) return false;
-    if (!orgId) return true;
-
-    const rowOrgId =
-      row.org_id ??
-      row.tenant_id ??
-      row.organization_id ??
-      row.orgId ??
-      row.tenantId ??
-      null;
-
-    if (!rowOrgId) return true;
-    return String(rowOrgId) === String(orgId);
-  }
-
-  async function loadCatalogsCanonical() {
-    if (!isAuthenticated || !orgId) {
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setCatalogOrgId(null);
-      return;
-    }
-
-    let personalRaw = [];
-    let personalNorm = [];
-    let geofencesRaw = [];
-    let geofencesNorm = [];
-
-    try {
-      const params = new URLSearchParams({
-        onlyActive: "1",
-        limit: "500",
-        org_id: String(orgId),
-      });
-      const rP = await fetchJsonSafe(`/api/personal?${params.toString()}`);
-      personalRaw = extractArray(rP.payload);
-      personalNorm = personalRaw
-        .filter((r) => {
-          const rowOrg =
-            r?.org_id ||
-            r?.tenant_id ||
-            r?.organization_id ||
-            null;
-          return !rowOrg || String(rowOrg) === String(orgId);
-        })
-        .map(normalizePersonRow)
-        .filter((p) => p.id);
-    } catch (e) {
-      console.warn("[AsignacionesPage] Failed to load personal catalog:", e);
-      personalRaw = [];
-      personalNorm = [];
-    }
-
-    try {
-      geofencesRaw = await listGeofences(orgId, true);
-      geofencesNorm = geofencesRaw
-        .map(normalizeGeofenceRow)
-        .filter((g) => g.id && g.source_geocerca_id);
-    } catch (e) {
-      console.warn("[AsignacionesPage] Failed to load geofences catalog:", e);
-      geofencesRaw = [];
-      geofencesNorm = [];
-    }
-
-    const dominantCatalogOrgId = detectDominantOrgId([
-      ...personalRaw,
-      ...geofencesRaw,
-    ]);
-
-    if (dominantCatalogOrgId && String(dominantCatalogOrgId) !== String(orgId)) {
-      setCatalogOrgId(String(dominantCatalogOrgId));
-    } else {
-      setCatalogOrgId(null);
-    }
-
-    setPersonalOptions(personalNorm);
-    setGeocercaOptions(geofencesNorm);
-  }
-
-  async function loadAll() {
-    if (!isAuthenticated || !orgId) {
-      setAsignaciones([]);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setActivityOptions([]);
-      setCatalogOrgId(null);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      await loadCatalogsCanonical();
-
-      const { data, error: bundleError } = await getAsignacionesBundle(orgId);
-
-      if (bundleError) {
-        console.error("[AsignacionesPage] bundle error:", bundleError);
-        setAsignaciones([]);
-        setActivityOptions([]);
-        setError(
-          bundleError.message ||
-            t("asignaciones.messages.loadError", {
-              defaultValue: "Error loading assignments.",
-            })
-        );
-        return;
-      }
-
-      const bundle = data || {};
-      const rows = Array.isArray(bundle.asignaciones)
-        ? bundle.asignaciones.filter((a) => keepIfSameOrgOrUnknown(a))
-        : [];
-      const catalogs = bundle.catalogs || {};
-
-      setAsignaciones(rows);
-
-      const activitiesRaw = Array.isArray(catalogs.activities)
-        ? catalogs.activities.filter((a) => keepIfSameOrgOrUnknown(a))
-        : [];
-      setActivityOptions(activitiesRaw);
-
-      if (!selectedActivityId && activitiesRaw.length === 1) {
-        setSelectedActivityId(activitiesRaw[0].id);
-      }
-    } catch (e) {
-      console.error("[AsignacionesPage] canonical catalogs crash:", e);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setCatalogOrgId(null);
-      setAsignaciones([]);
-      setActivityOptions([]);
-      setError(
-        e?.message ||
-          tt(
-            "asignaciones.messages.loadError",
-            "Error loading assignments."
-          )
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
+  // 🔥 FILTRO CANÓNICO DE TRACKERS
+  const validPersonas = (personas || []).filter(
+    (p) =>
+      p &&
+      p.user_id &&
+      String(p.org_id) === String(activeOrgId)
+  );
 
   useEffect(() => {
-    if (!ready) return;
-
-    if (!isAuthenticated) {
-      setAsignaciones([]);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setActivityOptions([]);
-      setCatalogOrgId(null);
-      setError(null);
-      setSuccessMessage(null);
-      setLoading(false);
-      return;
-    }
-
-    if (!orgId) {
-      setAsignaciones([]);
-      setPersonalOptions([]);
-      setGeocercaOptions([]);
-      setActivityOptions([]);
-      setCatalogOrgId(null);
-      setError(
-        tt(
-          "asignaciones.messages.noOrg",
-          "No active organization in session. Select an organization to create assignments."
-        )
-      );
-      return;
-    }
+    if (!activeOrgId) return;
 
     loadAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, isAuthenticated, orgId]);
+  }, [activeOrgId]);
 
-  const filteredAsignaciones = useMemo(() => {
-    let rows = Array.isArray(asignaciones) ? asignaciones : [];
-    if (estadoFilter !== "todos") {
-      rows = rows.filter((a) => (a.status || a.estado) === estadoFilter);
-    }
-    if (selectedPersonalId) {
-      rows = rows.filter((a) => a.personal_id === selectedPersonalId);
-    }
-    return rows;
-  }, [asignaciones, estadoFilter, selectedPersonalId]);
+  async function loadAll() {
+    try {
+      const [p, g, a] = await Promise.all([
+        listPersonal(),
+        listGeofences(activeOrgId, true),
+        listActividades({ orgId: activeOrgId }),
+      ]);
 
-  function resetForm() {
-    setSelectedPersonalId("");
-    setSelectedGeocercaId("");
-    setSelectedActivityId("");
-    setStartTime("");
-    setEndTime("");
-    setFrecuenciaEnvioMin(5);
-    setStatus("activa");
-    setEditingId(null);
+      setPersonas(p || []);
+      setGeocercas(g || []);
+      setActividades(a || []);
+    } catch (e) {
+      console.error(e);
+    }
   }
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
+  function localDateTimeToISO(val) {
+    if (!val) return null;
+    return new Date(val).toISOString();
+  }
 
-    if (!isAuthenticated) {
-      setError("Debes iniciar sesión para crear asignaciones");
-      return;
-    }
+  async function handleSubmit() {
+    setError("");
 
-    if (!orgId) {
-      setError(tt("asignaciones.messages.noOrg", "No active organization."));
-      return;
-    }
-
-    if (!selectedPersonalId || !selectedGeocercaId) {
-      setError(
-        tt(
-          "asignaciones.messages.selectPersonAndFence",
-          "You must select a person and a geofence."
-        )
-      );
-      return;
-    }
-
-    if (!selectedActivityId) {
-      setError(
-        tt(
-          "asignaciones.error.missingActivity",
-          "You must select an activity."
-        )
-      );
-      return;
-    }
-
-    if (!startTime || !endTime) {
-      setError(
-        tt(
-          "asignaciones.messages.selectDates",
-          "You must enter start and end date/time."
-        )
-      );
-      return;
-    }
-
-    if (endTime < startTime) {
-      setError("La fecha final no puede ser anterior a la fecha inicial");
-      return;
-    }
-
-    const freqMin = Number(frecuenciaEnvioMin) || 0;
-    if (freqMin < 5) {
-      setError(
-        tt(
-          "asignaciones.messages.frequencyTooLow",
-          "The minimum allowed frequency is 5 minutes."
-        )
-      );
-      return;
-    }
-
-    const selectedPerson = personalOptions.find(
-      (p) => String(p.personal_id || p.id) === String(selectedPersonalId)
+    const selectedPerson = validPersonas.find(
+      (p) => String(p.id) === String(selectedPersonId)
     );
 
+    // 🔥 VALIDACIÓN CRÍTICA
     if (!selectedPerson) {
-      setError("No se pudo resolver la persona seleccionada.");
-      return;
-    }
-
-    if (!selectedPerson.user_id) {
-      setError("La persona seleccionada no tiene user_id canónico para tracker.");
-      return;
-    }
-
-    if (
-      selectedPerson.org_id &&
-      orgId &&
-      String(selectedPerson.org_id) !== String(orgId)
-    ) {
-      setError("La persona seleccionada pertenece a otra organización.");
+      setError("Selecciona un tracker válido.");
       return;
     }
 
     const payload = {
-      personal_id: selectedPerson.personal_id,
+      personal_id: selectedPerson.id,
       tracker_user_id: selectedPerson.user_id,
-      org_id: orgId,
-      tenant_id: orgId,
+      org_id: activeOrgId,
+      tenant_id: activeOrgId,
       geofence_id: selectedGeocercaId,
       geocerca_id: null,
       activity_id: selectedActivityId,
@@ -525,459 +91,133 @@ export default function AsignacionesPage() {
       status,
     };
 
-    let resp;
     try {
-      resp = editingId
-        ? await updateAsignacion(editingId, payload, orgId)
-        : await createAsignacion(payload, orgId);
-    } catch (err) {
-      setError(
-        err?.message ||
-          tt(
-            "asignaciones.messages.saveGenericError",
-            "Error saving assignment."
-          )
-      );
-      return;
+      await createAsignacion(payload);
+      await loadAll();
+      setSelectedPersonId("");
+      setError("");
+    } catch (e) {
+      console.error(e);
+      setError(e?.message || "Error al guardar asignación");
     }
-
-    if (resp?.error) {
-      console.error("[AsignacionesPage] save error:", resp.error);
-      setError(
-        resp.error.message ||
-          tt(
-            "asignaciones.messages.saveGenericError",
-            "Error saving assignment."
-          )
-      );
-      return;
-    }
-
-    setSuccessMessage(
-      editingId
-        ? tt("asignaciones.banner.updated", "Assignment updated.")
-        : tt(
-            "asignaciones.banner.created",
-            "Assignment created successfully."
-          )
-    );
-
-    resetForm();
-    await loadAll();
   }
-
-  if (!ready) {
-    return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        <div className={`${cardBase} px-4 py-3 text-sm text-gray-700`}>
-          {tt("asignaciones.messages.loadingData", "Loading assignment data…")}
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="p-4 md:p-6 max-w-5xl mx-auto">
-        <div className="space-y-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3">
-          <p className="text-sm font-semibold text-red-800">
-            Debes iniciar sesión para crear asignaciones
-          </p>
-          <p className="text-xs text-red-700">
-            Inicia sesión para cargar personas, geocercas y actividades
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const labelForEstado = (v) => {
-    if (v === "todos") {
-      return tt("asignaciones.filters.status.todos", "All");
-    }
-    if (v === "activa") {
-      return tt("asignaciones.filters.status.activo", "Active");
-    }
-    if (v === "inactiva") {
-      return tt("asignaciones.filters.status.inactivo", "Inactive");
-    }
-    return v;
-  };
-
-  const hasCatalogOrgMismatch = Boolean(
-    catalogOrgId && String(catalogOrgId) !== String(orgId)
-  );
 
   return (
-    <div className="w-full px-3 md:px-6 py-4">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {tt("asignaciones.title", "Assignments")}
-          </h1>
-          <p className="text-xs text-gray-600 mt-1">
-            {tt("asignaciones.currentOrgLabel", "Current organization")}:{" "}
-            <span className="font-medium text-gray-900">
-              {currentOrg?.name || orgId || tt("common.unknown", "Unknown")}
-            </span>
+    <div className="p-4 max-w-3xl">
+      <h2 className="text-xl font-semibold mb-4">Nueva asignación</h2>
+
+      {/* PERSONA */}
+      <div className="mb-3">
+        <label>Persona</label>
+        <select
+          className="w-full border p-2 rounded"
+          value={selectedPersonId}
+          onChange={(e) => setSelectedPersonId(e.target.value)}
+        >
+          <option value="">Seleccionar</option>
+          {validPersonas.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre}
+            </option>
+          ))}
+        </select>
+
+        {validPersonas.length === 0 && (
+          <p className="text-red-600 text-sm mt-1">
+            No hay trackers disponibles en esta organización.
           </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <label className="font-medium text-sm text-gray-900">
-              {tt("asignaciones.filters.statusLabel", "Status")}
-            </label>
-            <select
-              className={selectBase}
-              value={estadoFilter}
-              onChange={(e) => setEstadoFilter(e.target.value)}
-            >
-              {ESTADOS.map((v) => (
-                <option key={v} value={v}>
-                  {labelForEstado(v)}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowForm((s) => !s)}
-            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
-          >
-            {showForm
-              ? tt("asignaciones.ui.hideForm", "Hide form")
-              : tt("asignaciones.ui.showForm", "Show form")}
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4">
-        {showForm && (
-          <div className={`${cardBase} p-4`}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold text-gray-900">
-                {editingId
-                  ? tt("asignaciones.form.editTitle", "Edit assignment")
-                  : tt("asignaciones.form.newTitle", "New assignment")}
-              </h2>
-              {loading && (
-                <span className="text-xs text-gray-500">
-                  {tt("common.loading", "Loading…")}
-                </span>
-              )}
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {hasCatalogOrgMismatch && (
-                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                  La organización activa no coincide con la organización de
-                  personas/geocercas cargadas. Cambia la organización antes de
-                  guardar.
-                </div>
-              )}
-
-              {!orgId && (
-                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                  {tt(
-                    "asignaciones.messages.noOrg",
-                    "No active organization in session. Select an organization to create assignments."
-                  )}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {tt("asignaciones.form.personLabel", "Person")}
-                </label>
-                <select
-                  className={selectBase}
-                  value={selectedPersonalId}
-                  onChange={(e) => setSelectedPersonalId(e.target.value)}
-                  required
-                >
-                  <option value="">
-                    {tt(
-                      "asignaciones.form.personPlaceholder",
-                      "Select a person"
-                    )}
-                  </option>
-                  {personalOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label ||
-                        `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
-                        p.id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {tt("asignaciones.form.geofenceLabel", "Geofence")}
-                </label>
-                <select
-                  className={selectBase}
-                  value={selectedGeocercaId}
-                  onChange={(e) => setSelectedGeocercaId(e.target.value)}
-                  required
-                >
-                  <option value="">
-                    {tt(
-                      "asignaciones.form.geofencePlaceholder",
-                      "Select a geofence"
-                    )}
-                  </option>
-                  {geocercaOptions.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nombre || g.id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  {tt("asignaciones.form.activityLabel", "Activity")}
-                </label>
-                <select
-                  className={selectBase}
-                  value={selectedActivityId}
-                  onChange={(e) => setSelectedActivityId(e.target.value)}
-                  required
-                  disabled={activityOptions.length === 0}
-                >
-                  <option value="">
-                    {tt(
-                      "asignaciones.form.activityPlaceholder",
-                      "Select an activity"
-                    )}
-                  </option>
-                  {activityOptions.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name || a.nombre || a.id}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.startLabel", "Start date/time")}
-                  </label>
-                  <input
-                    type="datetime-local"
-                    className={inputBase}
-                    value={startTime}
-                    onChange={(e) => {
-                      const nuevoStart = e.target.value;
-                      setStartTime(nuevoStart);
-                      if (endTime && endTime < nuevoStart) setEndTime("");
-                    }}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.endLabel", "End date/time")}
-                  </label>
-                  <input
-                    type="datetime-local"
-                    className={inputBase}
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    required
-                    min={startTime || undefined}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.statusLabel", "Status")}
-                  </label>
-                  <select
-                    className={selectBase}
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                  >
-                    <option value="activa">
-                      {tt("asignaciones.form.statusActive", "Active")}
-                    </option>
-                    <option value="inactiva">
-                      {tt("asignaciones.form.statusInactive", "Inactive")}
-                    </option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    {tt("asignaciones.form.frequencyLabel", "Frequency (min)")}
-                  </label>
-                  <input
-                    type="number"
-                    className={inputBase}
-                    min={5}
-                    value={frecuenciaEnvioMin}
-                    onChange={(e) =>
-                      setFrecuenciaEnvioMin(Number(e.target.value) || 5)
-                    }
-                  />
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    {tt(
-                      "asignaciones.form.frequencyHint",
-                      "Minimum: 5 minutes."
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                {editingId && (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50"
-                  >
-                    {tt("asignaciones.form.cancelEditButton", "Cancel")}
-                  </button>
-                )}
-
-                <button
-                  type="submit"
-                  className="rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
-                  disabled={
-                    hasCatalogOrgMismatch ||
-                    !orgId ||
-                    loading ||
-                    activityOptions.length === 0 ||
-                    personalOptions.length === 0 ||
-                    geocercaOptions.length === 0
-                  }
-                >
-                  {editingId
-                    ? tt("asignaciones.form.updateButton", "Update")
-                    : tt("asignaciones.form.saveButton", "Save")}
-                </button>
-              </div>
-
-              <div className="pt-1">
-                {successMessage && (
-                  <p className="text-green-700 text-sm font-semibold">
-                    {successMessage}
-                  </p>
-                )}
-                {error && (
-                  <p className="text-red-700 text-sm font-semibold">
-                    {error}
-                  </p>
-                )}
-              </div>
-            </form>
-          </div>
         )}
-
-        <div className={`${cardBase} overflow-hidden`}>
-          <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-gray-900">
-              {tt("asignaciones.list.title", "Assignment list")}
-            </h2>
-            <span className="text-xs text-gray-500">
-              {loading
-                ? tt("common.loading", "Loading…")
-                : `${filteredAsignaciones.length} ${tt("common.items", "items")}`}
-            </span>
-          </div>
-
-          <div
-            className="px-2 pb-2 overflow-auto"
-            style={{ maxHeight: "calc(100vh - 220px)" }}
-          >
-            <AsignacionesTable
-              asignaciones={filteredAsignaciones}
-              loading={loading}
-              people={personalOptions}
-              geofences={geocercaOptions}
-              activities={activityOptions}
-              onEdit={(a) => {
-                setEditingId(a.id);
-                setSelectedPersonalId(a.personal_id || "");
-                setSelectedGeocercaId(a.geofence_id || a.geocerca_id || "");
-                setSelectedActivityId(a.activity_id || "");
-                setStartTime(a.start_time?.slice(0, 16) || "");
-                setEndTime(a.end_time?.slice(0, 16) || "");
-                setFrecuenciaEnvioMin(
-                  Math.max(5, Math.round((a.frecuencia_envio_sec || 300) / 60))
-                );
-                setStatus(a.status || "activa");
-                setError(null);
-                setSuccessMessage(null);
-                setShowForm(true);
-              }}
-              onDelete={async (id) => {
-                const ok = window.confirm(
-                  tt(
-                    "asignaciones.messages.confirmDelete",
-                    "Are you sure you want to delete this assignment?"
-                  )
-                );
-                if (!ok) return;
-
-                const resp = await deleteAsignacion(id, orgId);
-                if (resp.error) {
-                  setError(
-                    tt(
-                      "asignaciones.messages.deleteError",
-                      "Could not delete the assignment."
-                    )
-                  );
-                } else {
-                  setSuccessMessage(
-                    tt("asignaciones.banner.deleted", "Assignment deleted.")
-                  );
-                  loadAll();
-                }
-              }}
-              onToggleStatus={async (row) => {
-                const newStatus =
-                  (row.status || row.estado) === "activa"
-                    ? "inactiva"
-                    : "activa";
-                const resp = await updateAsignacion(
-                  row.id,
-                  { status: newStatus },
-                  orgId
-                );
-                if (resp.error) {
-                  setError(
-                    tt(
-                      "asignaciones.messages.saveGenericError",
-                      "Error updating status."
-                    )
-                  );
-                } else {
-                  setSuccessMessage(
-                    newStatus === "activa"
-                      ? tt(
-                          "asignaciones.banner.activated",
-                          "Assignment activated."
-                        )
-                      : tt(
-                          "asignaciones.banner.deactivated",
-                          "Assignment deactivated."
-                        )
-                  );
-                  loadAll();
-                }
-              }}
-            />
-          </div>
-        </div>
       </div>
+
+      {/* GEO */}
+      <div className="mb-3">
+        <label>Geocerca</label>
+        <select
+          className="w-full border p-2 rounded"
+          value={selectedGeocercaId}
+          onChange={(e) => setSelectedGeocercaId(e.target.value)}
+        >
+          <option value="">Seleccionar</option>
+          {geocercas.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* ACTIVIDAD */}
+      <div className="mb-3">
+        <label>Actividad</label>
+        <select
+          className="w-full border p-2 rounded"
+          value={selectedActivityId}
+          onChange={(e) => setSelectedActivityId(e.target.value)}
+        >
+          <option value="">Seleccionar</option>
+          {actividades.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* FECHAS */}
+      <div className="mb-3">
+        <label>Fecha/hora inicio</label>
+        <input
+          type="datetime-local"
+          className="w-full border p-2 rounded"
+          value={startTime}
+          onChange={(e) => setStartTime(e.target.value)}
+        />
+      </div>
+
+      <div className="mb-3">
+        <label>Fecha/hora fin</label>
+        <input
+          type="datetime-local"
+          className="w-full border p-2 rounded"
+          value={endTime}
+          onChange={(e) => setEndTime(e.target.value)}
+        />
+      </div>
+
+      {/* STATUS */}
+      <div className="mb-3">
+        <label>Estado</label>
+        <select
+          className="w-full border p-2 rounded"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="active">Activa</option>
+          <option value="inactive">Inactiva</option>
+        </select>
+      </div>
+
+      {/* FRECUENCIA */}
+      <div className="mb-3">
+        <label>Frecuencia (minutos)</label>
+        <input
+          type="number"
+          className="w-full border p-2 rounded"
+          value={freqMin}
+          min={1}
+          onChange={(e) => setFreqMin(Number(e.target.value))}
+        />
+      </div>
+
+      {/* ERROR */}
+      {error && <div className="text-red-600 mb-3">{error}</div>}
+
+      <button
+        onClick={handleSubmit}
+        className="bg-blue-600 text-white px-4 py-2 rounded"
+      >
+        Guardar asignación
+      </button>
     </div>
   );
 }
