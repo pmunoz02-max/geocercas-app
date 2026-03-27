@@ -118,9 +118,13 @@ function normalizePersonRow(p) {
 function normalizeGeofenceRow(g) {
   const id = g?.id || "";
   const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
-  return { id, nombre: nombre || id };
+  return {
+    id,
+    nombre: nombre || id,
+    source_geocerca_id: g?.source_geocerca_id || null,
+    // ...puedes agregar más campos si necesitas compatibilidad futura
+  };
 }
-
 function detectDominantOrgId(items) {
   const counts = new Map();
 
@@ -254,7 +258,7 @@ export default function AsignacionesPage() {
       geofencesRaw = await listGeofences(orgId, true);
       geofencesNorm = geofencesRaw
         .map(normalizeGeofenceRow)
-        .filter((g) => g.id);
+        .filter((g) => g.id && g.source_geocerca_id); // Solo mostrar geofences con id y source_geocerca_id
     } catch (e) {
       console.warn("[AsignacionesPage] Failed to load geofences catalog:", e);
       geofencesRaw = [];
