@@ -1,8 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "actividades-v4-stable";
+const VERSION = "actividades-v5-put-update";
 
-// Extrae Bearer token del header Authorization
 function getBearerToken(req) {
   const auth = req.headers?.authorization || req.headers?.Authorization || "";
   if (typeof auth === "string" && auth.startsWith("Bearer ")) {
@@ -11,7 +10,6 @@ function getBearerToken(req) {
   return null;
 }
 
-// Extrae cookie simple por nombre
 function getCookie(req, name) {
   const cookieHeader = req.headers?.cookie || "";
   if (!cookieHeader) return null;
@@ -68,11 +66,6 @@ async function resolveContext(req, supabase, requestedOrgId) {
   } = await supabase.auth.getUser(accessToken);
 
   if (userError || !user) {
-    console.log("[ACTIVIDADES AUTH] invalid session", {
-      message: userError?.message || null,
-      status: userError?.status || null,
-    });
-
     return {
       errorResponse: {
         status: 401,
@@ -96,27 +89,11 @@ async function resolveContext(req, supabase, requestedOrgId) {
 }
 
 async function findActivityByIdCompat(supabase, id, orgId) {
-  console.log("[findActivityByIdCompat] start", { id, orgId });
-
   const { data, error } = await supabase
     .from("activities")
     .select("*")
     .eq("id", id)
     .maybeSingle();
-
-  console.log("[findActivityByIdCompat] row", {
-    id,
-    orgId,
-    data,
-    error: error
-      ? {
-          message: error.message,
-          code: error.code,
-          hint: error.hint,
-          details: error.details,
-        }
-      : null,
-  });
 
   if (error) return { data: null, error };
   if (!data) return { data: null, error: null };
@@ -129,18 +106,17 @@ async function findActivityByIdCompat(supabase, id, orgId) {
     rowOrgId === wantedOrgId ||
     (rowOrgId == null && rowTenantId === wantedOrgId);
 
-  console.log("[findActivityByIdCompat] ownership", {
-    id,
-    orgId,
-    rowOrgId,
-    rowTenantId,
-    wantedOrgId,
-    allowed,
-  });
-
   if (!allowed) return { data: null, error: null };
 
   return { data, error: null };
+}
+
+function parseHourlyCost(value) {
+  if (value === "" || value == null) return { ok: false, reason: "invalid_hourly_cost" };
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return { ok: false, reason: "invalid_hourly_cost" };
+  if (parsed <= 0) return { ok: false, reason: "hourly_cost_must_be_gt_zero" };
+  return { ok: true, value: parsed };
 }
 
 export default async function handler(req, res) {
@@ -157,16 +133,6 @@ export default async function handler(req, res) {
     const idRaw = typeof req.query?.id === "string" ? req.query.id : null;
     const id = idRaw ? String(idRaw).trim() : null;
 
-    console.log("[ACTIVIDADES] incoming", {
-      method: req.method,
-      query: req.query,
-      requestedOrgIdRaw,
-      requestedOrgId,
-      idRaw,
-      id,
-      version: VERSION,
-    });
-
     const { orgId, user, errorResponse } = await resolveContext(
       req,
       supabase,
@@ -177,36 +143,22 @@ export default async function handler(req, res) {
       return res.status(errorResponse.status).json(errorResponse.body);
     }
 
-    console.log("[ACTIVIDADES] context", {
-      method: req.method,
-      orgId,
-      userId: user?.id || null,
-      requestedOrgId,
-      id,
-    });
-
-    // POST (crear actividad)
     if (req.method === "POST") {
-      // Leer del body los campos legacy
       const name = String(req.body?.name || "").trim();
       const description = req.body?.description ? String(req.body.description).trim() : null;
-      const hourly_cost =
-        req.body?.hourly_cost === "" || req.body?.hourly_cost == null
-          ? null
-          : Number(req.body.hourly_cost);
       const currency = req.body?.currency ? String(req.body.currency).trim() : "USD";
       const active =
         typeof req.body?.active === "boolean" ? req.body.active : true;
 
-      // Validaciones
       if (!name) {
         return res.status(400).json({ error: "missing_name" });
       }
-      if (hourly_cost != null && Number.isNaN(hourly_cost)) {
-        return res.status(400).json({ error: "invalid_hourly_cost" });
+
+      const parsedCost = parseHourlyCost(req.body?.hourly_cost);
+      if (!parsedCost.ok) {
+        return res.status(400).json({ error: parsedCost.reason });
       }
 
-      // Validar duplicado compatible legacy por org_id / tenant_id
       const { data: byOrg, error: dupErr1 } = await supabase
         .from("activities")
         .select("id,name")
@@ -238,13 +190,12 @@ export default async function handler(req, res) {
         return res.status(409).json({ error: "activity_already_exists" });
       }
 
-      // Mapear correctamente hacia la DB
       const insertPayload = {
         tenant_id: orgId,
         org_id: orgId,
         name,
         description,
-        hourly_rate: hourly_cost,
+        hourly_rate: parsedCost.value,
         currency_code: currency,
         active,
         created_by: user?.id || null,
@@ -266,10 +217,9 @@ export default async function handler(req, res) {
         });
       }
 
-      return res.status(201).json(data);
+      return res.status(201).json({ ok: true, data });
     }
 
-    // GET
     if (req.method === "GET") {
       const { data: data1, error: error1 } = await supabase
         .from("activities")
@@ -284,14 +234,6 @@ export default async function handler(req, res) {
 
       if (error1 || error2) {
         const err = error1 || error2;
-
-        console.error("[ACTIVIDADES GET ERROR FULL]", {
-          message: err?.message,
-          code: err?.code,
-          hint: err?.hint,
-          details: err?.details,
-        });
-
         return res.status(500).json({
           error: "activities_fetch_failed",
           message: err?.message || null,
@@ -315,67 +257,85 @@ export default async function handler(req, res) {
         return String(a?.name || "").localeCompare(String(b?.name || ""));
       });
 
-      return res.status(200).json(combined);
+      return res.status(200).json({ ok: true, data: combined });
     }
 
-    // PUT (update activity)
     if (req.method === "PUT") {
-      // Validar id
       if (!id) {
         return res.status(400).json({ error: "missing_id" });
       }
-      // Buscar actividad y validar ownership
+
       const found = await findActivityByIdCompat(supabase, id, orgId);
+
       if (found.error) {
         return res.status(500).json({
           error: "lookup_failed",
           details: found.error.message || null,
         });
       }
+
       if (!found.data) {
         return res.status(404).json({ error: "activity_not_found" });
       }
-      // No permitir cambiar org_id
-      if (
-        req.body?.org_id && String(req.body.org_id) !== String(found.data.org_id)
-      ) {
-        return res.status(400).json({ error: "cannot_change_org_id" });
-      }
-      // Construir updatePayload solo con campos definidos
-      const allowedFields = [
-        "name",
-        "description",
-        "hourly_rate",
-        "currency_code",
-        "active",
-      ];
+
+      const { name, description, hourly_cost, currency, active } = req.body || {};
       const updatePayload = {};
-      for (const field of allowedFields) {
-        if (typeof req.body[field] !== "undefined") {
-          updatePayload[field] = req.body[field];
+
+      if (name !== undefined) {
+        const cleanName = String(name || "").trim();
+        if (!cleanName) {
+          return res.status(400).json({ error: "missing_name" });
         }
+        updatePayload.name = cleanName;
       }
+
+      if (description !== undefined) {
+        updatePayload.description =
+          description == null || String(description).trim() === ""
+            ? null
+            : String(description).trim();
+      }
+
+      if (currency !== undefined) {
+        updatePayload.currency_code = String(currency || "").trim() || "USD";
+      }
+
+      if (hourly_cost !== undefined) {
+        const parsedCost = parseHourlyCost(hourly_cost);
+        if (!parsedCost.ok) {
+          return res.status(400).json({ error: parsedCost.reason });
+        }
+        updatePayload.hourly_rate = parsedCost.value;
+      }
+
+      if (active !== undefined) {
+        updatePayload.active = Boolean(active);
+      }
+
       if (Object.keys(updatePayload).length === 0) {
-        return res.status(400).json({ error: "no_fields_to_update" });
+        return res.status(400).json({ error: "empty_update_payload" });
       }
+
       const { data, error } = await supabase
         .from("activities")
         .update(updatePayload)
         .eq("id", found.data.id)
         .select()
         .single();
+
       if (error) {
         return res.status(500).json({
-          error: error.message,
-          code: error.code || null,
-          hint: error.hint || null,
-          details: error.details || null,
+          error: "activity_update_failed",
+          message: error?.message || null,
+          code: error?.code || null,
+          hint: error?.hint || null,
+          details: error?.details || null,
         });
       }
-      return res.status(200).json(data);
+
+      return res.status(200).json({ ok: true, data });
     }
 
-    // PATCH (toggle active)
     if (req.method === "PATCH") {
       const found = await findActivityByIdCompat(supabase, id, orgId);
 
@@ -390,9 +350,12 @@ export default async function handler(req, res) {
         return res.status(404).json({ error: "activity_not_found" });
       }
 
+      const nextActive =
+        typeof req.body?.active === "boolean" ? req.body.active : !found.data.active;
+
       const { data, error } = await supabase
         .from("activities")
-        .update({ active: !found.data.active })
+        .update({ active: nextActive })
         .eq("id", found.data.id)
         .select()
         .single();
@@ -406,10 +369,9 @@ export default async function handler(req, res) {
         });
       }
 
-      return res.status(200).json(data);
+      return res.status(200).json({ ok: true, data });
     }
 
-    // DELETE
     if (req.method === "DELETE") {
       const found = await findActivityByIdCompat(supabase, id, orgId);
 
@@ -438,7 +400,7 @@ export default async function handler(req, res) {
         });
       }
 
-      return res.status(200).json({ success: true });
+      return res.status(200).json({ ok: true, data: { success: true } });
     }
 
     return res.status(405).json({ error: "method_not_allowed" });
