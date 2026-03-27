@@ -5,6 +5,17 @@
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
+import { listGeofences } from "../lib/geofencesApi";
+
+function normalizeGeofenceRow(g) {
+  const id = g?.id || "";
+  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
+  return {
+    id,
+    nombre: nombre || id,
+    source_geocerca_id: g?.source_geocerca_id || null,
+  };
+}
 import { useAuth } from "@/context/auth.js";
 import { useModuleAccess } from "../hooks/useModuleAccess";
 import { MODULE_KEYS } from "../lib/permissions";
@@ -395,11 +406,12 @@ const CostosDashboardPage = () => {
 
           loadActivitiesForOrg(currentOrg.id),
 
-          supabase
-            .from("geocercas")
-            .select("id, nombre")
-            .eq("org_id", currentOrg.id)
-            .order("nombre", { ascending: true }),
+          (async () => {
+            const geofencesRaw = await listGeofences(currentOrg.id, true);
+            return geofencesRaw
+              .map(normalizeGeofenceRow)
+              .filter((g) => g.id && g.source_geocerca_id);
+          })(),
         ]);
 
         if (personasRes.error) throw personasRes.error;
@@ -407,7 +419,7 @@ const CostosDashboardPage = () => {
 
         setPersonas(personasRes.data || []);
         setActividades(actData || []);
-        setGeocercas(geoRes.data || []);
+        setGeocercas(Array.isArray(geoRes) ? geoRes : []);
       } catch (e) {
         console.error("[CostosDashboard] loadFilters error:", e);
       }

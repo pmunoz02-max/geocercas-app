@@ -1,6 +1,17 @@
 ﻿// src/pages/CostosPage.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
+import { listGeofences } from "../lib/geofencesApi";
+
+function normalizeGeofenceRow(g) {
+  const id = g?.id || "";
+  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
+  return {
+    id,
+    nombre: nombre || id,
+    source_geocerca_id: g?.source_geocerca_id || null,
+  };
+}
 import { useAuth } from "@/context/auth.js";
 import { useTranslation } from "react-i18next";
 import { useModuleAccess } from "../hooks/useModuleAccess";
@@ -182,22 +193,36 @@ const CostosPage = () => {
 
         if (personasErr) throw personasErr;
 
-        const { data: actData, error: actErr } = await supabase
+        // Activities: primero por org_id, luego fallback tenant_id
+        let actData = [];
+        const { data: actOrg, error: actOrgErr } = await supabase
           .from("activities")
           .select("id, name")
-          .eq("tenant_id", currentOrg.id)
+          .eq("org_id", currentOrg.id)
           .eq("active", true)
           .order("name", { ascending: true });
+        if (!actOrgErr && Array.isArray(actOrg) && actOrg.length > 0) {
+          actData = actOrg;
+        } else {
+          const { data: actTenant, error: actTenantErr } = await supabase
+            .from("activities")
+            .select("id, name")
+            .eq("tenant_id", currentOrg.id)
+            .eq("active", true)
+            .order("name", { ascending: true });
+          if (!actTenantErr && Array.isArray(actTenant)) {
+            actData = actTenant;
+          }
+        }
 
-        if (actErr) throw actErr;
-
-        const { data: geoData, error: geoErr } = await supabase
-          .from("geocercas")
-          .select("id, nombre")
-          .eq("org_id", currentOrg.id)
-          .order("nombre", { ascending: true });
-
-        if (geoErr) throw geoErr;
+        // Geofences canónicas
+        let geoData = [];
+        try {
+          const geofencesRaw = await listGeofences(currentOrg.id, true);
+          geoData = geofencesRaw
+            .map(normalizeGeofenceRow)
+            .filter((g) => g.id && g.source_geocerca_id);
+        } catch {}
 
         setPersonas(personasData || []);
         setActividades(actData || []);
