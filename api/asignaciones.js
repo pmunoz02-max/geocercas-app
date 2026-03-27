@@ -423,8 +423,36 @@ async function loadCatalogs(sbDb, orgId) {
   const catalogs = {
     geocercas: [],
     activities: [],
+    personal: [],
   };
 
+  // Personas: cargar siempre desde la tabla correcta, solo filtrar por org_id
+  try {
+    // Intentar primero tabla "personal"
+    let r = await sbDb
+      .from("personal")
+      .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
+      .eq("org_id", orgId)
+      .limit(1000);
+
+    if (!r.error && Array.isArray(r.data) && r.data.length > 0) {
+      catalogs.personal = r.data;
+    } else {
+      // Si no hay resultados, intentar tabla "org_people"
+      r = await sbDb
+        .from("org_people")
+        .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
+        .eq("org_id", orgId)
+        .limit(1000);
+      if (!r.error && Array.isArray(r.data)) {
+        catalogs.personal = r.data;
+      }
+    }
+  } catch (e) {
+    console.warn("[loadCatalogs] personal/org_people exception:", e);
+  }
+
+  // Geocercas (sin cambios)
   try {
     const r = await sbDb
       .from("geofences")
@@ -449,6 +477,7 @@ async function loadCatalogs(sbDb, orgId) {
     console.warn("[loadCatalogs] geofences exception:", e);
   }
 
+  // Actividades (sin cambios)
   try {
     const r = await sbDb
       .from("activities")
