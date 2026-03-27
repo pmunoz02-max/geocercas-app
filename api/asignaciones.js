@@ -67,9 +67,11 @@ export default async function handler(req, res) {
         personal,
       },
       debug: {
-        personal_count: Array.isArray(personal) ? personal.length : -1,
-        first_person: Array.isArray(personal) && personal.length > 0 ? personal[0] : null,
         requested_org_id,
+        personal_count: Array.isArray(personal) ? personal.length : -1,
+        personal_org_ids: Array.isArray(personal)
+          ? [...new Set(personal.map(p => p.org_id))]
+          : [],
       },
     },
   });
