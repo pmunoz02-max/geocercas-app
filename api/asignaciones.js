@@ -1,4 +1,4 @@
-const VERSION = "asignaciones-clean-03";
+const VERSION = "asignaciones-clean-04";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -43,13 +43,14 @@ export default async function handler(req, res) {
 
   return send(res, 200, {
     ok: true,
-    route: VERSION,
-    org_id: q.org_id || q.orgId || null,
-    items: [],
-    catalogs: {
-      personal: [],
-      geocercas: [],
-      activities: [],
+    data: {
+      org_id: q.org_id || q.orgId || null,
+      asignaciones: [],
+      catalogs: {
+        personal: [],
+        geocercas: [],
+        activities: [],
+      },
     },
   });
 }
