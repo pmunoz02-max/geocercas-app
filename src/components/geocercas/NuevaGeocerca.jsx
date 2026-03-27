@@ -46,21 +46,6 @@ function Banner({ banner, onClose }) {
   );
 }
 
-function StatBadge({ label, value, tone = "default" }) {
-  const toneClass =
-    tone === "accent"
-      ? "border-emerald-400/40 bg-emerald-950/80 text-emerald-50"
-      : tone === "warn"
-      ? "border-amber-400/40 bg-amber-950/80 text-amber-50"
-      : "border-slate-300/20 bg-slate-950/80 text-slate-50";
-
-  return (
-    <div className={`min-w-[120px] rounded-2xl border px-3 py-2 shadow-lg backdrop-blur-md ${toneClass}`}>
-      <div className="text-[10px] uppercase tracking-[0.14em] text-slate-300/80">{label}</div>
-      <div className="mt-1 text-sm sm:text-base font-semibold">{value}</div>
-    </div>
-  );
-}
 
 function CursorPosLive({ setCursorLatLng, setMapZoom, setMapScale }) {
   const map = useMapEvents({
@@ -1113,49 +1098,6 @@ export default function NuevaGeocerca() {
           {geofencePanel}
         </div>
 
-        <div className="absolute left-1/2 top-16 sm:top-20 z-[1100] -translate-x-1/2 flex flex-col items-center gap-2">
-          <button
-            onClick={() => setStatsVisible((v) => !v)}
-            className="pointer-events-auto px-3 py-1 rounded-lg bg-slate-900/80 border border-slate-700 text-xs text-slate-200 hover:bg-slate-800 backdrop-blur-md shadow"
-            type="button"
-          >
-            {statsVisible
-              ? t("common.actions.hide", { defaultValue: "Hide" })
-              : t("common.actions.show", { defaultValue: "Show" })}
-          </button>
-
-          {statsVisible && (
-            <div className="flex w-[min(760px,calc(100%-24px))] flex-wrap justify-center gap-2 px-2">
-              <StatBadge
-                label={t("pricing.common.currentPlan", { defaultValue: "Current plan" })}
-                value={normalizePlanLabel(planCode)}
-                tone={planTone}
-              />
-              <StatBadge
-                label={t("geocercas.planUsageTitle", { defaultValue: "Geofences" })}
-                value={
-                  entitlementsLoading
-                    ? t("common.actions.loading", { defaultValue: "Loading..." })
-                    : hasFiniteGeofenceLimit
-                    ? `${currentGeofenceCount} / ${Number(maxGeocercas)}`
-                    : t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
-                }
-                tone={planTone}
-              />
-              <StatBadge
-                label={t("geocercas.planAvailableTitle", { defaultValue: "Available" })}
-                value={
-                  entitlementsLoading
-                    ? t("common.actions.loading", { defaultValue: "Loading..." })
-                    : geofenceSlotsLeft === null
-                    ? t("geocercas.plan.unlimitedShort", { defaultValue: "Unlimited" })
-                    : String(geofenceSlotsLeft)
-                }
-                tone={geofenceLimitReached ? "warn" : "default"}
-              />
-            </div>
-          )}
-        </div>
 
         <div className="pointer-events-none hidden md:block absolute right-3 top-72 z-[500]">
           <div className="rounded-xl bg-white/85 px-3 py-2 text-xs backdrop-blur-md border border-black/10 shadow-md">
