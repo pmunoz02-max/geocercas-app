@@ -17,7 +17,24 @@ function setHeaders(res) {
 
   res.setHeader("X-Api-Version", VERSION);
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS,HEAD");
+  // api/asignaciones.js — estructura estable tipo geofences
+  // Helpers locales
+  function send(res, status, payload) {
+    res.statusCode = status;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.end(JSON.stringify(payload));
+  }
+
+  function ok(res, payload) {
+    send(res, 200, { ok: true, ...payload });
+  }
+
+  async function resolveContext(req) {
+    // Simulación mínima para estructura base
+    return { ok: true, orgId: "dummy-org" };
+  }
+
+  // Handler principal
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
