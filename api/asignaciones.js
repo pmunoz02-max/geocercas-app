@@ -755,54 +755,62 @@ const rc = await resolveContext(req, { requestedOrgId });
         // Refuerza que catalogs.personal siempre se cargue correctamente antes de responder
         try {
           let r = await sbDb
-            .from("personal")
-            .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
-            .eq("org_id", orgId)
-            .limit(1000);
-          if (!r.error && Array.isArray(r.data) && r.data.length > 0) {
-            catalogs.personal = r.data;
-          } else {
-            r = await sbDb
-              .from("org_people")
-              .select("id,personal_id,org_id,user_id,nombre,name,first_name,apellido,last_name,full_name,email")
-              .eq("org_id", orgId)
-              .limit(1000);
-            if (!r.error && Array.isArray(r.data)) {
-              catalogs.personal = r.data;
+            let etapa = "inicio-handler";
+            try {
+              etapa = "listAssignmentsCanonical";
+              const merged = await listAssignmentsCanonical(sbDb, orgId);
+              etapa = "loadCatalogs";
+              let catalogs = { geocercas: [], activities: [], personal: [] };
+              try {
+                catalogs = await loadCatalogs(sbDb, orgId);
+              } catch (e) {
+                etapa = "error-loadCatalogs";
+                console.error("[api/asignaciones] error loadCatalogs", {
+                  message: e?.message,
+                  details: e?.details,
+                  hint: e?.hint,
+                  code: e?.code,
+                  orgId,
+                });
+              }
+              etapa = "pre-respuesta";
+              const requestedOrgId = (typeof searchParams !== "undefined" && searchParams.get) ? searchParams.get("org_id") || null : (typeof orgId !== "undefined" ? orgId : null);
+              // DEBUG TEMPORAL antes de responder
+              console.log("[DEBUG/ASIGNACIONES] org_id:", requestedOrgId);
+              console.log("[DEBUG/ASIGNACIONES] tablas consultadas: personal, org_people");
+              console.log("[DEBUG/ASIGNACIONES] cantidad personal devuelto:", Array.isArray(catalogs.personal) ? catalogs.personal.length : -1);
+              etapa = "respuesta-ok";
+              return ok(res, {
+                ok: true,
+                data: {
+                  asignaciones: merged,
+                  catalogs,
+                  debug: {
+                    org_id: requestedOrgId,
+                    personal_count: Array.isArray(catalogs.personal) ? catalogs.personal.length : -1,
+                    geocercas_count: Array.isArray(catalogs.geocercas) ? catalogs.geocercas.length : -1,
+                    activities_count: Array.isArray(catalogs.activities) ? catalogs.activities.length : -1
+                  }
+                },
+              });
+            } catch (error) {
+              console.error("[api/asignaciones] GET error", {
+                etapa,
+                message: error?.message,
+                stack: error?.stack,
+                details: error?.details,
+                hint: error?.hint,
+                code: error?.code,
+                orgId,
+              });
+              return send(res, 200, {
+                ok: false,
+                error: error?.message || String(error),
+                stack: error?.stack,
+                orgId,
+                etapa
+              });
             }
-          }
-        } catch (e) {
-          console.warn("[api/asignaciones] refuerzo personal/org_people exception:", e);
-        }
-
-        // Asegura variable local para el org activo
-        const requestedOrgId = (typeof searchParams !== "undefined" && searchParams.get) ? searchParams.get("org_id") || null : (typeof orgId !== "undefined" ? orgId : null);
-        return ok(res, {
-          ok: true,
-          data: {
-            asignaciones: merged,
-            catalogs,
-            debug: {
-              org_id: requestedOrgId,
-              personal_count: Array.isArray(catalogs.personal) ? catalogs.personal.length : -1,
-              geocercas_count: Array.isArray(catalogs.geocercas) ? catalogs.geocercas.length : -1,
-              activities_count: Array.isArray(catalogs.activities) ? catalogs.activities.length : -1
-            }
-          },
-        });
-      } catch (error) {
-        console.error("[api/asignaciones] GET error", {
-          message: error?.message,
-          details: error?.details,
-          hint: error?.hint,
-          code: error?.code,
-          orgId,
-        });
-
-        return send(res, 500, {
-          ok: false,
-          error: "server_error",
-          details: String(error?.message || error),
         });
       }
     }
