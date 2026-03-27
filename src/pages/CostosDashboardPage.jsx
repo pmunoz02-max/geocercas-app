@@ -2,20 +2,11 @@
 // Dashboard de Costos — Versión PRO (roles centralizados + más métricas + export)
 // ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
 // ✅ FIX: activities por org_id (fallback legacy tenant_id)
+// ✅ FIX: manejo explícito de vista faltante v_costos_detalle
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import { listGeofences } from "../lib/geofencesApi";
-
-function normalizeGeofenceRow(g) {
-  const id = g?.id || "";
-  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
-  return {
-    id,
-    nombre: nombre || id,
-    source_geocerca_id: g?.source_geocerca_id || null,
-  };
-}
 import { useAuth } from "@/context/auth.js";
 import { useModuleAccess } from "../hooks/useModuleAccess";
 import { MODULE_KEYS } from "../lib/permissions";
@@ -37,6 +28,16 @@ import {
   Legend,
   CartesianGrid,
 } from "recharts";
+
+function normalizeGeofenceRow(g) {
+  const id = g?.id || "";
+  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
+  return {
+    id,
+    nombre: nombre || id,
+    source_geocerca_id: g?.source_geocerca_id || null,
+  };
+}
 
 /* -----------------------------------------
    UTILIDADES (alineadas con CostosPage)
@@ -344,6 +345,8 @@ const CostosDashboardPage = () => {
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [missingView, setMissingView] = useState(false);
 
   const [selectedDimension, setSelectedDimension] = useState("persona");
   const [selectedChartType, setSelectedChartType] = useState("bar");
@@ -415,7 +418,6 @@ const CostosDashboardPage = () => {
         ]);
 
         if (personasRes.error) throw personasRes.error;
-        if (geoRes.error) throw geoRes.error;
 
         setPersonas(personasRes.data || []);
         setActividades(actData || []);
@@ -430,7 +432,10 @@ const CostosDashboardPage = () => {
 
   const fetchReport = async () => {
     if (!currentOrg?.id) return;
+
     setLoading(true);
+    setError("");
+    setMissingView(false);
 
     try {
       const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
@@ -446,12 +451,35 @@ const CostosDashboardPage = () => {
       if (selectedActividadId) query = query.eq("actividad_id", selectedActividadId);
       if (selectedGeocercaId) query = query.eq("geocerca_id", selectedGeocercaId);
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const { data, error: dataErr, status } = await query;
+
+      if (dataErr) {
+        if (status === 404) {
+          console.warn("[CostosDashboard] v_costos_detalle no existe");
+          setRows([]);
+          setMissingView(true);
+          setError(
+            t(
+              "dashboardCostos.errorViewMissing",
+              "Cost view is not available yet (v_costos_detalle)."
+            )
+          );
+          return;
+        }
+
+        throw dataErr;
+      }
 
       setRows(data || []);
     } catch (e) {
       console.error("[CostosDashboard] fetchReport error:", e);
+      setRows([]);
+      setError(
+        t(
+          "dashboardCostos.errorLoadReport",
+          "Could not load cost dashboard."
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -590,6 +618,18 @@ const CostosDashboardPage = () => {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            missingView
+              ? "border-amber-300 bg-amber-50 text-amber-900"
+              : "border-red-300 bg-red-50 text-red-700"
+          }`}
+        >
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-emerald-500">
@@ -741,6 +781,8 @@ const CostosDashboardPage = () => {
               setSelectedPersonaId("");
               setSelectedActividadId("");
               setSelectedGeocercaId("");
+              setError("");
+              setMissingView(false);
             }}
           >
             {t("dashboardCostos.filtersClear")}
