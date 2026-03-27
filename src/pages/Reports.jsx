@@ -1,5 +1,16 @@
 ﻿// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
+import { listGeofences } from "../lib/geofencesApi";
+function normalizeGeofenceRow(g) {
+  const id = g?.id || "";
+  const nombre = String(g?.name || g?.nombre || g?.label || "").trim();
+  return {
+    id,
+    nombre: nombre || id,
+    source_geocerca_id: g?.source_geocerca_id || null,
+  };
+}
+import { listGeofences } from "../lib/geofencesApi";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 
@@ -107,11 +118,20 @@ export default function Reports() {
     setLoadingFilters(true);
     setErrorMsg("");
     try {
+      // Personas, activities y asignaciones desde API legacy
       const url = "/api/reportes?action=filters";
       const json = await apiGet(url);
       const data = json?.data || {};
+      // Geofences canónicas del org activo
+      let geocercas = [];
+      if (currentOrg?.id) {
+        const geofencesRaw = await listGeofences(currentOrg.id, true);
+        geocercas = geofencesRaw
+          .map(normalizeGeofenceRow)
+          .filter((g) => g.id && g.source_geocerca_id);
+      }
       setFilters({
-        geocercas: Array.isArray(data.geocercas) ? data.geocercas : [],
+        geocercas,
         personas: Array.isArray(data.personas) ? data.personas : [],
         activities: Array.isArray(data.activities) ? data.activities : [],
         asignaciones: Array.isArray(data.asignaciones) ? data.asignaciones : [],
