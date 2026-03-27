@@ -2,9 +2,11 @@ import { createClient } from "@supabase/supabase-js";
 
 /**
  * api/geofences.js
- * Preview only
- * - un solo handler estable
- * - POST lee body una sola vez
+ * Entorno: preview
+ * Objetivo:
+ * - handler único y estable
+ * - POST con readBody(req) una sola vez
+ * - sin ramas duplicadas
  * - org_id controlado por backend
  * - compatibilidad legacy org_id / tenant_id
  * - delete con soft-delete si hay referencias
