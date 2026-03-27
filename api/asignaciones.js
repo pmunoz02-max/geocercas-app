@@ -271,6 +271,17 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     "SUPABASE_SERVICE_ROLE_KEY",
     "SUPABASE_SERVICE_KEY",
   ]);
+  
+  // Extrae org_id desde query o payload
+  function extractRequestedOrgId(req, body = null) {
+    const q = req.query || {};
+    return (
+      q.org_id ||
+      q.orgId ||
+      (body && (body.org_id || body.orgId)) ||
+      null
+    );
+  }
 
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return {
@@ -712,12 +723,7 @@ if (req.method === "POST" || req.method === "PATCH" || req.method === "DELETE") 
   body = await readBody(req);
 }
 
-const requestedOrgId =
-  q?.org_id ||
-  q?.orgId ||
-  body?.org_id ||
-  body?.orgId ||
-  null;
+     const requestedOrgId = extractRequestedOrgId(req, body);
 
 if (!requestedOrgId) {
   return send(res, 400, {
