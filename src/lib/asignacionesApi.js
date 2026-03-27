@@ -1,6 +1,8 @@
 // src/lib/asignacionesApi.js
 // CANONICO: solo /api/asignaciones (cookie tg_at)
 
+import { withActiveOrg } from "./withActiveOrg";
+
 async function parseJsonSafe(res) {
   const txt = await res.text();
   if (!txt) return null;
@@ -20,15 +22,27 @@ async function apiFetch(method, body) {
   });
 
   const payload = await parseJsonSafe(res);
+
   if (!res.ok || payload?.ok === false) {
-    const msg = payload?.error || `HTTP ${res.status} ${res.statusText}` || "Request failed";
-    return { data: null, error: { message: msg } };
+    const msg =
+      payload?.error ||
+      payload?.message ||
+      `HTTP ${res.status} ${res.statusText}` ||
+      "Request failed";
+
+    return { data: null, error: { message: msg, payload } };
   }
+
   return { data: payload?.data ?? null, error: null };
 }
 
-export async function getAsignacionesBundle(orgId = null) {
-  const query = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
+async function apiGetBundle(orgId) {
+  if (!orgId) {
+    return { data: null, error: { message: "missing_org_id" } };
+  }
+
+  const query = `?org_id=${encodeURIComponent(orgId)}`;
+
   const res = await fetch(`/api/asignaciones${query}`, {
     method: "GET",
     credentials: "include",
@@ -36,14 +50,31 @@ export async function getAsignacionesBundle(orgId = null) {
   });
 
   const payload = await parseJsonSafe(res);
+
   if (!res.ok || payload?.ok === false) {
-    const msg = payload?.error || `HTTP ${res.status} ${res.statusText}` || "Request failed";
-    return { data: null, error: { message: msg } };
+    const msg =
+      payload?.error ||
+      payload?.message ||
+      `HTTP ${res.status} ${res.statusText}` ||
+      "Request failed";
+
+    return { data: null, error: { message: msg, payload } };
   }
+
   return { data: payload?.data ?? null, error: null };
 }
 
-import { withActiveOrg } from "./withActiveOrg";
+// Devuelve el bundle completo: asignaciones + catálogos
+export async function getAsignacionesBundle(orgId) {
+  return apiGetBundle(orgId);
+}
+
+// Alias útil si alguna página espera "listAsignaciones"
+export async function listAsignaciones(orgId) {
+  const { data, error } = await apiGetBundle(orgId);
+  if (error) return [];
+  return Array.isArray(data?.asignaciones) ? data.asignaciones : [];
+}
 
 export async function createAsignacion(payload = {}, orgId = null) {
   return apiFetch("POST", withActiveOrg(payload, orgId));
