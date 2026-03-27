@@ -41,19 +41,24 @@ export default function AsignacionesPage() {
       setPersonas(Array.isArray(p) ? p : []);
       setGeocercas(Array.isArray(g) ? g : []);
       setActividades(Array.isArray(a) ? a : []);
+      setError("");
     } catch (e) {
       console.error(e);
-      setError("Error al cargar datos de asignaciones");
+      setError("Error al cargar datos de asignaciones.");
     }
   }
 
-  const personasEnOrg = useMemo(() => {
-    return (personas || []).filter((p) => {
-      if (!p) return false;
+  const personasDisponibles = useMemo(() => {
+    const base = Array.isArray(personas) ? personas.filter(Boolean) : [];
 
-      const personOrgId = p.org_id ?? p.tenant_id ?? null;
+    return base.filter((p) => {
+      const personId = p?.id ?? p?.personal_id ?? null;
+      if (!personId) return false;
+
+      const personOrgId = p?.org_id ?? p?.tenant_id ?? null;
 
       if (!activeOrgId) return true;
+
       if (!personOrgId) return true;
 
       return String(personOrgId) === String(activeOrgId);
@@ -61,11 +66,13 @@ export default function AsignacionesPage() {
   }, [personas, activeOrgId]);
 
   const selectedPerson = useMemo(() => {
-    return personasEnOrg.find(
-      (p) =>
-        String(p?.id ?? p?.personal_id ?? "") === String(selectedPersonId)
-    ) ?? null;
-  }, [personasEnOrg, selectedPersonId]);
+    return (
+      personasDisponibles.find(
+        (p) =>
+          String(p?.id ?? p?.personal_id ?? "") === String(selectedPersonId)
+      ) ?? null
+    );
+  }, [personasDisponibles, selectedPersonId]);
 
   const resolvedSelectedPersonId =
     selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
@@ -125,6 +132,7 @@ export default function AsignacionesPage() {
       await createAsignacion(payload);
       await loadAll();
       resetForm();
+
       setSuccess(
         selectedTrackerUserId
           ? "Asignación guardada correctamente."
@@ -152,13 +160,13 @@ export default function AsignacionesPage() {
           }}
         >
           <option value="">Seleccionar</option>
-          {personasEnOrg.map((p) => {
+          {personasDisponibles.map((p) => {
             const personId = p?.id ?? p?.personal_id ?? "";
             const nombre =
-              p?.nombre ??
-              p?.name ??
-              p?.full_name ??
-              p?.email ??
+              p?.nombre ||
+              p?.name ||
+              p?.full_name ||
+              p?.email ||
               `Persona ${personId}`;
 
             return (
@@ -170,9 +178,9 @@ export default function AsignacionesPage() {
           })}
         </select>
 
-        {personasEnOrg.length === 0 && (
+        {personasDisponibles.length === 0 && (
           <p className="text-amber-700 text-sm mt-1">
-            No hay personas disponibles en esta organización.
+            No hay personas disponibles para esta organización.
           </p>
         )}
 
