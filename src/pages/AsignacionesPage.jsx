@@ -55,58 +55,14 @@ export default function AsignacionesPage() {
   async function loadAll() {
     try {
       const { data, error } = await getAsignacionesBundle(activeOrgId);
-
       if (error) {
         throw new Error(error.message || "Error al cargar asignaciones");
       }
-
-      const catalogs = data?.catalogs || {};
-
-      const rawPersonas = catalogs.personal || catalogs.people || [];
-      const normalizedPersonas = rawPersonas.map((p) => ({
-        ...p,
-        id: p?.id ?? p?.personal_id ?? p?.org_people_id ?? null,
-        personal_id: p?.personal_id ?? p?.id ?? p?.org_people_id ?? null,
-        nombre: p?.nombre ?? p?.name ?? p?.first_name ?? "",
-        apellido: p?.apellido ?? p?.last_name ?? "",
-        email: p?.email ?? "",
-        user_id: p?.user_id ?? null,
-        full_name:
-          p?.full_name ??
-          [
-            p?.nombre ?? p?.name ?? p?.first_name ?? "",
-            p?.apellido ?? p?.last_name ?? "",
-          ]
-            .filter(Boolean)
-            .join(" "),
-      }));
-
-      const rawGeofences = catalogs.geofences || [];
-      const normalizedGeofences = rawGeofences.map((g) => ({
-        ...g,
-        id: g?.id ?? null,
-        name: g?.name ?? g?.nombre ?? "",
-      }));
-
-      const rawActividades = catalogs.activities || catalogs.actividades || [];
-      const normalizedActividades = rawActividades.map((a) => ({
-        ...a,
-        id: a?.id ?? null,
-        name: a?.name ?? a?.nombre ?? a?.title ?? "",
-      }));
-
-      const rawAsignaciones = Array.isArray(data?.asignaciones)
-        ? data.asignaciones
-        : [];
-
-      const visibleAsignaciones = rawAsignaciones.filter(
-        (a) => a?.is_deleted !== true
-      );
-
-      setPersonas(normalizedPersonas);
-      setGeocercas(normalizedGeofences);
-      setActividades(normalizedActividades);
-      setAsignaciones(visibleAsignaciones);
+      const bundle = data || {};
+      setPersonas(Array.isArray(bundle.catalogs?.personal) ? bundle.catalogs.personal : []);
+      setGeocercas(Array.isArray(bundle.catalogs?.geofences) ? bundle.catalogs.geofences : []);
+      setActividades(Array.isArray(bundle.catalogs?.activities) ? bundle.catalogs.activities : []);
+      setAsignaciones(Array.isArray(bundle.asignaciones) ? bundle.asignaciones : []);
       setError("");
     } catch (e) {
       console.error(e);
