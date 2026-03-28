@@ -355,7 +355,6 @@ export default function AsignacionesPage() {
               )}
             </div>
                 if (!id) return null;
-
                 return (
                   <option key={id} value={id}>
                     {personLabel(p)}
