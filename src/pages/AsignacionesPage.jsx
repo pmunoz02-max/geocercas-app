@@ -121,7 +121,7 @@ export default function AsignacionesPage() {
       );
 
       setPersonas(normalizedPersonas);
-      setGeocercas(normalizedGeocercas);
+      setGeocercas([]); // No legacy geocercas, keep empty or remove if unused
       setActividades(normalizedActividades);
       setAsignaciones(visibleAsignaciones);
       setError("");
