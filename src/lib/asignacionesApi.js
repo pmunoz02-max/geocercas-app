@@ -103,9 +103,6 @@ export async function deleteAsignacion(id) {
   return apiFetch("DELETE", { id });
 }
 
-export async function updateAsignacion(id, patch = {}, orgId = null) {
-  return apiFetch("PATCH", withActiveOrg({ id, patch }, orgId));
-}
 
 export async function deleteAsignacion(id, orgId = null) {
   return apiFetch("DELETE", withActiveOrg({ id }, orgId));
