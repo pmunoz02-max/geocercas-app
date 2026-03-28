@@ -20,62 +20,62 @@ function send(res, status, payload) {
 }
 
 export default async function handler(req, res) {
-  const q = req.query || {};
-  const { method } = req;
-
-  if (method === "OPTIONS") {
-    return send(res, 204, {});
-  }
-  if (method === "HEAD") {
-    setHeaders(res);
-    res.statusCode = 200;
-    return res.end();
-  }
-
-  const { createClient } = await import("@supabase/supabase-js");
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-  if (method === "PATCH") {
-    // PATCH: editar asignación o cambiar estado
-    const { id, ...fields } = req.body || {};
-    if (!id) return send(res, 400, { ok: false, error: "missing_id" });
-    const { error } = await supabase
-      .from("asignaciones")
-      .update(fields)
-      .eq("id", id)
-      .eq("is_deleted", false);
-    if (error) return send(res, 500, { ok: false, error: error.message });
-    return send(res, 200, { ok: true });
-  }
-
-  if (method === "DELETE") {
-    // DELETE lógico: is_deleted=true
-    const { id } = req.body || {};
-    if (!id) return send(res, 400, { ok: false, error: "missing_id" });
-    const { error } = await supabase
-      .from("asignaciones")
-      .update({ is_deleted: true })
-      .eq("id", id);
-    if (error) return send(res, 500, { ok: false, error: error.message });
-    return send(res, 200, { ok: true });
-  }
-
-  if (method !== "GET") {
-    return send(res, 405, {
-      ok: false,
-      error: "method_not_allowed",
-      method,
-      version: VERSION,
-    });
-  }
-
-  // GET: bundle de asignaciones y catálogos
-  let personal = [];
-  let geocercas = [];
-  let activities = [];
-  let asignaciones = [];
-  const requested_org_id = q.org_id || q.orgId || null;
   try {
+    const q = req.query || {};
+    const { method } = req;
+
+    if (method === "OPTIONS") {
+      return send(res, 204, {});
+    }
+    if (method === "HEAD") {
+      setHeaders(res);
+      res.statusCode = 200;
+      return res.end();
+    }
+
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    if (method === "PATCH") {
+      // PATCH: editar asignación o cambiar estado
+      const { id, ...fields } = req.body || {};
+      if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+      const { error } = await supabase
+        .from("asignaciones")
+        .update(fields)
+        .eq("id", id)
+        .eq("is_deleted", false);
+      if (error) return send(res, 500, { ok: false, error: error.message });
+      return send(res, 200, { ok: true });
+    }
+
+    if (method === "DELETE") {
+      // DELETE lógico: is_deleted=true
+      const { id } = req.body || {};
+      if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+      const { error } = await supabase
+        .from("asignaciones")
+        .update({ is_deleted: true })
+        .eq("id", id);
+      if (error) return send(res, 500, { ok: false, error: error.message });
+      return send(res, 200, { ok: true });
+    }
+
+    if (method !== "GET") {
+      return send(res, 405, {
+        ok: false,
+        error: "method_not_allowed",
+        method,
+        version: VERSION,
+      });
+    }
+
+    // GET: bundle de asignaciones y catálogos
+    let personal = [];
+    let geofences = [];
+    let activities = [];
+    let asignaciones = [];
+    const requested_org_id = q.org_id || q.orgId || null;
     if (requested_org_id) {
       // Personal
       try {
@@ -144,24 +144,21 @@ export default async function handler(req, res) {
         }
       } catch { asignaciones = []; }
     }
-  } catch (e) {
-    // Si hay error, todo queda como []
-    personal = [];
-    geofences = [];
-    activities = [];
-    asignaciones = [];
-  }
 
-  return send(res, 200, {
-    ok: true,
-    data: {
-      catalogs: {
-        personal,
-        geofences,
-        activities,
+    return send(res, 200, {
+      ok: true,
+      data: {
+        catalogs: {
+          personal,
+          geofences,
+          activities,
+        },
+        asignaciones,
       },
-      asignaciones,
-      // debug info opcional si se requiere
-    },
-  });
+    });
+  } catch (error) {
+    console.error(error?.message);
+    if (error?.stack) console.error(error.stack);
+    return send(res, 500, { ok: false, error: error?.message || "Internal Server Error" });
+  }
 }
