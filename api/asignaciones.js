@@ -328,15 +328,12 @@ export default async function handler(req, res) {
 
     if (method === "POST") {
       // Create new assignment in asignaciones table
-      const fields = req.body || {};
-      // Always rebuild period column using tstzrange before saving
-      if (fields.start_time && fields.end_time) {
-        const startTz = new Date(fields.start_time).toISOString();
-        const endTz = new Date(fields.end_time).toISOString();
-        fields.period = `tstzrange('${startTz}','${endTz}','[)')`;
-      } else {
-        delete fields.period;
-      }
+      const incoming = req.body || {};
+      // Remove period, period_tstz, start_date, end_date from payload
+      const {
+        period, period_tstz, start_date, end_date, ...fields
+      } = incoming;
+      // Only insert writable columns (fields)
       const { error } = await supabase
         .from("asignaciones")
         .insert([fields]);
