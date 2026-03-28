@@ -64,6 +64,19 @@ export default function AsignacionesPage() {
     loadAll();
   }, [activeOrgId]);
 
+  // Opciones de geocercas solo desde catalogs.geofences
+  let catalogs = {};
+  if (typeof window !== "undefined" && window.__asignaciones_last_catalogs) {
+    catalogs = window.__asignaciones_last_catalogs;
+  }
+  const geofenceOptions = (catalogs?.geofences || []).map(g => ({
+    value: g?.id ?? null,
+    label: g?.name || `Geocerca ${g?.id ?? ''}`
+  })).filter(opt => !!opt.value);
+  // Console.log temporal
+  console.log("[DEBUG] catalogs.geofences", catalogs?.geofences);
+  console.log("[DEBUG] geofenceOptions", geofenceOptions);
+
   async function loadAll() {
     try {
       const { data, error } = await getAsignacionesBundle(activeOrgId);
@@ -72,7 +85,8 @@ export default function AsignacionesPage() {
         throw new Error(error.message || "Error al cargar asignaciones");
       }
 
-      const catalogs = data?.catalogs || {};
+      catalogs = data?.catalogs || {};
+      if (typeof window !== "undefined") window.__asignaciones_last_catalogs = catalogs;
 
       const rawPersonas = catalogs.personal || catalogs.people || [];
       const normalizedPersonas = (rawPersonas || []).map((p) => ({
@@ -90,15 +104,6 @@ export default function AsignacionesPage() {
             .join(" "),
       }));
 
-      // Usar solo catalogs.geofences para el select de geocercas
-      const geofences = catalogs.geofences || [];
-      const geofenceOptions = (geofences || []).map(g => ({
-        value: g?.id ?? null,
-        label: g?.name ?? ""
-      })).filter(opt => !!opt.value);
-  // Console.log temporal de catalogs.geofences y geofenceOptions
-  console.log("[DEBUG] catalogs.geofences", catalogs?.geofences);
-  console.log("[DEBUG] geofenceOptions", geofenceOptions);
 
       const rawActividades = catalogs.activities || catalogs.actividades || [];
       const normalizedActividades = (rawActividades || []).map((a) => ({
