@@ -135,7 +135,7 @@ export default async function handler(req, res) {
           .from("asignaciones")
           .select("*")
           .eq("org_id", requested_org_id)
-          .eq("is_deleted", false)
+          .or("is_deleted.is.false,is_deleted.is.null")
           .order("created_at", { ascending: false });
         if (!asignacionesError && Array.isArray(asignacionesData)) {
           asignaciones = asignacionesData;
