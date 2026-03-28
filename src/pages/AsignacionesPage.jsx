@@ -90,15 +90,15 @@ export default function AsignacionesPage() {
             .join(" "),
       }));
 
-      const rawGeocercas = catalogs.geocercas || catalogs.geofences || [];
-      console.log("[DEBUG] rawGeocercas", rawGeocercas);
-      const normalizedGeocercas = (rawGeocercas || []).map((g) => ({
-        ...g,
-        id: g?.id ?? null,
-        nombre: g?.nombre ?? g?.name ?? "",
-        name: g?.name ?? g?.nombre ?? "",
-      }));
-      console.log("[DEBUG] normalizedGeocercas", normalizedGeocercas);
+      // Usar solo catalogs.geofences para el select de geocercas
+      const geofences = catalogs.geofences || [];
+      const geofenceOptions = (geofences || []).map(g => ({
+        value: g?.id ?? null,
+        label: g?.name ?? ""
+      })).filter(opt => !!opt.value);
+  // Console.log temporal de catalogs.geofences y geofenceOptions
+  console.log("[DEBUG] catalogs.geofences", catalogs?.geofences);
+  console.log("[DEBUG] geofenceOptions", geofenceOptions);
 
       const rawActividades = catalogs.activities || catalogs.actividades || [];
       const normalizedActividades = (rawActividades || []).map((a) => ({
@@ -342,9 +342,9 @@ export default function AsignacionesPage() {
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
             >
               <option value="">Seleccionar</option>
-              {geocercas.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {geocercaLabel(g)}
+              {geofenceOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
             </select>
