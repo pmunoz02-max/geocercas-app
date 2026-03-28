@@ -111,6 +111,7 @@ export default async function handler(req, res) {
     }
 
     let asignacion = null;
+    let personal_id = null;
     if (assignment_id) {
       try {
         const supabaseUrl = process.env.SUPABASE_URL;
@@ -125,7 +126,9 @@ export default async function handler(req, res) {
         if (resp.ok) {
           const rows = await resp.json();
           asignacion = rows && rows[0];
-          if (!asignacion || !asignacion.personal_id) {
+          if (asignacion && asignacion.personal_id) {
+            personal_id = asignacion.personal_id;
+          } else {
             console.warn(`[invite-tracker] asignación inválida o sin personal_id`);
           }
         } else {
@@ -133,6 +136,32 @@ export default async function handler(req, res) {
         }
       } catch (e) {
         console.warn(`[invite-tracker] error consultando asignaciones`, e);
+      }
+    }
+    // If no assignment_id or no personal_id from assignment, try to get personal by email
+    if (!personal_id) {
+      try {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const url = `${supabaseUrl}/rest/v1/personal?org_id=eq.${encodeURIComponent(org_id)}&email=eq.${encodeURIComponent(email)}&is_deleted=eq.false&select=id,email`;
+        const resp = await fetch(url, {
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+          },
+        });
+        if (resp.ok) {
+          const rows = await resp.json();
+          const personal = rows && rows[0];
+          if (personal && personal.id) {
+            personal_id = personal.id;
+          } else {
+            console.warn(`[invite-tracker] no se encontró personal para el email`);
+          }
+        } else {
+          console.warn(`[invite-tracker] error consultando personal`);
+        }
+      } catch (e) {
+        console.warn(`[invite-tracker] error consultando personal`, e);
       }
     }
 
@@ -172,7 +201,7 @@ export default async function handler(req, res) {
       org_id,
       email,
       assignment_id,
-      personal_id: asignacion.personal_id,
+      personal_id,
     });
 
     const ts = String(Date.now());
@@ -202,6 +231,7 @@ export default async function handler(req, res) {
         name,
         role,
         assignment_id,
+        personal_id,
       }),
     });
 

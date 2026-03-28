@@ -446,6 +446,7 @@ serve(async (req) => {
     const email = normEmail(body?.email || "");
     const to_name = String(body?.name || "").trim() || undefined;
     const assignment_id = String(body?.assignment_id || "").trim();
+    const personal_id = String(body?.personal_id || "").trim();
 
     let lang = "es";
     const bodyLangRaw = body?.lang;
@@ -522,6 +523,7 @@ serve(async (req) => {
       taskName: copy.valueNotSpecified,
     };
 
+    let effectivePersonalId = null;
     if (assignment_id) {
       try {
         const details = await getAssignmentEmailDetails(sbAdmin, {
@@ -531,13 +533,20 @@ serve(async (req) => {
         });
         if (details) {
           assignmentDetails = details;
+          if (details.personalId) {
+            effectivePersonalId = details.personalId;
+          }
         } else {
           console.warn('[send-tracker-invite-brevo] assignment details not found or empty');
         }
       } catch (e) {
         console.warn('[send-tracker-invite-brevo] error fetching assignment details', e);
       }
-    } // else: leave assignmentDetails as default
+    }
+    // If no assignment or no personalId from assignment, use personal_id from payload
+    if (!effectivePersonalId && personal_id) {
+      effectivePersonalId = personal_id;
+    }
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
