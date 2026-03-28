@@ -248,49 +248,51 @@ export default async function handler(req, res) {
       json = { raw: text };
     }
 
-    // After creating tracker, link personal.user_id to tracker user id for the same org
-    // Fail if a conflicting user_id already exists (not null and not equal to tracker user id)
+    // After creating tracker, always link personal.user_id to tracker_user_id for the same org_id
+    // If a matching personal record exists with user_id null, update it. If it exists with a different user_id, throw a conflict error.
+    // Never leave personal.user_id null after a successful tracker invite.
     if (personal_id && json && json.ok !== false) {
       try {
         const trackerUserId = json.user_id || json.tracker_user_id || null;
-        if (trackerUserId) {
-          // Fetch current personal record to check user_id
-          const getUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,user_id`;
-          const getResp = await fetch(getUrl, {
-            headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+        if (!trackerUserId) throw new Error("No tracker_user_id returned from invite");
+        // Fetch current personal record to check user_id
+        const getUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,user_id`;
+        const getResp = await fetch(getUrl, {
+          headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+        });
+        if (!getResp.ok) throw new Error("Failed to fetch personal for user_id check");
+        const rows = await getResp.json();
+        const personal = rows && rows[0];
+        if (!personal) throw new Error("Personal record not found after invite");
+        if (personal.user_id && personal.user_id !== trackerUserId) {
+          // Conflict: user_id already set to a different value
+          console.warn(`[invite-tracker] conflict: personal.user_id already set to a different value`, { personal_id, org_id, existing: personal.user_id, new: trackerUserId });
+          return res.status(409).json({
+            ok: false,
+            build: BUILD_TAG,
+            error: "personal_user_id_conflict",
+            message: "El personal ya está vinculado a otro usuario.",
+            personal_id,
+            org_id,
+            existing_user_id: personal.user_id,
+            new_user_id: trackerUserId
           });
-          if (!getResp.ok) throw new Error("Failed to fetch personal for user_id check");
-          const rows = await getResp.json();
-          const personal = rows && rows[0];
-          if (personal && personal.user_id && personal.user_id !== trackerUserId) {
-            // Conflict: user_id already set to a different value
-            console.warn(`[invite-tracker] conflict: personal.user_id already set to a different value`, { personal_id, org_id, existing: personal.user_id, new: trackerUserId });
-            return res.status(409).json({
-              ok: false,
-              build: BUILD_TAG,
-              error: "personal_user_id_conflict",
-              message: "El personal ya está vinculado a otro usuario.",
-              personal_id,
-              org_id,
-              existing_user_id: personal.user_id,
-              new_user_id: trackerUserId
-            });
-          }
-          if (!personal.user_id) {
-            // Patch personal record if user_id is not set
-            const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
-            const patchResp = await fetch(patchUrl, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
-              body: JSON.stringify({ user_id: trackerUserId }),
-            });
-            if (!patchResp.ok) {
-              console.warn("[invite-tracker] failed to patch personal.user_id", await patchResp.text());
-            }
+        }
+        if (!personal.user_id) {
+          // Patch personal record if user_id is not set
+          const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
+          const patchResp = await fetch(patchUrl, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+            body: JSON.stringify({ user_id: trackerUserId }),
+          });
+          if (!patchResp.ok) {
+            console.warn("[invite-tracker] failed to patch personal.user_id", await patchResp.text());
+            throw new Error("Failed to update personal.user_id after invite");
           }
         }
       } catch (e) {
-        console.warn("[invite-tracker] failed to patch personal.user_id", e);
+        console.warn("[invite-tracker] failed to ensure personal.user_id linkage", e);
         return res.status(500).json({
           ok: false,
           build: BUILD_TAG,

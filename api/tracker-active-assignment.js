@@ -52,73 +52,104 @@ export default async function handler(req, res) {
     }
 
     let personalRows = await personalResp.json();
-    console.log("[api/tracker-active-assignment] personal rows", personalRows);
+    console.log("[tracker-active-assignment] tracker_user_id:", trackerUserId, "org_id:", org_id);
     let personal = personalRows && personalRows[0];
-    let personal_id = null;
-    if (personal && personal.id && personal.user_id === trackerUserId) {
-      personal_id = personal.id;
+    if (personal) {
+      console.log("[tracker-active-assignment] personal resolved:", { id: personal.id, user_id: personal.user_id, email: personal.email });
     }
-
-    // MIGRATION: fallback to email only for migration period
-    if (!personal_id && payload?.email) {
-      const personalByEmailUrl = `${SUPABASE_URL}/rest/v1/personal?email=eq.${encodeURIComponent(payload.email)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id,user_id,email`;
-      const personalByEmailResp = await fetch(personalByEmailUrl, {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
+    if (!personal || !personal.id || personal.user_id !== trackerUserId) {
+      console.log("[tracker-active-assignment] No personal found for tracker_user_id", { org_id, trackerUserId });
+      console.log("[tracker-active-assignment] final reason: no_personal_found");
+      return res.status(200).json({
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: "no_personal_found",
+        org_id,
+        tracker_user_id: trackerUserId
       });
-      if (personalByEmailResp.ok) {
-        const personalByEmailRows = await personalByEmailResp.json();
-        console.log("[api/tracker-active-assignment] personal by email rows (MIGRATION ONLY)", personalByEmailRows);
-        const fallbackPersonal = personalByEmailRows && personalByEmailRows[0];
-        if (fallbackPersonal && fallbackPersonal.id) {
-          personal_id = fallbackPersonal.id;
-        }
-      }
     }
+    const personal_id = personal.id;
 
-    if (!personal_id) {
-      console.log("[api/tracker-active-assignment] No linked personal found", { org_id, trackerUserId, personalRows });
-      return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_linked_personal", org_id, trackerUserId });
-    }
-
-    // 2. Join tracker_assignments with asignaciones, but use asignaciones as source of truth
-    // Only consider tracker_assignments that are active and reference an active asignacion
-    const joinUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&select=*,asignacion:asignacion_id(*)`;
-    const joinResp = await fetch(joinUrl, {
+    // 2. Find active tracker_assignments for this tracker_user_id and org_id
+    const nowIso = new Date().toISOString();
+    const today = nowIso.slice(0, 10);
+    const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&select=*`;
+    const trackerAssignmentsResp = await fetch(trackerAssignmentsUrl, {
       headers: {
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
       },
     });
-    if (!joinResp.ok) {
-      console.log("[api/tracker-active-assignment] join fetch error", joinUrl, joinResp.status);
-      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando join tracker_assignments/asignaciones' });
+    if (!trackerAssignmentsResp.ok) {
+      console.log("[api/tracker-active-assignment] tracker_assignments fetch error", trackerAssignmentsUrl, trackerAssignmentsResp.status);
+      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
     }
-    const joinRows = await joinResp.json();
-    console.log("[api/tracker-active-assignment] join rows", joinRows);
-    // Find the first tracker_assignment whose asignacion is valid and active (using asignaciones.start_time/end_time)
-    const valid = joinRows.find(row => row.asignacion &&
-      row.asignacion.personal_id === personal_id &&
-      !row.asignacion.is_deleted &&
-      ["activa", "activa"].includes(row.asignacion.status || row.asignacion.estado) &&
-      row.asignacion.start_time <= nowIso &&
-      row.asignacion.end_time >= nowIso
-    );
-    if (valid) {
-      // Use asignacion as the source of truth
+    const trackerAssignmentsRows = await trackerAssignmentsResp.json();
+    // Safe debug log for tracker assignments count
+    console.log("[tracker-active-assignment] tracker_assignments found:", Array.isArray(trackerAssignmentsRows) ? trackerAssignmentsRows.length : 0);
+    // Find the first assignment that is active for the current date/time
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const today = nowIso.slice(0, 10);
+    const activeAssignment = trackerAssignmentsRows && trackerAssignmentsRows.find(row => {
+      if (row.active !== true) return false;
+      // Validate by period_tstz (Postgres tstzrange)
+      if (row.period_tstz && typeof row.period_tstz === 'string') {
+        // Expect format: ["2026-03-28T00:00:00+00:00","2026-03-29T00:00:00+00:00")
+        const m = row.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
+        if (m && m[1] && m[2]) {
+          return nowIso >= m[1] && nowIso < m[2];
+        }
+      }
+      // Validate by period (date range string)
+      if (row.period && typeof row.period === 'string') {
+        // Expect format: ["2026-03-28","2026-03-29")
+        const m = row.period.match(/\["(.+?)","(.+?)"[)\]]/);
+        if (m && m[1] && m[2]) {
+          return today >= m[1] && today < m[2];
+        }
+      }
+      // Validate by start_date/end_date (date only)
+      if (row.start_date && row.end_date) {
+        return row.start_date <= today && row.end_date >= today;
+      }
+      if (row.start_date && !row.end_date) {
+        return row.start_date <= today;
+      }
+      if (!row.start_date && row.end_date) {
+        return row.end_date >= today;
+      }
+      // If no range fields, treat as not active
+      return false;
+    });
+    if (activeAssignment) {
+      console.log("[tracker-active-assignment] active tracker assignment found:", { id: activeAssignment.id, tracker_user_id: activeAssignment.tracker_user_id, org_id: activeAssignment.org_id });
+      console.log("[tracker-active-assignment] final reason: assignment_found");
+    } else {
+      console.log("[tracker-active-assignment] final reason: no_active_assignment");
+    }
+    if (!activeAssignment) {
       return res.status(200).json({
         ok: true,
-        active: true,
-        assignment: valid.asignacion,
-        reason: "tracker_assignment_joined",
-        tracker_user_id: trackerUserId,
+        active: false,
+        assignment: null,
+        reason: "no_active_assignment",
         org_id,
-        tracker_assignment_id: valid.id || null,
-        assignment_id: valid.asignacion.id || null
+        tracker_user_id: trackerUserId,
+        personal_id
       });
     }
+    return res.status(200).json({
+      ok: true,
+      active: true,
+      assignment: activeAssignment,
+      reason: "assignment_found",
+      org_id,
+      tracker_user_id: trackerUserId,
+      personal_id,
+      assignment_id: activeAssignment.id
+    });
     }
 
     // 3. Fallback: direct query to asignaciones (in case tracker_assignments is missing or not linked)
