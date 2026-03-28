@@ -108,7 +108,7 @@ export default function InvitarTracker() {
   const [loadingAssignments, setLoadingAssignments] = useState(false);
 
   const [people, setPeople] = useState([]);
-  const [selectedKey, setSelectedKey] = useState("");
+  const [selectedPersonId, setSelectedPersonId] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [assignments, setAssignments] = useState([]);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
@@ -167,10 +167,9 @@ export default function InvitarTracker() {
   }, [entitlementsLoading, isFree]);
 
   const selectedPerson = useMemo(() => {
-    const key = normalizeEmail(selectedKey);
-    if (!key) return null;
-    return people.find((p) => normalizeEmail(p?.email) === key) || null;
-  }, [people, selectedKey]);
+    if (!selectedPersonId) return null;
+    return people.find((p) => String(p.id) === String(selectedPersonId)) || null;
+  }, [people, selectedPersonId]);
 
   const selectedAssignment = useMemo(() => {
     const id = String(selectedAssignmentId || "").trim();
@@ -287,9 +286,10 @@ export default function InvitarTracker() {
   }, [orgId, t, entitlementsLoading, isFree]);
 
   useEffect(() => {
-    if (!selectedKey) return;
-    setEmailInput(selectedKey);
-  }, [selectedKey]);
+    if (!selectedPersonId) return;
+    const person = people.find((p) => String(p.id) === String(selectedPersonId));
+    setEmailInput(person?.email || "");
+  }, [selectedPersonId, people]);
 
   useEffect(() => {
     let cancelled = false;
@@ -733,11 +733,12 @@ export default function InvitarTracker() {
 
             <select
               className="mt-1 w-full rounded-xl border px-3 py-2 bg-white text-gray-900"
-              value={selectedKey}
+              value={selectedPersonId}
               onChange={(e) => {
-                const v = normalizeEmail(e.target.value);
-                setSelectedKey(v);
-                setEmailInput(v);
+                const v = e.target.value;
+                setSelectedPersonId(v);
+                const person = people.find((p) => String(p.id) === String(v));
+                setEmailInput(person?.email || "");
                 setSelectedAssignmentId("");
                 setOkMsg(null);
                 setErrMsg(null);
@@ -745,16 +746,11 @@ export default function InvitarTracker() {
               disabled={loadingPeople || people.length === 0}
             >
               <option value="">{selectPlaceholder}</option>
-
-              {people.map((p) => {
-                const email = normalizeEmail(p?.email || "");
-                if (!email) return null;
-                return (
-                  <option key={p.id} value={email}>
-                    {pickPersonalLabel(p)}
-                  </option>
-                );
-              })}
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {pickPersonalLabel(p)}
+                </option>
+              ))}
             </select>
 
             <p className="mt-2 text-xs text-slate-600">
