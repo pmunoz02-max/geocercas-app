@@ -447,14 +447,7 @@ export default function InvitarTracker() {
       return;
     }
 
-    if (!selectedAssignmentId) {
-      setErrMsg(
-        t("inviteTracker.errors.noAssignment", {
-          defaultValue: "Debes seleccionar una asignación activa.",
-        })
-      );
-      return;
-    }
+
 
     try {
       setBusy(true);
