@@ -234,14 +234,25 @@ export default function AsignacionesPage() {
   function handleEdit(row) {
     setError("");
     setSuccess("");
+    setEndTimeError("");
+
     setEditingId(row?.id || null);
-    setSelectedPersonId(row?.personal_id || row?.id_personal || "");
-    setSelectedGeocercaId(row?.geofence_id || row?.geocerca_id || "");
-    setSelectedActivityId(row?.activity_id || "");
-    setStartTime(row?.start_time ? new Date(row.start_time).toISOString().slice(0, 16) : "");
-    setEndTime(row?.end_time ? new Date(row.end_time).toISOString().slice(0, 16) : "");
-    setStatus(row?.status || "active");
-    setFreqMin(row?.frecuencia_envio_sec ? Math.round(row.frecuencia_envio_sec / 60) : 5);
+    setSelectedPersonId(String(row?.personal_id || ""));
+    setSelectedGeocercaId(String(row?.geofence_id || row?.geocerca_id || ""));
+    setSelectedActivityId(String(row?.activity_id || ""));
+    setStartTime(row?.start_time ? row.start_time.slice(0, 16) : "");
+    setEndTime(row?.end_time ? row.end_time.slice(0, 16) : "");
+
+    const rowStatus = String(row?.status || row?.estado || "").toLowerCase();
+    setStatus(rowStatus === "inactive" || rowStatus === "inactiva" ? "inactive" : "active");
+
+    setFreqMin(
+      row?.frecuencia_envio_sec
+        ? Math.round(Number(row.frecuencia_envio_sec) / 60)
+        : 5
+    );
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleToggleStatus(row) {
@@ -470,26 +481,28 @@ export default function AsignacionesPage() {
             >
               {saving ? (editingId ? "Actualizando..." : "Guardando...") : (editingId ? "Actualizar asignación" : "Guardar asignación")}
             </button>
-            {editingId && (
-              <button
-                type="button"
-                className="inline-flex items-center rounded-lg bg-gray-200 px-4 py-2 text-gray-800 font-medium hover:bg-gray-300 border border-gray-300"
-                onClick={() => {
-                  setEditingId(null);
-                  setSelectedPersonId("");
-                  setSelectedGeocercaId("");
-                  setSelectedActivityId("");
-                  setStartTime("");
-                  setEndTime("");
-                  setEndTimeError("");
-                  setStatus("active");
-                  setFreqMin(5);
-                }}
-              >
-                Cancelar
-              </button>
-            )}
           </div>
+          {editingId ? (
+            <button
+              type="button"
+              onClick={() => {
+                setEditingId(null);
+                setSelectedPersonId("");
+                setSelectedGeocercaId("");
+                setSelectedActivityId("");
+                setStartTime("");
+                setEndTime("");
+                setEndTimeError("");
+                setStatus("active");
+                setFreqMin(5);
+                setError("");
+                setSuccess("");
+              }}
+              className="ml-2 inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 font-medium hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+          ) : null}
         </form>
       </div>
 

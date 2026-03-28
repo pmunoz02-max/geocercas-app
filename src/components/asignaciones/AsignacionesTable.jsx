@@ -282,13 +282,13 @@ export default function AsignacionesTable({
                           }
                           title={
                             estado === "activa" || estado === "active"
-                              ? t("asignaciones.actions.deactivate", { defaultValue: "Desactivar" })
-                              : t("asignaciones.actions.activate", { defaultValue: "Activar" })
+                              ? "Desactivar"
+                              : "Activar"
                           }
                         >
                           {estado === "activa" || estado === "active"
-                            ? t("asignaciones.actions.deactivate", { defaultValue: "Desactivar" })
-                            : t("asignaciones.actions.activate", { defaultValue: "Activar" })}
+                            ? "Desactivar"
+                            : "Activar"}
                         </button>
                       ) : (
                         <span
