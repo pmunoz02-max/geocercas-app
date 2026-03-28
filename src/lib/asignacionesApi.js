@@ -104,6 +104,3 @@ export async function deleteAsignacion(id) {
 }
 
 
-export async function deleteAsignacion(id, orgId = null) {
-  return apiFetch("DELETE", withActiveOrg({ id }, orgId));
-}
