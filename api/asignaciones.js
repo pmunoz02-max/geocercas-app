@@ -143,6 +143,8 @@ export default async function handler(req, res) {
         personal_org_ids: Array.isArray(personal)
           ? [...new Set(personal.map(p => p.org_id))]
           : [],
+        geocercas_count: Array.isArray(geocercas) ? geocercas.length : -1,
+        first_geocerca: Array.isArray(geocercas) && geocercas.length > 0 ? geocercas[0] : null,
       },
     },
   });

@@ -91,12 +91,14 @@ export default function AsignacionesPage() {
       }));
 
       const rawGeocercas = catalogs.geocercas || catalogs.geofences || [];
+      console.log("[DEBUG] rawGeocercas", rawGeocercas);
       const normalizedGeocercas = (rawGeocercas || []).map((g) => ({
         ...g,
         id: g?.id ?? null,
         nombre: g?.nombre ?? g?.name ?? "",
         name: g?.name ?? g?.nombre ?? "",
       }));
+      console.log("[DEBUG] normalizedGeocercas", normalizedGeocercas);
 
       const rawActividades = catalogs.activities || catalogs.actividades || [];
       const normalizedActividades = (rawActividades || []).map((a) => ({
