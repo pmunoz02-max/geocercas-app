@@ -46,14 +46,32 @@ export default async function handler(req, res) {
   console.log("[api/tracker-active-assignment] start", { hasAuth: !!authHeader, org_id });
   console.log("[api/tracker-active-assignment] tracker_user_id", trackerUserId);
 
-  // Nueva lógica: asignaciones + personal
+  // Nueva lógica: tracker_assignments primero, luego fallback a personal/asignaciones
   try {
     const serviceKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_SERVICE_KEY ||
       SUPABASE_ANON_KEY;
 
-    // 1. Buscar en tabla personal
+    // 1. Buscar asignación activa en tracker_assignments
+    const nowIso = new Date().toISOString();
+    const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&start_date=lte.${nowIso.slice(0,10)}&or=(end_date.gte.${nowIso.slice(0,10)},end_date.is.null)&select=*`;
+    const trackerAssignmentsResp = await fetch(trackerAssignmentsUrl, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    });
+    if (!trackerAssignmentsResp.ok) {
+      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
+    }
+    const trackerAssignmentsRows = await trackerAssignmentsResp.json();
+    const trackerAssignment = trackerAssignmentsRows && trackerAssignmentsRows[0];
+    if (trackerAssignment) {
+      return res.status(200).json({ ok: true, active: true, assignment: trackerAssignment });
+    }
+
+    // 2. Fallback: Buscar en tabla personal
     const personalUrl = `${SUPABASE_URL}/rest/v1/personal?user_id=eq.${encodeURIComponent(trackerUserId)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id`;
     const personalResp = await fetch(personalUrl, {
       headers: {
@@ -71,8 +89,7 @@ export default async function handler(req, res) {
     }
     const personal_id = personal.id;
 
-    // 2. Buscar asignación activa
-    const nowIso = new Date().toISOString();
+    // 3. Buscar asignación activa en asignaciones
     const asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?org_id=eq.${encodeURIComponent(org_id)}&personal_id=eq.${encodeURIComponent(personal_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=*`;
     const asignacionesResp = await fetch(asignacionesUrl, {
       headers: {
