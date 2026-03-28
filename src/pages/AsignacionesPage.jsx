@@ -123,6 +123,8 @@ export default function AsignacionesPage() {
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Debug state for counts
+  const [debugCounts, setDebugCounts] = useState({ personas: 0, geocercas: 0, actividades: 0, asignaciones: 0 });
   useEffect(() => {
     if (!activeOrgId) return;
     loadAll();
@@ -130,23 +132,19 @@ export default function AsignacionesPage() {
 
   async function loadAll() {
     try {
+      console.log("[AsignacionesPage] getAsignacionesBundle request org_id:", activeOrgId);
       const result = await getAsignacionesBundle(activeOrgId);
-
+      console.log("[AsignacionesPage] raw bundle response:", result);
       if (result?.error) {
         throw new Error(result.error.message || "Error al cargar asignaciones");
       }
-
       const next = extractBundle(result);
-
-      console.log("[AsignacionesPage] raw bundle result:", result);
-      console.log("[AsignacionesPage] extracted bundle:", {
+      setDebugCounts({
         personas: next.personas.length,
         geocercas: next.geocercas.length,
         actividades: next.actividades.length,
         asignaciones: next.asignaciones.length,
       });
-
-      // Actualizar siempre con lo extraído
       setPersonas(next.personas);
       setGeocercas(next.geocercas);
       setActividades(next.actividades);
@@ -377,6 +375,10 @@ export default function AsignacionesPage() {
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
+      {/* Debug banner */}
+      <div style={{ background: '#f5f5f5', border: '2px solid #eab308', color: '#92400e', padding: 8, borderRadius: 8, marginBottom: 16, fontSize: 14, fontWeight: 500 }}>
+        <span>DEBUG: org_id=<b>{String(activeOrgId)}</b> | personas: <b>{debugCounts.personas}</b> | geocercas: <b>{debugCounts.geocercas}</b> | actividades: <b>{debugCounts.actividades}</b> | asignaciones: <b>{debugCounts.asignaciones}</b></span>
+      </div>
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
         <h2 className="text-2xl font-semibold text-gray-900 mb-4">
           {editingId ? "Editar asignación" : "Nueva asignación"}
