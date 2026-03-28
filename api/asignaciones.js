@@ -284,10 +284,13 @@ export default async function handler(req, res) {
     let asignaciones = [];
     const requested_org_id = q.org_id || q.orgId || null;
     if (requested_org_id) {
+      console.log(`[GET /api/asignaciones] requested_org_id:`, requested_org_id);
       // Personal
       try {
+        const personalTable = "personal";
+        const personalFilters = { org_id: requested_org_id, is_deleted: false, vigente: true };
         const { data: personalData, error: personalError } = await supabase
-          .from("personal")
+          .from(personalTable)
           .select("id,nombre,apellido,email,org_id")
           .eq("org_id", requested_org_id)
           .eq("is_deleted", false)
@@ -299,20 +302,26 @@ export default async function handler(req, res) {
         } else {
           personal = [];
         }
-      } catch { personal = []; }
+        console.log(`[GET /api/asignaciones] table: ${personalTable}, filters:`, personalFilters, `count:`, personal.length);
+      } catch (err) { personal = []; console.log(`[GET /api/asignaciones] table: personal ERROR`, err); }
 
       // Geofences
       try {
+        const geofencesTable = "geofences";
         let geofencesArr = [];
         let hasIsDeleted = false;
         try {
-          const { data: meta, error: metaError } = await supabase.from("geofences").select("is_deleted").limit(1);
+          const { data: meta, error: metaError } = await supabase.from(geofencesTable).select("is_deleted").limit(1);
           if (!metaError && Array.isArray(meta) && meta.length > 0 && Object.prototype.hasOwnProperty.call(meta[0], "is_deleted")) {
             hasIsDeleted = true;
           }
         } catch {}
-        let geofencesQuery = supabase.from("geofences").select("id,name").eq("org_id", requested_org_id).eq("active", true);
-        if (hasIsDeleted) geofencesQuery = geofencesQuery.eq("is_deleted", false);
+        let geofencesQuery = supabase.from(geofencesTable).select("id,name").eq("org_id", requested_org_id).eq("active", true);
+        let geofencesFilters = { org_id: requested_org_id, active: true };
+        if (hasIsDeleted) {
+          geofencesQuery = geofencesQuery.eq("is_deleted", false);
+          geofencesFilters.is_deleted = false;
+        }
         const { data: geofencesData, error: geofencesError } = await geofencesQuery.order("name", { ascending: true });
         if (!geofencesError && Array.isArray(geofencesData)) {
           geofencesArr = geofencesData.map(g => ({ id: g.id, name: g.name || null }));
@@ -320,12 +329,15 @@ export default async function handler(req, res) {
           geofencesArr = [];
         }
         geofences = geofencesArr;
-      } catch { geofences = []; }
+        console.log(`[GET /api/asignaciones] table: ${geofencesTable}, filters:`, geofencesFilters, `count:`, geofences.length);
+      } catch (err) { geofences = []; console.log(`[GET /api/asignaciones] table: geofences ERROR`, err); }
 
       // Activities
       try {
+        const activitiesTable = "activities";
+        const activitiesFilters = { org_id: requested_org_id };
         const { data: activitiesData, error: activitiesError } = await supabase
-          .from("activities")
+          .from(activitiesTable)
           .select("id,name")
           .eq("org_id", requested_org_id)
           .order("name", { ascending: true });
@@ -334,12 +346,15 @@ export default async function handler(req, res) {
         } else {
           activities = [];
         }
-      } catch { activities = []; }
+        console.log(`[GET /api/asignaciones] table: ${activitiesTable}, filters:`, activitiesFilters, `count:`, activities.length);
+      } catch (err) { activities = []; console.log(`[GET /api/asignaciones] table: activities ERROR`, err); }
 
       // Asignaciones
       try {
+        const asignacionesTable = "asignaciones";
+        const asignacionesFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
         const { data: asignacionesData, error: asignacionesError } = await supabase
-          .from("asignaciones")
+          .from(asignacionesTable)
           .select("*")
           .eq("org_id", requested_org_id)
           .or("is_deleted.is.false,is_deleted.is.null")
@@ -349,7 +364,8 @@ export default async function handler(req, res) {
         } else {
           asignaciones = [];
         }
-      } catch { asignaciones = []; }
+        console.log(`[GET /api/asignaciones] table: ${asignacionesTable}, filters:`, asignacionesFilters, `count:`, asignaciones.length);
+      } catch (err) { asignaciones = []; console.log(`[GET /api/asignaciones] table: asignaciones ERROR`, err); }
     }
 
     return send(res, 200, {
