@@ -106,6 +106,42 @@ export default async function handler(req, res) {
       }
 
       // Si no, actualizar otros campos (sin crear filas nuevas)
+      // Validar traslape de fechas para la misma persona (excluyendo el id actual)
+      const { personal_id, start_time, end_time } = fields;
+      if (personal_id && start_time) {
+        // Usar los valores editados (nuevos) para el rango a validar
+        const newStart = start_time;
+        const newEnd = end_time || start_time;
+        // Buscar traslapes: (startA <= newEnd) && (endA >= newStart)
+        let overlapQuery = supabase
+          .from("asignaciones")
+          .select("id,start_time,end_time")
+          .eq("personal_id", personal_id)
+          .eq("is_deleted", false)
+          .neq("id", id);
+        const { data: overlapRows, error: overlapError } = await overlapQuery;
+        if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
+        // Check overlap in JS for robust date handling
+        const overlap = Array.isArray(overlapRows) && overlapRows.some(a => {
+          const aStart = a.start_time ? new Date(a.start_time) : null;
+          const aEnd = a.end_time ? new Date(a.end_time) : null;
+          const nStart = newStart ? new Date(newStart) : null;
+          const nEnd = newEnd ? new Date(newEnd) : null;
+          if (!aStart || !nStart) return false;
+          if (nEnd && aEnd) {
+            return aStart <= nEnd && aEnd >= nStart;
+          } else if (nEnd && !aEnd) {
+            return aStart <= nEnd && nStart <= aStart;
+          } else if (!nEnd && aEnd) {
+            return aEnd >= nStart && nStart <= aEnd;
+          } else {
+            return aStart.getTime() === nStart.getTime();
+          }
+        });
+        if (overlap) {
+          return send(res, 409, { ok: false, error: "overlap", message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.", overlap_ids: overlapRows.map(r => r.id) });
+        }
+      }
       const { error } = await supabase
         .from("asignaciones")
         .update(fields)
