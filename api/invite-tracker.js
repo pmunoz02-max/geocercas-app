@@ -248,13 +248,22 @@ export default async function handler(req, res) {
       json = { raw: text };
     }
 
-    // After creating tracker, always link personal.user_id to tracker_user_id for the same org_id
-    // If a matching personal record exists with user_id null, update it. If it exists with a different user_id, throw a conflict error.
-    // Never leave personal.user_id null after a successful tracker invite.
+    // After creating tracker, only link personal.user_id if tracker_user_id is present in invite response
+    // If tracker_user_id is missing, do NOT patch personal and return error
     if (personal_id && json && json.ok !== false) {
+      const trackerUserId = json.user_id || json.tracker_user_id || null;
+      if (!trackerUserId) {
+        console.warn("[invite-tracker] No tracker_user_id returned from invite, aborting personal patch", { personal_id, org_id, invite_response: json });
+        return res.status(500).json({
+          ok: false,
+          build: BUILD_TAG,
+          error: "tracker_user_id_missing",
+          message: "No tracker_user_id returned from invite. Cannot link personal record.",
+          personal_id,
+          org_id
+        });
+      }
       try {
-        const trackerUserId = json.user_id || json.tracker_user_id || null;
-        if (!trackerUserId) throw new Error("No tracker_user_id returned from invite");
         // Fetch current personal record to check user_id
         const getUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,user_id`;
         const getResp = await fetch(getUrl, {

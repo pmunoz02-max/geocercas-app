@@ -93,3 +93,9 @@ WHERE (u.email_count > 1 OR (p.user_id IS NOT NULL AND p.user_id <> u.user_ids[1
 - Only update when the email is unique in auth.users and personal.user_id is null.
 - Never overwrite a different existing user_id.
 - Log all conflicts for review.
+
+## Invite-Tracker: Enforcing tracker_user_id Linkage
+
+- The invite-tracker endpoint must **always** resolve and return a valid `tracker_user_id` (the auth user id) before attempting to patch or update `personal.user_id`.
+- If no `tracker_user_id` is available from the invite or user creation process, the request **must fail** and no changes to `personal` are allowed.
+- This ensures that `personal.user_id` is only ever set when a valid, persistent auth user exists, preventing orphaned or inconsistent links.
