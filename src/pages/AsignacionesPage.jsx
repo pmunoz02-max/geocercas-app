@@ -41,6 +41,8 @@ export default function AsignacionesPage() {
   const [status, setStatus] = useState("active");
   const [freqMin, setFreqMin] = useState(5);
 
+  const [editingId, setEditingId] = useState(null);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
@@ -203,7 +205,13 @@ export default function AsignacionesPage() {
     };
 
     try {
-      await createAsignacion(payload, activeOrgId);
+      if (editingId) {
+        await updateAsignacion(editingId, payload, activeOrgId);
+        setSuccess("Asignación actualizada correctamente.");
+      } else {
+        await createAsignacion(payload, activeOrgId);
+        setSuccess("Asignación guardada correctamente.");
+      }
       await loadAll();
 
       setSelectedPersonId("");
@@ -214,34 +222,26 @@ export default function AsignacionesPage() {
       setEndTimeError("");
       setStatus("active");
       setFreqMin(5);
-
-      setSuccess("Asignación guardada correctamente.");
+      setEditingId(null);
     } catch (e2) {
       console.error(e2);
-      setError(e2?.message || "Error al guardar asignación.");
+      setError(e2?.message || (editingId ? "Error al actualizar asignación." : "Error al guardar asignación."));
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleEdit(row) {
-    try {
-      setError("");
-      setSuccess("");
-
-      const id = row?.id;
-      if (!id) return;
-
-      const patch = { ...row };
-      delete patch.id;
-
-      await updateAsignacion(id, patch, activeOrgId);
-      await loadAll();
-      setSuccess("Asignación actualizada correctamente.");
-    } catch (e) {
-      console.error(e);
-      setError(e?.message || "Error al editar asignación.");
-    }
+  function handleEdit(row) {
+    setError("");
+    setSuccess("");
+    setEditingId(row?.id || null);
+    setSelectedPersonId(row?.personal_id || row?.id_personal || "");
+    setSelectedGeocercaId(row?.geofence_id || row?.geocerca_id || "");
+    setSelectedActivityId(row?.activity_id || "");
+    setStartTime(row?.start_time ? new Date(row.start_time).toISOString().slice(0, 16) : "");
+    setEndTime(row?.end_time ? new Date(row.end_time).toISOString().slice(0, 16) : "");
+    setStatus(row?.status || "active");
+    setFreqMin(row?.frecuencia_envio_sec ? Math.round(row.frecuencia_envio_sec / 60) : 5);
   }
 
   async function handleToggleStatus(row) {
@@ -293,7 +293,7 @@ export default function AsignacionesPage() {
     <div className="p-4 max-w-6xl mx-auto">
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
         <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-          Nueva asignación
+          {editingId ? "Editar asignación" : "Nueva asignación"}
         </h2>
 
         {error ? (
@@ -462,14 +462,33 @@ export default function AsignacionesPage() {
             </div>
           </div>
 
-          <div>
+          <div className="flex gap-2">
             <button
               type="submit"
               disabled={saving}
               className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-60"
             >
-              {saving ? "Guardando..." : "Guardar asignación"}
+              {saving ? (editingId ? "Actualizando..." : "Guardando...") : (editingId ? "Actualizar asignación" : "Guardar asignación")}
             </button>
+            {editingId && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-lg bg-gray-200 px-4 py-2 text-gray-800 font-medium hover:bg-gray-300 border border-gray-300"
+                onClick={() => {
+                  setEditingId(null);
+                  setSelectedPersonId("");
+                  setSelectedGeocercaId("");
+                  setSelectedActivityId("");
+                  setStartTime("");
+                  setEndTime("");
+                  setEndTimeError("");
+                  setStatus("active");
+                  setFreqMin(5);
+                }}
+              >
+                Cancelar
+              </button>
+            )}
           </div>
         </form>
       </div>
