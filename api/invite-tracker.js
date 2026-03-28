@@ -213,6 +213,7 @@ export default async function handler(req, res) {
       `${String(supabaseUrl).replace(/\/$/, "")}` +
       `/functions/v1/send-tracker-invite-brevo`;
 
+    // Always include personal_id in tracker creation payload, even if no assignment_id
     const started = Date.now();
     const upstream = await fetch(edgeUrl, {
       method: "POST",
@@ -233,7 +234,7 @@ export default async function handler(req, res) {
         name,
         role,
         assignment_id,
-        personal_id,
+        personal_id, // always present if resolved
       }),
     });
 
