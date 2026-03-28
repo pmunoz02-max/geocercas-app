@@ -6,7 +6,6 @@ import {
   toggleAsignacionStatus,
   deleteAsignacion,
 } from "../lib/asignacionesApi";
-import { getGeocercasCatalog } from "../lib/geocercasCatalog";
 import { useAuth } from "@/context/auth.js";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable.jsx";
 
@@ -67,10 +66,7 @@ export default function AsignacionesPage() {
 
   async function loadAll() {
     try {
-      const [{ data, error }, geocercasApi] = await Promise.all([
-        getAsignacionesBundle(activeOrgId),
-        getGeocercasCatalog(activeOrgId),
-      ]);
+      const { data, error } = await getAsignacionesBundle(activeOrgId);
 
       if (error) {
         throw new Error(error.message || "Error al cargar asignaciones");
@@ -94,8 +90,7 @@ export default function AsignacionesPage() {
             .join(" "),
       }));
 
-      // Geocercas desde API canónico
-      const rawGeocercas = geocercasApi || [];
+      const rawGeocercas = catalogs.geocercas || catalogs.geofences || [];
       console.log("[DEBUG] rawGeocercas", rawGeocercas);
       const normalizedGeocercas = (rawGeocercas || []).map((g) => ({
         ...g,
