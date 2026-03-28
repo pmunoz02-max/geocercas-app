@@ -325,6 +325,25 @@ export default async function handler(req, res) {
       return send(res, 200, { ok: true });
     }
 
+
+    if (method === "POST") {
+      // Create new assignment in asignaciones table
+      const fields = req.body || {};
+      // Always rebuild period column using tstzrange before saving
+      if (fields.start_time && fields.end_time) {
+        const startTz = new Date(fields.start_time).toISOString();
+        const endTz = new Date(fields.end_time).toISOString();
+        fields.period = `tstzrange('${startTz}','${endTz}','[)')`;
+      } else {
+        delete fields.period;
+      }
+      const { error } = await supabase
+        .from("asignaciones")
+        .insert([fields]);
+      if (error) return send(res, 500, { ok: false, error: error.message });
+      return send(res, 201, { ok: true });
+    }
+
     if (method !== "GET") {
       return send(res, 405, {
         ok: false,
