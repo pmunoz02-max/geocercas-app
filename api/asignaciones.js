@@ -89,12 +89,13 @@ export default async function handler(req, res) {
       if (!personalError && Array.isArray(personalData)) {
         personal = personalData;
       }
-      // Geocercas desde tabla geofences (canónica)
+      // Geocercas desde tabla geofences (canónica, igual que pantalla Geocerca)
       const { data: geocercasData, error: geocercasError } = await supabase
         .from("geofences")
-        .select("id,name,org_id,active")
+        .select("id,name")
         .eq("org_id", requested_org_id)
         .eq("active", true)
+        .eq("is_deleted", false)
         .order("name", { ascending: true });
       if (!geocercasError && Array.isArray(geocercasData)) {
         geocercas = geocercasData.map(g => ({
