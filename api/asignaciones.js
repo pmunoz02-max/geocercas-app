@@ -112,12 +112,13 @@ export default async function handler(req, res) {
         activities = activitiesData;
       }
 
-      // Asignaciones desde tabla asignaciones
+      // Asignaciones desde tabla real, filtrado y ordenado
       const { data: asignacionesData, error: asignacionesError } = await supabase
         .from("asignaciones")
         .select("*")
         .eq("org_id", requested_org_id)
-        .eq("is_deleted", false);
+        .eq("is_deleted", false)
+        .order("created_at", { ascending: false });
       if (!asignacionesError && Array.isArray(asignacionesData)) {
         asignaciones = asignacionesData;
       }
