@@ -236,7 +236,9 @@ export default function AsignacionesTable({
                 const freqMin = row.frecuencia_envio_sec ? Math.round(row.frecuencia_envio_sec / 60) : "";
                 const inicio = formatDateTimeLocal(row.start_time);
                 const fin = formatDateTimeLocal(row.end_time);
-                const estado = (row.status || row.estado || '').toLowerCase();
+                const rawStatus = String(row.status || row.estado || '').toLowerCase();
+                const isActive = rawStatus === 'active' || rawStatus === 'activa';
+                const isInactive = rawStatus === 'inactive' || rawStatus === 'inactiva';
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
@@ -275,25 +277,19 @@ export default function AsignacionesTable({
                           type="button"
                           onClick={() => onToggleStatus(row)}
                           className={
-                            (estado === "activa" || estado === "active"
+                            (isActive
                               ? "bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
                               : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200") +
                             " inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-blue-500"
                           }
-                          title={
-                            estado === "activa" || estado === "active"
-                              ? "Desactivar"
-                              : "Activar"
-                          }
+                          title={isActive ? "Desactivar" : isInactive ? "Activar" : "Activar"}
                         >
-                          {estado === "activa" || estado === "active"
-                            ? "Desactivar"
-                            : "Activar"}
+                          {isActive ? "Desactivar" : isInactive ? "Activar" : "Activar"}
                         </button>
                       ) : (
                         <span
                           className={
-                            estado === "activa" || estado === "active"
+                            isActive
                               ? "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200"
                               : "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200"
                           }
