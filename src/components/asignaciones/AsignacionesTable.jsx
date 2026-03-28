@@ -294,7 +294,7 @@ export default function AsignacionesTable({
                               : "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200"
                           }
                         >
-                          {estado === "activa" || estado === "active"
+                          {isActive
                             ? t("asignaciones.actions.active", { defaultValue: "Activa" })
                             : t("asignaciones.actions.inactive", { defaultValue: "Inactiva" })}
                         </span>

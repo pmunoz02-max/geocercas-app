@@ -263,15 +263,13 @@ export default function AsignacionesPage() {
       const id = row?.id;
       if (!id) return;
 
-      const current =
-        String(row?.status || row?.estado || "").toLowerCase() === "active" ||
-        String(row?.status || row?.estado || "").toLowerCase() === "activa"
-          ? "active"
-          : "inactive";
-
+      // Normalizar status actual
+      const rawStatus = String(row?.status || row?.estado || "").toLowerCase();
+      const isActive = rawStatus === "active" || rawStatus === "activa";
+      const current = isActive ? "active" : "inactive";
       const next = current === "active" ? "inactive" : "active";
 
-      await toggleAsignacionStatus(id, next, activeOrgId);
+      await toggleAsignacionStatus(id, current, activeOrgId);
       await loadAll();
       setSuccess(
         next === "active"

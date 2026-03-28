@@ -86,8 +86,26 @@ export default async function handler(req, res) {
 
     if (method === "PATCH") {
       // PATCH: editar asignación o cambiar estado
-      const { id, ...fields } = req.body || {};
+      const { id, status, org_id, ...fields } = req.body || {};
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+
+      // Si se envía status, actualizar solo status (y org_id si viene)
+      if (typeof status !== "undefined") {
+        if (!org_id) return send(res, 400, { ok: false, error: "missing_org_id" });
+        const { data, error } = await supabase
+          .from("asignaciones")
+          .update({ status })
+          .eq("id", id)
+          .eq("org_id", org_id)
+          .eq("is_deleted", false)
+          .select()
+          .single();
+        if (error) return send(res, 500, { ok: false, error: error.message });
+        if (!data) return send(res, 404, { ok: false, error: "not_found" });
+        return send(res, 200, { ok: true, asignacion: data });
+      }
+
+      // Si no, actualizar otros campos (sin crear filas nuevas)
       const { error } = await supabase
         .from("asignaciones")
         .update(fields)

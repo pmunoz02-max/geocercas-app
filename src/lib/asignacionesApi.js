@@ -97,11 +97,15 @@ export async function updateAsignacion(id, fields = {}) {
 }
 
 // Cambia el estado activa/inactiva de una asignación
-export async function toggleAsignacionStatus(id, currentStatus) {
-  if (!id) return { data: null, error: { message: "missing_id" } };
+export async function toggleAsignacionStatus(id, currentStatus, orgId = null) {
+  if (!id) throw new Error("missing_id");
   // Solo acepta 'active' o 'inactive' para el backend
   const newStatus = currentStatus === "active" ? "inactive" : "active";
-  return apiFetch("PATCH", { id, status: newStatus });
+  const result = await apiFetch("PATCH", { id, status: newStatus, org_id: orgId });
+  if (result.error) {
+    throw new Error(result.error.message || "Error toggling asignacion status");
+  }
+  return result.data;
 }
 
 // Eliminación lógica (is_deleted=true)
