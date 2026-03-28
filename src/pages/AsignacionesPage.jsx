@@ -90,7 +90,6 @@ export default function AsignacionesPage() {
     selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
 
   const selectedTrackerUserId = selectedPerson?.user_id ?? null;
-  const showNoTrackerWarning = !!selectedPerson && !selectedTrackerUserId;
 
   async function handleSubmit() {
     setError("");
@@ -178,18 +177,13 @@ export default function AsignacionesPage() {
             return (
               <option key={personId} value={personId}>
                 {label}
-                {!p?.user_id ? " — sin tracker" : ""}
               </option>
             );
           })}
         </select>
       </div>
 
-      {showNoTrackerWarning && (
-        <div className="mt-2 mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          Esta persona aún no tiene tracker vinculado. La asignación se guardará, pero el tracking no se activará hasta vincular un usuario/tracker.
-        </div>
-      )}
+
 
       <div className="mb-3">
         <label>Geocerca</label>
