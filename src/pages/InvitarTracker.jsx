@@ -476,7 +476,7 @@ export default function InvitarTracker() {
         lang,
         name,
         caller_jwt,
-        assignment_id: selectedAssignmentId,
+        assignment_id: selectedAssignmentId || null,
       };
 
       const res = await fetch("/api/invite-tracker", {

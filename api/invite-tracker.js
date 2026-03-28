@@ -110,17 +110,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid assignment_id" });
     }
 
-    // --- Validación QUIRÚRGICA: solo invitar si assignment_id es válido y corresponde al email ---
-    if (!assignment_id) {
-      return res.status(422).json({
-        ok: false,
-        build: BUILD_TAG,
-        code: "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
-        message: "Solo se puede invitar a trackers con asignaciones activas",
-        error: "assignment_id requerido"
-      });
-    }
-
     const nowIso = new Date().toISOString();
     let asignacion = null;
     try {

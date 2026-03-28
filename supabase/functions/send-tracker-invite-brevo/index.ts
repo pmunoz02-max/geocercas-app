@@ -526,6 +526,8 @@ serve(async (req) => {
         orgId: org_id,
         fallbackLabel: copy.valueNotSpecified,
       });
+    } else {
+      // If no assignment_id, leave assignmentDetails as default (valueNotSpecified)
     }
 
     const nowIso = new Date().toISOString();
