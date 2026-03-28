@@ -78,56 +78,78 @@ export default async function handler(req, res) {
   try {
     if (requested_org_id) {
       // Personal
-      const { data: personalData, error: personalError } = await supabase
-        .from("personal")
-        .select("id,nombre,apellido,email,org_id")
-        .eq("org_id", requested_org_id)
-        .eq("is_deleted", false)
-        .eq("vigente", true)
-        .order("apellido", { ascending: true })
-        .order("nombre", { ascending: true });
-      if (!personalError && Array.isArray(personalData)) {
-        personal = personalData;
-      }
-      // Geofences: solo tabla geofences, sin fallback legacy
-      let geofences = [];
-      // Detectar si existe columna is_deleted
-      let hasIsDeleted = false;
       try {
-        const { data: meta, error: metaError } = await supabase.from("geofences").select("is_deleted").limit(1);
-        if (!metaError && Array.isArray(meta) && meta.length > 0 && Object.prototype.hasOwnProperty.call(meta[0], "is_deleted")) {
-          hasIsDeleted = true;
+        const { data: personalData, error: personalError } = await supabase
+          .from("personal")
+          .select("id,nombre,apellido,email,org_id")
+          .eq("org_id", requested_org_id)
+          .eq("is_deleted", false)
+          .eq("vigente", true)
+          .order("apellido", { ascending: true })
+          .order("nombre", { ascending: true });
+        if (!personalError && Array.isArray(personalData)) {
+          personal = personalData;
+        } else {
+          personal = [];
         }
-      } catch {}
-      let geofencesQuery = supabase.from("geofences").select("id,name").eq("org_id", requested_org_id).eq("active", true);
-      if (hasIsDeleted) geofencesQuery = geofencesQuery.eq("is_deleted", false);
-      const { data: geofencesData, error: geofencesError } = await geofencesQuery.order("name", { ascending: true });
-      if (!geofencesError && Array.isArray(geofencesData)) {
-        geofences = geofencesData.map(g => ({ id: g.id, name: g.name || null }));
-      }
-      // Activities desde tabla activities
-      const { data: activitiesData, error: activitiesError } = await supabase
-        .from("activities")
-        .select("id,name")
-        .eq("org_id", requested_org_id)
-        .order("name", { ascending: true });
-      if (!activitiesError && Array.isArray(activitiesData)) {
-        activities = activitiesData;
-      }
+      } catch { personal = []; }
 
-      // Asignaciones desde tabla real, filtrado y ordenado
-      const { data: asignacionesData, error: asignacionesError } = await supabase
-        .from("asignaciones")
-        .select("*")
-        .eq("org_id", requested_org_id)
-        .eq("is_deleted", false)
-        .order("created_at", { ascending: false });
-      if (!asignacionesError && Array.isArray(asignacionesData)) {
-        asignaciones = asignacionesData;
-      }
+      // Geofences
+      try {
+        let geofencesArr = [];
+        let hasIsDeleted = false;
+        try {
+          const { data: meta, error: metaError } = await supabase.from("geofences").select("is_deleted").limit(1);
+          if (!metaError && Array.isArray(meta) && meta.length > 0 && Object.prototype.hasOwnProperty.call(meta[0], "is_deleted")) {
+            hasIsDeleted = true;
+          }
+        } catch {}
+        let geofencesQuery = supabase.from("geofences").select("id,name").eq("org_id", requested_org_id).eq("active", true);
+        if (hasIsDeleted) geofencesQuery = geofencesQuery.eq("is_deleted", false);
+        const { data: geofencesData, error: geofencesError } = await geofencesQuery.order("name", { ascending: true });
+        if (!geofencesError && Array.isArray(geofencesData)) {
+          geofencesArr = geofencesData.map(g => ({ id: g.id, name: g.name || null }));
+        } else {
+          geofencesArr = [];
+        }
+        geofences = geofencesArr;
+      } catch { geofences = []; }
+
+      // Activities
+      try {
+        const { data: activitiesData, error: activitiesError } = await supabase
+          .from("activities")
+          .select("id,name")
+          .eq("org_id", requested_org_id)
+          .order("name", { ascending: true });
+        if (!activitiesError && Array.isArray(activitiesData)) {
+          activities = activitiesData;
+        } else {
+          activities = [];
+        }
+      } catch { activities = []; }
+
+      // Asignaciones
+      try {
+        const { data: asignacionesData, error: asignacionesError } = await supabase
+          .from("asignaciones")
+          .select("*")
+          .eq("org_id", requested_org_id)
+          .eq("is_deleted", false)
+          .order("created_at", { ascending: false });
+        if (!asignacionesError && Array.isArray(asignacionesData)) {
+          asignaciones = asignacionesData;
+        } else {
+          asignaciones = [];
+        }
+      } catch { asignaciones = []; }
     }
   } catch (e) {
-    // Si hay error, personal y geocercas quedan como []
+    // Si hay error, todo queda como []
+    personal = [];
+    geofences = [];
+    activities = [];
+    asignaciones = [];
   }
 
   return send(res, 200, {
@@ -139,15 +161,7 @@ export default async function handler(req, res) {
         activities,
       },
       asignaciones,
-      debug: {
-        requested_org_id,
-        personal_count: Array.isArray(personal) ? personal.length : -1,
-        personal_org_ids: Array.isArray(personal)
-          ? [...new Set(personal.map(p => p.org_id))]
-          : [],
-        geocercas_count: Array.isArray(geocercas) ? geocercas.length : -1,
-        first_geocerca: Array.isArray(geocercas) && geocercas.length > 0 ? geocercas[0] : null,
-      },
+      // debug info opcional si se requiere
     },
   });
 }
