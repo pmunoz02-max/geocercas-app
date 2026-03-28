@@ -53,35 +53,9 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_KEY ||
       SUPABASE_ANON_KEY;
 
-    // 1. Buscar asignación activa en tracker_assignments
     const nowIso = new Date().toISOString();
-    const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&start_date=lte.${nowIso.slice(0,10)}&or=(end_date.gte.${nowIso.slice(0,10)},end_date.is.null)&select=*`;
-    const trackerAssignmentsResp = await fetch(trackerAssignmentsUrl, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-      },
-    });
-    if (!trackerAssignmentsResp.ok) {
-      console.log("[api/tracker-active-assignment] tracker_assignments fetch error", trackerAssignmentsUrl, trackerAssignmentsResp.status);
-      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
-    }
-    const trackerAssignmentsRows = await trackerAssignmentsResp.json();
-    console.log("[api/tracker-active-assignment] tracker_assignments rows", trackerAssignmentsRows);
-    const trackerAssignment = trackerAssignmentsRows && trackerAssignmentsRows[0];
-    if (trackerAssignment) {
-      return res.status(200).json({ ok: true, active: true, assignment: trackerAssignment });
-    } else {
-      console.log("[api/tracker-active-assignment] No tracker_assignment found", {
-        org_id,
-        trackerUserId,
-        nowIso,
-        trackerAssignmentsUrl,
-        trackerAssignmentsRows
-      });
-    }
 
-    // 2. Fallback: Buscar en tabla personal
+    // 1. Find personal_id for this tracker user
     const personalUrl = `${SUPABASE_URL}/rest/v1/personal?user_id=eq.${encodeURIComponent(trackerUserId)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id`;
     const personalResp = await fetch(personalUrl, {
       headers: {
@@ -102,7 +76,35 @@ export default async function handler(req, res) {
     }
     const personal_id = personal.id;
 
-    // 3. Buscar asignación activa en asignaciones
+    // 2. Join tracker_assignments with asignaciones, but use asignaciones as source of truth
+    // Only consider tracker_assignments that are active and reference an active asignacion
+    const joinUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&start_date=lte.${nowIso.slice(0,10)}&or=(end_date.gte.${nowIso.slice(0,10)},end_date.is.null)&select=*,asignacion:asignacion_id(*)`;
+    const joinResp = await fetch(joinUrl, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    });
+    if (!joinResp.ok) {
+      console.log("[api/tracker-active-assignment] join fetch error", joinUrl, joinResp.status);
+      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando join tracker_assignments/asignaciones' });
+    }
+    const joinRows = await joinResp.json();
+    console.log("[api/tracker-active-assignment] join rows", joinRows);
+    // Find the first tracker_assignment whose asignacion is valid and active
+    const valid = joinRows.find(row => row.asignacion &&
+      row.asignacion.personal_id === personal_id &&
+      !row.asignacion.is_deleted &&
+      ["activa", "activa"].includes(row.asignacion.status || row.asignacion.estado) &&
+      row.asignacion.start_time <= nowIso &&
+      row.asignacion.end_time >= nowIso
+    );
+    if (valid) {
+      // Use asignacion as the source of truth
+      return res.status(200).json({ ok: true, active: true, assignment: valid.asignacion });
+    }
+
+    // 3. Fallback: direct query to asignaciones (in case tracker_assignments is missing or not linked)
     const asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?org_id=eq.${encodeURIComponent(org_id)}&personal_id=eq.${encodeURIComponent(personal_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=*`;
     const asignacionesResp = await fetch(asignacionesUrl, {
       headers: {
