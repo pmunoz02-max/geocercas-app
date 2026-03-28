@@ -1,3 +1,5 @@
+// Reexporta helper de catálogo de geocercas
+export { getGeocercasCatalog } from "./geocercasCatalog";
 // src/lib/asignacionesApi.js
 // CANONICO: solo /api/asignaciones (cookie tg_at)
 
