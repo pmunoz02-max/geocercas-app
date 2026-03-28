@@ -268,10 +268,9 @@ export default function InvitarTracker() {
         if (asignsErr) throw asignsErr;
         const validPersonalIds = new Set((asigns || []).map(a => a.personal_id));
 
-        // 3. Filtrar personas que tengan al menos una asignación activa y vigente
-        const invitables = filtered.filter(p => validPersonalIds.has(p.id));
-        invitables.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
-        setPeople(invitables);
+        // 3. Usar la lista filtrada de personas (no requerir asignación existente)
+        filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
+        setPeople(filtered);
       } catch (e) {
         if (cancelled) return;
         setPeople([]);
