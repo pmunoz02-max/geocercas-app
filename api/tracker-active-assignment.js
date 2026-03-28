@@ -23,8 +23,8 @@ export default async function handler(req, res) {
   const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return res.status(500).json({ ok: false, error: 'missing_env', message: 'Missing SUPABASE_URL or SUPABASE_ANON_KEY' });
-  }
+      // 1. Require personal.user_id linkage for this tracker user in this org
+      const personalUrl = `${SUPABASE_URL}/rest/v1/personal?user_id=eq.${encodeURIComponent(trackerUserId)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id,user_id`;
 
   // Decodificar sub del JWT
   function decodeJwtPayload(token) {
@@ -39,29 +39,12 @@ export default async function handler(req, res) {
   }
   const payload = decodeJwtPayload(jwt);
   const trackerUserId = payload?.sub;
-  if (!trackerUserId) {
-    return res.status(401).json({ ok: false, error: "invalid_tracker_jwt" });
-  }
-
-  console.log("[api/tracker-active-assignment] start", { hasAuth: !!authHeader, org_id });
-  console.log("[api/tracker-active-assignment] tracker_user_id", trackerUserId);
-
-  // Nueva lógica: tracker_assignments primero, luego fallback a personal/asignaciones
-  try {
-    const serviceKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_SERVICE_KEY ||
-      SUPABASE_ANON_KEY;
-
-    const nowIso = new Date().toISOString();
-
-    // 1. Find personal_id for this tracker user
-    const personalUrl = `${SUPABASE_URL}/rest/v1/personal?user_id=eq.${encodeURIComponent(trackerUserId)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id`;
-    const personalResp = await fetch(personalUrl, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-      },
+      // Only resolve assignment if personal exists and user_id is linked
+      if (!personal || !personal.id || !personal.user_id || personal.user_id !== trackerUserId) {
+        console.log("[api/tracker-active-assignment] No linked personal found", { org_id, trackerUserId, personalRows });
+        return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_linked_personal", org_id, trackerUserId });
+      }
+      const personal_id = personal.id;
     });
     if (!personalResp.ok) {
       console.log("[api/tracker-active-assignment] personal fetch error", personalUrl, personalResp.status);
@@ -71,10 +54,14 @@ export default async function handler(req, res) {
     let personalRows = await personalResp.json();
     console.log("[api/tracker-active-assignment] personal rows", personalRows);
     let personal = personalRows && personalRows[0];
+    let personal_id = null;
+    if (personal && personal.id && personal.user_id === trackerUserId) {
+      personal_id = personal.id;
+    }
 
-    // Fallback: if not found by user_id, try by email (from JWT)
-    if ((!personal || !personal.id) && payload?.email) {
-      const personalByEmailUrl = `${SUPABASE_URL}/rest/v1/personal?email=eq.${encodeURIComponent(payload.email)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id`;
+    // MIGRATION: fallback to email only for migration period
+    if (!personal_id && payload?.email) {
+      const personalByEmailUrl = `${SUPABASE_URL}/rest/v1/personal?email=eq.${encodeURIComponent(payload.email)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id,user_id,email`;
       const personalByEmailResp = await fetch(personalByEmailUrl, {
         headers: {
           apikey: serviceKey,
@@ -83,18 +70,18 @@ export default async function handler(req, res) {
       });
       if (personalByEmailResp.ok) {
         const personalByEmailRows = await personalByEmailResp.json();
-        console.log("[api/tracker-active-assignment] personal by email rows", personalByEmailRows);
-        if (personalByEmailRows && personalByEmailRows[0]) {
-          personal = personalByEmailRows[0];
+        console.log("[api/tracker-active-assignment] personal by email rows (MIGRATION ONLY)", personalByEmailRows);
+        const fallbackPersonal = personalByEmailRows && personalByEmailRows[0];
+        if (fallbackPersonal && fallbackPersonal.id) {
+          personal_id = fallbackPersonal.id;
         }
       }
     }
 
-    if (!personal || !personal.id) {
-      console.log("[api/tracker-active-assignment] No personal found", { org_id, trackerUserId, personalRows });
-      return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_personal_found", org_id, trackerUserId });
+    if (!personal_id) {
+      console.log("[api/tracker-active-assignment] No linked personal found", { org_id, trackerUserId, personalRows });
+      return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_linked_personal", org_id, trackerUserId });
     }
-    const personal_id = personal.id;
 
     // 2. Join tracker_assignments with asignaciones, but use asignaciones as source of truth
     // Only consider tracker_assignments that are active and reference an active asignacion
