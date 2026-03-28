@@ -206,6 +206,8 @@ export default function AsignacionesPage() {
 
     try {
       if (editingId) {
+        // Log the update payload before calling updateAsignacion
+        console.log("[AsignacionesPage] update payload:", payload);
         await updateAsignacion(editingId, payload, activeOrgId);
         await loadAll();
         setSuccess("Asignación actualizada correctamente.");

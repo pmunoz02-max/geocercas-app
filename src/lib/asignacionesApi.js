@@ -93,7 +93,26 @@ export async function createAsignacion(payload = {}, orgId = null) {
 // Actualiza campos de una asignación existente
 export async function updateAsignacion(id, fields = {}) {
   if (!id) return { data: null, error: { message: "missing_id" } };
-  return apiFetch("PATCH", { id, ...fields });
+  // Always include id in PATCH body
+  const updatePayload = { id };
+  // Only map start_date/end_date if present in fields
+  if (fields.start_time !== undefined) {
+    updatePayload.start_date = fields.start_time ? new Date(fields.start_time).toISOString().slice(0, 10) : null;
+  }
+  if (fields.end_time !== undefined) {
+    updatePayload.end_date = fields.end_time ? new Date(fields.end_time).toISOString().slice(0, 10) : null;
+  }
+  // Copy all other fields, but do not overwrite with null unless explicitly provided
+  for (const key of Object.keys(fields)) {
+    if (key === "start_time" || key === "end_time") continue;
+    if (fields[key] !== undefined) updatePayload[key] = fields[key];
+  }
+  // Log the update payload
+  console.log("[updateAsignacion] PATCH payload:", updatePayload);
+  const response = await apiFetch("PATCH", updatePayload);
+  // Log the update response
+  console.log("[updateAsignacion] PATCH response:", response);
+  return response;
 }
 
 // Cambia el estado activa/inactiva de una asignación
