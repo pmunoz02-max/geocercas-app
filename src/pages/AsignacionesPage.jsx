@@ -187,6 +187,32 @@ export default function AsignacionesPage() {
       return;
     }
 
+    // Validate no overlap with other assignments for the same person
+    const newStart = startTime ? new Date(startTime) : null;
+    const newEnd = endTime ? new Date(endTime) : null;
+    const overlap = asignaciones.some(a => {
+      if (a.personal_id !== resolvedSelectedPersonId) return false;
+      if (editingId && a.id === editingId) return false; // skip self when editing
+      const aStart = a.start_time ? new Date(a.start_time) : null;
+      const aEnd = a.end_time ? new Date(a.end_time) : null;
+      if (!aStart || !newStart) return false;
+      // Overlap if (startA <= endB) && (endA >= startB)
+      if (newEnd && aEnd) {
+        return aStart <= newEnd && aEnd >= newStart;
+      } else if (newEnd && !aEnd) {
+        return aStart <= newEnd && newStart <= aStart;
+      } else if (!newEnd && aEnd) {
+        return aEnd >= newStart && newStart <= aEnd;
+      } else {
+        return aStart.getTime() === newStart.getTime();
+      }
+    });
+    if (overlap) {
+      setError("Ya existe otra asignación para esta persona en el rango de fechas seleccionado. Modifica las fechas para evitar traslapes.");
+      setSaving(false);
+      return;
+    }
+
     setSaving(true);
 
     const payload = {
