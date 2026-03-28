@@ -2,7 +2,32 @@
 // App Geocercas (PREVIEW) — Invite Tracker Proxy
 // BUILD: invite-proxy-v18_ASSIGNMENT_DETAILS_20260311
 
+
 import crypto from "crypto";
+import fetch from "node-fetch";
+
+// Helper: resolve user_id by email using Supabase admin API
+async function resolveUserIdByEmail({ email, serviceKey, supabaseUrl }) {
+  const perPage = 200;
+  const maxPages = 20;
+  const emailLc = String(email || "").toLowerCase().trim();
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `${supabaseUrl}/auth/v1/admin/users?page=${page}&per_page=${perPage}&email=${encodeURIComponent(emailLc)}`;
+    const resp = await fetch(url, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+      },
+    });
+    if (!resp.ok) break;
+    const data = await resp.json();
+    const users = Array.isArray(data?.users) ? data.users : data;
+    const match = users.find((u) => String(u?.email || "").toLowerCase() === emailLc);
+    if (match?.id) return match.id;
+    if (!users.length || users.length < perPage) break;
+  }
+  return null;
+}
 
 const BUILD_TAG = "invite-proxy-v18_ASSIGNMENT_DETAILS_20260311";
 
@@ -248,20 +273,23 @@ export default async function handler(req, res) {
       json = { raw: text };
     }
 
-    // After creating tracker, only link personal.user_id if tracker_user_id is present in invite response
-    // If tracker_user_id is missing, do NOT patch personal and return error
+    // After creating tracker, always resolve tracker_user_id (from invite or existing user)
     if (personal_id && json && json.ok !== false) {
-      const trackerUserId = json.user_id || json.tracker_user_id || null;
+      let trackerUserId = json.user_id || json.tracker_user_id || null;
       if (!trackerUserId) {
-        console.warn("[invite-tracker] No tracker_user_id returned from invite, aborting personal patch", { personal_id, org_id, invite_response: json });
-        return res.status(500).json({
-          ok: false,
-          build: BUILD_TAG,
-          error: "tracker_user_id_missing",
-          message: "No tracker_user_id returned from invite. Cannot link personal record.",
-          personal_id,
-          org_id
-        });
+        // Fallback: resolve by email using admin listUsers
+        trackerUserId = await resolveUserIdByEmail({ email, serviceKey, supabaseUrl });
+        if (!trackerUserId) {
+          console.warn("[invite-tracker] No tracker_user_id returned from invite or found by email, aborting personal patch", { personal_id, org_id, invite_response: json });
+          return res.status(500).json({
+            ok: false,
+            build: BUILD_TAG,
+            error: "tracker_user_id_missing",
+            message: "No tracker_user_id returned from invite or found by email. Cannot link personal record.",
+            personal_id,
+            org_id
+          });
+        }
       }
       try {
         // Fetch current personal record to check user_id

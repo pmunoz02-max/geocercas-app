@@ -99,3 +99,15 @@ WHERE (u.email_count > 1 OR (p.user_id IS NOT NULL AND p.user_id <> u.user_ids[1
 - The invite-tracker endpoint must **always** resolve and return a valid `tracker_user_id` (the auth user id) before attempting to patch or update `personal.user_id`.
 - If no `tracker_user_id` is available from the invite or user creation process, the request **must fail** and no changes to `personal` are allowed.
 - This ensures that `personal.user_id` is only ever set when a valid, persistent auth user exists, preventing orphaned or inconsistent links.
+
+## Resolución de tracker_user_id en invite-tracker
+
+El endpoint `invite-tracker` debe resolver un `tracker_user_id` válido antes de hacer patch de `personal.user_id`.
+
+Orden obligatorio:
+1. intentar obtener `tracker_user_id` desde la respuesta del invite
+2. si el invite no devuelve user id, resolver el usuario existente en `auth.users` por email
+3. si ninguno de los dos caminos devuelve `tracker_user_id`, fallar la solicitud
+4. solo después actualizar `personal.user_id`
+
+Esto evita continuar el flujo con identidad incompleta.
