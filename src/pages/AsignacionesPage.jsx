@@ -12,7 +12,6 @@ import AsignacionesTable from "../components/asignaciones/AsignacionesTable.jsx"
 function personLabel(persona) {
   const nombre = persona?.nombre || "";
   const apellido = persona?.apellido || "";
-
   return (
     persona?.full_name?.trim() ||
     [nombre, apellido].filter(Boolean).join(" ").trim() ||
@@ -25,30 +24,79 @@ function actividadLabel(item) {
   return item?.name || item?.nombre || item?.title || "Sin nombre";
 }
 
-function normalizeBundleResponse(result) {
-  // getAsignacionesBundle normalmente devuelve { data, error }
-  // pero dejamos esto robusto por si cambia el wrapper.
-  const root = result?.data ?? result ?? {};
-  const bundle =
-    root?.catalogs && Array.isArray(root?.asignaciones)
-      ? root
-      : root?.data && root.data?.catalogs
-        ? root.data
-        : {};
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function extractBundle(result) {
+  // Casos posibles:
+  // 1) getAsignacionesBundle -> { data: { catalogs, asignaciones }, error: null }
+  // 2) fetch directo -> { ok, data: { catalogs, asignaciones } }
+  // 3) variantes con names ingles/español
+  const level0 = result ?? {};
+  const level1 = level0?.data ?? {};
+  const level2 = level1?.data ?? {};
+
+  const candidates = [level0, level1, level2];
+
+  for (const node of candidates) {
+    const catalogs = node?.catalogs ?? node?.catalog ?? node?.catalogos ?? null;
+
+    const personal =
+      asArray(catalogs?.personal).length > 0
+        ? catalogs.personal
+        : asArray(catalogs?.people).length > 0
+          ? catalogs.people
+          : asArray(node?.personal).length > 0
+            ? node.personal
+            : asArray(node?.people);
+
+    const geofences =
+      asArray(catalogs?.geofences).length > 0
+        ? catalogs.geofences
+        : asArray(catalogs?.geocercas).length > 0
+          ? catalogs.geocercas
+          : asArray(node?.geofences).length > 0
+            ? node.geofences
+            : asArray(node?.geocercas);
+
+    const activities =
+      asArray(catalogs?.activities).length > 0
+        ? catalogs.activities
+        : asArray(catalogs?.actividades).length > 0
+          ? catalogs.actividades
+          : asArray(node?.activities).length > 0
+            ? node.activities
+            : asArray(node?.actividades);
+
+    const asignaciones =
+      asArray(node?.asignaciones).length > 0
+        ? node.asignaciones
+        : asArray(node?.assignments).length > 0
+          ? node.assignments
+          : asArray(node?.rows);
+
+    if (
+      catalogs ||
+      personal.length > 0 ||
+      geofences.length > 0 ||
+      activities.length > 0 ||
+      asignaciones.length > 0
+    ) {
+      return {
+        personas: personal,
+        geocercas: geofences,
+        actividades: activities,
+        asignaciones,
+      };
+    }
+  }
 
   return {
-    personas: Array.isArray(bundle?.catalogs?.personal)
-      ? bundle.catalogs.personal
-      : [],
-    geocercas: Array.isArray(bundle?.catalogs?.geofences)
-      ? bundle.catalogs.geofences
-      : [],
-    actividades: Array.isArray(bundle?.catalogs?.activities)
-      ? bundle.catalogs.activities
-      : [],
-    asignaciones: Array.isArray(bundle?.asignaciones)
-      ? bundle.asignaciones
-      : [],
+    personas: [],
+    geocercas: [],
+    actividades: [],
+    asignaciones: [],
   };
 }
 
@@ -74,7 +122,6 @@ export default function AsignacionesPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!activeOrgId) return;
@@ -82,28 +129,24 @@ export default function AsignacionesPage() {
   }, [activeOrgId]);
 
   async function loadAll() {
-    if (!activeOrgId) return;
-
     try {
-      setLoading(true);
-
       const result = await getAsignacionesBundle(activeOrgId);
 
       if (result?.error) {
         throw new Error(result.error.message || "Error al cargar asignaciones");
       }
 
-      const next = normalizeBundleResponse(result);
+      const next = extractBundle(result);
 
-      console.log("[AsignacionesPage] bundle loaded:", {
-        org_id: activeOrgId,
+      console.log("[AsignacionesPage] raw bundle result:", result);
+      console.log("[AsignacionesPage] extracted bundle:", {
         personas: next.personas.length,
         geocercas: next.geocercas.length,
         actividades: next.actividades.length,
         asignaciones: next.asignaciones.length,
       });
 
-      // Actualizar exactamente con la forma devuelta por el API.
+      // Actualizar siempre con lo extraído
       setPersonas(next.personas);
       setGeocercas(next.geocercas);
       setActividades(next.actividades);
@@ -112,10 +155,6 @@ export default function AsignacionesPage() {
     } catch (e) {
       console.error("[AsignacionesPage] loadAll failed:", e);
       setError("Error al cargar datos de asignaciones.");
-      // No vaciar estado existente en caso de error:
-      // así evitamos desaparecer selects y tabla si el backend falla temporalmente.
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -213,22 +252,17 @@ export default function AsignacionesPage() {
 
     try {
       if (editingId) {
-        console.log("[AsignacionesPage] update payload:", payload);
         const result = await updateAsignacion(editingId, payload, activeOrgId);
-
         if (result?.error) {
           throw new Error(result.error.message || "Error al actualizar asignación");
         }
-
         await loadAll();
         setSuccess("Asignación actualizada correctamente.");
       } else {
         const result = await createAsignacion(payload, activeOrgId);
-
         if (result?.error) {
           throw new Error(result.error.message || "Error al guardar asignación");
         }
-
         await loadAll();
         setSuccess("Asignación guardada correctamente.");
 
@@ -374,7 +408,6 @@ export default function AsignacionesPage() {
               {personasDisponibles.map((p) => {
                 const id = p?.id ?? p?.personal_id ?? null;
                 if (!id) return null;
-
                 return (
                   <option key={id} value={id}>
                     {personLabel(p)}
@@ -518,7 +551,7 @@ export default function AsignacionesPage() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={saving || loading}
+              disabled={saving}
               className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-60"
             >
               {saving
