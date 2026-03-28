@@ -1,6 +1,8 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { createAsignacion, getAsignacionesBundle } from "../lib/asignacionesApi";
+﻿
+import { useEffect, useMemo, useState } from "react";
+import { createAsignacion, getAsignacionesBundle, updateAsignacion, toggleAsignacionStatus, deleteAsignacion } from "../lib/asignacionesApi";
 import { useAuth } from "@/context/auth.js";
+import AsignacionesTable from "../components/asignaciones/AsignacionesTable.jsx";
 
 export default function AsignacionesPage() {
   const { activeOrgId } = useAuth();
