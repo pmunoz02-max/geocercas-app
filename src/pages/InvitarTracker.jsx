@@ -826,10 +826,10 @@ export default function InvitarTracker() {
 
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId || !selectedAssignmentId}
+            disabled={busy || loadingPeople || !orgId}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId || !selectedAssignmentId
+              busy || loadingPeople || !orgId
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}
