@@ -107,7 +107,7 @@ export default async function handler(req, res) {
 
       // Si no, actualizar otros campos (sin crear filas nuevas)
       // Validar traslape de fechas para la misma persona (excluyendo el id actual)
-      // Fetch existing row to merge missing user id fields for overlap validation
+      // Fetch current assignment row to merge missing user fields for overlap validation
       let { tracker_user_id, personal_id, start_time, end_time, start_date, end_date, period, period_tstz } = fields;
       let existingRow = null;
       {
@@ -118,10 +118,12 @@ export default async function handler(req, res) {
           .single();
         if (!rowError && row) existingRow = row;
       }
-      // Merge missing user id fields from existing row
+      // Merge missing user id fields from current row
       if (!tracker_user_id && existingRow && existingRow.tracker_user_id) tracker_user_id = existingRow.tracker_user_id;
       if (!personal_id && existingRow && existingRow.personal_id) personal_id = existingRow.personal_id;
-      const overlapUserId = tracker_user_id || personal_id;
+      // Determine effective user field and id
+      let effectiveUserField = tracker_user_id ? "tracker_user_id" : (personal_id ? "personal_id" : null);
+      let overlapUserId = tracker_user_id || personal_id;
       // Use edited full datetime range if available
       let newStartDT = start_time ? new Date(start_time) : (start_date ? new Date(start_date) : null);
       let newEndDT = end_time ? new Date(end_time) : (end_date ? new Date(end_date) : newStartDT);
@@ -131,7 +133,7 @@ export default async function handler(req, res) {
         let overlapQuery = supabase
           .from("asignaciones")
           .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
-          .eq(tracker_user_id ? "tracker_user_id" : "personal_id", overlapUserId)
+          .eq(effectiveUserField, overlapUserId)
           .eq("is_deleted", false)
           .neq("id", id);
         const { data: overlapRows, error: overlapError } = await overlapQuery;
@@ -177,17 +179,59 @@ export default async function handler(req, res) {
               // Debug log with all relevant info
               console.log("[PATCH asignaciones] Overlap detected:", {
                 current_id: id,
-                tracker_user_id: tracker_user_id,
-                old_range: { start: aStartDT, end: aEndDT, period: a.period, period_tstz: a.period_tstz },
-                new_range: { start: newStartDT, end: newEndDT, period, period_tstz: newPeriodTstz },
-                conflicting_id: a.id
+                effective_user_field: effectiveUserField,
+                effective_user_id: overlapUserId,
+                new_start: newStartDT,
+                new_end: newEndDT,
+                conflicting_id: a.id,
+                conflicting_personal_id: a.personal_id,
+                conflicting_tracker_user_id: a.tracker_user_id,
+                conflicting_start: aStartDT,
+                conflicting_end: aEndDT
               });
               break;
             }
           }
         }
         if (foundConflict) {
-          return send(res, 409, { ok: false, error: "overlap", message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.", overlap_ids: [foundConflict.id] });
+          return send(res, 409, {
+            ok: false,
+            error: "overlap",
+            message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.",
+            overlap_ids: [foundConflict.id],
+            debug: {
+              current_id: id,
+              effective_user_field: effectiveUserField,
+              effective_user_id: overlapUserId,
+              new_start: newStartDT,
+              new_end: newEndDT,
+              conflicting_id: foundConflict.id,
+              conflicting_personal_id: foundConflict.personal_id,
+              conflicting_tracker_user_id: foundConflict.tracker_user_id,
+              conflicting_start: (() => {
+                if (foundConflict.period_tstz) {
+                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
+                  return m && m[1] ? m[1] : null;
+                } else if (foundConflict.start_time) {
+                  return foundConflict.start_time;
+                } else if (foundConflict.start_date) {
+                  return foundConflict.start_date;
+                }
+                return null;
+              })(),
+              conflicting_end: (() => {
+                if (foundConflict.period_tstz) {
+                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
+                  return m && m[2] ? m[2] : null;
+                } else if (foundConflict.end_time) {
+                  return foundConflict.end_time;
+                } else if (foundConflict.end_date) {
+                  return foundConflict.end_date;
+                }
+                return null;
+              })()
+            }
+          });
         }
       }
       const { error } = await supabase
