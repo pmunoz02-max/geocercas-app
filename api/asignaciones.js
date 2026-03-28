@@ -44,6 +44,7 @@ export default async function handler(req, res) {
   // Consulta mínima a personal
   let personal = [];
   let geocercas = [];
+  let activities = [];
   const requested_org_id = q.org_id || q.orgId || null;
   try {
     const { createClient } = await import("@supabase/supabase-js");
@@ -75,6 +76,15 @@ export default async function handler(req, res) {
           nombre: g.nombre || g.name || null
         }));
       }
+      // Activities desde tabla activities
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from("activities")
+        .select("id,name")
+        .eq("org_id", requested_org_id)
+        .order("name", { ascending: true });
+      if (!activitiesError && Array.isArray(activitiesData)) {
+        activities = activitiesData;
+      }
     }
   } catch (e) {
     // Si hay error, personal y geocercas quedan como []
@@ -86,6 +96,7 @@ export default async function handler(req, res) {
       catalogs: {
         personal,
         geocercas,
+        activities,
       },
       debug: {
         requested_org_id,
