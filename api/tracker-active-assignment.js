@@ -67,9 +67,29 @@ export default async function handler(req, res) {
       console.log("[api/tracker-active-assignment] personal fetch error", personalUrl, personalResp.status);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando personal' });
     }
-    const personalRows = await personalResp.json();
+
+    let personalRows = await personalResp.json();
     console.log("[api/tracker-active-assignment] personal rows", personalRows);
-    const personal = personalRows && personalRows[0];
+    let personal = personalRows && personalRows[0];
+
+    // Fallback: if not found by user_id, try by email (from JWT)
+    if ((!personal || !personal.id) && payload?.email) {
+      const personalByEmailUrl = `${SUPABASE_URL}/rest/v1/personal?email=eq.${encodeURIComponent(payload.email)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id`;
+      const personalByEmailResp = await fetch(personalByEmailUrl, {
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+        },
+      });
+      if (personalByEmailResp.ok) {
+        const personalByEmailRows = await personalByEmailResp.json();
+        console.log("[api/tracker-active-assignment] personal by email rows", personalByEmailRows);
+        if (personalByEmailRows && personalByEmailRows[0]) {
+          personal = personalByEmailRows[0];
+        }
+      }
+    }
+
     if (!personal || !personal.id) {
       console.log("[api/tracker-active-assignment] No personal found", { org_id, trackerUserId, personalRows });
       return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_personal_found", org_id, trackerUserId });
@@ -78,7 +98,7 @@ export default async function handler(req, res) {
 
     // 2. Join tracker_assignments with asignaciones, but use asignaciones as source of truth
     // Only consider tracker_assignments that are active and reference an active asignacion
-    const joinUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&start_date=lte.${nowIso.slice(0,10)}&or=(end_date.gte.${nowIso.slice(0,10)},end_date.is.null)&select=*,asignacion:asignacion_id(*)`;
+    const joinUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&select=*,asignacion:asignacion_id(*)`;
     const joinResp = await fetch(joinUrl, {
       headers: {
         apikey: serviceKey,
@@ -91,7 +111,7 @@ export default async function handler(req, res) {
     }
     const joinRows = await joinResp.json();
     console.log("[api/tracker-active-assignment] join rows", joinRows);
-    // Find the first tracker_assignment whose asignacion is valid and active
+    // Find the first tracker_assignment whose asignacion is valid and active (using asignaciones.start_time/end_time)
     const valid = joinRows.find(row => row.asignacion &&
       row.asignacion.personal_id === personal_id &&
       !row.asignacion.is_deleted &&
@@ -101,10 +121,22 @@ export default async function handler(req, res) {
     );
     if (valid) {
       // Use asignacion as the source of truth
-      return res.status(200).json({ ok: true, active: true, assignment: valid.asignacion });
+      return res.status(200).json({
+        ok: true,
+        active: true,
+        assignment: valid.asignacion,
+        reason: "tracker_assignment_joined",
+        tracker_user_id: trackerUserId,
+        org_id,
+        tracker_assignment_id: valid.id || null,
+        assignment_id: valid.asignacion.id || null
+      });
+    }
     }
 
     // 3. Fallback: direct query to asignaciones (in case tracker_assignments is missing or not linked)
+    // 3. Fallback: direct query to asignaciones (in case tracker_assignments is missing or not linked)
+    // Use asignaciones.start_time and end_time as the active window
     const asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?org_id=eq.${encodeURIComponent(org_id)}&personal_id=eq.${encodeURIComponent(personal_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=*`;
     const asignacionesResp = await fetch(asignacionesUrl, {
       headers: {
@@ -120,7 +152,16 @@ export default async function handler(req, res) {
     console.log("[api/tracker-active-assignment] asignaciones rows", asignacionesRows);
     const asignacion = asignacionesRows && asignacionesRows[0];
     if (asignacion) {
-      return res.status(200).json({ ok: true, active: true, assignment: asignacion });
+      return res.status(200).json({
+        ok: true,
+        active: true,
+        assignment: asignacion,
+        reason: "direct_asignacion",
+        tracker_user_id: trackerUserId,
+        org_id,
+        tracker_assignment_id: null,
+        assignment_id: asignacion.id || null
+      });
     } else {
       console.log("[api/tracker-active-assignment] No active asignacion found", {
         org_id,
@@ -130,7 +171,17 @@ export default async function handler(req, res) {
         asignacionesUrl,
         asignacionesRows
       });
-      return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_active_asignacion", org_id, trackerUserId, personal_id });
+      return res.status(200).json({
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: "no_active_asignacion",
+        tracker_user_id: trackerUserId,
+        org_id,
+        tracker_assignment_id: null,
+        assignment_id: null,
+        personal_id: personal_id || null
+      });
     }
   } catch (e) {
     console.log("[api/tracker-active-assignment] error", e);
