@@ -283,13 +283,19 @@ export default async function handler(req, res) {
     let activities = [];
     let asignaciones = [];
     const requested_org_id = q.org_id || q.orgId || null;
+    const debug = {
+      requested_org_id,
+      supabase_url_host: (supabase && supabase.restUrl) ? (() => { try { return new URL(supabase.restUrl).host; } catch { return null; } })() : null,
+      queries: []
+    };
     if (requested_org_id) {
-      console.log(`[GET /api/asignaciones] requested_org_id:`, requested_org_id);
       // Personal
+      const personalTable = "personal";
+      const personalFilters = { org_id: requested_org_id, is_deleted: false, vigente: true };
+      let personalError = null;
+      let personalCount = 0;
       try {
-        const personalTable = "personal";
-        const personalFilters = { org_id: requested_org_id, is_deleted: false, vigente: true };
-        const { data: personalData, error: personalError } = await supabase
+        const { data: personalData, error } = await supabase
           .from(personalTable)
           .select("id,nombre,apellido,email,org_id")
           .eq("org_id", requested_org_id)
@@ -297,19 +303,27 @@ export default async function handler(req, res) {
           .eq("vigente", true)
           .order("apellido", { ascending: true })
           .order("nombre", { ascending: true });
-        if (!personalError && Array.isArray(personalData)) {
+        if (!error && Array.isArray(personalData)) {
           personal = personalData;
+          personalCount = personal.length;
         } else {
           personal = [];
+          personalError = error ? error.message : 'Unknown error';
         }
-        console.log(`[GET /api/asignaciones] table: ${personalTable}, filters:`, personalFilters, `count:`, personal.length);
-      } catch (err) { personal = []; console.log(`[GET /api/asignaciones] table: personal ERROR`, err); }
+      } catch (err) {
+        personal = [];
+        personalError = err?.message || String(err);
+      }
+      debug.queries.push({ table: personalTable, filters: personalFilters, count: personalCount, error: personalError });
 
       // Geofences
+      const geofencesTable = "geofences";
+      let geofencesArr = [];
+      let hasIsDeleted = false;
+      let geofencesError = null;
+      let geofencesCount = 0;
+      let geofencesFilters = { org_id: requested_org_id, active: true };
       try {
-        const geofencesTable = "geofences";
-        let geofencesArr = [];
-        let hasIsDeleted = false;
         try {
           const { data: meta, error: metaError } = await supabase.from(geofencesTable).select("is_deleted").limit(1);
           if (!metaError && Array.isArray(meta) && meta.length > 0 && Object.prototype.hasOwnProperty.call(meta[0], "is_deleted")) {
@@ -317,55 +331,73 @@ export default async function handler(req, res) {
           }
         } catch {}
         let geofencesQuery = supabase.from(geofencesTable).select("id,name").eq("org_id", requested_org_id).eq("active", true);
-        let geofencesFilters = { org_id: requested_org_id, active: true };
         if (hasIsDeleted) {
           geofencesQuery = geofencesQuery.eq("is_deleted", false);
           geofencesFilters.is_deleted = false;
         }
-        const { data: geofencesData, error: geofencesError } = await geofencesQuery.order("name", { ascending: true });
-        if (!geofencesError && Array.isArray(geofencesData)) {
+        const { data: geofencesData, error } = await geofencesQuery.order("name", { ascending: true });
+        if (!error && Array.isArray(geofencesData)) {
           geofencesArr = geofencesData.map(g => ({ id: g.id, name: g.name || null }));
+          geofencesCount = geofencesArr.length;
         } else {
           geofencesArr = [];
+          geofencesError = error ? error.message : 'Unknown error';
         }
         geofences = geofencesArr;
-        console.log(`[GET /api/asignaciones] table: ${geofencesTable}, filters:`, geofencesFilters, `count:`, geofences.length);
-      } catch (err) { geofences = []; console.log(`[GET /api/asignaciones] table: geofences ERROR`, err); }
+      } catch (err) {
+        geofences = [];
+        geofencesError = err?.message || String(err);
+      }
+      debug.queries.push({ table: geofencesTable, filters: geofencesFilters, count: geofencesCount, error: geofencesError });
 
       // Activities
+      const activitiesTable = "activities";
+      const activitiesFilters = { org_id: requested_org_id };
+      let activitiesError = null;
+      let activitiesCount = 0;
       try {
-        const activitiesTable = "activities";
-        const activitiesFilters = { org_id: requested_org_id };
-        const { data: activitiesData, error: activitiesError } = await supabase
+        const { data: activitiesData, error } = await supabase
           .from(activitiesTable)
           .select("id,name")
           .eq("org_id", requested_org_id)
           .order("name", { ascending: true });
-        if (!activitiesError && Array.isArray(activitiesData)) {
+        if (!error && Array.isArray(activitiesData)) {
           activities = activitiesData;
+          activitiesCount = activities.length;
         } else {
           activities = [];
+          activitiesError = error ? error.message : 'Unknown error';
         }
-        console.log(`[GET /api/asignaciones] table: ${activitiesTable}, filters:`, activitiesFilters, `count:`, activities.length);
-      } catch (err) { activities = []; console.log(`[GET /api/asignaciones] table: activities ERROR`, err); }
+      } catch (err) {
+        activities = [];
+        activitiesError = err?.message || String(err);
+      }
+      debug.queries.push({ table: activitiesTable, filters: activitiesFilters, count: activitiesCount, error: activitiesError });
 
       // Assignments (tracker_assignments)
+      const assignmentsTable = "tracker_assignments";
+      const assignmentsFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
+      let assignmentsError = null;
+      let assignmentsCount = 0;
       try {
-        const assignmentsTable = "tracker_assignments";
-        const assignmentsFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
-        const { data: assignmentsData, error: assignmentsError } = await supabase
+        const { data: assignmentsData, error } = await supabase
           .from(assignmentsTable)
           .select("*")
           .eq("org_id", requested_org_id)
           .or("is_deleted.is.false,is_deleted.is.null")
           .order("created_at", { ascending: false });
-        if (!assignmentsError && Array.isArray(assignmentsData)) {
+        if (!error && Array.isArray(assignmentsData)) {
           asignaciones = assignmentsData;
+          assignmentsCount = asignaciones.length;
         } else {
           asignaciones = [];
+          assignmentsError = error ? error.message : 'Unknown error';
         }
-        console.log(`[GET /api/asignaciones] table: ${assignmentsTable}, filters:`, assignmentsFilters, `count:`, asignaciones.length);
-      } catch (err) { asignaciones = []; console.log(`[GET /api/asignaciones] table: tracker_assignments ERROR`, err); }
+      } catch (err) {
+        asignaciones = [];
+        assignmentsError = err?.message || String(err);
+      }
+      debug.queries.push({ table: assignmentsTable, filters: assignmentsFilters, count: assignmentsCount, error: assignmentsError });
     }
 
     return send(res, 200, {
@@ -378,6 +410,7 @@ export default async function handler(req, res) {
         },
         asignaciones,
       },
+      debug,
     });
   } catch (error) {
     console.error(error?.message);
