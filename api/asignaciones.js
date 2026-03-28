@@ -107,39 +107,74 @@ export default async function handler(req, res) {
 
       // Si no, actualizar otros campos (sin crear filas nuevas)
       // Validar traslape de fechas para la misma persona (excluyendo el id actual)
-      const { personal_id, start_time, end_time } = fields;
-      if (personal_id && start_time) {
-        // Usar los valores editados (nuevos) para el rango a validar
-        const newStart = start_time;
-        const newEnd = end_time || start_time;
-        // Buscar traslapes: (startA <= newEnd) && (endA >= newStart)
+      // Overlap validation: exclude current id, use full datetime ranges if available
+      const { tracker_user_id, personal_id, start_time, end_time, start_date, end_date, period, period_tstz } = fields;
+      const overlapUserId = tracker_user_id || personal_id;
+      // Use edited full datetime range if available
+      let newStartDT = start_time ? new Date(start_time) : (start_date ? new Date(start_date) : null);
+      let newEndDT = end_time ? new Date(end_time) : (end_date ? new Date(end_date) : newStartDT);
+      let newPeriodTstz = period_tstz || null;
+      if (overlapUserId && newStartDT) {
         let overlapQuery = supabase
           .from("asignaciones")
-          .select("id,start_time,end_time")
-          .eq("personal_id", personal_id)
+          .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
+          .eq(tracker_user_id ? "tracker_user_id" : "personal_id", overlapUserId)
           .eq("is_deleted", false)
           .neq("id", id);
         const { data: overlapRows, error: overlapError } = await overlapQuery;
         if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
-        // Check overlap in JS for robust date handling
-        const overlap = Array.isArray(overlapRows) && overlapRows.some(a => {
-          const aStart = a.start_time ? new Date(a.start_time) : null;
-          const aEnd = a.end_time ? new Date(a.end_time) : null;
-          const nStart = newStart ? new Date(newStart) : null;
-          const nEnd = newEnd ? new Date(newEnd) : null;
-          if (!aStart || !nStart) return false;
-          if (nEnd && aEnd) {
-            return aStart <= nEnd && aEnd >= nStart;
-          } else if (nEnd && !aEnd) {
-            return aStart <= nEnd && nStart <= aStart;
-          } else if (!nEnd && aEnd) {
-            return aEnd >= nStart && nStart <= aEnd;
-          } else {
-            return aStart.getTime() === nStart.getTime();
+        let foundConflict = null;
+        if (Array.isArray(overlapRows)) {
+          for (const a of overlapRows) {
+            // Prefer period_tstz for both, else use start_time/end_time, else fallback to date-only
+            let aStartDT = null, aEndDT = null, aPeriodTstz = null;
+            if (a.period_tstz) {
+              // Parse tstzrange: ["2026-03-28T00:00:00+00:00","2026-03-29T00:00:00+00:00")
+              const m = a.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
+              if (m && m[1]) aStartDT = new Date(m[1]);
+              if (m && m[2]) aEndDT = new Date(m[2]);
+              aPeriodTstz = a.period_tstz;
+            } else if (a.start_time) {
+              aStartDT = new Date(a.start_time);
+              aEndDT = a.end_time ? new Date(a.end_time) : aStartDT;
+            } else if (a.start_date) {
+              aStartDT = new Date(a.start_date);
+              aEndDT = a.end_date ? new Date(a.end_date) : aStartDT;
+            }
+            // Use new period_tstz if provided, else newStartDT/newEndDT
+            let overlap = false;
+            if (newPeriodTstz && aPeriodTstz) {
+              // Compare ranges: overlap if (aStart < newEnd) && (aEnd > newStart)
+              const mNew = newPeriodTstz.match(/\["(.+?)","(.+?)"[)\]]/);
+              const nStart = mNew && mNew[1] ? new Date(mNew[1]) : null;
+              const nEnd = mNew && mNew[2] ? new Date(mNew[2]) : null;
+              if (nStart && nEnd && aStartDT && aEndDT) {
+                overlap = aStartDT < nEnd && aEndDT > nStart;
+              }
+            } else if (newStartDT && newEndDT && aStartDT && aEndDT) {
+              // Compare full datetime
+              overlap = aStartDT < newEndDT && aEndDT > newStartDT;
+            }
+            // Only fallback to date-only if no time fields
+            else if (a.start_date && newStartDT && a.end_date && newEndDT) {
+              overlap = aStartDT <= newEndDT && aEndDT >= newStartDT;
+            }
+            if (overlap) {
+              foundConflict = a;
+              // Debug log with all relevant info
+              console.log("[PATCH asignaciones] Overlap detected:", {
+                current_id: id,
+                tracker_user_id: tracker_user_id,
+                old_range: { start: aStartDT, end: aEndDT, period: a.period, period_tstz: a.period_tstz },
+                new_range: { start: newStartDT, end: newEndDT, period, period_tstz: newPeriodTstz },
+                conflicting_id: a.id
+              });
+              break;
+            }
           }
-        });
-        if (overlap) {
-          return send(res, 409, { ok: false, error: "overlap", message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.", overlap_ids: overlapRows.map(r => r.id) });
+        }
+        if (foundConflict) {
+          return send(res, 409, { ok: false, error: "overlap", message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.", overlap_ids: [foundConflict.id] });
         }
       }
       const { error } = await supabase
