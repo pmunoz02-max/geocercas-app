@@ -63,12 +63,22 @@ export default async function handler(req, res) {
       },
     });
     if (!trackerAssignmentsResp.ok) {
+      console.log("[api/tracker-active-assignment] tracker_assignments fetch error", trackerAssignmentsUrl, trackerAssignmentsResp.status);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
     }
     const trackerAssignmentsRows = await trackerAssignmentsResp.json();
+    console.log("[api/tracker-active-assignment] tracker_assignments rows", trackerAssignmentsRows);
     const trackerAssignment = trackerAssignmentsRows && trackerAssignmentsRows[0];
     if (trackerAssignment) {
       return res.status(200).json({ ok: true, active: true, assignment: trackerAssignment });
+    } else {
+      console.log("[api/tracker-active-assignment] No tracker_assignment found", {
+        org_id,
+        trackerUserId,
+        nowIso,
+        trackerAssignmentsUrl,
+        trackerAssignmentsRows
+      });
     }
 
     // 2. Fallback: Buscar en tabla personal
@@ -80,12 +90,15 @@ export default async function handler(req, res) {
       },
     });
     if (!personalResp.ok) {
+      console.log("[api/tracker-active-assignment] personal fetch error", personalUrl, personalResp.status);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando personal' });
     }
     const personalRows = await personalResp.json();
+    console.log("[api/tracker-active-assignment] personal rows", personalRows);
     const personal = personalRows && personalRows[0];
     if (!personal || !personal.id) {
-      return res.status(200).json({ ok: true, active: false, assignment: null });
+      console.log("[api/tracker-active-assignment] No personal found", { org_id, trackerUserId, personalRows });
+      return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_personal_found", org_id, trackerUserId });
     }
     const personal_id = personal.id;
 
@@ -98,16 +111,27 @@ export default async function handler(req, res) {
       },
     });
     if (!asignacionesResp.ok) {
+      console.log("[api/tracker-active-assignment] asignaciones fetch error", asignacionesUrl, asignacionesResp.status);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando asignaciones' });
     }
     const asignacionesRows = await asignacionesResp.json();
+    console.log("[api/tracker-active-assignment] asignaciones rows", asignacionesRows);
     const asignacion = asignacionesRows && asignacionesRows[0];
     if (asignacion) {
       return res.status(200).json({ ok: true, active: true, assignment: asignacion });
     } else {
-      return res.status(200).json({ ok: true, active: false, assignment: null });
+      console.log("[api/tracker-active-assignment] No active asignacion found", {
+        org_id,
+        trackerUserId,
+        personal_id,
+        nowIso,
+        asignacionesUrl,
+        asignacionesRows
+      });
+      return res.status(200).json({ ok: true, active: false, assignment: null, reason: "no_active_asignacion", org_id, trackerUserId, personal_id });
     }
   } catch (e) {
+    console.log("[api/tracker-active-assignment] error", e);
     return res.status(500).json({ ok: false, error: 'backend_error', message: e.message });
   }
 }
