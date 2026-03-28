@@ -57,9 +57,40 @@
   a:visited {
     color: inherit;
   }
+
   .text-link:hover {
     text-decoration: underline;
   }
+}
+
+/* ---------- Mejora de legibilidad para formularios ---------- */
+@layer base {
+  input,
+  select,
+  textarea {
+    color: #1a202c; /* slate-900 */
+    background-color: #fff;
+    border: 1.5px solid #cbd5e1; /* slate-300, más visible */
+    box-shadow: none;
+    transition: border-color 0.18s;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: #a0aec0; /* gray-400 */
+    opacity: 1;
+  }
+  label {
+    color: #1e293b; /* slate-800 */
+    font-weight: 500;
+  }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    border-color: #64748b; /* slate-500 */
+    outline: 2px solid #38bdf8; /* sky-400 */
+    outline-offset: 1px;
+  }
+}
 
   a:focus-visible,
   button:focus-visible,
