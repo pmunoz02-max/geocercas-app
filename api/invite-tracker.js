@@ -247,6 +247,41 @@ export default async function handler(req, res) {
       json = { raw: text };
     }
 
+    // After creating tracker, insert tracker_assignments record if assignment_id exists
+    // If no assignment_id, allow tracker to run without assignment and enable future linking
+    if (assignment_id && personal_id && json && json.ok !== false) {
+      try {
+        // Fetch assignment details to get geofence_id, start_date, end_date
+        const assignmentUrl = `${supabaseUrl}/rest/v1/asignaciones?id=eq.${encodeURIComponent(assignment_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=geofence_id,start_time,end_time`;
+        const assignmentResp = await fetch(assignmentUrl, {
+          headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+        });
+        if (assignmentResp.ok) {
+          const rows = await assignmentResp.json();
+          const assignment = rows && rows[0];
+          if (assignment && assignment.geofence_id) {
+            const trackerAssignmentsUrl = `${supabaseUrl}/rest/v1/tracker_assignments`;
+            const insertBody = [{
+              org_id,
+              tracker_user_id: personal_id,
+              geofence_id: assignment.geofence_id,
+              start_date: assignment.start_time ? assignment.start_time.slice(0, 10) : null,
+              end_date: assignment.end_time ? assignment.end_time.slice(0, 10) : null,
+              active: true,
+            }];
+            await fetch(trackerAssignmentsUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+              body: JSON.stringify(insertBody),
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("[invite-tracker] failed to insert tracker_assignments", e);
+      }
+    }
+    // If no assignment_id, do nothing: tracker is created and can be linked to assignments later
+
     return res.status(upstream.status).json({
       ...(json || {}),
       _proxy: {

@@ -1214,6 +1214,30 @@ export default function TrackerGpsPage() {
     );
   }
 
+
+  // Blocked state: no active assignment
+  if (trackerReady && hasSession && assignmentWindowStatus !== "active") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
+          <h1 className="text-2xl font-bold mb-4">{tt("trackerGps.blocked.title", "Tracker blocked")}</h1>
+          <div className="text-lg text-amber-300 mb-2">
+            {tt("trackerGps.blocked.noActiveAssignment", "No active assignment found.")}
+          </div>
+          <div className="text-sm text-slate-300 mb-6">
+            {tt("trackerGps.blocked.instructions", "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error.")}
+          </div>
+          <button
+            onClick={() => navigate("/")}
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+          >
+            {tt("trackerGps.goHome", "Go to home")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
       <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
@@ -1229,7 +1253,6 @@ export default function TrackerGpsPage() {
                   <div>
                     {tt("trackerGps.lastSend", "Last send")}: {formattedLastSend}
                   </div>
-
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
                     {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt ({debug.send_fn})
                   </div>
@@ -1282,7 +1305,6 @@ export default function TrackerGpsPage() {
                     </div>
                   )}
                 </div>
-
                 <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
                   <summary className="cursor-pointer text-sm text-slate-200">
                     {tt("trackerGps.debugCopyPaste", "Debug (copy/paste)")}
@@ -1293,33 +1315,27 @@ export default function TrackerGpsPage() {
                 </details>
               </>
             )}
-
             <div className="mt-3 text-xs">
               {tt("trackerGps.stateLabel", "Status")}: <span className="text-slate-100">{visualStatus}</span>
             </div>
-
             {isActivationBgRunning ? (
               <div className="mt-2 text-[11px] text-slate-300">Syncing org access...</div>
             ) : null}
-
             {membershipDetail ? (
               <div className="mt-3 text-[11px] text-slate-200 bg-slate-800/40 border border-slate-700 rounded-xl p-3 whitespace-pre-wrap">
                 {membershipDetail}
               </div>
             ) : null}
-
             {acceptError ? (
               <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
                 {acceptError}
               </div>
             ) : null}
-
             {upgradeRequired ? (
               <div className="mt-3">
                 <UpgradeToProButton />
               </div>
             ) : null}
-
             {lastError && !acceptError ? (
               <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
                 {lastError}
