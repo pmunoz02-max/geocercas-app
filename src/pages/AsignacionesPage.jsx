@@ -35,14 +35,7 @@ export default function AsignacionesPage() {
 
       const catalogs = data?.catalogs || {};
 
-      // LOGS TEMPORALES
-      console.log("[AsignacionesPage] activeOrgId", activeOrgId);
-      console.log("[AsignacionesPage] bundle data", data);
-      console.log("[AsignacionesPage] catalogs", catalogs);
-      console.log("[AsignacionesPage] rawPersonas", catalogs.personal || catalogs.people || []);
-      console.log("[AsignacionesPage] rawGeocercas", catalogs.geocercas || catalogs.geofences || []);
-      console.log("[AsignacionesPage] rawActividades", catalogs.activities || catalogs.actividades || []);
-
+      // ...existing code...
       const rawPersonas = catalogs.personal || catalogs.people || [];
       const normalizedPersonas = (rawPersonas || []).map((p) => ({
         ...p,
@@ -59,10 +52,8 @@ export default function AsignacionesPage() {
             .filter(Boolean)
             .join(" "),
       }));
-
       const rawGeocercas = catalogs.geocercas || catalogs.geofences || [];
       const rawActividades = catalogs.activities || catalogs.actividades || [];
-
       setPersonas(normalizedPersonas);
       setGeocercas(rawGeocercas);
       setActividades(rawActividades);
