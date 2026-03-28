@@ -51,6 +51,7 @@ export default function AsignacionesForm({
           defaultValue: "Select an activity",
         });
 
+
   return (
     <div className="mb-8 bg-white rounded-lg border border-gray-100 shadow-sm p-4">
       <h2 className="text-lg font-medium mb-3">{title}</h2>
