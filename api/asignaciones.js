@@ -21,34 +21,61 @@ function send(res, status, payload) {
 
 export default async function handler(req, res) {
   const q = req.query || {};
+  const { method } = req;
 
-  if (req.method === "OPTIONS") {
+  if (method === "OPTIONS") {
     return send(res, 204, {});
   }
-
-  if (req.method === "HEAD") {
+  if (method === "HEAD") {
     setHeaders(res);
     res.statusCode = 200;
     return res.end();
   }
 
-  if (req.method !== "GET") {
+  const { createClient } = await import("@supabase/supabase-js");
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  if (method === "PATCH") {
+    // PATCH: editar asignación o cambiar estado
+    const { id, ...fields } = req.body || {};
+    if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+    const { error } = await supabase
+      .from("asignaciones")
+      .update(fields)
+      .eq("id", id)
+      .eq("is_deleted", false);
+    if (error) return send(res, 500, { ok: false, error: error.message });
+    return send(res, 200, { ok: true });
+  }
+
+  if (method === "DELETE") {
+    // DELETE lógico: is_deleted=true
+    const { id } = req.body || {};
+    if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+    const { error } = await supabase
+      .from("asignaciones")
+      .update({ is_deleted: true })
+      .eq("id", id);
+    if (error) return send(res, 500, { ok: false, error: error.message });
+    return send(res, 200, { ok: true });
+  }
+
+  if (method !== "GET") {
     return send(res, 405, {
       ok: false,
       error: "method_not_allowed",
-      method: req.method,
+      method,
       version: VERSION,
     });
   }
 
-  // Consulta mínima a personal
+  // GET: bundle de asignaciones y catálogos
   let personal = [];
   let geocercas = [];
   let activities = [];
+  let asignaciones = [];
   const requested_org_id = q.org_id || q.orgId || null;
   try {
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     if (requested_org_id) {
       // Personal
       const { data: personalData, error: personalError } = await supabase
@@ -84,6 +111,16 @@ export default async function handler(req, res) {
       if (!activitiesError && Array.isArray(activitiesData)) {
         activities = activitiesData;
       }
+
+      // Asignaciones desde tabla asignaciones
+      const { data: asignacionesData, error: asignacionesError } = await supabase
+        .from("asignaciones")
+        .select("*")
+        .eq("org_id", requested_org_id)
+        .eq("is_deleted", false);
+      if (!asignacionesError && Array.isArray(asignacionesData)) {
+        asignaciones = asignacionesData;
+      }
     }
   } catch (e) {
     // Si hay error, personal y geocercas quedan como []
@@ -97,6 +134,7 @@ export default async function handler(req, res) {
         geocercas,
         activities,
       },
+      asignaciones,
       debug: {
         requested_org_id,
         personal_count: Array.isArray(personal) ? personal.length : -1,

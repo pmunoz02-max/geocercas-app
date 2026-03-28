@@ -135,150 +135,78 @@ export default function AsignacionesPage() {
     }
   }
 
+  // ...existing code...
+  const [asignaciones, setAsignaciones] = useState([]);
+
+  useEffect(() => {
+    if (!activeOrgId) return;
+    loadAll();
+  }, [activeOrgId]);
+
+  async function loadAll() {
+    try {
+      const { data, error } = await getAsignacionesBundle(activeOrgId);
+      if (error) throw new Error(error.message);
+      const catalogs = data?.catalogs || {};
+      const rawPersonas = catalogs.personal || catalogs.people || [];
+      const normalizedPersonas = (rawPersonas || []).map((p) => ({
+        ...p,
+        id: p?.id ?? p?.personal_id ?? p?.org_people_id ?? null,
+        personal_id: p?.personal_id ?? p?.id ?? p?.org_people_id ?? null,
+        nombre: p?.nombre ?? p?.name ?? p?.first_name ?? "",
+        apellido: p?.apellido ?? p?.last_name ?? "",
+        full_name:
+          p?.full_name ??
+          [
+            p?.nombre ?? p?.name ?? p?.first_name ?? "",
+            p?.apellido ?? p?.last_name ?? "",
+          ]
+            .filter(Boolean)
+            .join(" "),
+      }));
+      const rawGeocercas = catalogs.geocercas || catalogs.geofences || [];
+      const rawActividades = catalogs.activities || catalogs.actividades || [];
+      setPersonas(normalizedPersonas);
+      setGeocercas(rawGeocercas);
+      setActividades(rawActividades);
+      setAsignaciones(data?.asignaciones || []);
+      setError("");
+    } catch (e) {
+      console.error(e);
+      setError("Error al cargar datos de asignaciones.");
+    }
+  }
+
+  // ...existing code...
+
   return (
     <div className="p-4 max-w-3xl">
       <h2 className="text-xl font-semibold mb-4">Nueva asignación</h2>
+      {/* ...formulario de nueva asignación aquí... */}
 
-
-      {/* DEBUG TEMPORAL */}
-      <div className="mb-3 rounded border border-slate-300 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-        <div>activeOrgId: {String(activeOrgId || "")}</div>
-        <div>personas: {personas.length}</div>
-        <div>geocercas: {geocercas.length}</div>
-        <div>actividades: {actividades.length}</div>
-      </div>
-
-      {personasDisponibles.length === 0 && (
-        <p className="text-amber-700 text-sm mb-3">
-          No hay personas disponibles para esta organización.
-        </p>
-      )}
-
-      <div className="mb-3">
-        <label>Persona</label>
-        <select
-          className="w-full border p-2 rounded"
-          value={selectedPersonId}
-          onChange={(e) => {
-            setSelectedPersonId(e.target.value);
-            setError("");
-            setSuccess("");
-          }}
-        >
-          <option value="">Seleccionar</option>
-          {personasDisponibles.map((p) => {
-            const personId = p?.id || p?.personal_id;
-            const label =
-              p?.full_name ||
-              [p?.nombre, p?.apellido].filter(Boolean).join(" ") ||
-              p?.email ||
-              `Persona ${personId}`;
-
-            return (
-              <option key={personId} value={personId}>
-                {label}
-              </option>
-            );
-          })}
-        </select>
-      </div>
-
-
-
-      <div className="mb-3">
-        <label>Geocerca</label>
-        <select
-          className="w-full border p-2 rounded"
-          value={selectedGeocercaId}
-          onChange={(e) => setSelectedGeocercaId(e.target.value)}
-        >
-          <option value="">Seleccionar</option>
-          {geocercas.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name || g.nombre || g.title || g.id}
-            </option>
-          ))}
-        </select>
-        {geocercas.length === 0 && (
-          <p className="text-amber-700 text-sm mt-1">
-            No hay geocercas disponibles para esta organización.
-          </p>
-        )}
-      </div>
-
-      <div className="mb-3">
-        <label>Actividad</label>
-        <select
-          className="w-full border p-2 rounded"
-          value={selectedActivityId}
-          onChange={(e) => setSelectedActivityId(e.target.value)}
-        >
-          <option value="">Seleccionar</option>
-          {actividades.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name || a.nombre || a.title || a.id}
-            </option>
-          ))}
-        </select>
-        {actividades.length === 0 && (
-          <p className="text-amber-700 text-sm mt-1">
-            No hay actividades disponibles para esta organización.
-          </p>
-        )}
-      </div>
-
-      <div className="mb-3">
-        <label>Fecha/hora inicio</label>
-        <input
-          type="datetime-local"
-          className="w-full border p-2 rounded"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-        />
-      </div>
-
-      <div className="mb-3">
-        <label>Fecha/hora fin</label>
-        <input
-          type="datetime-local"
-          className="w-full border p-2 rounded"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-        />
-      </div>
-
-      <div className="mb-3">
-        <label>Estado</label>
-        <select
-          className="w-full border p-2 rounded"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="active">Activa</option>
-          <option value="inactive">Inactiva</option>
-        </select>
-      </div>
-
-      <div className="mb-3">
-        <label>Frecuencia (minutos)</label>
-        <input
-          type="number"
-          className="w-full border p-2 rounded"
-          value={freqMin}
-          min={1}
-          onChange={(e) => setFreqMin(Number(e.target.value))}
-        />
-      </div>
-
-      {error && <div className="text-red-600 mb-3">{error}</div>}
-      {success && <div className="text-green-600 mb-3">{success}</div>}
-
-      <button
-        onClick={handleSubmit}
-        className="bg-blue-600 text-white px-4 py-2 rounded"
-      >
-        Guardar asignación
-      </button>
+      <AsignacionesTable
+        asignaciones={asignaciones}
+        people={personas}
+        geofences={geocercas}
+        activities={actividades}
+        onEdit={async (row) => {
+          const { id, ...fields } = row;
+          if (!id) return;
+          await updateAsignacion(id, fields);
+          await loadAll();
+        }}
+        onToggleStatus={async (row) => {
+          const { id, status } = row;
+          if (!id) return;
+          await toggleAsignacionStatus(id, status);
+          await loadAll();
+        }}
+        onDelete={async (id) => {
+          if (!id) return;
+          await deleteAsignacion(id);
+          await loadAll();
+        }}
+      />
     </div>
   );
 }

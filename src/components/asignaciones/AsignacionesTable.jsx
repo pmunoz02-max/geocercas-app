@@ -228,7 +228,7 @@ export default function AsignacionesTable({
             </thead>
 
             <tbody className="divide-y divide-gray-200">
-              {asignaciones.map((row) => {
+              {asignaciones.filter(row => !row.is_deleted).map((row) => {
                 const person = resolvePerson(row);
                 const geofenceLabel = resolveGeofenceLabel(row);
                 const activityLabel = resolveActivityLabel(row);
@@ -236,7 +236,7 @@ export default function AsignacionesTable({
                 const freqMin = row.frecuencia_envio_sec ? Math.round(row.frecuencia_envio_sec / 60) : "";
                 const inicio = formatDateTimeLocal(row.start_time);
                 const fin = formatDateTimeLocal(row.end_time);
-                const estado = row.status || row.estado;
+                const estado = (row.status || row.estado || '').toLowerCase();
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
@@ -275,32 +275,32 @@ export default function AsignacionesTable({
                           type="button"
                           onClick={() => onToggleStatus(row)}
                           className={
-                            (estado === "activa"
+                            (estado === "activa" || estado === "active"
                               ? "bg-green-100 text-green-800 border-green-200 hover:bg-green-200"
                               : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200") +
                             " inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-blue-500"
                           }
                           title={
-                            estado === "activa"
-                              ? t("asignaciones.actions.deactivate", { defaultValue: "Deactivate" })
-                              : t("asignaciones.actions.activate", { defaultValue: "Activate" })
+                            estado === "activa" || estado === "active"
+                              ? t("asignaciones.actions.deactivate", { defaultValue: "Desactivar" })
+                              : t("asignaciones.actions.activate", { defaultValue: "Activar" })
                           }
                         >
-                          {estado === "activa"
-                            ? t("asignaciones.actions.activate", { defaultValue: "Active" })
-                            : t("asignaciones.actions.deactivate", { defaultValue: "Inactive" })}
+                          {estado === "activa" || estado === "active"
+                            ? t("asignaciones.actions.deactivate", { defaultValue: "Desactivar" })
+                            : t("asignaciones.actions.activate", { defaultValue: "Activar" })}
                         </button>
                       ) : (
                         <span
                           className={
-                            estado === "activa"
+                            estado === "activa" || estado === "active"
                               ? "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200"
                               : "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200"
                           }
                         >
-                          {estado === "activa"
-                            ? t("asignaciones.actions.activate", { defaultValue: "Active" })
-                            : t("asignaciones.actions.deactivate", { defaultValue: "Inactive" })}
+                          {estado === "activa" || estado === "active"
+                            ? t("asignaciones.actions.active", { defaultValue: "Activa" })
+                            : t("asignaciones.actions.inactive", { defaultValue: "Inactiva" })}
                         </span>
                       )}
                     </td>

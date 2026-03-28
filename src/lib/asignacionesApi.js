@@ -76,8 +76,31 @@ export async function listAsignaciones(orgId) {
   return Array.isArray(data?.asignaciones) ? data.asignaciones : [];
 }
 
+
 export async function createAsignacion(payload = {}, orgId = null) {
   return apiFetch("POST", withActiveOrg(payload, orgId));
+}
+
+// Actualiza campos de una asignación existente
+export async function updateAsignacion(id, fields = {}) {
+  if (!id) return { data: null, error: { message: "missing_id" } };
+  return apiFetch("PATCH", { id, ...fields });
+}
+
+// Cambia el estado activa/inactiva de una asignación
+export async function toggleAsignacionStatus(id, currentStatus) {
+  if (!id) return { data: null, error: { message: "missing_id" } };
+  const newStatus =
+    currentStatus === "activa" || currentStatus === "active"
+      ? "inactiva"
+      : "activa";
+  return apiFetch("PATCH", { id, status: newStatus });
+}
+
+// Eliminación lógica (is_deleted=true)
+export async function deleteAsignacion(id) {
+  if (!id) return { data: null, error: { message: "missing_id" } };
+  return apiFetch("DELETE", { id });
 }
 
 export async function updateAsignacion(id, patch = {}, orgId = null) {
