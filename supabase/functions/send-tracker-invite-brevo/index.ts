@@ -1,3 +1,5 @@
+// NOTE (2026-03-28): Assignment query is now optional and no longer blocks the invite flow.
+// If the assignment lookup fails or returns empty, the invite is still sent and a warning is logged.
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -521,14 +523,21 @@ serve(async (req) => {
     };
 
     if (assignment_id) {
-      assignmentDetails = await getAssignmentEmailDetails(sbAdmin, {
-        assignmentId: assignment_id,
-        orgId: org_id,
-        fallbackLabel: copy.valueNotSpecified,
-      });
-    } else {
-      // If no assignment_id, leave assignmentDetails as default (valueNotSpecified)
-    }
+      try {
+        const details = await getAssignmentEmailDetails(sbAdmin, {
+          assignmentId: assignment_id,
+          orgId: org_id,
+          fallbackLabel: copy.valueNotSpecified,
+        });
+        if (details) {
+          assignmentDetails = details;
+        } else {
+          console.warn('[send-tracker-invite-brevo] assignment details not found or empty');
+        }
+      } catch (e) {
+        console.warn('[send-tracker-invite-brevo] error fetching assignment details', e);
+      }
+    } // else: leave assignmentDetails as default
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();

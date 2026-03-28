@@ -110,38 +110,30 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid assignment_id" });
     }
 
-    const nowIso = new Date().toISOString();
     let asignacion = null;
-    try {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      // status o estado = activa
-      const url = `${supabaseUrl}/rest/v1/asignaciones?id=eq.${encodeURIComponent(assignment_id)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=id,org_id,personal_id,status,estado,start_time,end_time`;
-      const resp = await fetch(url, {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-        },
-      });
-      if (!resp.ok) throw new Error(`[invite-tracker] no se pudo consultar asignaciones`);
-      const rows = await resp.json();
-      asignacion = rows && rows[0];
-      if (!asignacion || !asignacion.personal_id) {
-        console.warn(`[invite-tracker] blocked: asignación inválida o sin personal_id`);
-        return res.status(422).json({
-          ok: false,
-          build: BUILD_TAG,
-          code: "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
-          message: "Solo se puede invitar a trackers con asignaciones activas",
-          error: "Invalid or inactive assignment_id"
+    if (assignment_id) {
+      try {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        // status o estado = activa
+        const url = `${supabaseUrl}/rest/v1/asignaciones?id=eq.${encodeURIComponent(assignment_id)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=id,org_id,personal_id,status,estado,start_time,end_time`;
+        const resp = await fetch(url, {
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+          },
         });
+        if (resp.ok) {
+          const rows = await resp.json();
+          asignacion = rows && rows[0];
+          if (!asignacion || !asignacion.personal_id) {
+            console.warn(`[invite-tracker] asignación inválida o sin personal_id`);
+          }
+        } else {
+          console.warn(`[invite-tracker] no se pudo consultar asignaciones`);
+        }
+      } catch (e) {
+        console.warn(`[invite-tracker] error consultando asignaciones`, e);
       }
-    } catch (e) {
-      console.warn(`[invite-tracker] blocked: error consultando asignaciones`, e);
-      return res.status(500).json({
-        ok: false,
-        build: BUILD_TAG,
-        error: String(e?.message || e),
-      });
     }
 
     // Consultar personal y validar email
