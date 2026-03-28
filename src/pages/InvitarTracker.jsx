@@ -252,15 +252,8 @@ export default function InvitarTracker() {
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
-        const filtered = rows.filter((r) => {
-          const ab = r?.activo_bool;
-          const a = r?.activo;
-          const v = r?.vigente;
-          if (ab !== null && ab !== undefined) return isTruthy(ab);
-          if (a !== null && a !== undefined) return isTruthy(a);
-          if (v !== null && v !== undefined) return isTruthy(v);
-          return true;
-        });
+        // Solo excluir usuarios eliminados (ya filtrados por .eq("is_deleted", false) en la consulta)
+        const filtered = rows;
 
         // 2. Consultar asignaciones activas y vigentes hoy
         const nowIso = new Date().toISOString();
