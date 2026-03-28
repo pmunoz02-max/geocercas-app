@@ -78,7 +78,16 @@ export async function listAsignaciones(orgId) {
 
 
 export async function createAsignacion(payload = {}, orgId = null) {
-  return apiFetch("POST", withActiveOrg(payload, orgId));
+  const result = await apiFetch("POST", withActiveOrg(payload, orgId));
+  // Throw if not ok or method_not_allowed
+  if (result.error) {
+    const code = result.error.payload?.error || result.error.payload?.message;
+    if (code === "method_not_allowed") {
+      throw new Error("POST /api/asignaciones: method_not_allowed");
+    }
+    throw new Error(result.error.message || "Error creating asignacion");
+  }
+  return result.data;
 }
 
 // Actualiza campos de una asignación existente

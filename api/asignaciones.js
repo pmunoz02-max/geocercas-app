@@ -36,6 +36,19 @@ export default async function handler(req, res) {
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+
+    if (method === "POST") {
+      // POST: crear nueva asignación
+      const fields = req.body || {};
+      const { data, error } = await supabase
+        .from("asignaciones")
+        .insert([fields])
+        .select()
+        .single();
+      if (error) return send(res, 500, { ok: false, error: error.message });
+      return send(res, 201, { ok: true, asignacion: data });
+    }
+
     if (method === "PATCH") {
       // PATCH: editar asignación o cambiar estado
       const { id, ...fields } = req.body || {};
