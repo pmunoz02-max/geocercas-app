@@ -52,6 +52,7 @@ export default function AsignacionesPage() {
   const [selectedActivityId, setSelectedActivityId] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [endTimeError, setEndTimeError] = useState("");
   const [status, setStatus] = useState("active");
   const [freqMin, setFreqMin] = useState(5);
 
@@ -156,6 +157,7 @@ export default function AsignacionesPage() {
 
     setError("");
     setSuccess("");
+    setEndTimeError("");
 
     if (!activeOrgId) {
       setError("No hay organización activa.");
@@ -179,6 +181,13 @@ export default function AsignacionesPage() {
 
     if (!startTime) {
       setError("Debe seleccionar la fecha/hora de inicio.");
+      return;
+    }
+
+    // Validar que endTime no sea menor que startTime
+    if (endTime && startTime && new Date(endTime) < new Date(startTime)) {
+      setEndTimeError("La fecha/hora de fin no puede ser anterior a la de inicio.");
+      setError("La fecha/hora de fin no puede ser anterior a la de inicio.");
       return;
     }
 
@@ -303,29 +312,48 @@ export default function AsignacionesPage() {
 
         {error ? (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        ) : null}
-
-        {success ? (
-          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-            {success}
-          </div>
-        ) : null}
-
-        <form className="space-y-4" onSubmit={handleSubmit}>
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
-              Persona
-            </label>
-            <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
-              value={selectedPersonId}
-              onChange={(e) => setSelectedPersonId(e.target.value)}
-            >
-              <option value="">Seleccionar</option>
-              {personasDisponibles.map((p) => {
-                const id = p?.id ?? p?.personal_id;
+            <div>
+              <label className="block text-sm font-medium text-gray-800 mb-1">
+                Fecha/hora inicio
+              </label>
+              <input
+                type="datetime-local"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                value={startTime}
+                onChange={(e) => {
+                  setStartTime(e.target.value);
+                  // Validar endTime en cada cambio de startTime
+                  if (endTime && e.target.value && new Date(endTime) < new Date(e.target.value)) {
+                    setEndTimeError("La fecha/hora de fin no puede ser anterior a la de inicio.");
+                  } else {
+                    setEndTimeError("");
+                  }
+                }}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-800 mb-1">
+                Fecha/hora fin
+              </label>
+              <input
+                type="datetime-local"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                value={endTime}
+                onChange={(e) => {
+                  setEndTime(e.target.value);
+                  // Validar endTime en cada cambio
+                  if (startTime && e.target.value && new Date(e.target.value) < new Date(startTime)) {
+                    setEndTimeError("La fecha/hora de fin no puede ser anterior a la de inicio.");
+                  } else {
+                    setEndTimeError("");
+                  }
+                }}
+              />
+              {endTimeError && (
+                <p className="mt-1 text-sm text-red-600">{endTimeError}</p>
+              )}
+            </div>
                 if (!id) return null;
 
                 return (
