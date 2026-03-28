@@ -19,10 +19,67 @@ function send(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+import { createClient } from "@supabase/supabase-js";
+
+function getEnv(nameList) {
+  for (const n of nameList) {
+    const v = process.env[n];
+    if (v && String(v).trim()) return String(v).trim();
+  }
+  return null;
+}
+
+function parseCookie(cookieHeader, key) {
+  if (!cookieHeader) return null;
+  const m = cookieHeader.match(new RegExp(`(?:^|;\\s*)${key}=([^;]+)`));
+  if (!m || !m[1]) return null;
+  const raw = m[1];
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export default async function handler(req, res) {
   try {
     const q = req.query || {};
     const { method } = req;
+
+    // Supabase client initialization (cookie-first, bearer fallback)
+    const SUPABASE_URL = getEnv([
+      "SUPABASE_URL",
+      "VITE_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_URL",
+    ]);
+    const SUPABASE_ANON_KEY = getEnv([
+      "SUPABASE_ANON_KEY",
+      "SUPABASE_ANON_PUBLIC",
+      "VITE_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    ]);
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      return send(res, 500, {
+        ok: false,
+        error: "Server misconfigured: missing Supabase env vars (SUPABASE_URL / SUPABASE_ANON_KEY)",
+        details: { hasUrl: Boolean(SUPABASE_URL), hasAnonKey: Boolean(SUPABASE_ANON_KEY) },
+      });
+    }
+    const cookieHeader = req.headers.cookie || "";
+    let token = parseCookie(cookieHeader, "tg_at");
+    if (!token) {
+      const authHeader = req.headers.authorization || "";
+      if (authHeader.toLowerCase().startsWith("bearer ")) {
+        token = authHeader.slice(7);
+      }
+    }
+    if (!token) {
+      return send(res, 401, { ok: false, error: "Missing authentication (cookie tg_at or Authorization Bearer)" });
+    }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false },
+    });
 
     if (method === "OPTIONS") {
       return send(res, 204, {});
