@@ -12,6 +12,7 @@ import AsignacionesTable from "../components/asignaciones/AsignacionesTable.jsx"
 function personLabel(persona) {
   const nombre = persona?.nombre || "";
   const apellido = persona?.apellido || "";
+
   return (
     persona?.full_name?.trim() ||
     [nombre, apellido].filter(Boolean).join(" ").trim() ||
@@ -22,6 +23,33 @@ function personLabel(persona) {
 
 function actividadLabel(item) {
   return item?.name || item?.nombre || item?.title || "Sin nombre";
+}
+
+function normalizeBundleResponse(result) {
+  // getAsignacionesBundle normalmente devuelve { data, error }
+  // pero dejamos esto robusto por si cambia el wrapper.
+  const root = result?.data ?? result ?? {};
+  const bundle =
+    root?.catalogs && Array.isArray(root?.asignaciones)
+      ? root
+      : root?.data && root.data?.catalogs
+        ? root.data
+        : {};
+
+  return {
+    personas: Array.isArray(bundle?.catalogs?.personal)
+      ? bundle.catalogs.personal
+      : [],
+    geocercas: Array.isArray(bundle?.catalogs?.geofences)
+      ? bundle.catalogs.geofences
+      : [],
+    actividades: Array.isArray(bundle?.catalogs?.activities)
+      ? bundle.catalogs.activities
+      : [],
+    asignaciones: Array.isArray(bundle?.asignaciones)
+      ? bundle.asignaciones
+      : [],
+  };
 }
 
 export default function AsignacionesPage() {
@@ -46,6 +74,7 @@ export default function AsignacionesPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!activeOrgId) return;
@@ -53,20 +82,40 @@ export default function AsignacionesPage() {
   }, [activeOrgId]);
 
   async function loadAll() {
+    if (!activeOrgId) return;
+
     try {
-      const { data, error } = await getAsignacionesBundle(activeOrgId);
-      if (error) {
-        throw new Error(error.message || "Error al cargar asignaciones");
+      setLoading(true);
+
+      const result = await getAsignacionesBundle(activeOrgId);
+
+      if (result?.error) {
+        throw new Error(result.error.message || "Error al cargar asignaciones");
       }
-      const bundle = data || {};
-      setPersonas(Array.isArray(bundle.catalogs?.personal) ? bundle.catalogs.personal : []);
-      setGeocercas(Array.isArray(bundle.catalogs?.geofences) ? bundle.catalogs.geofences : []);
-      setActividades(Array.isArray(bundle.catalogs?.activities) ? bundle.catalogs.activities : []);
-      setAsignaciones(Array.isArray(bundle.asignaciones) ? bundle.asignaciones : []);
+
+      const next = normalizeBundleResponse(result);
+
+      console.log("[AsignacionesPage] bundle loaded:", {
+        org_id: activeOrgId,
+        personas: next.personas.length,
+        geocercas: next.geocercas.length,
+        actividades: next.actividades.length,
+        asignaciones: next.asignaciones.length,
+      });
+
+      // Actualizar exactamente con la forma devuelta por el API.
+      setPersonas(next.personas);
+      setGeocercas(next.geocercas);
+      setActividades(next.actividades);
+      setAsignaciones(next.asignaciones);
       setError("");
     } catch (e) {
-      console.error(e);
+      console.error("[AsignacionesPage] loadAll failed:", e);
       setError("Error al cargar datos de asignaciones.");
+      // No vaciar estado existente en caso de error:
+      // así evitamos desaparecer selects y tabla si el backend falla temporalmente.
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -88,14 +137,17 @@ export default function AsignacionesPage() {
   const resolvedSelectedPersonId =
     selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
 
-  const selectedTrackerUserId = selectedPerson?.user_id ?? null;
+  const selectedTrackerUserId =
+    selectedPerson?.user_id ?? selectedPerson?.tracker_user_id ?? null;
 
-  const geofenceOptions = geocercas
-    .map((g) => ({
-      value: g?.id ?? null,
-      label: g?.name || `Geocerca ${g?.id ?? ""}`,
-    }))
-    .filter((opt) => !!opt.value);
+  const geofenceOptions = useMemo(() => {
+    return geocercas
+      .map((g) => ({
+        value: g?.id ?? null,
+        label: g?.name || `Geocerca ${g?.id ?? ""}`,
+      }))
+      .filter((opt) => !!opt.value);
+  }, [geocercas]);
 
   async function handleSubmit(e) {
     e?.preventDefault?.();
@@ -143,61 +195,43 @@ export default function AsignacionesPage() {
       return;
     }
 
-    // Validate no overlap with other assignments for the same person
-    const newStart = startTime ? new Date(startTime) : null;
-    const newEnd = endTime ? new Date(endTime) : null;
-    const overlap = asignaciones.some(a => {
-      if (a.personal_id !== resolvedSelectedPersonId) return false;
-      if (editingId && a.id === editingId) return false; // skip self when editing
-      const aStart = a.start_time ? new Date(a.start_time) : null;
-      const aEnd = a.end_time ? new Date(a.end_time) : null;
-      if (!aStart || !newStart) return false;
-      // Overlap if (startA <= endB) && (endA >= startB)
-      if (newEnd && aEnd) {
-        return aStart <= newEnd && aEnd >= newStart;
-      } else if (newEnd && !aEnd) {
-        return aStart <= newEnd && newStart <= aStart;
-      } else if (!newEnd && aEnd) {
-        return aEnd >= newStart && newStart <= aEnd;
-      } else {
-        return aStart.getTime() === newStart.getTime();
-      }
-    });
-    if (overlap) {
-      setError("Ya existe otra asignación para esta persona en el rango de fechas seleccionado. Modifica las fechas para evitar traslapes.");
-      setSaving(false);
-      return;
-    }
-
     setSaving(true);
 
     const payload = {
+      id: editingId || undefined,
       personal_id: resolvedSelectedPersonId,
       org_id: activeOrgId,
       geofence_id: selectedGeocercaId || null,
-      geocerca_id: null,
       activity_id: selectedActivityId || null,
       start_time: startTime ? new Date(startTime).toISOString() : null,
       end_time: endTime ? new Date(endTime).toISOString() : null,
+      frequency_minutes: parsedFreqMin,
       frecuencia_envio_sec: parsedFreqMin * 60,
       status,
-      ...(selectedTrackerUserId
-        ? { tracker_user_id: selectedTrackerUserId }
-        : {}),
+      ...(selectedTrackerUserId ? { tracker_user_id: selectedTrackerUserId } : {}),
     };
 
     try {
       if (editingId) {
-        // Log the update payload before calling updateAsignacion
         console.log("[AsignacionesPage] update payload:", payload);
-        await updateAsignacion(editingId, payload, activeOrgId);
+        const result = await updateAsignacion(editingId, payload, activeOrgId);
+
+        if (result?.error) {
+          throw new Error(result.error.message || "Error al actualizar asignación");
+        }
+
         await loadAll();
         setSuccess("Asignación actualizada correctamente.");
       } else {
-        await createAsignacion(payload, activeOrgId);
+        const result = await createAsignacion(payload, activeOrgId);
+
+        if (result?.error) {
+          throw new Error(result.error.message || "Error al guardar asignación");
+        }
+
         await loadAll();
         setSuccess("Asignación guardada correctamente.");
-        // Reset form only after creating new assignment
+
         setSelectedPersonId("");
         setSelectedGeocercaId("");
         setSelectedActivityId("");
@@ -207,10 +241,16 @@ export default function AsignacionesPage() {
         setStatus("active");
         setFreqMin(5);
       }
+
       setEditingId(null);
     } catch (e2) {
-      console.error(e2);
-      setError(e2?.message || (editingId ? "Error al actualizar asignación." : "Error al guardar asignación."));
+      console.error("[AsignacionesPage] submit failed:", e2);
+      setError(
+        e2?.message ||
+          (editingId
+            ? "Error al actualizar asignación."
+            : "Error al guardar asignación.")
+      );
     } finally {
       setSaving(false);
     }
@@ -229,12 +269,16 @@ export default function AsignacionesPage() {
     setEndTime(row?.end_time ? row.end_time.slice(0, 16) : "");
 
     const rowStatus = String(row?.status || row?.estado || "").toLowerCase();
-    setStatus(rowStatus === "inactive" || rowStatus === "inactiva" ? "inactive" : "active");
+    setStatus(
+      rowStatus === "inactive" || rowStatus === "inactiva" ? "inactive" : "active"
+    );
 
     setFreqMin(
-      row?.frecuencia_envio_sec
-        ? Math.round(Number(row.frecuencia_envio_sec) / 60)
-        : 5
+      row?.frequency_minutes
+        ? Number(row.frequency_minutes)
+        : row?.frecuencia_envio_sec
+          ? Math.round(Number(row.frecuencia_envio_sec) / 60)
+          : 5
     );
 
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -248,7 +292,6 @@ export default function AsignacionesPage() {
       const id = row?.id;
       if (!id) return;
 
-      // Normalizar status actual
       const rawStatus = String(row?.status || row?.estado || "").toLowerCase();
       const isActive = rawStatus === "active" || rawStatus === "activa";
       const current = isActive ? "active" : "inactive";
@@ -256,13 +299,14 @@ export default function AsignacionesPage() {
 
       await toggleAsignacionStatus(id, current, activeOrgId);
       await loadAll();
+
       setSuccess(
         next === "active"
           ? "Asignación activada correctamente."
           : "Asignación desactivada correctamente."
       );
     } catch (e) {
-      console.error(e);
+      console.error("[AsignacionesPage] toggle status failed:", e);
       setError(e?.message || "Error al cambiar estado de asignación.");
     }
   }
@@ -278,9 +322,23 @@ export default function AsignacionesPage() {
       await loadAll();
       setSuccess("Asignación eliminada correctamente.");
     } catch (e) {
-      console.error(e);
+      console.error("[AsignacionesPage] delete failed:", e);
       setError(e?.message || "Error al eliminar asignación.");
     }
+  }
+
+  function handleCancelEdit() {
+    setEditingId(null);
+    setSelectedPersonId("");
+    setSelectedGeocercaId("");
+    setSelectedActivityId("");
+    setStartTime("");
+    setEndTime("");
+    setEndTimeError("");
+    setStatus("active");
+    setFreqMin(5);
+    setError("");
+    setSuccess("");
   }
 
   return (
@@ -316,6 +374,7 @@ export default function AsignacionesPage() {
               {personasDisponibles.map((p) => {
                 const id = p?.id ?? p?.personal_id ?? null;
                 if (!id) return null;
+
                 return (
                   <option key={id} value={id}>
                     {personLabel(p)}
@@ -459,33 +518,28 @@ export default function AsignacionesPage() {
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || loading}
               className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-60"
             >
-              {saving ? (editingId ? "Actualizando..." : "Guardando...") : (editingId ? "Actualizar asignación" : "Guardar asignación")}
+              {saving
+                ? editingId
+                  ? "Actualizando..."
+                  : "Guardando..."
+                : editingId
+                  ? "Actualizar asignación"
+                  : "Guardar asignación"}
             </button>
+
+            {editingId ? (
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+            ) : null}
           </div>
-          {editingId ? (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingId(null);
-                setSelectedPersonId("");
-                setSelectedGeocercaId("");
-                setSelectedActivityId("");
-                setStartTime("");
-                setEndTime("");
-                setEndTimeError("");
-                setStatus("active");
-                setFreqMin(5);
-                setError("");
-                setSuccess("");
-              }}
-              className="ml-2 inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 font-medium hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-          ) : null}
         </form>
       </div>
 
