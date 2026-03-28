@@ -111,7 +111,6 @@ export default function InvitarTracker() {
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [assignments, setAssignments] = useState([]);
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
 
   const [geofenceMap, setGeofenceMap] = useState(new Map());
   const [activityMap, setActivityMap] = useState(new Map());
@@ -171,11 +170,12 @@ export default function InvitarTracker() {
     return people.find((p) => String(p.id) === String(selectedPersonId)) || null;
   }, [people, selectedPersonId]);
 
+
+  // Derive assignment automatically: use the only active assignment if available, otherwise null
   const selectedAssignment = useMemo(() => {
-    const id = String(selectedAssignmentId || "").trim();
-    if (!id) return null;
-    return assignments.find((a) => String(a.id) === id) || null;
-  }, [assignments, selectedAssignmentId]);
+    if (assignments.length === 1) return assignments[0];
+    return null;
+  }, [assignments]);
 
   const assignmentPreview = useMemo(() => {
     if (!selectedAssignment) return null;
@@ -296,7 +296,6 @@ export default function InvitarTracker() {
 
     async function loadAssignmentsForPerson() {
       setAssignments([]);
-      setSelectedAssignmentId("");
       setGeofenceMap(new Map());
       setActivityMap(new Map());
 
@@ -336,12 +335,6 @@ export default function InvitarTracker() {
 
         const safeRows = (Array.isArray(rows) ? rows : []);
         setAssignments(safeRows);
-
-        if (safeRows.length === 1) {
-          setSelectedAssignmentId(String(safeRows[0].id));
-        } else {
-          setSelectedAssignmentId("");
-        }
 
         const geofenceIds = Array.from(
           new Set(
@@ -391,7 +384,6 @@ export default function InvitarTracker() {
       } catch (e) {
         if (cancelled) return;
         setAssignments([]);
-        setSelectedAssignmentId("");
         setErrMsg(String(e?.message || e));
       } finally {
         if (!cancelled) setLoadingAssignments(false);
@@ -476,7 +468,7 @@ export default function InvitarTracker() {
         lang,
         name,
         caller_jwt,
-        assignment_id: selectedAssignmentId || null,
+        assignment_id: selectedAssignment ? selectedAssignment.id : null,
       };
 
       const res = await fetch("/api/invite-tracker", {
@@ -780,49 +772,8 @@ export default function InvitarTracker() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-900">
-              {t("inviteTracker.assignment.label", { defaultValue: "Asignación activa" })}
-            </label>
 
-            <select
-              className="mt-1 w-full rounded-xl border px-3 py-2 bg-white text-gray-900"
-              value={selectedAssignmentId}
-              onChange={(e) => {
-                setSelectedAssignmentId(e.target.value);
-                setOkMsg(null);
-                setErrMsg(null);
-              }}
-              disabled={loadingAssignments || !selectedPerson || assignmentOptions.length === 0}
-            >
-              <option value="">{assignmentPlaceholder}</option>
-              {assignmentOptions.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {assignmentPreview ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">
-              <div className="font-semibold mb-2">
-                {t("inviteTracker.assignment.previewTitle", { defaultValue: "Detalle que se enviará" })}
-              </div>
-              <div>
-                <b>{t("inviteTracker.assignment.window", { defaultValue: "Ventana asignada" })}:</b>{" "}
-                {assignmentPreview.startLabel} → {assignmentPreview.endLabel}
-              </div>
-              <div className="mt-1">
-                <b>{t("inviteTracker.assignment.geofence", { defaultValue: "Geocerca asignada" })}:</b>{" "}
-                {assignmentPreview.geofenceName}
-              </div>
-              <div className="mt-1">
-                <b>{t("inviteTracker.assignment.task", { defaultValue: "Tarea asignada" })}:</b>{" "}
-                {assignmentPreview.activityName}
-              </div>
-            </div>
-          ) : null}
+      {/* Assignment select and preview removed: assignment is now derived automatically from selected person */}
 
           <button
             type="submit"
