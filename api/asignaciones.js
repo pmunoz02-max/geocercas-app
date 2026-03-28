@@ -349,23 +349,23 @@ export default async function handler(req, res) {
         console.log(`[GET /api/asignaciones] table: ${activitiesTable}, filters:`, activitiesFilters, `count:`, activities.length);
       } catch (err) { activities = []; console.log(`[GET /api/asignaciones] table: activities ERROR`, err); }
 
-      // Asignaciones
+      // Assignments (tracker_assignments)
       try {
-        const asignacionesTable = "asignaciones";
-        const asignacionesFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
-        const { data: asignacionesData, error: asignacionesError } = await supabase
-          .from(asignacionesTable)
+        const assignmentsTable = "tracker_assignments";
+        const assignmentsFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
+        const { data: assignmentsData, error: assignmentsError } = await supabase
+          .from(assignmentsTable)
           .select("*")
           .eq("org_id", requested_org_id)
           .or("is_deleted.is.false,is_deleted.is.null")
           .order("created_at", { ascending: false });
-        if (!asignacionesError && Array.isArray(asignacionesData)) {
-          asignaciones = asignacionesData;
+        if (!assignmentsError && Array.isArray(assignmentsData)) {
+          asignaciones = assignmentsData;
         } else {
           asignaciones = [];
         }
-        console.log(`[GET /api/asignaciones] table: ${asignacionesTable}, filters:`, asignacionesFilters, `count:`, asignaciones.length);
-      } catch (err) { asignaciones = []; console.log(`[GET /api/asignaciones] table: asignaciones ERROR`, err); }
+        console.log(`[GET /api/asignaciones] table: ${assignmentsTable}, filters:`, assignmentsFilters, `count:`, asignaciones.length);
+      } catch (err) { asignaciones = []; console.log(`[GET /api/asignaciones] table: tracker_assignments ERROR`, err); }
     }
 
     return send(res, 200, {
