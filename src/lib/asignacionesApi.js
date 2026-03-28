@@ -1,5 +1,3 @@
-// Reexporta helper de catálogo de geocercas
-export { getGeocercasCatalog } from "./geocercasCatalog";
 // src/lib/asignacionesApi.js
 // CANONICO: solo /api/asignaciones (cookie tg_at)
 
@@ -92,10 +90,8 @@ export async function updateAsignacion(id, fields = {}) {
 // Cambia el estado activa/inactiva de una asignación
 export async function toggleAsignacionStatus(id, currentStatus) {
   if (!id) return { data: null, error: { message: "missing_id" } };
-  const newStatus =
-    currentStatus === "activa" || currentStatus === "active"
-      ? "inactiva"
-      : "activa";
+  // Solo acepta 'active' o 'inactive' para el backend
+  const newStatus = currentStatus === "active" ? "inactive" : "active";
   return apiFetch("PATCH", { id, status: newStatus });
 }
 
