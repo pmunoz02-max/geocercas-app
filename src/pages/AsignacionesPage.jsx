@@ -190,7 +190,6 @@ export default function AsignacionesPage() {
     const payload = {
       personal_id: resolvedSelectedPersonId,
       org_id: activeOrgId,
-      tenant_id: activeOrgId,
       geofence_id: selectedGeocercaId || null,
       geocerca_id: null,
       activity_id: selectedActivityId || null,

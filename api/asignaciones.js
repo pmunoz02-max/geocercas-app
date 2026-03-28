@@ -38,11 +38,46 @@ export default async function handler(req, res) {
 
 
     if (method === "POST") {
-      // POST: crear nueva asignación
-      const fields = req.body || {};
+      // POST: crear nueva asignación (no confiar en tenant_id del frontend)
+      const rawFields = req.body || {};
+      // Nunca confiar en tenant_id del frontend
+      const { tenant_id: _ignoreTenantId, ...fieldsNoTenant } = rawFields;
+
+      // org_id debe venir del query o sesión
+      const org_id = q.org_id || q.orgId || fieldsNoTenant.org_id || null;
+      if (!org_id) {
+        return send(res, 400, { ok: false, error: "missing_org_id" });
+      }
+
+      // Si se requiere tenant_id, resolverlo aquí (ejemplo: buscar en tabla tenants)
+      let resolvedTenantId = null;
+      if (fieldsNoTenant.tenant_lookup_key) {
+        // Ejemplo: buscar tenant por clave
+        const { data: tenantRow, error: tenantError } = await supabase
+          .from("tenants")
+          .select("id")
+          .eq("lookup_key", fieldsNoTenant.tenant_lookup_key)
+          .eq("org_id", org_id)
+          .single();
+        if (tenantError || !tenantRow) {
+          return send(res, 400, { ok: false, error: "tenant_not_found" });
+        }
+        resolvedTenantId = tenantRow.id;
+      }
+
+      // Construir payload final sin tenant_id del frontend
+      const insertPayload = {
+        ...fieldsNoTenant,
+        org_id,
+        ...(resolvedTenantId ? { tenant_id: resolvedTenantId } : {}),
+      };
+
+      // Eliminar tenant_lookup_key del insert
+      delete insertPayload.tenant_lookup_key;
+
       const { data, error } = await supabase
         .from("asignaciones")
-        .insert([fields])
+        .insert([insertPayload])
         .select()
         .single();
       if (error) return send(res, 500, { ok: false, error: error.message });
