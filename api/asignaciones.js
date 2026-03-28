@@ -89,46 +89,22 @@ export default async function handler(req, res) {
       if (!personalError && Array.isArray(personalData)) {
         personal = personalData;
       }
-      // Geocercas: lógica canónica igual a listGeofences(orgId, true)
-      let geocercasItems = [];
-      let seenGeocercas = new Set();
-      // Query principal por org_id
-      let q1 = supabase.from("geofences").select("id,name,active,is_deleted").eq("org_id", requested_org_id);
-      q1 = q1.eq("active", true);
-      const r1 = await q1.order("name", { ascending: true });
-      if (!r1.error && Array.isArray(r1.data)) {
-        for (const row of r1.data) {
-          if (row.is_deleted) continue;
-          const id = row?.id ? String(row.id) : JSON.stringify(row);
-          if (!seenGeocercas.has(id)) {
-            seenGeocercas.add(id);
-            geocercasItems.push(row);
-          }
-        }
-      }
-      // Compatibilidad legacy: solo si existe tenant_id
-      let hasTenantId = false;
+      // Geofences: solo tabla geofences, sin fallback legacy
+      let geofences = [];
+      // Detectar si existe columna is_deleted
+      let hasIsDeleted = false;
       try {
-        const { error: tenantIdError } = await supabase.from("geofences").select("tenant_id").limit(1);
-        if (!tenantIdError) hasTenantId = true;
-      } catch {}
-      if (hasTenantId) {
-        let q2 = supabase.from("geofences").select("id,name,active,is_deleted").is("org_id", null).eq("tenant_id", requested_org_id);
-        q2 = q2.eq("active", true);
-        const r2 = await q2.order("name", { ascending: true });
-        if (!r2.error && Array.isArray(r2.data)) {
-          for (const row of r2.data) {
-            if (row.is_deleted) continue;
-            const id = row?.id ? String(row.id) : JSON.stringify(row);
-            if (!seenGeocercas.has(id)) {
-              seenGeocercas.add(id);
-              geocercasItems.push(row);
-            }
-          }
+        const { data: meta, error: metaError } = await supabase.from("geofences").select("is_deleted").limit(1);
+        if (!metaError && Array.isArray(meta) && meta.length > 0 && Object.prototype.hasOwnProperty.call(meta[0], "is_deleted")) {
+          hasIsDeleted = true;
         }
+      } catch {}
+      let geofencesQuery = supabase.from("geofences").select("id,name").eq("org_id", requested_org_id).eq("active", true);
+      if (hasIsDeleted) geofencesQuery = geofencesQuery.eq("is_deleted", false);
+      const { data: geofencesData, error: geofencesError } = await geofencesQuery.order("name", { ascending: true });
+      if (!geofencesError && Array.isArray(geofencesData)) {
+        geofences = geofencesData.map(g => ({ id: g.id, name: g.name || null }));
       }
-      geocercasItems.sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || "")));
-      geocercas = geocercasItems.map(g => ({ id: g.id, name: g.name || null }));
       // Activities desde tabla activities
       const { data: activitiesData, error: activitiesError } = await supabase
         .from("activities")
@@ -159,7 +135,7 @@ export default async function handler(req, res) {
     data: {
       catalogs: {
         personal,
-        geocercas,
+        geofences,
         activities,
       },
       asignaciones,
