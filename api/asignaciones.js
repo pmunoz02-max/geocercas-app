@@ -447,30 +447,30 @@ export default async function handler(req, res) {
       }
       debug.queries.push({ table: activitiesTable, filters: activitiesFilters, count: activitiesCount, error: activitiesError });
 
-      // Assignments (tracker_assignments)
-      const assignmentsTable = "tracker_assignments";
-      const assignmentsFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
-      let assignmentsError = null;
-      let assignmentsCount = 0;
+      // Asignaciones (asignaciones table, org_id + is_deleted false/null)
+      const asignacionesTable = "asignaciones";
+      const asignacionesFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
+      let asignacionesError = null;
+      let asignacionesCount = 0;
       try {
-        const { data: assignmentsData, error } = await supabase
-          .from(assignmentsTable)
+        const { data: asignacionesData, error } = await supabase
+          .from(asignacionesTable)
           .select("*")
           .eq("org_id", requested_org_id)
           .or("is_deleted.is.false,is_deleted.is.null")
           .order("created_at", { ascending: false });
-        if (!error && Array.isArray(assignmentsData)) {
-          asignaciones = assignmentsData;
-          assignmentsCount = asignaciones.length;
+        if (!error && Array.isArray(asignacionesData)) {
+          asignaciones = asignacionesData;
+          asignacionesCount = asignaciones.length;
         } else {
           asignaciones = [];
-          assignmentsError = error ? error.message : 'Unknown error';
+          asignacionesError = error ? error.message : 'Unknown error';
         }
       } catch (err) {
         asignaciones = [];
-        assignmentsError = err?.message || String(err);
+        asignacionesError = err?.message || String(err);
       }
-      debug.queries.push({ table: assignmentsTable, filters: assignmentsFilters, count: assignmentsCount, error: assignmentsError });
+      debug.queries.push({ table: asignacionesTable, filters: asignacionesFilters, count: asignacionesCount, error: asignacionesError });
     }
 
     return send(res, 200, {
