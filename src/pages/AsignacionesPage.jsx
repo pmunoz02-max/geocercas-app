@@ -207,21 +207,22 @@ export default function AsignacionesPage() {
     try {
       if (editingId) {
         await updateAsignacion(editingId, payload, activeOrgId);
+        await loadAll();
         setSuccess("Asignación actualizada correctamente.");
       } else {
         await createAsignacion(payload, activeOrgId);
+        await loadAll();
         setSuccess("Asignación guardada correctamente.");
+        // Reset form only after creating new assignment
+        setSelectedPersonId("");
+        setSelectedGeocercaId("");
+        setSelectedActivityId("");
+        setStartTime("");
+        setEndTime("");
+        setEndTimeError("");
+        setStatus("active");
+        setFreqMin(5);
       }
-      await loadAll();
-
-      setSelectedPersonId("");
-      setSelectedGeocercaId("");
-      setSelectedActivityId("");
-      setStartTime("");
-      setEndTime("");
-      setEndTimeError("");
-      setStatus("active");
-      setFreqMin(5);
       setEditingId(null);
     } catch (e2) {
       console.error(e2);
