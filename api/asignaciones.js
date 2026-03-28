@@ -107,13 +107,26 @@ export default async function handler(req, res) {
 
       // Si no, actualizar otros campos (sin crear filas nuevas)
       // Validar traslape de fechas para la misma persona (excluyendo el id actual)
-      // Overlap validation: exclude current id, use full datetime ranges if available
-      const { tracker_user_id, personal_id, start_time, end_time, start_date, end_date, period, period_tstz } = fields;
+      // Fetch existing row to merge missing user id fields for overlap validation
+      let { tracker_user_id, personal_id, start_time, end_time, start_date, end_date, period, period_tstz } = fields;
+      let existingRow = null;
+      {
+        const { data: row, error: rowError } = await supabase
+          .from("asignaciones")
+          .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
+          .eq("id", id)
+          .single();
+        if (!rowError && row) existingRow = row;
+      }
+      // Merge missing user id fields from existing row
+      if (!tracker_user_id && existingRow && existingRow.tracker_user_id) tracker_user_id = existingRow.tracker_user_id;
+      if (!personal_id && existingRow && existingRow.personal_id) personal_id = existingRow.personal_id;
       const overlapUserId = tracker_user_id || personal_id;
       // Use edited full datetime range if available
       let newStartDT = start_time ? new Date(start_time) : (start_date ? new Date(start_date) : null);
       let newEndDT = end_time ? new Date(end_time) : (end_date ? new Date(end_date) : newStartDT);
       let newPeriodTstz = period_tstz || null;
+      // Never run overlap validation with undefined user id
       if (overlapUserId && newStartDT) {
         let overlapQuery = supabase
           .from("asignaciones")
