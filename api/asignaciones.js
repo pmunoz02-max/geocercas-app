@@ -61,24 +61,19 @@ export default async function handler(req, res) {
       if (!personalError && Array.isArray(personalData)) {
         personal = personalData;
       }
-      // Geocercas
-      let geocercasQuery = supabase
-        .from("geofences")
-        .select("id,name,is_deleted")
-        .eq("org_id", requested_org_id);
-      // Excluir eliminadas si existe is_deleted
-      try {
-        const { data: testData } = await supabase
-          .from("geofences")
-          .select("is_deleted")
-          .limit(1);
-        if (Array.isArray(testData) && testData.length > 0 && testData[0] && typeof testData[0].is_deleted !== "undefined") {
-          geocercasQuery = geocercasQuery.eq("is_deleted", false);
-        }
-      } catch {}
-      const { data: geocercasData, error: geocercasError } = await geocercasQuery;
+      // Geocercas desde tabla geocercas
+      const { data: geocercasData, error: geocercasError } = await supabase
+        .from("geocercas")
+        .select("id,nombre,name,is_deleted,activo")
+        .eq("org_id", requested_org_id)
+        .eq("is_deleted", false)
+        .eq("activo", true)
+        .order("nombre", { ascending: true });
       if (!geocercasError && Array.isArray(geocercasData)) {
-        geocercas = geocercasData.map(g => ({ id: g.id, name: g.name }));
+        geocercas = geocercasData.map(g => ({
+          id: g.id,
+          nombre: g.nombre || g.name || null
+        }));
       }
     }
   } catch (e) {
