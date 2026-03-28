@@ -29,64 +29,77 @@ export default async function handler(req, res) {
     }
     if (method === "HEAD") {
       setHeaders(res);
-      res.statusCode = 200;
-      return res.end();
-    }
-
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-
-    if (method === "POST") {
-      // POST: crear nueva asignación (no confiar en tenant_id del frontend)
-      const rawFields = req.body || {};
-      // Nunca confiar en tenant_id del frontend
-      const { tenant_id: _ignoreTenantId, ...fieldsNoTenant } = rawFields;
-
-      // org_id debe venir del query o sesión
-      const org_id = q.org_id || q.orgId || fieldsNoTenant.org_id || null;
-      if (!org_id) {
-        return send(res, 400, { ok: false, error: "missing_org_id" });
-      }
-
-      // Si se requiere tenant_id, resolverlo aquí (ejemplo: buscar en tabla tenants)
-      let resolvedTenantId = null;
-      if (fieldsNoTenant.tenant_lookup_key) {
-        // Ejemplo: buscar tenant por clave
-        const { data: tenantRow, error: tenantError } = await supabase
-          .from("tenants")
-          .select("id")
-          .eq("lookup_key", fieldsNoTenant.tenant_lookup_key)
-          .eq("org_id", org_id)
-          .single();
-        if (tenantError || !tenantRow) {
-          return send(res, 400, { ok: false, error: "tenant_not_found" });
+      // ...existing code...
+      // Never run overlap validation with undefined user id
+      if (overlapUserId && newStartDT) {
+        let overlapQuery = supabase
+          .from("asignaciones")
+          .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
+          .eq(effectiveUserField, overlapUserId)
+          .eq("is_deleted", false)
+          .neq("id", id);
+        const { data: overlapRows, error: overlapError } = await overlapQuery;
+        if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
+        let foundConflict = null;
+        if (Array.isArray(overlapRows)) {
+          for (const a of overlapRows) {
+            // ...existing code...
+          }
         }
-        resolvedTenantId = tenantRow.id;
+        if (foundConflict) {
+          return send(res, 409, {
+            ok: false,
+            error: "overlap",
+            message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.",
+            overlap_ids: [foundConflict.id],
+            debug: {
+              current_id: id,
+              effective_user_field: effectiveUserField,
+              effective_user_id: overlapUserId,
+              new_start: newStartDT,
+              new_end: newEndDT,
+              conflicting_id: foundConflict.id,
+              conflicting_personal_id: foundConflict.personal_id,
+              conflicting_tracker_user_id: foundConflict.tracker_user_id,
+              conflicting_start: (() => {
+                if (foundConflict.period_tstz) {
+                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
+                  return m && m[1] ? m[1] : null;
+                } else if (foundConflict.start_time) {
+                  return foundConflict.start_time;
+                } else if (foundConflict.start_date) {
+                  return foundConflict.start_date;
+                }
+                return null;
+              })(),
+              conflicting_end: (() => {
+                if (foundConflict.period_tstz) {
+                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
+                  return m && m[2] ? m[2] : null;
+                } else if (foundConflict.end_time) {
+                  return foundConflict.end_time;
+                } else if (foundConflict.end_date) {
+                  return foundConflict.end_date;
+                }
+                return null;
+              })()
+            }
+          });
+        }
       }
 
-      // Construir payload final sin tenant_id del frontend
-      const insertPayload = {
-        ...fieldsNoTenant,
-        org_id,
-        ...(resolvedTenantId ? { tenant_id: resolvedTenantId } : {}),
-      };
-
-      // Eliminar tenant_lookup_key del insert
-      delete insertPayload.tenant_lookup_key;
-
-      const { data, error } = await supabase
-        .from("asignaciones")
-        .insert([insertPayload])
-        .select()
-        .single();
-      if (error) return send(res, 500, { ok: false, error: error.message });
-      return send(res, 201, { ok: true, asignacion: data });
-    }
-
-    if (method === "PATCH") {
-      // PATCH: editar asignación o cambiar estado
-      const { id, status, org_id, ...fields } = req.body || {};
+      // Always rebuild period column using tstzrange before saving
+      // Only if start_time and end_time are present
+      if (fields.start_time && fields.end_time) {
+        // Format: tstzrange('start', 'end', '[)')
+        // Ensure ISO strings with timezone
+        const startTz = new Date(fields.start_time).toISOString();
+        const endTz = new Date(fields.end_time).toISOString();
+        fields.period = `tstzrange('${startTz}','${endTz}','[)')`;
+      } else {
+        // If not both present, remove period so triggers can handle
+        delete fields.period;
+      }
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
 
       // Si se envía status, actualizar solo status (y org_id si viene)
