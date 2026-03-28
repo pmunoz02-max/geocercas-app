@@ -547,6 +547,10 @@ serve(async (req) => {
     if (!effectivePersonalId && personal_id) {
       effectivePersonalId = personal_id;
     }
+    // Defensive: if still no personalId, log and continue with null
+    if (!effectivePersonalId) {
+      console.warn('[send-tracker-invite-brevo] No personalId found for invite', { org_id, email, assignment_id, personal_id });
+    }
 
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();

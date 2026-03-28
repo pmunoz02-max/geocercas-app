@@ -168,7 +168,9 @@ export default async function handler(req, res) {
     // Consultar personal y validar email
     try {
       const supabaseUrl = process.env.SUPABASE_URL;
-      const url = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(asignacion.personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,email`;
+      // Use resolvedPersonalId fallback for null safety
+      const resolvedPersonalId = personal_id || (asignacion && asignacion.personal_id) || null;
+      const url = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(resolvedPersonalId)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,email`;
       const resp = await fetch(url, {
         headers: {
           apikey: serviceKey,
