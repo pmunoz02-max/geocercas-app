@@ -201,107 +201,55 @@ async function syncTrackerAssignment(adminSupabase, row) {
     return { ok: false, error: "missing_service_role_key" };
   }
 
-  const orgId = row?.org_id || null;
-  const trackerUserId = row?.user_id || null;
-  const geofenceId = row?.geofence_id || row?.geocerca_id || null;
-  const activityId = row?.activity_id || null;
-  const startDate = toDateOnlyOrNull(row?.start_time);
-  const endDate = toDateOnlyOrNull(row?.end_time);
-  const active = normalizeActiveStatus(row);
-  const frequencyMinutes = normalizeFrequencyMinutes(row);
+  const orgId = row.org_id;
+  const trackerUserId = row.user_id;
+  const geofenceId = row.geofence_id || row.geocerca_id;
+  const activityId = row.activity_id;
+
+  const startDate = row.start_time?.slice(0, 10);
+  const endDate = row.end_time?.slice(0, 10);
 
   if (!orgId || !trackerUserId || !geofenceId) {
-    return { ok: false, error: "missing_sync_fields" };
+    return { ok: false, error: "missing_fields" };
   }
 
-  const basePayload = {
-    tenant_id: orgId,
-    org_id: orgId,
-    tracker_user_id: trackerUserId,
-    geofence_id: geofenceId,
-    activity_id: activityId,
-    start_date: startDate,
-    end_date: endDate,
-    frequency_minutes: frequencyMinutes,
-    active,
-    updated_at: new Date().toISOString(),
-  };
+  console.log("[SYNC] deleting old assignments...");
 
-  console.log("[asignaciones] direct tracker sync payload", basePayload);
-
-  const { data: exactRows, error: exactError } = await adminSupabase
+  // 🔥 BORRA anteriores (clave)
+  await adminSupabase
     .from("tracker_assignments")
-    .select("id, org_id, tracker_user_id, geofence_id, activity_id, created_at, updated_at")
+    .delete()
     .eq("org_id", orgId)
     .eq("tracker_user_id", trackerUserId)
-    .eq("geofence_id", geofenceId)
-    .eq("activity_id", activityId)
-    .order("updated_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .eq("geofence_id", geofenceId);
 
-  if (exactError) {
-    return { ok: false, error: exactError.message };
-  }
+  console.log("[SYNC] inserting new assignment...");
 
-  if (Array.isArray(exactRows) && exactRows.length > 0) {
-    const targetId = exactRows[0].id;
-    const { error: updateError } = await adminSupabase
-      .from("tracker_assignments")
-      .update(basePayload)
-      .eq("id", targetId);
-
-    if (updateError) {
-      return { ok: false, error: updateError.message };
-    }
-
-    return { ok: true, mode: "update_exact", id: targetId };
-  }
-
-  const { data: relatedRows, error: relatedError } = await adminSupabase
+  const { data, error } = await adminSupabase
     .from("tracker_assignments")
-    .select("id, org_id, tracker_user_id, geofence_id, activity_id, start_date, end_date, created_at, updated_at")
-    .eq("org_id", orgId)
-    .eq("geofence_id", geofenceId)
-    .eq("activity_id", activityId)
-    .order("updated_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  if (relatedError) {
-    return { ok: false, error: relatedError.message };
-  }
-
-  if (Array.isArray(relatedRows) && relatedRows.length > 0) {
-    const targetId = relatedRows[0].id;
-    const { error: reassignError } = await adminSupabase
-      .from("tracker_assignments")
-      .update(basePayload)
-      .eq("id", targetId);
-
-    if (reassignError) {
-      return { ok: false, error: reassignError.message };
-    }
-
-    return { ok: true, mode: "reassign_related", id: targetId };
-  }
-
-  const insertPayload = {
-    ...basePayload,
-    created_at: new Date().toISOString(),
-  };
-
-  const { data: inserted, error: insertError } = await adminSupabase
-    .from("tracker_assignments")
-    .insert([insertPayload])
+    .insert([{
+      org_id: orgId,
+      tenant_id: orgId,
+      tracker_user_id: trackerUserId,
+      geofence_id: geofenceId,
+      activity_id: activityId,
+      start_date: startDate,
+      end_date: endDate,
+      active: true,
+      frequency_minutes: row.frequency_minutes || 5,
+      created_at: new Date().toISOString()
+    }])
     .select("id")
     .single();
 
-  if (insertError) {
-    return { ok: false, error: insertError.message };
+  if (error) {
+    console.error("[SYNC ERROR]", error);
+    return { ok: false, error: error.message };
   }
 
-  return { ok: true, mode: "insert", id: inserted?.id || null };
+  console.log("[SYNC OK]", data);
+
+  return { ok: true, id: data.id };
 }
 
 export default async function handler(req, res) {
