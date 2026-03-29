@@ -14,7 +14,16 @@ async function parseJsonSafe(res) {
 }
 
 async function apiFetch(method, body) {
-  const res = await fetch("/api/asignaciones", {
+  let url = "/api/asignaciones";
+  if (method === "PATCH") {
+    url += "?v=asig-patch-01";
+  }
+  // Log temporal del método y payload
+  if (method === "PATCH") {
+    console.log("[apiFetch] PATCH payload:", body);
+    console.log("[apiFetch] HTTP method:", method, "URL:", url);
+  }
+  const res = await fetch(url, {
     method,
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -99,10 +108,11 @@ export async function updateAsignacion(id, fields = {}) {
   for (const key of Object.keys(fields)) {
     if (fields[key] !== undefined) updatePayload[key] = fields[key];
   }
-  // Log the update payload
-  console.log("[updateAsignacion] PATCH payload:", updatePayload);
+  // Log temporal del payload final y método
+  console.log("[updateAsignacion] PATCH payload FINAL:", updatePayload);
+  console.log("[updateAsignacion] HTTP method: PATCH");
   const response = await apiFetch("PATCH", updatePayload);
-  // Log the update response
+  // Log la respuesta
   console.log("[updateAsignacion] PATCH response:", response);
   return response;
 }
