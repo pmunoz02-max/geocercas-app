@@ -111,6 +111,8 @@ export default async function handler(req, res) {
     console.log('[taa] step: tracker_assignments fetch status', trackerAssignmentsResp.status);
     if (!trackerAssignmentsResp.ok) {
       console.log("[taa] step: tracker_assignments fetch error", trackerAssignmentsUrl, trackerAssignmentsResp.status);
+      const errorText = await trackerAssignmentsResp.text();
+      console.log("[taa] step: tracker_assignments error body", errorText);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
     }
     const trackerAssignmentsRows = await trackerAssignmentsResp.json();
