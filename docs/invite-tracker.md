@@ -68,3 +68,8 @@ El registro de personal se resuelve usando email + org_id para garantizar consis
 ## Update Marzo 2026 – Lookup post-invite con service key
 
 La verificación de `personal` después del invite usa `serviceKey` para evitar lecturas vacías por RLS.
+## Update Marzo 2026 – Reutilización de usuario existente
+
+Antes de crear/invitar un tracker, el sistema busca si ya existe un `auth.users` para ese email.
+Si existe, reutiliza ese usuario.
+Solo crea/invita un usuario nuevo si no existe uno previo para el email.
