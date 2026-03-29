@@ -413,7 +413,7 @@ export default async function handler(req, res) {
         }
       }
       try {
-        // Fetch current personal record por email y org_id
+        // Buscar personal solo por email y org_id después del invite
         const getUrl = `${supabaseUrl}/rest/v1/personal?email=eq.${encodeURIComponent(email)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,user_id`;
         const getResp = await fetch(getUrl, {
           headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
@@ -421,16 +421,23 @@ export default async function handler(req, res) {
         if (!getResp.ok) throw new Error("Failed to fetch personal for user_id check");
         const rows = await getResp.json();
         const personal = rows && rows[0];
-        if (!personal) throw new Error("Personal record not found after invite");
+        if (!personal) {
+          return res.status(500).json({
+            ok: false,
+            error: "personal_not_found_after_invite",
+            email,
+            org_id,
+          });
+        }
         if (personal.user_id && personal.user_id !== trackerUserId) {
           // Conflict: user_id already set to a different value
-          console.warn(`[invite-tracker] conflict: personal.user_id already set to a different value`, { personal_id, org_id, existing: personal.user_id, new: trackerUserId });
+          console.warn(`[invite-tracker] conflict: personal.user_id already set to a different value`, { personal_id: personal.id, org_id, existing: personal.user_id, new: trackerUserId });
           return res.status(409).json({
             ok: false,
             build: BUILD_TAG,
             error: "personal_user_id_conflict",
             message: "El personal ya está vinculado a otro usuario.",
-            personal_id,
+            personal_id: personal.id,
             org_id,
             existing_user_id: personal.user_id,
             new_user_id: trackerUserId
@@ -442,7 +449,7 @@ export default async function handler(req, res) {
             // Ya está vinculado correctamente, continuar sin PATCH ni error
           } else if (!personal.user_id) {
             // Solo hacer PATCH si user_id está vacío
-            const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
+            const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal.id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
             const patchResp = await fetch(patchUrl, {
               method: "PATCH",
               headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },

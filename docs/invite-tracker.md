@@ -61,3 +61,7 @@ No se debe filtrar nuevamente por `org_id` en esa lectura final, porque la valid
 ## Update Marzo 2026 – Resolución por email post-invite
 
 Después de invitar, el registro de personal se resuelve usando email + org_id en lugar de personal_id para evitar inconsistencias en el flujo.
+## Update Marzo 2026 – Eliminación de dependencia de personal_id
+
+El flujo de invitación ya no depende de personal_id después del invite.
+El registro de personal se resuelve usando email + org_id para garantizar consistencia.
