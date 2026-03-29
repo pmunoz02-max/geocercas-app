@@ -34,3 +34,17 @@ Permitir:
 
 Sin romper:
 - consistencia de `personal.user_id`
+## Update Marzo 2026 – Patch condicional de user_id
+
+Se evita hacer PATCH innecesario sobre `personal.user_id`.
+
+### Nueva lógica
+
+- Si `personal.user_id` es NULL → se asigna `trackerUserId`
+- Si `personal.user_id` ya es igual a `trackerUserId` → NO hacer PATCH
+- Si `personal.user_id` es distinto → retornar conflicto
+
+### Objetivo
+
+- Evitar errores 500 en invitaciones
+- Mantener consistencia sin sobreescrituras

@@ -437,16 +437,20 @@ export default async function handler(req, res) {
           });
         }
         if (!personal.user_id) {
-          // Patch personal record if user_id is not set
-          const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
-          const patchResp = await fetch(patchUrl, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
-            body: JSON.stringify({ user_id: trackerUserId }),
-          });
-          if (!patchResp.ok) {
-            console.warn("[invite-tracker] failed to patch personal.user_id", await patchResp.text());
-            throw new Error("Failed to update personal.user_id after invite");
+          // Solo hacer PATCH si user_id es diferente
+          if (trackerUserId && personal.user_id === trackerUserId) {
+            // Ya está vinculado correctamente, continuar
+          } else {
+            const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
+            const patchResp = await fetch(patchUrl, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+              body: JSON.stringify({ user_id: trackerUserId }),
+            });
+            if (!patchResp.ok) {
+              console.warn("[invite-tracker] failed to patch personal.user_id", await patchResp.text());
+              throw new Error("Failed to update personal.user_id after invite");
+            }
           }
         }
       } catch (e) {
