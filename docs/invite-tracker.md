@@ -65,3 +65,6 @@ Después de invitar, el registro de personal se resuelve usando email + org_id e
 
 El flujo de invitación ya no depende de personal_id después del invite.
 El registro de personal se resuelve usando email + org_id para garantizar consistencia.
+## Update Marzo 2026 – Lookup post-invite con service key
+
+La verificación de `personal` después del invite usa `serviceKey` para evitar lecturas vacías por RLS.

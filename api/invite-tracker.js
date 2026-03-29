@@ -413,22 +413,90 @@ export default async function handler(req, res) {
         }
       }
       try {
-        // Buscar personal solo por email y org_id después del invite
-        const getUrl = `${supabaseUrl}/rest/v1/personal?email=eq.${encodeURIComponent(email)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,user_id`;
-        const getResp = await fetch(getUrl, {
-          headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
+        const normalizedEmail = String(email || "").trim().toLowerCase();
+
+        console.log("[invite-tracker] post-invite lookup start", {
+          personal_id,
+          org_id,
+          email,
+          normalizedEmail,
         });
-        if (!getResp.ok) throw new Error("Failed to fetch personal for user_id check");
-        const rows = await getResp.json();
-        const personal = rows && rows[0];
+
+        const candidateUrl =
+          `${supabaseUrl}/rest/v1/personal` +
+          `?id=eq.${encodeURIComponent(personal_id)}` +
+          `&select=id,email,user_id,org_id`;
+
+        const candidateResp = await fetch(candidateUrl, {
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            Accept: "application/json",
+          },
+        });
+
+        const candidateRows = await candidateResp.json().catch(() => []);
+        const candidate = Array.isArray(candidateRows) ? candidateRows[0] : null;
+
+        console.log("[invite-tracker] candidateRows", {
+          count: Array.isArray(candidateRows) ? candidateRows.length : -1,
+          first: candidate || null,
+        });
+
+        let personal = null;
+
+        if (candidate && String(candidate.org_id) === String(org_id)) {
+          personal = candidate;
+        } else {
+          const getUrl =
+            `${supabaseUrl}/rest/v1/personal` +
+            `?org_id=eq.${encodeURIComponent(org_id)}` +
+            `&email=eq.${encodeURIComponent(normalizedEmail)}` +
+            `&select=id,email,user_id,org_id`;
+
+          console.log("[invite-tracker] email fallback lookup", {
+            getUrl,
+            normalizedEmail,
+          });
+
+          const getResp = await fetch(getUrl, {
+            headers: {
+              apikey: serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+              Accept: "application/json",
+            },
+          });
+
+          if (!getResp.ok) {
+            const txt = await getResp.text().catch(() => "");
+            throw new Error(`Failed to fetch personal for user_id check: ${getResp.status} ${txt}`);
+          }
+
+          const rows = await getResp.json().catch(() => []);
+          console.log("[invite-tracker] email fallback rows", {
+            count: Array.isArray(rows) ? rows.length : -1,
+            rows: Array.isArray(rows) ? rows : [],
+          });
+
+          personal = Array.isArray(rows)
+            ? rows.find((r) => String(r.email || "").trim().toLowerCase() === normalizedEmail) || null
+            : null;
+        }
+
+        console.log("[invite-tracker] resolved personal after invite", {
+          personal: personal || null,
+        });
+
         if (!personal) {
           return res.status(500).json({
             ok: false,
             error: "personal_not_found_after_invite",
-            email,
+            email: normalizedEmail,
             org_id,
+            personal_id: personal_id || null,
           });
         }
+
         if (personal.user_id && personal.user_id !== trackerUserId) {
           // Conflict: user_id already set to a different value
           console.warn(`[invite-tracker] conflict: personal.user_id already set to a different value`, { personal_id: personal.id, org_id, existing: personal.user_id, new: trackerUserId });
@@ -443,6 +511,7 @@ export default async function handler(req, res) {
             new_user_id: trackerUserId
           });
         }
+
         if (!personal.user_id) {
           // Si personal.user_id ya es igual a trackerUserId, no hacer PATCH ni retornar error
           if (trackerUserId && personal.user_id === trackerUserId) {
