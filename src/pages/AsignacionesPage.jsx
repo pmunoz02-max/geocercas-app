@@ -253,6 +253,15 @@ export default function AsignacionesPage() {
         }
         await loadAll();
         setSuccess("Asignación actualizada correctamente.");
+        // Limpiar formulario igual que en createAsignacion
+        setSelectedPersonId("");
+        setSelectedGeocercaId("");
+        setSelectedActivityId("");
+        setStartTime("");
+        setEndTime("");
+        setEndTimeError("");
+        setStatus("active");
+        setFreqMin(5);
         setEditingId(null);
         setSaving(false);
         return;
