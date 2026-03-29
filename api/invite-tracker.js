@@ -579,7 +579,7 @@ export default async function handler(req, res) {
             const trackerAssignmentsUrl = `${supabaseUrl}/rest/v1/tracker_assignments`;
             const insertBody = [{
               org_id,
-              tracker_user_id: personal_id,
+              tracker_user_id: trackerUserId,
               geofence_id: assignment.geofence_id,
               start_date: assignment.start_time ? assignment.start_time.slice(0, 10) : null,
               end_date: assignment.end_time ? assignment.end_time.slice(0, 10) : null,

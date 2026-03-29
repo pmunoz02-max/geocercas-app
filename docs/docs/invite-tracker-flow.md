@@ -29,3 +29,13 @@ This document describes the current invite-tracker flow for preview environments
   - No matching `personal` record exists for the org/email.
   - The email in `personal` does not match the invite email.
   - There is a true data inconsistency (e.g., conflicting user IDs).
+
+## ID Mapping and Integrity Rules (2026-03)
+
+- `personal.id`: Internal operational record for the person. Never used as a user reference in assignments.
+- `personal.user_id`: Always the canonical link to the auth user (`auth.users.id`).
+- `tracker_assignments.tracker_user_id`: Always set to the auth user's id (`auth.users.id`). Never use `personal.id` here.
+- The backend ensures that all assignment and invite flows use the correct mapping and never confuse operational and auth/user IDs.
+- This mapping is enforced in all inserts and updates, and is now covered by automated tests and code review policy.
+
+---
