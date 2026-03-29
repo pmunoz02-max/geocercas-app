@@ -158,8 +158,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid org_id" });
     }
 
+
     if (!email || !email.includes("@")) {
       return res.status(400).json({ ok: false, build: BUILD_TAG, error: "Invalid email" });
+    }
+
+    if (!assignment_id) {
+      return res.status(400).json({
+        ok: false,
+        error: "assignment_required",
+        message: "Assignment is required for tracker invite",
+      });
     }
 
     if (assignment_id && !isUuid(assignment_id)) {
@@ -168,6 +177,8 @@ export default async function handler(req, res) {
 
     let asignacion = null;
     let personal_id = null;
+    // Definir nowIso antes del query de asignaciones
+    const nowIso = new Date().toISOString();
     if (assignment_id) {
       try {
         const supabaseUrl = process.env.SUPABASE_URL;
@@ -238,16 +249,6 @@ export default async function handler(req, res) {
     let reusedExistingUser = false;
 
     // 1) Buscar auth user existente por email usando service key
-    const serviceKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY ||
-      process.env.SUPABASE_SERVICE_KEY;
-
-    if (!serviceKey) {
-      return res.status(500).json({
-        ok: false,
-        error: "missing_service_key",
-      });
-    }
 
     try {
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -271,15 +272,8 @@ export default async function handler(req, res) {
 
     // 2) Si existe -> trackerUserId = existing id, reusedExistingUser = true
     // 3) Si no existe -> ejecutar invite/creation original y obtener trackerUserId
-    if (!trackerUserId) {
-      // Solo crear/invitar usuario si NO existe
-      // ...lógica de invitación/creación original...
-      // Al finalizar, asignar trackerUserId = user_id creado por el invite
-      // reusedExistingUser = false;
-    } else {
-      // Si ya existe auth user, NO crear otro usuario, continuar con vinculación a org y personal usando ese user_id
-      // Aquí trackerUserId ya está seteado correctamente
-    }
+    // Always rely on Brevo invite flow to create or reuse user
+    // trackerUserId will be resolved after invite if needed
     // 4) Luego SIEMPRE continuar con:
     //    - validación de personal post-invite/post-link
     //    - vinculación personal.user_id
@@ -381,6 +375,11 @@ export default async function handler(req, res) {
       `/functions/v1/send-tracker-invite-brevo`;
 
     // Always include personal_id in tracker creation payload, even if no assignment_id
+    console.log("[invite-tracker] invite_request", {
+      org_id,
+      email,
+      assignment_id,
+    });
     const started = Date.now();
     const upstream = await fetch(edgeUrl, {
       method: "POST",
