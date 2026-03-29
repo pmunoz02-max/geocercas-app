@@ -417,20 +417,23 @@ export default async function handler(req, res) {
       const effectiveStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
       const effectiveEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
 
-      // Overlap validation: org_id, personal_id, start_time, end_time, exclude current id
+      // Overlap validation: org_id, personal_id, start_time, end_time, exclude current id (normalized)
       if (effectiveOrgId && effectivePersonalId && effectiveStart && effectiveEnd) {
+        // Normalize id for comparison
+        const normId = String(id).trim();
         const { data: overlapRows, error: overlapError } = await supabase
           .from("asignaciones")
           .select("id, start_time, end_time, personal_id, org_id")
           .eq("org_id", effectiveOrgId)
           .eq("personal_id", effectivePersonalId)
           .eq("is_deleted", false)
-          .neq("id", id);
+          .neq("id", normId);
         if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
         const nStart = new Date(effectiveStart);
         const nEnd = new Date(effectiveEnd);
         for (const a of overlapRows || []) {
-          if (!a.id || a.id === id) continue; // Exclude current id from JS overlap check
+          // Exclude current id from JS overlap check using normalized string comparison
+          if (!a.id || String(a.id).trim() === normId) continue;
           const aStart = a.start_time ? new Date(a.start_time) : null;
           const aEnd = a.end_time ? new Date(a.end_time) : null;
           if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
