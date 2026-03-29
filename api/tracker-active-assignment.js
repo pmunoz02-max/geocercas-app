@@ -98,8 +98,8 @@ export default async function handler(req, res) {
     }
     const personal_id = personal.id;
 
-    // Paso 1: obtener assignment_ids de tracker_assignments
-    const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&select=assignment_id`;
+    // Paso 1: Buscar tracker_assignments activos para este tracker_user_id y org_id
+    const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&select=id,org_id,tracker_user_id,activity_id,geofence_id,active,start_date,end_date,period,period_tstz,frequency_minutes`;
     console.log('[taa] step: tracker_assignments url', trackerAssignmentsUrl);
     console.log('[taa] step: tracker_assignments fetch start');
     const trackerAssignmentsResp = await fetch(trackerAssignmentsUrl, {
@@ -116,10 +116,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
     }
     const trackerAssignmentsRows = await trackerAssignmentsResp.json();
-    const assignmentIds = (trackerAssignmentsRows || []).map(row => row.assignment_id).filter(Boolean);
-    console.log('[taa] step: got assignmentIds', assignmentIds);
-    if (!assignmentIds.length) {
-      console.log("[taa] step: no assignment linked");
+    console.log('[taa] step: got trackerAssignmentsRows', trackerAssignmentsRows);
+    if (!trackerAssignmentsRows.length) {
+      console.log("[taa] step: no tracker_assignments linked");
       return res.status(200).json({
         ok: true,
         active: false,
@@ -131,9 +130,31 @@ export default async function handler(req, res) {
       });
     }
 
-    // Paso 2: consultar asignaciones como fuente de verdad
+    // Paso 2: Tomar activity_id y geofence_id
+    const activityIds = trackerAssignmentsRows.map(row => row.activity_id).filter(Boolean);
+    const geofenceIds = trackerAssignmentsRows.map(row => row.geofence_id).filter(Boolean);
+    console.log('[taa] step: got activityIds', activityIds, 'geofenceIds', geofenceIds);
+    if (!activityIds.length) {
+      console.log('[taa] step: no activity_id in tracker_assignments');
+      return res.status(200).json({
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: "no_activity_id_in_assignments",
+        org_id,
+        tracker_user_id: trackerUserId,
+        personal_id
+      });
+    }
+
+    // Paso 3: Buscar en asignaciones usando org_id, user_id, activity_id y (opcional) geofence_id
     const nowIso = new Date().toISOString();
-    const asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?id=in.(${assignmentIds.map(id => encodeURIComponent(id)).join(',')})&org_id=eq.${encodeURIComponent(org_id)}&active=eq.true&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=*`;
+    let asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?org_id=eq.${encodeURIComponent(org_id)}&user_id=eq.${encodeURIComponent(trackerUserId)}&activity_id=in.(${activityIds.map(id => encodeURIComponent(id)).join(',')})`;
+    if (geofenceIds.length) {
+      asignacionesUrl += `&geofence_id=in.(${geofenceIds.map(id => encodeURIComponent(id)).join(',')})`;
+    }
+    asignacionesUrl += `&select=*`;
+    console.log('[taa] step: asignaciones url', asignacionesUrl);
     const asignacionesResp = await fetch(asignacionesUrl, {
       headers: {
         apikey: serviceKey,
@@ -145,18 +166,29 @@ export default async function handler(req, res) {
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando asignaciones' });
     }
     const asignacionesRows = await asignacionesResp.json();
-    const activeAsignacion = asignacionesRows && asignacionesRows[0];
-    console.log('[taa] step: checked asignaciones, found:', !!activeAsignacion);
+    // Paso 4: Validar ventana activa y status en asignaciones
+    const now = new Date();
+    const activeAsignacion = (asignacionesRows || []).find(row => {
+      // status = 'active' o estado = 'activa'/'active'
+      const statusOk = (row.status && row.status.toLowerCase() === 'active') || (row.estado && ['activa','active'].includes(row.estado.toLowerCase()));
+      // NOW() entre start_time y end_time
+      const start = row.start_time ? new Date(row.start_time) : null;
+      const end = row.end_time ? new Date(row.end_time) : null;
+      const windowOk = start && end && now >= start && now <= end;
+      return statusOk && windowOk;
+    });
     if (activeAsignacion) {
+      // Buscar el tracker_assignment correspondiente
+      const matchingTrackerAssignment = trackerAssignmentsRows.find(row => row.activity_id === activeAsignacion.activity_id && (!activeAsignacion.geofence_id || row.geofence_id === activeAsignacion.geofence_id));
       return res.status(200).json({
         ok: true,
         active: true,
         assignment: activeAsignacion,
+        tracker_assignment: matchingTrackerAssignment || null,
         reason: "assignment_found",
         org_id,
         tracker_user_id: trackerUserId,
-        personal_id,
-        assignment_id: activeAsignacion.id
+        personal_id
       });
     } else {
       console.log("[taa] step: no active assignment in asignaciones");
@@ -164,7 +196,7 @@ export default async function handler(req, res) {
         ok: true,
         active: false,
         assignment: null,
-        reason: "no_active_assignment_in_asignaciones",
+        reason: "no_active_assignment",
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
