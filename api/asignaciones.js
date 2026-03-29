@@ -328,22 +328,64 @@ export default async function handler(req, res) {
 
 
     if (method === "POST") {
-      // Create new assignment in asignaciones table
+      // Only allow real writable columns for public.asignaciones
       const incoming = req.body || {};
-      // Remove period, period_tstz, start_date, end_date from payload
       const {
-        period, period_tstz, start_date, end_date, ...fields
+        personal_id,
+        geofence_id,
+        geocerca_id,
+        activity_id,
+        start_time,
+        end_time,
+        status,
+        estado,
+        frecuencia_envio_sec,
+        frequency_minutes,
+        org_id
       } = incoming;
-      // Only insert writable columns (fields)
+      // Overlap validation: org_id, personal_id, start_time, end_time
+      if (!org_id || !personal_id || !start_time || !end_time) {
+        return send(res, 400, { ok: false, error: "missing_required_fields" });
+      }
+      const { data: overlapRows, error: overlapError } = await supabase
+        .from("asignaciones")
+        .select("id, start_time, end_time, personal_id, org_id")
+        .eq("org_id", org_id)
+        .eq("personal_id", personal_id)
+        .eq("is_deleted", false);
+      if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
+      const nStart = new Date(start_time);
+      const nEnd = new Date(end_time);
+      for (const a of overlapRows || []) {
+        const aStart = a.start_time ? new Date(a.start_time) : null;
+        const aEnd = a.end_time ? new Date(a.end_time) : null;
+        if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
+          return send(res, 409, { ok: false, error: "overlap", conflict_id: a.id });
+        }
+      }
+      // Only insert allowed columns
+      const insertFields = {
+        personal_id,
+        geofence_id,
+        geocerca_id,
+        activity_id,
+        start_time,
+        end_time,
+        status,
+        estado,
+        frecuencia_envio_sec,
+        frequency_minutes,
+        org_id
+      };
       const { error } = await supabase
         .from("asignaciones")
-        .insert([fields]);
+        .insert([insertFields]);
       if (error) return send(res, 500, { ok: false, error: error.message });
       return send(res, 201, { ok: true });
     }
 
     if (method === "PATCH") {
-      // Only allow updates to asignaciones columns
+      // Only allow updates to real writable columns for public.asignaciones
       const incoming = req.body || {};
       const {
         id,
@@ -357,8 +399,7 @@ export default async function handler(req, res) {
         estado,
         frecuencia_envio_sec,
         frequency_minutes,
-        org_id,
-        period
+        org_id
       } = incoming;
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
 
@@ -370,43 +411,29 @@ export default async function handler(req, res) {
         .single();
       if (fetchError || !currentRow) return send(res, 404, { ok: false, error: "not_found" });
 
-      // Rebuild effective start_time/end_time
+      // Determine effective values
+      const effectivePersonalId = typeof personal_id !== "undefined" ? personal_id : currentRow.personal_id;
+      const effectiveOrgId = typeof org_id !== "undefined" ? org_id : currentRow.org_id;
       const effectiveStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
       const effectiveEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
 
-      // Always update period from effective start/end
-      let newPeriod = null;
-      if (effectiveStart && effectiveEnd) {
-        const startTz = new Date(effectiveStart).toISOString();
-        const endTz = new Date(effectiveEnd).toISOString();
-        newPeriod = `tstzrange('${startTz}','${endTz}','[)')`;
-      }
-
-      // Overlap validation (exclude current id)
-      const overlapPersonalId = typeof personal_id !== "undefined" ? personal_id : currentRow.personal_id;
-      if (overlapPersonalId && effectiveStart) {
+      // Overlap validation: org_id, personal_id, start_time, end_time, exclude current id
+      if (effectiveOrgId && effectivePersonalId && effectiveStart && effectiveEnd) {
         const { data: overlapRows, error: overlapError } = await supabase
           .from("asignaciones")
-          .select("id,start_time,end_time,personal_id,period")
-          .eq("personal_id", overlapPersonalId)
+          .select("id, start_time, end_time, personal_id, org_id")
+          .eq("org_id", effectiveOrgId)
+          .eq("personal_id", effectivePersonalId)
           .eq("is_deleted", false)
           .neq("id", id);
         if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
+        const nStart = new Date(effectiveStart);
+        const nEnd = new Date(effectiveEnd);
         for (const a of overlapRows || []) {
-          // Overlap logic: use period if present, else start/end
-          let aStart = a.start_time ? new Date(a.start_time) : null;
-          let aEnd = a.end_time ? new Date(a.end_time) : null;
-          if (a.period) {
-            const m = a.period.match(/\['"](.+?)['"],['"](.+?)['"]/);
-            if (m && m[1]) aStart = new Date(m[1]);
-            if (m && m[2]) aEnd = new Date(m[2]);
-          }
-          const nStart = effectiveStart ? new Date(effectiveStart) : null;
-          const nEnd = effectiveEnd ? new Date(effectiveEnd) : null;
-          if (aStart && aEnd && nStart && nEnd) {
-            if (aStart < nEnd && aEnd > nStart) {
-              return send(res, 409, { ok: false, error: "overlap", conflict_id: a.id });
-            }
+          const aStart = a.start_time ? new Date(a.start_time) : null;
+          const aEnd = a.end_time ? new Date(a.end_time) : null;
+          if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
+            return send(res, 409, { ok: false, error: "overlap", conflict_id: a.id });
           }
         }
       }
@@ -424,7 +451,6 @@ export default async function handler(req, res) {
       if (typeof frecuencia_envio_sec !== "undefined") updateFields.frecuencia_envio_sec = frecuencia_envio_sec;
       if (typeof frequency_minutes !== "undefined") updateFields.frequency_minutes = frequency_minutes;
       if (typeof org_id !== "undefined") updateFields.org_id = org_id;
-      if (newPeriod) updateFields.period = newPeriod;
 
       const { error } = await supabase
         .from("asignaciones")
