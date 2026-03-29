@@ -1,4 +1,6 @@
-const VERSION = "asignaciones-clean-04";
+import { createClient } from "@supabase/supabase-js";
+
+const VERSION = "asignaciones-clean-05";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -9,7 +11,7 @@ function setHeaders(res) {
   res.setHeader("Surrogate-Control", "no-store");
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS,POST,PATCH,DELETE");
   res.setHeader("X-Api-Version", VERSION);
 }
 
@@ -18,8 +20,6 @@ function send(res, status, payload) {
   res.statusCode = status;
   res.end(JSON.stringify(payload));
 }
-
-import { createClient } from "@supabase/supabase-js";
 
 function getEnv(nameList) {
   for (const n of nameList) {
@@ -41,445 +41,353 @@ function parseCookie(cookieHeader, key) {
   }
 }
 
+function toDateOrNull(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function rangesOverlapInclusive(startA, endA, startB, endB) {
+  return startA <= endB && endA >= startB;
+}
+
+function buildWritableFields(incoming) {
+  const allowed = [
+    "personal_id",
+    "geofence_id",
+    "geocerca_id",
+    "activity_id",
+    "start_time",
+    "end_time",
+    "status",
+    "estado",
+    "frecuencia_envio_sec",
+    "frequency_minutes",
+    "org_id",
+    "org_people_id",
+    "user_id",
+  ];
+
+  const fields = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(incoming, key)) {
+      fields[key] = incoming[key];
+    }
+  }
+  return fields;
+}
+
+async function findOverlap(supabase, { currentId = null, orgId, personalId, startTime, endTime }) {
+  if (!orgId || !personalId || !startTime || !endTime) return null;
+
+  const newStart = toDateOrNull(startTime);
+  const newEnd = toDateOrNull(endTime);
+
+  if (!newStart || !newEnd) {
+    return { error: "invalid_datetime" };
+  }
+
+  if (newStart >= newEnd) {
+    return { error: "invalid_range" };
+  }
+
+  const { data: rows, error } = await supabase
+    .from("asignaciones")
+    .select("id, org_id, personal_id, start_time, end_time, is_deleted")
+    .eq("org_id", orgId)
+    .eq("personal_id", personalId)
+    .eq("is_deleted", false);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  const currentIdNorm = currentId ? String(currentId) : null;
+
+  for (const row of rows || []) {
+    if (!row?.id) continue;
+    if (currentIdNorm && String(row.id) === currentIdNorm) continue;
+    if (!row.start_time || !row.end_time) continue;
+
+    const rowStart = toDateOrNull(row.start_time);
+    const rowEnd = toDateOrNull(row.end_time);
+    if (!rowStart || !rowEnd) continue;
+
+    if (rangesOverlapInclusive(rowStart, rowEnd, newStart, newEnd)) {
+      return {
+        conflict: row,
+        debug: {
+          current_id: currentIdNorm,
+          conflict_id: row.id,
+          org_id: orgId,
+          personal_id: personalId,
+          start_time: newStart.toISOString(),
+          end_time: newEnd.toISOString(),
+          conflicting_start_time: row.start_time,
+          conflicting_end_time: row.end_time,
+        },
+      };
+    }
+  }
+
+  return null;
+}
+
 export default async function handler(req, res) {
   try {
     const q = req.query || {};
     const { method } = req;
 
-    // Supabase client initialization (cookie-first, bearer fallback)
     const SUPABASE_URL = getEnv([
       "SUPABASE_URL",
       "VITE_SUPABASE_URL",
       "NEXT_PUBLIC_SUPABASE_URL",
     ]);
+
     const SUPABASE_ANON_KEY = getEnv([
       "SUPABASE_ANON_KEY",
       "SUPABASE_ANON_PUBLIC",
       "VITE_SUPABASE_ANON_KEY",
       "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     ]);
+
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return send(res, 500, {
         ok: false,
         error: "Server misconfigured: missing Supabase env vars (SUPABASE_URL / SUPABASE_ANON_KEY)",
-        details: { hasUrl: Boolean(SUPABASE_URL), hasAnonKey: Boolean(SUPABASE_ANON_KEY) },
+        details: {
+          hasUrl: Boolean(SUPABASE_URL),
+          hasAnonKey: Boolean(SUPABASE_ANON_KEY),
+        },
       });
     }
+
     const cookieHeader = req.headers.cookie || "";
     let token = parseCookie(cookieHeader, "tg_at");
+
     if (!token) {
       const authHeader = req.headers.authorization || "";
       if (authHeader.toLowerCase().startsWith("bearer ")) {
         token = authHeader.slice(7);
       }
     }
+
     if (!token) {
-      return send(res, 401, { ok: false, error: "Missing authentication (cookie tg_at or Authorization Bearer)" });
+      return send(res, 401, {
+        ok: false,
+        error: "Missing authentication (cookie tg_at or Authorization Bearer)",
+      });
     }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
 
     if (method === "OPTIONS") {
-      return send(res, 204, {});
+      setHeaders(res);
+      res.statusCode = 204;
+      return res.end();
     }
+
     if (method === "HEAD") {
       setHeaders(res);
-      // ...existing code...
-      // Never run overlap validation with undefined user id
-      if (overlapUserId && newStartDT) {
-        let overlapQuery = supabase
-          .from("asignaciones")
-          .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
-          .eq(effectiveUserField, overlapUserId)
-          .eq("is_deleted", false)
-          .neq("id", id);
-        const { data: overlapRows, error: overlapError } = await overlapQuery;
-        if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
-        let foundConflict = null;
-        if (Array.isArray(overlapRows)) {
-          for (const a of overlapRows) {
-            // ...existing code...
-          }
-        }
-        if (foundConflict) {
-          return send(res, 409, {
-            ok: false,
-            error: "overlap",
-            message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.",
-            overlap_ids: [foundConflict.id],
-            debug: {
-              current_id: id,
-              effective_user_field: effectiveUserField,
-              effective_user_id: overlapUserId,
-              new_start: newStartDT,
-              new_end: newEndDT,
-              conflicting_id: foundConflict.id,
-              conflicting_personal_id: foundConflict.personal_id,
-              conflicting_tracker_user_id: foundConflict.tracker_user_id,
-              conflicting_start: (() => {
-                if (foundConflict.period_tstz) {
-                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
-                  return m && m[1] ? m[1] : null;
-                } else if (foundConflict.start_time) {
-                  return foundConflict.start_time;
-                } else if (foundConflict.start_date) {
-                  return foundConflict.start_date;
-                }
-                return null;
-              })(),
-              conflicting_end: (() => {
-                if (foundConflict.period_tstz) {
-                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
-                  return m && m[2] ? m[2] : null;
-                } else if (foundConflict.end_time) {
-                  return foundConflict.end_time;
-                } else if (foundConflict.end_date) {
-                  return foundConflict.end_date;
-                }
-                return null;
-              })()
-            }
-          });
-        }
-      }
-
-      // Always rebuild period column using tstzrange before saving
-      // Only if start_time and end_time are present
-      if (fields.start_time && fields.end_time) {
-        // Format: tstzrange('start', 'end', '[)')
-        // Ensure ISO strings with timezone
-        const startTz = new Date(fields.start_time).toISOString();
-        const endTz = new Date(fields.end_time).toISOString();
-        fields.period = `tstzrange('${startTz}','${endTz}','[)')`;
-      } else {
-        // If not both present, remove period so triggers can handle
-        delete fields.period;
-      }
-      if (!id) return send(res, 400, { ok: false, error: "missing_id" });
-
-      // Si se envía status, actualizar solo status (y org_id si viene)
-      if (typeof status !== "undefined") {
-        if (!org_id) return send(res, 400, { ok: false, error: "missing_org_id" });
-        const { data, error } = await supabase
-          .from("asignaciones")
-          .update({ status })
-          .eq("id", id)
-          .eq("org_id", org_id)
-          .eq("is_deleted", false)
-          .select()
-          .single();
-        if (error) return send(res, 500, { ok: false, error: error.message });
-        if (!data) return send(res, 404, { ok: false, error: "not_found" });
-        return send(res, 200, { ok: true, asignacion: data });
-      }
-
-      // Si no, actualizar otros campos (sin crear filas nuevas)
-      // Validar traslape de fechas para la misma persona (excluyendo el id actual)
-      // Fetch current assignment row to merge missing user fields for overlap validation
-      let { tracker_user_id, personal_id, start_time, end_time, start_date, end_date, period, period_tstz } = fields;
-      let existingRow = null;
-      {
-        const { data: row, error: rowError } = await supabase
-          .from("asignaciones")
-          .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
-          .eq("id", id)
-          .single();
-        if (!rowError && row) existingRow = row;
-      }
-      // Merge missing user id fields from current row
-      if (!tracker_user_id && existingRow && existingRow.tracker_user_id) tracker_user_id = existingRow.tracker_user_id;
-      if (!personal_id && existingRow && existingRow.personal_id) personal_id = existingRow.personal_id;
-      // Determine effective user field and id
-      let effectiveUserField = tracker_user_id ? "tracker_user_id" : (personal_id ? "personal_id" : null);
-      let overlapUserId = tracker_user_id || personal_id;
-      // Use edited full datetime range if available
-      let newStartDT = start_time ? new Date(start_time) : (start_date ? new Date(start_date) : null);
-      let newEndDT = end_time ? new Date(end_time) : (end_date ? new Date(end_date) : newStartDT);
-      let newPeriodTstz = period_tstz || null;
-      // Never run overlap validation with undefined user id
-      if (overlapUserId && newStartDT) {
-        let overlapQuery = supabase
-          .from("asignaciones")
-          .select("id,tracker_user_id,personal_id,start_time,end_time,start_date,end_date,period,period_tstz")
-          .eq(effectiveUserField, overlapUserId)
-          .eq("is_deleted", false)
-          .neq("id", id);
-        const { data: overlapRows, error: overlapError } = await overlapQuery;
-        if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
-        let foundConflict = null;
-        if (Array.isArray(overlapRows)) {
-          for (const a of overlapRows) {
-            // Prefer period_tstz for both, else use start_time/end_time, else fallback to date-only
-            let aStartDT = null, aEndDT = null, aPeriodTstz = null;
-            if (a.period_tstz) {
-              // Parse tstzrange: ["2026-03-28T00:00:00+00:00","2026-03-29T00:00:00+00:00")
-              const m = a.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
-              if (m && m[1]) aStartDT = new Date(m[1]);
-              if (m && m[2]) aEndDT = new Date(m[2]);
-              aPeriodTstz = a.period_tstz;
-            } else if (a.start_time) {
-              aStartDT = new Date(a.start_time);
-              aEndDT = a.end_time ? new Date(a.end_time) : aStartDT;
-            } else if (a.start_date) {
-              aStartDT = new Date(a.start_date);
-              aEndDT = a.end_date ? new Date(a.end_date) : aStartDT;
-            }
-            // Use new period_tstz if provided, else newStartDT/newEndDT
-            let overlap = false;
-            if (newPeriodTstz && aPeriodTstz) {
-              // Compare ranges: overlap if (aStart < newEnd) && (aEnd > newStart)
-              const mNew = newPeriodTstz.match(/\["(.+?)","(.+?)"[)\]]/);
-              const nStart = mNew && mNew[1] ? new Date(mNew[1]) : null;
-              const nEnd = mNew && mNew[2] ? new Date(mNew[2]) : null;
-              if (nStart && nEnd && aStartDT && aEndDT) {
-                overlap = aStartDT < nEnd && aEndDT > nStart;
-              }
-            } else if (newStartDT && newEndDT && aStartDT && aEndDT) {
-              // Compare full datetime
-              overlap = aStartDT < newEndDT && aEndDT > newStartDT;
-            }
-            // Only fallback to date-only if no time fields
-            else if (a.start_date && newStartDT && a.end_date && newEndDT) {
-              overlap = aStartDT <= newEndDT && aEndDT >= newStartDT;
-            }
-            if (overlap) {
-              foundConflict = a;
-              // Debug log with all relevant info
-              console.log("[PATCH asignaciones] Overlap detected:", {
-                current_id: id,
-                effective_user_field: effectiveUserField,
-                effective_user_id: overlapUserId,
-                new_start: newStartDT,
-                new_end: newEndDT,
-                conflicting_id: a.id,
-                conflicting_personal_id: a.personal_id,
-                conflicting_tracker_user_id: a.tracker_user_id,
-                conflicting_start: aStartDT,
-                conflicting_end: aEndDT
-              });
-              break;
-            }
-          }
-        }
-        if (foundConflict) {
-          return send(res, 409, {
-            ok: false,
-            error: "overlap",
-            message: "Ya existe otra asignación para esta persona en el rango de fechas seleccionado.",
-            overlap_ids: [foundConflict.id],
-            debug: {
-              current_id: id,
-              effective_user_field: effectiveUserField,
-              effective_user_id: overlapUserId,
-              new_start: newStartDT,
-              new_end: newEndDT,
-              conflicting_id: foundConflict.id,
-              conflicting_personal_id: foundConflict.personal_id,
-              conflicting_tracker_user_id: foundConflict.tracker_user_id,
-              conflicting_start: (() => {
-                if (foundConflict.period_tstz) {
-                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
-                  return m && m[1] ? m[1] : null;
-                } else if (foundConflict.start_time) {
-                  return foundConflict.start_time;
-                } else if (foundConflict.start_date) {
-                  return foundConflict.start_date;
-                }
-                return null;
-              })(),
-              conflicting_end: (() => {
-                if (foundConflict.period_tstz) {
-                  const m = foundConflict.period_tstz.match(/\["(.+?)","(.+?)"[)\]]/);
-                  return m && m[2] ? m[2] : null;
-                } else if (foundConflict.end_time) {
-                  return foundConflict.end_time;
-                } else if (foundConflict.end_date) {
-                  return foundConflict.end_date;
-                }
-                return null;
-              })()
-            }
-          });
-        }
-      }
-      const { error } = await supabase
-        .from("asignaciones")
-        .update(fields)
-        .eq("id", id)
-        .eq("is_deleted", false);
-      if (error) return send(res, 500, { ok: false, error: error.message });
-      return send(res, 200, { ok: true });
+      res.statusCode = 200;
+      return res.end();
     }
 
     if (method === "DELETE") {
-      // DELETE lógico: is_deleted=true
       const { id } = req.body || {};
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+
       const { error } = await supabase
         .from("asignaciones")
         .update({ is_deleted: true })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("is_deleted", false);
+
       if (error) return send(res, 500, { ok: false, error: error.message });
       return send(res, 200, { ok: true });
     }
 
-
-
     if (method === "POST") {
-      // Only allow real writable columns for public.asignaciones
       const incoming = req.body || {};
+      const insertFields = buildWritableFields(incoming);
+
       const {
         personal_id,
-        geofence_id,
-        geocerca_id,
-        activity_id,
+        org_id,
         start_time,
         end_time,
-        status,
-        estado,
-        frecuencia_envio_sec,
-        frequency_minutes,
-        org_id
-      } = incoming;
-      // Overlap validation: org_id, personal_id, start_time, end_time
+      } = insertFields;
+
       if (!org_id || !personal_id || !start_time || !end_time) {
         return send(res, 400, { ok: false, error: "missing_required_fields" });
       }
-      const { data: overlapRows, error: overlapError } = await supabase
-        .from("asignaciones")
-        .select("id, start_time, end_time, personal_id, org_id")
-        .eq("org_id", org_id)
-        .eq("personal_id", personal_id)
-        .eq("is_deleted", false);
-      if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
-      const nStart = new Date(start_time);
-      const nEnd = new Date(end_time);
-      for (const a of overlapRows || []) {
-        const aStart = a.start_time ? new Date(a.start_time) : null;
-        const aEnd = a.end_time ? new Date(a.end_time) : null;
-        if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
-          return send(res, 409, { ok: false, error: "overlap", conflict_id: a.id });
-        }
+
+      const overlapCheck = await findOverlap(supabase, {
+        orgId: org_id,
+        personalId: personal_id,
+        startTime: start_time,
+        endTime: end_time,
+      });
+
+      if (overlapCheck?.error === "invalid_datetime") {
+        return send(res, 400, { ok: false, error: "invalid_datetime" });
       }
-      // Only insert allowed columns
-      const insertFields = {
-        personal_id,
-        geofence_id,
-        geocerca_id,
-        activity_id,
-        start_time,
-        end_time,
-        status,
-        estado,
-        frecuencia_envio_sec,
-        frequency_minutes,
-        org_id
-      };
-      const { error } = await supabase
+
+      if (overlapCheck?.error === "invalid_range") {
+        return send(res, 400, {
+          ok: false,
+          error: "invalid_range",
+          message: "start_time debe ser menor que end_time",
+        });
+      }
+
+      if (overlapCheck?.error) {
+        return send(res, 500, { ok: false, error: overlapCheck.error });
+      }
+
+      if (overlapCheck?.conflict) {
+        return send(res, 409, {
+          ok: false,
+          error: "overlap",
+          conflict_id: overlapCheck.conflict.id,
+        });
+      }
+
+      const { data, error } = await supabase
         .from("asignaciones")
-        .insert([insertFields]);
-      if (error) return send(res, 500, { ok: false, error: error.message });
-      return send(res, 201, { ok: true });
+        .insert([insertFields])
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === "23P01") {
+          return send(res, 409, { ok: false, error: "overlap" });
+        }
+        return send(res, 500, { ok: false, error: error.message });
+      }
+
+      return send(res, 201, { ok: true, asignacion: data });
     }
 
     if (method === "PATCH") {
-      // PATCH: solo columnas válidas, sin period ni tracker_user_id
       const incoming = req.body || {};
-      const {
-        id,
-        personal_id,
-        geofence_id,
-        geocerca_id,
-        activity_id,
-        start_time,
-        end_time,
-        status,
-        estado,
-        frecuencia_envio_sec,
-        frequency_minutes,
-        org_id
-      } = incoming;
-      if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+      const { id } = incoming;
 
-      // Cargar fila actual
-      const { data: currentRow, error: fetchError } = await supabase
-        .from("asignaciones")
-        .select("id, personal_id, org_id, start_time, end_time, is_deleted")
-        .eq("id", id)
-        .single();
-      if (fetchError || !currentRow) return send(res, 404, { ok: false, error: "not_found" });
-
-      // Calcular valores efectivos
-      const effPersonalId = typeof personal_id !== "undefined" ? personal_id : currentRow.personal_id;
-      const effOrgId = typeof org_id !== "undefined" ? org_id : currentRow.org_id;
-      const effStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
-      const effEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
-
-      // Validar start_time y end_time
-      if (!effStart || !effEnd || new Date(effStart) >= new Date(effEnd)) {
-        return send(res, 400, { ok: false, error: "invalid_range", message: "start_time debe ser menor que end_time" });
+      if (!id) {
+        return send(res, 400, { ok: false, error: "missing_id" });
       }
 
-      // Validar traslape solo con org_id, personal_id, start_time, end_time, is_deleted
-      if (effOrgId && effPersonalId) {
-        const normId = String(id);
-        const { data: overlapRows, error: overlapError } = await supabase
-          .from("asignaciones")
-          .select("id, start_time, end_time")
-          .eq("org_id", effOrgId)
-          .eq("personal_id", effPersonalId)
-          .eq("is_deleted", false);
-        if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
-        const nStart = new Date(effStart);
-        const nEnd = new Date(effEnd);
-        for (const a of overlapRows || []) {
-          if (!a.id || String(a.id) === normId) continue;
-          if (!a.start_time || !a.end_time) continue;
-          const aStart = new Date(a.start_time);
-          const aEnd = new Date(a.end_time);
-          if (aStart < nEnd && aEnd > nStart) {
-            // Log temporal de conflicto
-            console.log('[PATCH asignaciones] OVERLAP', {
-              current_id: normId,
-              conflict_id: a.id,
-              org_id: effOrgId,
-              personal_id: effPersonalId,
-              start_time: effStart,
-              end_time: effEnd
-            });
-            return send(res, 409, {
+      const { data: currentRow, error: fetchError } = await supabase
+        .from("asignaciones")
+        .select("id, org_id, personal_id, start_time, end_time, is_deleted")
+        .eq("id", id)
+        .eq("is_deleted", false)
+        .single();
+
+      if (fetchError || !currentRow) {
+        return send(res, 404, { ok: false, error: "not_found" });
+      }
+
+      const updateFields = buildWritableFields(incoming);
+      const nextOrgId =
+        Object.prototype.hasOwnProperty.call(updateFields, "org_id")
+          ? updateFields.org_id
+          : currentRow.org_id;
+
+      const nextPersonalId =
+        Object.prototype.hasOwnProperty.call(updateFields, "personal_id")
+          ? updateFields.personal_id
+          : currentRow.personal_id;
+
+      const nextStartTime =
+        Object.prototype.hasOwnProperty.call(updateFields, "start_time")
+          ? updateFields.start_time
+          : currentRow.start_time;
+
+      const nextEndTime =
+        Object.prototype.hasOwnProperty.call(updateFields, "end_time")
+          ? updateFields.end_time
+          : currentRow.end_time;
+
+      if (!nextStartTime || !nextEndTime) {
+        return send(res, 400, {
+          ok: false,
+          error: "invalid_range",
+          message: "start_time y end_time son obligatorios",
+        });
+      }
+
+      const startDate = toDateOrNull(nextStartTime);
+      const endDate = toDateOrNull(nextEndTime);
+
+      if (!startDate || !endDate) {
+        return send(res, 400, { ok: false, error: "invalid_datetime" });
+      }
+
+      if (startDate >= endDate) {
+        return send(res, 400, {
+          ok: false,
+          error: "invalid_range",
+          message: "start_time debe ser menor que end_time",
+        });
+      }
+
+      if (nextOrgId && nextPersonalId) {
+        const overlapCheck = await findOverlap(supabase, {
+          currentId: currentRow.id,
+          orgId: nextOrgId,
+          personalId: nextPersonalId,
+          startTime: startDate.toISOString(),
+          endTime: endDate.toISOString(),
+        });
+
+        if (overlapCheck?.error) {
+          if (overlapCheck.error === "invalid_datetime") {
+            return send(res, 400, { ok: false, error: "invalid_datetime" });
+          }
+          if (overlapCheck.error === "invalid_range") {
+            return send(res, 400, {
               ok: false,
-              error: "overlap",
-              current_id: normId,
-              conflict_id: a.id
+              error: "invalid_range",
+              message: "start_time debe ser menor que end_time",
             });
           }
+          return send(res, 500, { ok: false, error: overlapCheck.error });
+        }
+
+        if (overlapCheck?.conflict) {
+          console.log("[PATCH asignaciones] OVERLAP", overlapCheck.debug);
+          return send(res, 409, {
+            ok: false,
+            error: "overlap",
+            conflict_id: overlapCheck.conflict.id,
+          });
         }
       }
 
-      // Solo columnas válidas
-      const updateFields = {};
-      if (typeof personal_id !== "undefined") updateFields.personal_id = personal_id;
-      if (typeof geofence_id !== "undefined") updateFields.geofence_id = geofence_id;
-      if (typeof geocerca_id !== "undefined") updateFields.geocerca_id = geocerca_id;
-      if (typeof activity_id !== "undefined") updateFields.activity_id = activity_id;
-      if (typeof start_time !== "undefined") updateFields.start_time = start_time;
-      if (typeof end_time !== "undefined") updateFields.end_time = end_time;
-      if (typeof status !== "undefined") updateFields.status = status;
-      if (typeof estado !== "undefined") updateFields.estado = estado;
-      if (typeof frecuencia_envio_sec !== "undefined") updateFields.frecuencia_envio_sec = frecuencia_envio_sec;
-      if (typeof frequency_minutes !== "undefined") updateFields.frequency_minutes = frequency_minutes;
-      if (typeof org_id !== "undefined") updateFields.org_id = org_id;
+      if (Object.keys(updateFields).length === 0) {
+        return send(res, 400, { ok: false, error: "no_fields_to_update" });
+      }
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("asignaciones")
         .update(updateFields)
         .eq("id", id)
-        .eq("is_deleted", false);
-      if (error) return send(res, 500, { ok: false, error: error.message });
-      return send(res, 200, { ok: true });
+        .eq("is_deleted", false)
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === "23P01") {
+          return send(res, 409, { ok: false, error: "overlap" });
+        }
+        return send(res, 500, { ok: false, error: error.message });
+      }
+
+      return send(res, 200, { ok: true, asignacion: data });
     }
 
     if (method !== "GET") {
@@ -491,127 +399,136 @@ export default async function handler(req, res) {
       });
     }
 
-    // GET: bundle de asignaciones y catálogos
     let personal = [];
     let geofences = [];
     let activities = [];
     let asignaciones = [];
     const requested_org_id = q.org_id || q.orgId || null;
+
     const debug = {
       requested_org_id,
-      supabase_url_host: (supabase && supabase.restUrl) ? (() => { try { return new URL(supabase.restUrl).host; } catch { return null; } })() : null,
-      queries: []
+      supabase_url_host:
+        supabase && supabase.restUrl
+          ? (() => {
+              try {
+                return new URL(supabase.restUrl).host;
+              } catch {
+                return null;
+              }
+            })()
+          : null,
+      queries: [],
     };
+
     if (requested_org_id) {
-      // Personal
-      const personalTable = "personal";
-      const personalFilters = { org_id: requested_org_id, is_deleted: false, vigente: true };
       let personalError = null;
       let personalCount = 0;
       try {
-        const { data: personalData, error } = await supabase
-          .from(personalTable)
+        const { data, error } = await supabase
+          .from("personal")
           .select("id,nombre,apellido,email,org_id")
           .eq("org_id", requested_org_id)
           .eq("is_deleted", false)
           .eq("vigente", true)
           .order("apellido", { ascending: true })
           .order("nombre", { ascending: true });
-        if (!error && Array.isArray(personalData)) {
-          personal = personalData;
-          personalCount = personal.length;
+
+        if (!error && Array.isArray(data)) {
+          personal = data;
+          personalCount = data.length;
         } else {
-          personal = [];
-          personalError = error ? error.message : 'Unknown error';
+          personalError = error ? error.message : "Unknown error";
         }
       } catch (err) {
-        personal = [];
         personalError = err?.message || String(err);
       }
-      debug.queries.push({ table: personalTable, filters: personalFilters, count: personalCount, error: personalError });
 
-      // Geofences
-      const geofencesTable = "geofences";
-      let geofencesArr = [];
-      let hasIsDeleted = false;
+      debug.queries.push({
+        table: "personal",
+        filters: { org_id: requested_org_id, is_deleted: false, vigente: true },
+        count: personalCount,
+        error: personalError,
+      });
+
       let geofencesError = null;
       let geofencesCount = 0;
-      let geofencesFilters = { org_id: requested_org_id, active: true };
       try {
-        try {
-          const { data: meta, error: metaError } = await supabase.from(geofencesTable).select("is_deleted").limit(1);
-          if (!metaError && Array.isArray(meta) && meta.length > 0 && Object.prototype.hasOwnProperty.call(meta[0], "is_deleted")) {
-            hasIsDeleted = true;
-          }
-        } catch {}
-        let geofencesQuery = supabase.from(geofencesTable).select("id,name").eq("org_id", requested_org_id).eq("active", true);
-        if (hasIsDeleted) {
-          geofencesQuery = geofencesQuery.eq("is_deleted", false);
-          geofencesFilters.is_deleted = false;
-        }
-        const { data: geofencesData, error } = await geofencesQuery.order("name", { ascending: true });
-        if (!error && Array.isArray(geofencesData)) {
-          geofencesArr = geofencesData.map(g => ({ id: g.id, name: g.name || null }));
-          geofencesCount = geofencesArr.length;
+        const { data, error } = await supabase
+          .from("geofences")
+          .select("id,name")
+          .eq("org_id", requested_org_id)
+          .eq("active", true)
+          .order("name", { ascending: true });
+
+        if (!error && Array.isArray(data)) {
+          geofences = data.map((g) => ({ id: g.id, name: g.name || null }));
+          geofencesCount = geofences.length;
         } else {
-          geofencesArr = [];
-          geofencesError = error ? error.message : 'Unknown error';
+          geofencesError = error ? error.message : "Unknown error";
         }
-        geofences = geofencesArr;
       } catch (err) {
-        geofences = [];
         geofencesError = err?.message || String(err);
       }
-      debug.queries.push({ table: geofencesTable, filters: geofencesFilters, count: geofencesCount, error: geofencesError });
 
-      // Activities
-      const activitiesTable = "activities";
-      const activitiesFilters = { org_id: requested_org_id };
+      debug.queries.push({
+        table: "geofences",
+        filters: { org_id: requested_org_id, active: true },
+        count: geofencesCount,
+        error: geofencesError,
+      });
+
       let activitiesError = null;
       let activitiesCount = 0;
       try {
-        const { data: activitiesData, error } = await supabase
-          .from(activitiesTable)
+        const { data, error } = await supabase
+          .from("activities")
           .select("id,name")
           .eq("org_id", requested_org_id)
           .order("name", { ascending: true });
-        if (!error && Array.isArray(activitiesData)) {
-          activities = activitiesData;
-          activitiesCount = activities.length;
+
+        if (!error && Array.isArray(data)) {
+          activities = data;
+          activitiesCount = data.length;
         } else {
-          activities = [];
-          activitiesError = error ? error.message : 'Unknown error';
+          activitiesError = error ? error.message : "Unknown error";
         }
       } catch (err) {
-        activities = [];
         activitiesError = err?.message || String(err);
       }
-      debug.queries.push({ table: activitiesTable, filters: activitiesFilters, count: activitiesCount, error: activitiesError });
 
-      // Asignaciones (asignaciones table, org_id + is_deleted false/null)
-      const asignacionesTable = "asignaciones";
-      const asignacionesFilters = { org_id: requested_org_id, is_deleted: 'is false or null' };
+      debug.queries.push({
+        table: "activities",
+        filters: { org_id: requested_org_id },
+        count: activitiesCount,
+        error: activitiesError,
+      });
+
       let asignacionesError = null;
       let asignacionesCount = 0;
       try {
-        const { data: asignacionesData, error } = await supabase
-          .from(asignacionesTable)
+        const { data, error } = await supabase
+          .from("asignaciones")
           .select("*")
           .eq("org_id", requested_org_id)
           .or("is_deleted.is.false,is_deleted.is.null")
           .order("created_at", { ascending: false });
-        if (!error && Array.isArray(asignacionesData)) {
-          asignaciones = asignacionesData;
-          asignacionesCount = asignaciones.length;
+
+        if (!error && Array.isArray(data)) {
+          asignaciones = data;
+          asignacionesCount = data.length;
         } else {
-          asignaciones = [];
-          asignacionesError = error ? error.message : 'Unknown error';
+          asignacionesError = error ? error.message : "Unknown error";
         }
       } catch (err) {
-        asignaciones = [];
         asignacionesError = err?.message || String(err);
       }
-      debug.queries.push({ table: asignacionesTable, filters: asignacionesFilters, count: asignacionesCount, error: asignacionesError });
+
+      debug.queries.push({
+        table: "asignaciones",
+        filters: { org_id: requested_org_id, is_deleted: "is false or null" },
+        count: asignacionesCount,
+        error: asignacionesError,
+      });
     }
 
     return send(res, 200, {
@@ -629,6 +546,9 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error(error?.message);
     if (error?.stack) console.error(error.stack);
-    return send(res, 500, { ok: false, error: error?.message || "Internal Server Error" });
+    return send(res, 500, {
+      ok: false,
+      error: error?.message || "Internal Server Error",
+    });
   }
 }
