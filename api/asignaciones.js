@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-sync-userid-rpc-01";
+const VERSION = "asignaciones-direct-sync-01";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -80,6 +80,22 @@ function buildWritableFields(incoming) {
     }
   }
   return fields;
+}
+
+function normalizeActiveStatus(row) {
+  const s1 = String(row?.status || "").toLowerCase();
+  const s2 = String(row?.estado || "").toLowerCase();
+  return s1 === "active" || s1 === "activa" || s2 === "active" || s2 === "activa";
+}
+
+function normalizeFrequencyMinutes(row) {
+  const fm = Number(row?.frequency_minutes);
+  if (Number.isFinite(fm) && fm > 0) return Math.round(fm);
+
+  const fs = Number(row?.frecuencia_envio_sec);
+  if (Number.isFinite(fs) && fs > 0) return Math.max(1, Math.round(fs / 60));
+
+  return 5;
 }
 
 async function findOverlap(supabase, { currentId = null, orgId, personalId, startTime, endTime }) {
@@ -166,26 +182,126 @@ async function resolvePersonalUserId(supabase, { orgId, personalId }) {
   return { userId: data.user_id, error: null };
 }
 
-async function syncTrackerAssignment(supabase, payload) {
-  const rpcPayload = {
-    p_org_id: payload.org_id,
-    p_tracker_user_id: payload.user_id,
-    p_activity_id: payload.activity_id || null,
-    p_geofence_id: payload.geofence_id || payload.geocerca_id || null,
-    p_start_date: toDateOnlyOrNull(payload.start_time),
-    p_end_date: toDateOnlyOrNull(payload.end_time),
-  };
+function createAdminSupabase(SUPABASE_URL) {
+  const serviceKey = getEnv([
+    "SUPABASE_SERVICE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+  ]);
 
-  console.log("[asignaciones] rpc_upsert_tracker_assignment payload", rpcPayload);
+  if (!SUPABASE_URL || !serviceKey) return null;
 
-  const { error } = await supabase.rpc("rpc_upsert_tracker_assignment", rpcPayload);
+  return createClient(SUPABASE_URL, serviceKey, {
+    auth: { persistSession: false },
+  });
+}
 
-  if (error) {
-    console.error("[asignaciones] rpc_upsert_tracker_assignment failed", error);
-    return { ok: false, error: error.message || "rpc_upsert_tracker_assignment_failed" };
+async function syncTrackerAssignment(adminSupabase, row) {
+  if (!adminSupabase) {
+    return { ok: false, error: "missing_service_role_key" };
   }
 
-  return { ok: true, error: null };
+  const orgId = row?.org_id || null;
+  const trackerUserId = row?.user_id || null;
+  const geofenceId = row?.geofence_id || row?.geocerca_id || null;
+  const activityId = row?.activity_id || null;
+  const startDate = toDateOnlyOrNull(row?.start_time);
+  const endDate = toDateOnlyOrNull(row?.end_time);
+  const active = normalizeActiveStatus(row);
+  const frequencyMinutes = normalizeFrequencyMinutes(row);
+
+  if (!orgId || !trackerUserId || !geofenceId) {
+    return { ok: false, error: "missing_sync_fields" };
+  }
+
+  const basePayload = {
+    tenant_id: orgId,
+    org_id: orgId,
+    tracker_user_id: trackerUserId,
+    geofence_id: geofenceId,
+    activity_id: activityId,
+    start_date: startDate,
+    end_date: endDate,
+    frequency_minutes: frequencyMinutes,
+    active,
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log("[asignaciones] direct tracker sync payload", basePayload);
+
+  const { data: exactRows, error: exactError } = await adminSupabase
+    .from("tracker_assignments")
+    .select("id, org_id, tracker_user_id, geofence_id, activity_id, created_at, updated_at")
+    .eq("org_id", orgId)
+    .eq("tracker_user_id", trackerUserId)
+    .eq("geofence_id", geofenceId)
+    .eq("activity_id", activityId)
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (exactError) {
+    return { ok: false, error: exactError.message };
+  }
+
+  if (Array.isArray(exactRows) && exactRows.length > 0) {
+    const targetId = exactRows[0].id;
+    const { error: updateError } = await adminSupabase
+      .from("tracker_assignments")
+      .update(basePayload)
+      .eq("id", targetId);
+
+    if (updateError) {
+      return { ok: false, error: updateError.message };
+    }
+
+    return { ok: true, mode: "update_exact", id: targetId };
+  }
+
+  const { data: relatedRows, error: relatedError } = await adminSupabase
+    .from("tracker_assignments")
+    .select("id, org_id, tracker_user_id, geofence_id, activity_id, start_date, end_date, created_at, updated_at")
+    .eq("org_id", orgId)
+    .eq("geofence_id", geofenceId)
+    .eq("activity_id", activityId)
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (relatedError) {
+    return { ok: false, error: relatedError.message };
+  }
+
+  if (Array.isArray(relatedRows) && relatedRows.length > 0) {
+    const targetId = relatedRows[0].id;
+    const { error: reassignError } = await adminSupabase
+      .from("tracker_assignments")
+      .update(basePayload)
+      .eq("id", targetId);
+
+    if (reassignError) {
+      return { ok: false, error: reassignError.message };
+    }
+
+    return { ok: true, mode: "reassign_related", id: targetId };
+  }
+
+  const insertPayload = {
+    ...basePayload,
+    created_at: new Date().toISOString(),
+  };
+
+  const { data: inserted, error: insertError } = await adminSupabase
+    .from("tracker_assignments")
+    .insert([insertPayload])
+    .select("id")
+    .single();
+
+  if (insertError) {
+    return { ok: false, error: insertError.message };
+  }
+
+  return { ok: true, mode: "insert", id: inserted?.id || null };
 }
 
 export default async function handler(req, res) {
@@ -238,6 +354,8 @@ export default async function handler(req, res) {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
+
+    const adminSupabase = createAdminSupabase(SUPABASE_URL);
 
     if (method === "OPTIONS") {
       setHeaders(res);
@@ -339,21 +457,15 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: error.message });
       }
 
-      const syncResult = await syncTrackerAssignment(supabase, {
-        org_id: data.org_id,
-        user_id: data.user_id,
-        activity_id: data.activity_id,
-        geofence_id: data.geofence_id,
-        geocerca_id: data.geocerca_id,
-        start_time: data.start_time,
-        end_time: data.end_time,
-      });
+      const syncResult = await syncTrackerAssignment(adminSupabase, data);
 
       return send(res, 201, {
         ok: true,
         asignacion: data,
         tracker_sync_ok: syncResult.ok,
         tracker_sync_error: syncResult.error,
+        tracker_sync_mode: syncResult.mode || null,
+        tracker_assignment_id: syncResult.id || null,
       });
     }
 
@@ -367,7 +479,7 @@ export default async function handler(req, res) {
 
       const { data: currentRow, error: fetchError } = await supabase
         .from("asignaciones")
-        .select("id, org_id, personal_id, user_id, geofence_id, geocerca_id, activity_id, start_time, end_time, is_deleted")
+        .select("id, org_id, personal_id, user_id, geofence_id, geocerca_id, activity_id, start_time, end_time, status, estado, frequency_minutes, frecuencia_envio_sec, is_deleted")
         .eq("id", id)
         .eq("is_deleted", false)
         .single();
@@ -500,21 +612,15 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: error.message });
       }
 
-      const syncResult = await syncTrackerAssignment(supabase, {
-        org_id: data.org_id,
-        user_id: data.user_id,
-        activity_id: data.activity_id,
-        geofence_id: data.geofence_id,
-        geocerca_id: data.geocerca_id,
-        start_time: data.start_time,
-        end_time: data.end_time,
-      });
+      const syncResult = await syncTrackerAssignment(adminSupabase, data);
 
       return send(res, 200, {
         ok: true,
         asignacion: data,
         tracker_sync_ok: syncResult.ok,
         tracker_sync_error: syncResult.error,
+        tracker_sync_mode: syncResult.mode || null,
+        tracker_assignment_id: syncResult.id || null,
       });
     }
 
