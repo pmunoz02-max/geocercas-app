@@ -326,6 +326,7 @@ export default async function handler(req, res) {
     }
 
 
+
     if (method === "POST") {
       // Create new assignment in asignaciones table
       const incoming = req.body || {};
@@ -339,6 +340,20 @@ export default async function handler(req, res) {
         .insert([fields]);
       if (error) return send(res, 500, { ok: false, error: error.message });
       return send(res, 201, { ok: true });
+    }
+
+    if (method === "PATCH") {
+      // Update assignment by id, only writable fields
+      const incoming = req.body || {};
+      const { id, period, period_tstz, start_date, end_date, ...fields } = incoming;
+      if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+      const { error } = await supabase
+        .from("asignaciones")
+        .update(fields)
+        .eq("id", id)
+        .eq("is_deleted", false);
+      if (error) return send(res, 500, { ok: false, error: error.message });
+      return send(res, 200, { ok: true });
     }
 
     if (method !== "GET") {
