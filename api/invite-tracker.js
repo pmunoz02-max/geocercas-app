@@ -309,21 +309,40 @@ export default async function handler(req, res) {
 
     personal_id = personalRow.id;
 
-    // Si personal.user_id ya existe y es distinto del user_id invitado, retorna 409
-    // El user_id invitado se determina después del invite, pero si ya existe en personalRow, validamos aquí
-    // Si ya existe user_id en personalRow, y es distinto del que se va a invitar, abortar
-    // NOTA: El user_id invitado se obtiene después del invite, pero si ya existe en personalRow, y es distinto, abortar
+    // Permitir invitar si personal.user_id ya corresponde al mismo usuario del email invitado
+    // Solo retornar conflicto si corresponde a otro auth user distinto
     if (personalRow.user_id) {
-      // Si ya existe user_id, y el invite va a otro user, abortar
-      // No sabemos aún el user_id invitado, pero si ya hay uno, abortar aquí
-      return res.status(409).json({
-        ok: false,
-        error: "personal_user_id_conflict",
-        message: "El personal ya está vinculado a otro usuario.",
-        personal_id: personalRow.id,
-        org_id,
-        existing_user_id: personalRow.user_id,
-      });
+      // Buscar el user_id de auth.users para el email invitado
+      let invitedUserId = null;
+      try {
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+        const userResp = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
+          headers: {
+            apikey: adminKey,
+            Authorization: `Bearer ${adminKey}`,
+          },
+        });
+        if (userResp.ok) {
+          const userJson = await userResp.json();
+          const user = Array.isArray(userJson?.users) ? userJson.users[0] : (Array.isArray(userJson) ? userJson[0] : null);
+          if (user && user.id) invitedUserId = user.id;
+        }
+      } catch (e) {
+        console.warn("[invite-tracker] failed to resolve invited user_id for email", email, e);
+      }
+      if (invitedUserId && personalRow.user_id !== invitedUserId) {
+        return res.status(409).json({
+          ok: false,
+          error: "personal_user_id_conflict",
+          message: "El personal ya está vinculado a otro usuario.",
+          personal_id: personalRow.id,
+          org_id,
+          existing_user_id: personalRow.user_id,
+          invited_user_id: invitedUserId,
+        });
+      }
+      // Si es el mismo user_id, permitir continuar
     }
 
     console.log("[invite-tracker] validated assignment/email", {

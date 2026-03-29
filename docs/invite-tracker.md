@@ -16,3 +16,21 @@ personal.user_id == auth.users.id == tracker_positions.user_id
 ## Errores
 - personal_not_found_for_invite (400)
 - personal_user_id_conflict (409)
+## Update Marzo 2026 – Multi-organización
+
+Se permite invitar usuarios que ya existen en otras organizaciones.
+
+### Regla actualizada
+
+- Si `personal.user_id` ya corresponde al mismo `auth.users.id` del email invitado → PERMITIR
+- Solo retornar conflicto (`personal_user_id_conflict`) si:
+  - `personal.user_id` pertenece a un usuario distinto al email invitado
+
+### Objetivo
+
+Permitir:
+- un mismo usuario en múltiples organizaciones
+- roles distintos por organización
+
+Sin romper:
+- consistencia de `personal.user_id`
