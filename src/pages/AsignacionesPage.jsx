@@ -6,6 +6,7 @@ import {
   toggleAsignacionStatus,
   deleteAsignacion,
 } from "../lib/asignacionesApi";
+import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "@/context/auth.js";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable.jsx";
 
@@ -29,14 +30,9 @@ function asArray(value) {
 }
 
 function extractBundle(result) {
-  // Casos posibles:
-  // 1) getAsignacionesBundle -> { data: { catalogs, asignaciones }, error: null }
-  // 2) fetch directo -> { ok, data: { catalogs, asignaciones } }
-  // 3) variantes con names ingles/español
   const level0 = result ?? {};
   const level1 = level0?.data ?? {};
   const level2 = level1?.data ?? {};
-
   const candidates = [level0, level1, level2];
 
   for (const node of candidates) {
@@ -100,6 +96,13 @@ function extractBundle(result) {
   };
 }
 
+function toDateOnly(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
 export default function AsignacionesPage() {
   const { activeOrgId } = useAuth();
 
@@ -123,8 +126,13 @@ export default function AsignacionesPage() {
   const [success, setSuccess] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Debug state for counts
-  const [debugCounts, setDebugCounts] = useState({ personas: 0, geocercas: 0, actividades: 0, asignaciones: 0 });
+  const [debugCounts, setDebugCounts] = useState({
+    personas: 0,
+    geocercas: 0,
+    actividades: 0,
+    asignaciones: 0,
+  });
+
   useEffect(() => {
     if (!activeOrgId) return;
     loadAll();
@@ -135,16 +143,20 @@ export default function AsignacionesPage() {
       console.log("[AsignacionesPage] getAsignacionesBundle request org_id:", activeOrgId);
       const result = await getAsignacionesBundle(activeOrgId);
       console.log("[AsignacionesPage] raw bundle response:", result);
+
       if (result?.error) {
         throw new Error(result.error.message || "Error al cargar asignaciones");
       }
+
       const next = extractBundle(result);
+
       setDebugCounts({
         personas: next.personas.length,
         geocercas: next.geocercas.length,
         actividades: next.actividades.length,
         asignaciones: next.asignaciones.length,
       });
+
       setPersonas(next.personas);
       setGeocercas(next.geocercas);
       setActividades(next.actividades);
@@ -174,6 +186,8 @@ export default function AsignacionesPage() {
   const resolvedSelectedPersonId =
     selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
 
+  const resolvedSelectedTrackerUserId =
+    selectedPerson?.user_id ?? null;
 
   const geofenceOptions = useMemo(() => {
     return geocercas
@@ -198,6 +212,11 @@ export default function AsignacionesPage() {
 
     if (!resolvedSelectedPersonId) {
       setError("Debe seleccionar una persona válida.");
+      return;
+    }
+
+    if (!resolvedSelectedTrackerUserId) {
+      setError("La persona seleccionada no tiene user_id. No se puede vincular como tracker.");
       return;
     }
 
@@ -235,6 +254,7 @@ export default function AsignacionesPage() {
     const payload = {
       id: editingId || undefined,
       personal_id: resolvedSelectedPersonId,
+      user_id: resolvedSelectedTrackerUserId,
       org_id: activeOrgId,
       geofence_id: selectedGeocercaId || null,
       activity_id: selectedActivityId || null,
@@ -246,32 +266,45 @@ export default function AsignacionesPage() {
     };
 
     try {
-      let result;
       if (editingId) {
-        result = await updateAsignacion(editingId, payload, activeOrgId);
-        if (result?.error) {
-          throw new Error(result.error.message || "Error al actualizar asignación");
-        }
+        await updateAsignacion(editingId, payload, activeOrgId);
       } else {
-        result = await createAsignacion(payload, activeOrgId);
-        if (result?.error) {
-          throw new Error(result.error.message || "Error al guardar asignación");
-        }
+        await createAsignacion(payload, activeOrgId);
       }
 
-      // Llamar a rpc_upsert_tracker_assignment después de guardar/upd
-      const { supabase } = await import("../lib/supabaseClient.js");
-      await supabase.rpc("rpc_upsert_tracker_assignment", {
+      console.log("[AsignacionesPage] syncing tracker assignment via rpc", {
         p_org_id: activeOrgId,
-        p_tracker_user_id: resolvedSelectedPersonId,
+        p_tracker_user_id: resolvedSelectedTrackerUserId,
         p_activity_id: selectedActivityId,
         p_geofence_id: selectedGeocercaId || null,
-        p_start_date: startTime ? new Date(startTime).toISOString() : null,
-        p_end_date: endTime ? new Date(endTime).toISOString() : null,
+        p_start_date: toDateOnly(startTime),
+        p_end_date: toDateOnly(endTime),
       });
 
+      const { error: rpcError } = await supabase.rpc("rpc_upsert_tracker_assignment", {
+        p_org_id: activeOrgId,
+        p_tracker_user_id: resolvedSelectedTrackerUserId,
+        p_activity_id: selectedActivityId,
+        p_geofence_id: selectedGeocercaId || null,
+        p_start_date: toDateOnly(startTime),
+        p_end_date: toDateOnly(endTime),
+      });
+
+      if (rpcError) {
+        console.error("[AsignacionesPage] rpc_upsert_tracker_assignment failed:", rpcError);
+        throw new Error(
+          rpcError.message || "Error sincronizando tracker_assignments"
+        );
+      }
+
       await loadAll();
-      setSuccess(editingId ? "Asignación actualizada correctamente." : "Asignación guardada correctamente.");
+
+      setSuccess(
+        editingId
+          ? "Asignación actualizada correctamente."
+          : "Asignación guardada correctamente."
+      );
+
       setSelectedPersonId("");
       setSelectedGeocercaId("");
       setSelectedActivityId("");
@@ -300,7 +333,7 @@ export default function AsignacionesPage() {
     setEndTimeError("");
 
     setEditingId(row?.id || null);
-    setSelectedPersonId(String(row?.personal_id || ""));
+    setSelectedPersonId(String(row?.personal_id || row?.org_people_id || ""));
     setSelectedGeocercaId(String(row?.geofence_id || row?.geocerca_id || ""));
     setSelectedActivityId(String(row?.activity_id || ""));
     setStartTime(row?.start_time ? row.start_time.slice(0, 16) : "");
@@ -380,10 +413,9 @@ export default function AsignacionesPage() {
   }
 
   return (
-    <div className="p-4 max-w-6xl mx-auto">
-      {/* ...existing code... */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
-        <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+    <div className="max-w-6xl mx-auto p-4">
+      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 text-2xl font-semibold text-gray-900">
           {editingId ? "Editar asignación" : "Nueva asignación"}
         </h2>
 
@@ -401,7 +433,7 @@ export default function AsignacionesPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-800">
               Persona
             </label>
             <select
@@ -423,7 +455,7 @@ export default function AsignacionesPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-800">
               Geocerca
             </label>
             <select
@@ -441,7 +473,7 @@ export default function AsignacionesPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-800 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-800">
               Actividad
             </label>
             <select
@@ -463,9 +495,9 @@ export default function AsignacionesPage() {
             ) : null}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-800 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-800">
                 Fecha/hora inicio
               </label>
               <input
@@ -476,11 +508,7 @@ export default function AsignacionesPage() {
                   const nextStart = e.target.value;
                   setStartTime(nextStart);
 
-                  if (
-                    endTime &&
-                    nextStart &&
-                    new Date(endTime) < new Date(nextStart)
-                  ) {
+                  if (endTime && nextStart && new Date(endTime) < new Date(nextStart)) {
                     setEndTimeError(
                       "La fecha/hora de fin no puede ser anterior a la fecha/hora de inicio."
                     );
@@ -493,7 +521,7 @@ export default function AsignacionesPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-800 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-800">
                 Fecha/hora fin
               </label>
               <input
@@ -505,11 +533,7 @@ export default function AsignacionesPage() {
                   const nextEnd = e.target.value;
                   setEndTime(nextEnd);
 
-                  if (
-                    startTime &&
-                    nextEnd &&
-                    new Date(nextEnd) < new Date(startTime)
-                  ) {
+                  if (startTime && nextEnd && new Date(nextEnd) < new Date(startTime)) {
                     setEndTimeError(
                       "La fecha/hora de fin no puede ser anterior a la fecha/hora de inicio."
                     );
@@ -524,9 +548,9 @@ export default function AsignacionesPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-sm font-medium text-gray-800 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-800">
                 Estado
               </label>
               <select
@@ -540,7 +564,7 @@ export default function AsignacionesPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-800 mb-1">
+              <label className="mb-1 block text-sm font-medium text-gray-800">
                 Frecuencia (minutos)
               </label>
               <input
@@ -557,7 +581,7 @@ export default function AsignacionesPage() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700 disabled:opacity-60"
+              className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-60"
             >
               {saving
                 ? editingId
@@ -572,13 +596,17 @@ export default function AsignacionesPage() {
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-gray-700 font-medium hover:bg-gray-50"
+                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
               >
                 Cancelar
               </button>
             ) : null}
           </div>
         </form>
+
+        <div className="mt-4 text-xs text-gray-500">
+          Debug: personas {debugCounts.personas} · geocercas {debugCounts.geocercas} · actividades {debugCounts.actividades} · asignaciones {debugCounts.asignaciones}
+        </div>
       </div>
 
       <AsignacionesTable
