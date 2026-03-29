@@ -413,8 +413,8 @@ export default async function handler(req, res) {
         }
       }
       try {
-        // Fetch current personal record to check user_id
-        const getUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=id,user_id`;
+        // Fetch current personal record solo por id, select id,user_id,org_id
+        const getUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&select=id,user_id,org_id`;
         const getResp = await fetch(getUrl, {
           headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
         });

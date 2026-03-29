@@ -54,3 +54,7 @@ Se evita hacer PATCH innecesario sobre `personal.user_id`.
 Si `personal.user_id` ya es igual al `trackerUserId`, la invitación continúa sin hacer PATCH.
 Solo se hace PATCH cuando `personal.user_id` es NULL.
 Solo hay conflicto si `personal.user_id` pertenece a otro usuario distinto.
+## Update Marzo 2026 – Resolución de personal después de invitar
+
+Después del invite, la relectura de `personal` se hace por `id` del registro.
+No se debe filtrar nuevamente por `org_id` en esa lectura final, porque la validación de organización ya ocurrió antes en el flujo.
