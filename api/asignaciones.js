@@ -347,6 +347,59 @@ export default async function handler(req, res) {
       const incoming = req.body || {};
       const { id, period, period_tstz, start_date, end_date, ...fields } = incoming;
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
+
+      // Fetch current row
+      const { data: currentRow, error: fetchError } = await supabase
+        .from("asignaciones")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (fetchError || !currentRow) return send(res, 404, { ok: false, error: "not_found" });
+
+      // Rebuild effective start_time/end_time
+      const effectiveStart = fields.start_time || currentRow.start_time;
+      const effectiveEnd = fields.end_time || currentRow.end_time;
+
+      // Always update period from effective start/end
+      let newPeriod = null;
+      if (effectiveStart && effectiveEnd) {
+        const startTz = new Date(effectiveStart).toISOString();
+        const endTz = new Date(effectiveEnd).toISOString();
+        newPeriod = `tstzrange('${startTz}','${endTz}','[)')`;
+        fields.period = newPeriod;
+      } else {
+        delete fields.period;
+      }
+
+      // Overlap validation (exclude current id)
+      const overlapUserId = fields.tracker_user_id || fields.personal_id || currentRow.tracker_user_id || currentRow.personal_id;
+      if (overlapUserId && effectiveStart) {
+        const { data: overlapRows, error: overlapError } = await supabase
+          .from("asignaciones")
+          .select("id,start_time,end_time,tracker_user_id,personal_id,period")
+          .eq(fields.tracker_user_id ? "tracker_user_id" : "personal_id", overlapUserId)
+          .eq("is_deleted", false)
+          .neq("id", id);
+        if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
+        for (const a of overlapRows || []) {
+          // Overlap logic: use period if present, else start/end
+          let aStart = a.start_time ? new Date(a.start_time) : null;
+          let aEnd = a.end_time ? new Date(a.end_time) : null;
+          if (a.period) {
+            const m = a.period.match(/\['"](.+?)['"],['"](.+?)['"]/);
+            if (m && m[1]) aStart = new Date(m[1]);
+            if (m && m[2]) aEnd = new Date(m[2]);
+          }
+          const nStart = effectiveStart ? new Date(effectiveStart) : null;
+          const nEnd = effectiveEnd ? new Date(effectiveEnd) : null;
+          if (aStart && aEnd && nStart && nEnd) {
+            if (aStart < nEnd && aEnd > nStart) {
+              return send(res, 409, { ok: false, error: "overlap", conflict_id: a.id });
+            }
+          }
+        }
+      }
+
       const { error } = await supabase
         .from("asignaciones")
         .update(fields)
