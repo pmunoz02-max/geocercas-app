@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-clean-05";
+const VERSION = "asignaciones-sync-userid-rpc-01";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -45,6 +45,11 @@ function toDateOrNull(value) {
   if (!value) return null;
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function toDateOnlyOrNull(value) {
+  const d = toDateOrNull(value);
+  return d ? d.toISOString().slice(0, 10) : null;
 }
 
 function rangesOverlapInclusive(startA, endA, startB, endB) {
@@ -131,6 +136,56 @@ async function findOverlap(supabase, { currentId = null, orgId, personalId, star
   }
 
   return null;
+}
+
+async function resolvePersonalUserId(supabase, { orgId, personalId }) {
+  if (!orgId || !personalId) {
+    return { userId: null, error: "missing_org_or_personal_id" };
+  }
+
+  const { data, error } = await supabase
+    .from("personal")
+    .select("id, org_id, user_id, email, is_deleted")
+    .eq("id", personalId)
+    .eq("org_id", orgId)
+    .eq("is_deleted", false)
+    .maybeSingle();
+
+  if (error) {
+    return { userId: null, error: error.message };
+  }
+
+  if (!data) {
+    return { userId: null, error: "personal_not_found" };
+  }
+
+  if (!data.user_id) {
+    return { userId: null, error: "personal_without_user_id" };
+  }
+
+  return { userId: data.user_id, error: null };
+}
+
+async function syncTrackerAssignment(supabase, payload) {
+  const rpcPayload = {
+    p_org_id: payload.org_id,
+    p_tracker_user_id: payload.user_id,
+    p_activity_id: payload.activity_id || null,
+    p_geofence_id: payload.geofence_id || payload.geocerca_id || null,
+    p_start_date: toDateOnlyOrNull(payload.start_time),
+    p_end_date: toDateOnlyOrNull(payload.end_time),
+  };
+
+  console.log("[asignaciones] rpc_upsert_tracker_assignment payload", rpcPayload);
+
+  const { error } = await supabase.rpc("rpc_upsert_tracker_assignment", rpcPayload);
+
+  if (error) {
+    console.error("[asignaciones] rpc_upsert_tracker_assignment failed", error);
+    return { ok: false, error: error.message || "rpc_upsert_tracker_assignment_failed" };
+  }
+
+  return { ok: true, error: null };
 }
 
 export default async function handler(req, res) {
@@ -256,6 +311,21 @@ export default async function handler(req, res) {
         });
       }
 
+      const resolvedUser = await resolvePersonalUserId(supabase, {
+        orgId: org_id,
+        personalId: personal_id,
+      });
+
+      if (resolvedUser.error) {
+        return send(res, 400, {
+          ok: false,
+          error: resolvedUser.error,
+          message: "No se pudo resolver user_id desde personal",
+        });
+      }
+
+      insertFields.user_id = resolvedUser.userId;
+
       const { data, error } = await supabase
         .from("asignaciones")
         .insert([insertFields])
@@ -269,9 +339,23 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: error.message });
       }
 
-      return send(res, 201, { ok: true, asignacion: data });
-    }
+      const syncResult = await syncTrackerAssignment(supabase, {
+        org_id: data.org_id,
+        user_id: data.user_id,
+        activity_id: data.activity_id,
+        geofence_id: data.geofence_id,
+        geocerca_id: data.geocerca_id,
+        start_time: data.start_time,
+        end_time: data.end_time,
+      });
 
+      return send(res, 201, {
+        ok: true,
+        asignacion: data,
+        tracker_sync_ok: syncResult.ok,
+        tracker_sync_error: syncResult.error,
+      });
+    }
 
     if (method === "PATCH") {
       const incoming = req.body || {};
@@ -283,7 +367,7 @@ export default async function handler(req, res) {
 
       const { data: currentRow, error: fetchError } = await supabase
         .from("asignaciones")
-        .select("id, org_id, personal_id, start_time, end_time, is_deleted")
+        .select("id, org_id, personal_id, user_id, geofence_id, geocerca_id, activity_id, start_time, end_time, is_deleted")
         .eq("id", id)
         .eq("is_deleted", false)
         .single();
@@ -293,6 +377,7 @@ export default async function handler(req, res) {
       }
 
       const updateFields = buildWritableFields(incoming);
+
       const nextOrgId =
         Object.prototype.hasOwnProperty.call(updateFields, "org_id")
           ? updateFields.org_id
@@ -313,15 +398,14 @@ export default async function handler(req, res) {
           ? updateFields.end_time
           : currentRow.end_time;
 
-      // Log temporal de entrada PATCH
-      console.log('[PATCH asignaciones]', {
+      console.log("[PATCH asignaciones]", {
         VERSION,
         incoming_id: incoming.id,
         current_id: currentRow.id,
         nextOrgId,
         nextPersonalId,
         nextStartTime,
-        nextEndTime
+        nextEndTime,
       });
 
       if (!nextStartTime || !nextEndTime) {
@@ -380,6 +464,23 @@ export default async function handler(req, res) {
         }
       }
 
+      if (nextOrgId && nextPersonalId) {
+        const resolvedUser = await resolvePersonalUserId(supabase, {
+          orgId: nextOrgId,
+          personalId: nextPersonalId,
+        });
+
+        if (resolvedUser.error) {
+          return send(res, 400, {
+            ok: false,
+            error: resolvedUser.error,
+            message: "No se pudo resolver user_id desde personal",
+          });
+        }
+
+        updateFields.user_id = resolvedUser.userId;
+      }
+
       if (Object.keys(updateFields).length === 0) {
         return send(res, 400, { ok: false, error: "no_fields_to_update" });
       }
@@ -399,7 +500,22 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: error.message });
       }
 
-      return send(res, 200, { ok: true, asignacion: data });
+      const syncResult = await syncTrackerAssignment(supabase, {
+        org_id: data.org_id,
+        user_id: data.user_id,
+        activity_id: data.activity_id,
+        geofence_id: data.geofence_id,
+        geocerca_id: data.geocerca_id,
+        start_time: data.start_time,
+        end_time: data.end_time,
+      });
+
+      return send(res, 200, {
+        ok: true,
+        asignacion: data,
+        tracker_sync_ok: syncResult.ok,
+        tracker_sync_error: syncResult.error,
+      });
     }
 
     if (method !== "GET") {
@@ -438,7 +554,7 @@ export default async function handler(req, res) {
       try {
         const { data, error } = await supabase
           .from("personal")
-          .select("id,nombre,apellido,email,org_id")
+          .select("id,nombre,apellido,email,org_id,user_id")
           .eq("org_id", requested_org_id)
           .eq("is_deleted", false)
           .eq("vigente", true)
