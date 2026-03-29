@@ -48,3 +48,4 @@ Se evita hacer PATCH innecesario sobre `personal.user_id`.
 
 - Evitar errores 500 en invitaciones
 - Mantener consistencia sin sobreescrituras
+<!-- update: idempotent personal.user_id patch Marzo 2026 -->

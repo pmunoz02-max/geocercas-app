@@ -437,10 +437,11 @@ export default async function handler(req, res) {
           });
         }
         if (!personal.user_id) {
-          // Solo hacer PATCH si user_id es diferente
+          // Si personal.user_id ya es igual a trackerUserId, no hacer PATCH ni retornar error
           if (trackerUserId && personal.user_id === trackerUserId) {
-            // Ya está vinculado correctamente, continuar
-          } else {
+            // Ya está vinculado correctamente, continuar sin PATCH ni error
+          } else if (!personal.user_id) {
+            // Solo hacer PATCH si user_id está vacío
             const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal_id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
             const patchResp = await fetch(patchUrl, {
               method: "PATCH",
