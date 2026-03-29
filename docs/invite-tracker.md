@@ -84,3 +84,6 @@ La verificación de `personal` después del invite usa `serviceKey` para evitar 
 Antes de crear/invitar un tracker, el sistema busca si ya existe un `auth.users` para ese email.
 Si existe, reutiliza ese usuario.
 Solo crea/invita un usuario nuevo si no existe uno previo para el email.
+## Update Marzo 2026 – Manejo de errores en send-tracker-invite-brevo
+
+Se agregó captura global de errores y logs en la edge function `send-tracker-invite-brevo` para evitar `FUNCTION_INVOCATION_FAILED` sin detalle y exponer el motivo real del fallo.

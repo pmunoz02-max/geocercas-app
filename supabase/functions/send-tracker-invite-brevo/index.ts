@@ -400,14 +400,34 @@ if (asg.activity_id && isUuid(asg.activity_id)) {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") {
-    return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
-  }
-
-  const t0 = Date.now();
-
   try {
+    if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+    if (req.method !== "POST") {
+      return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
+    }
+
+    const t0 = Date.now();
+      try {
+        const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": opts.apiKey,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const text = await resp.text();
+        if (!resp.ok) {
+          console.error("[brevo] error", text);
+          throw new Error(`Brevo send failed: ${resp.status} ${text}`);
+        }
+        return text;
+      } catch (e) {
+        console.error("[brevo] exception", e);
+        throw e;
+      }
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || "";
@@ -841,11 +861,15 @@ serve(async (req) => {
       assignment_details: assignmentDetails,
       brevo: { ok: true, messageId: brevoMessageId || null, sample: String(brevoResp).slice(0, 160) },
     });
-  } catch (e) {
-    console.error("[invite] unhandled_error", {
-      build_tag: BUILD_TAG,
-      message: String((e as any)?.message || e),
-    });
-    return jsonResponse(500, { ok: false, error: String((e as any)?.message || e), build_tag: BUILD_TAG });
+  } catch (err) {
+    console.error("[send-tracker-invite-brevo] UNHANDLED ERROR", err);
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        error: "unhandled_exception",
+        message: String(err?.message || err),
+      }),
+      { status: 500 }
+    );
   }
 });
