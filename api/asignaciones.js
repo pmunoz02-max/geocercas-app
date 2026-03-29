@@ -211,51 +211,65 @@ async function syncTrackerAssignment(adminSupabase, row) {
   const frequencyMinutes = normalizeFrequencyMinutes(row);
 
   if (!orgId || !trackerUserId || !geofenceId || !startDate || !endDate) {
-    return { ok: false, error: "missing_sync_fields" };
+    return {
+      ok: false,
+      error: "missing_sync_fields",
+      details: { orgId, trackerUserId, geofenceId, activityId, startDate, endDate },
+    };
   }
 
-  const deleteQuery = adminSupabase
-    .from("tracker_assignments")
-    .delete()
-    .eq("org_id", orgId)
-    .eq("tracker_user_id", trackerUserId)
-    .eq("geofence_id", geofenceId);
-
-  const deleteScopedQuery =
-    activityId == null ? deleteQuery.is("activity_id", null) : deleteQuery.eq("activity_id", activityId);
-
-  const { error: deleteError } = await deleteScopedQuery;
-
+  // Delete previous assignments
+  let deleteError = null;
+  try {
+    const deleteQuery = adminSupabase
+      .from("tracker_assignments")
+      .delete()
+      .eq("org_id", orgId)
+      .eq("tracker_user_id", trackerUserId)
+      .eq("geofence_id", geofenceId);
+    const deleteScopedQuery =
+      activityId == null ? deleteQuery.is("activity_id", null) : deleteQuery.eq("activity_id", activityId);
+    const { error } = await deleteScopedQuery;
+    if (error) deleteError = error;
+  } catch (err) {
+    deleteError = err;
+  }
   if (deleteError) {
     console.error("[SYNC DELETE ERROR]", deleteError);
-    return { ok: false, error: deleteError.message };
+    return { ok: false, error: "delete_failed", details: deleteError };
   }
 
-  const insertPayload = {
-    tenant_id: orgId,
-    org_id: orgId,
-    tracker_user_id: trackerUserId,
-    geofence_id: geofenceId,
-    activity_id: activityId,
-    start_date: startDate,
-    end_date: endDate,
-    frequency_minutes: frequencyMinutes,
-    active,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-
-  console.log("[SYNC INSERT]", insertPayload);
-
-  const { data, error } = await adminSupabase
-    .from("tracker_assignments")
-    .insert([insertPayload])
-    .select("id")
-    .single();
-
-  if (error) {
-    console.error("[SYNC INSERT ERROR]", error);
-    return { ok: false, error: error.message };
+  // Insert new assignment
+  let insertError = null;
+  let data = null;
+  try {
+    const insertPayload = {
+      tenant_id: orgId,
+      org_id: orgId,
+      tracker_user_id: trackerUserId,
+      geofence_id: geofenceId,
+      activity_id: activityId,
+      start_date: startDate,
+      end_date: endDate,
+      frequency_minutes: frequencyMinutes,
+      active,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    console.log("[SYNC INSERT]", insertPayload);
+    const result = await adminSupabase
+      .from("tracker_assignments")
+      .insert([insertPayload])
+      .select("id")
+      .single();
+    data = result.data;
+    if (result.error) insertError = result.error;
+  } catch (err) {
+    insertError = err;
+  }
+  if (insertError) {
+    console.error("[SYNC INSERT ERROR]", insertError);
+    return { ok: false, error: "insert_failed", details: insertError };
   }
 
   return { ok: true, id: data?.id || null, mode: "delete_insert" };
@@ -409,12 +423,28 @@ export default async function handler(req, res) {
       }
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
+      if (!syncResult.ok) {
+        await supabase
+          .from("asignaciones")
+          .delete()
+          .eq("id", data.id);
+
+        return send(res, 500, {
+          ok: false,
+          error: "tracker_assignment_sync_failed",
+          stage: syncResult.stage || null,
+          details: syncResult.error,
+          sync_details: syncResult.details || null,
+          sync_payload: syncResult.payload || null,
+          asignacion_id: data.id,
+        });
+      }
 
       return send(res, 201, {
         ok: true,
         asignacion: data,
-        tracker_sync_ok: syncResult.ok,
-        tracker_sync_error: syncResult.error,
+        tracker_sync_ok: true,
+        tracker_sync_error: null,
         tracker_sync_mode: syncResult.mode || null,
         tracker_assignment_id: syncResult.id || null,
       });
@@ -553,12 +583,28 @@ export default async function handler(req, res) {
       }
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
+      if (!syncResult.ok) {
+        await supabase
+          .from("asignaciones")
+          .delete()
+          .eq("id", data.id);
+
+        return send(res, 500, {
+          ok: false,
+          error: "tracker_assignment_sync_failed",
+          stage: syncResult.stage || null,
+          details: syncResult.error,
+          sync_details: syncResult.details || null,
+          sync_payload: syncResult.payload || null,
+          asignacion_id: data.id,
+        });
+      }
 
       return send(res, 200, {
         ok: true,
         asignacion: data,
-        tracker_sync_ok: syncResult.ok,
-        tracker_sync_error: syncResult.error,
+        tracker_sync_ok: true,
+        tracker_sync_error: null,
         tracker_sync_mode: syncResult.mode || null,
         tracker_assignment_id: syncResult.id || null,
       });
