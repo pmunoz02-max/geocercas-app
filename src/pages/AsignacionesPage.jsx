@@ -246,33 +246,32 @@ export default function AsignacionesPage() {
     };
 
     try {
+      let result;
       if (editingId) {
-        const result = await updateAsignacion(editingId, payload, activeOrgId);
+        result = await updateAsignacion(editingId, payload, activeOrgId);
         if (result?.error) {
           throw new Error(result.error.message || "Error al actualizar asignación");
         }
-        await loadAll();
-        setSuccess("Asignación actualizada correctamente.");
-        // Limpiar formulario igual que en createAsignacion
-        setSelectedPersonId("");
-        setSelectedGeocercaId("");
-        setSelectedActivityId("");
-        setStartTime("");
-        setEndTime("");
-        setEndTimeError("");
-        setStatus("active");
-        setFreqMin(5);
-        setEditingId(null);
-        setSaving(false);
-        return;
+      } else {
+        result = await createAsignacion(payload, activeOrgId);
+        if (result?.error) {
+          throw new Error(result.error.message || "Error al guardar asignación");
+        }
       }
-      // ...existing code for createAsignacion...
-      const result = await createAsignacion(payload, activeOrgId);
-      if (result?.error) {
-        throw new Error(result.error.message || "Error al guardar asignación");
-      }
+
+      // Llamar a rpc_upsert_tracker_assignment después de guardar/upd
+      const { supabase } = await import("../lib/supabaseClient.js");
+      await supabase.rpc("rpc_upsert_tracker_assignment", {
+        p_org_id: activeOrgId,
+        p_tracker_user_id: resolvedSelectedPersonId,
+        p_activity_id: selectedActivityId,
+        p_geofence_id: selectedGeocercaId || null,
+        p_start_date: startTime ? new Date(startTime).toISOString() : null,
+        p_end_date: endTime ? new Date(endTime).toISOString() : null,
+      });
+
       await loadAll();
-      setSuccess("Asignación guardada correctamente.");
+      setSuccess(editingId ? "Asignación actualizada correctamente." : "Asignación guardada correctamente.");
       setSelectedPersonId("");
       setSelectedGeocercaId("");
       setSelectedActivityId("");
