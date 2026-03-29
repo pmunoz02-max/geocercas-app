@@ -440,6 +440,15 @@ export default async function handler(req, res) {
           const aStart = new Date(a.start_time);
           const aEnd = new Date(a.end_time);
           if (aStart < nEnd && aEnd > nStart) {
+            // Log temporal de conflicto
+            console.log('[PATCH asignaciones] OVERLAP', {
+              current_id: normId,
+              conflict_id: a.id,
+              org_id: effOrgId,
+              personal_id: effPersonalId,
+              start_time: effStart,
+              end_time: effEnd
+            });
             return send(res, 409, {
               ok: false,
               error: "overlap",
