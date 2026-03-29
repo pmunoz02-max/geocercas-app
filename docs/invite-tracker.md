@@ -49,3 +49,8 @@ Se evita hacer PATCH innecesario sobre `personal.user_id`.
 - Evitar errores 500 en invitaciones
 - Mantener consistencia sin sobreescrituras
 <!-- update: idempotent personal.user_id patch Marzo 2026 -->
+## Update Marzo 2026 – Idempotencia del vínculo
+
+Si `personal.user_id` ya es igual al `trackerUserId`, la invitación continúa sin hacer PATCH.
+Solo se hace PATCH cuando `personal.user_id` es NULL.
+Solo hay conflicto si `personal.user_id` pertenece a otro usuario distinto.
