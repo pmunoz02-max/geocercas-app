@@ -165,10 +165,22 @@ export default function InvitarTracker() {
     return !entitlementsLoading && isFree;
   }, [entitlementsLoading, isFree]);
 
+
   const selectedPerson = useMemo(() => {
     if (!selectedPersonId) return null;
     return people.find((p) => String(p.id) === String(selectedPersonId)) || null;
   }, [people, selectedPersonId]);
+
+  // Bloquear invitación si la persona ya tiene user_id asignado
+  const inviteBlockedByUserId = useMemo(() => {
+    return Boolean(selectedPerson?.user_id);
+  }, [selectedPerson]);
+
+  const inviteBlockedMessage = inviteBlockedByUserId
+    ? t("inviteTracker.errors.personalAlreadyLinked", {
+        defaultValue: "Esta persona ya está vinculada a un usuario.",
+      })
+    : null;
 
 
   // Derive assignment automatically: use the only active assignment if available, otherwise null
@@ -401,8 +413,8 @@ export default function InvitarTracker() {
   async function onSendInvite(e) {
             if (inviteBlockedByUserId) {
               setErrMsg(
-                t("inviteTracker.errors.alreadyLinked", {
-                  defaultValue: "Esta persona ya está vinculada a un usuario y no puede ser invitada nuevamente.",
+                t("inviteTracker.errors.personalAlreadyLinked", {
+                  defaultValue: "Esta persona ya está vinculada a un usuario.",
                 })
               );
               return;
@@ -802,12 +814,8 @@ export default function InvitarTracker() {
 
       {/* Assignment select and preview removed: assignment is now derived automatically from selected person */}
 
-          {inviteBlockedByUserId && (
-            <div className="text-sm text-red-600 mb-2">
-              {t("inviteTracker.errors.alreadyLinked", {
-                defaultValue: "Esta persona ya está vinculada a un usuario y no puede ser invitada nuevamente.",
-              })}
-            </div>
+          {inviteBlockedMessage && (
+            <div className="text-sm text-red-600 mb-2">{inviteBlockedMessage}</div>
           )}
           <button
             type="submit"
