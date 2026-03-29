@@ -6,7 +6,6 @@ import {
   toggleAsignacionStatus,
   deleteAsignacion,
 } from "../lib/asignacionesApi";
-import { supabase } from "../lib/supabaseClient.js";
 import { useAuth } from "@/context/auth.js";
 import AsignacionesTable from "../components/asignaciones/AsignacionesTable.jsx";
 
@@ -96,13 +95,6 @@ function extractBundle(result) {
   };
 }
 
-function toDateOnly(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString().slice(0, 10);
-}
-
 export default function AsignacionesPage() {
   const { activeOrgId } = useAuth();
 
@@ -186,8 +178,7 @@ export default function AsignacionesPage() {
   const resolvedSelectedPersonId =
     selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
 
-  const resolvedSelectedTrackerUserId =
-    selectedPerson?.user_id ?? null;
+  const resolvedSelectedTrackerUserId = selectedPerson?.user_id ?? null;
 
   const geofenceOptions = useMemo(() => {
     return geocercas
@@ -270,31 +261,6 @@ export default function AsignacionesPage() {
         await updateAsignacion(editingId, payload, activeOrgId);
       } else {
         await createAsignacion(payload, activeOrgId);
-      }
-
-      console.log("[AsignacionesPage] syncing tracker assignment via rpc", {
-        p_org_id: activeOrgId,
-        p_tracker_user_id: resolvedSelectedTrackerUserId,
-        p_activity_id: selectedActivityId,
-        p_geofence_id: selectedGeocercaId || null,
-        p_start_date: toDateOnly(startTime),
-        p_end_date: toDateOnly(endTime),
-      });
-
-      const { error: rpcError } = await supabase.rpc("rpc_upsert_tracker_assignment", {
-        p_org_id: activeOrgId,
-        p_tracker_user_id: resolvedSelectedTrackerUserId,
-        p_activity_id: selectedActivityId,
-        p_geofence_id: selectedGeocercaId || null,
-        p_start_date: toDateOnly(startTime),
-        p_end_date: toDateOnly(endTime),
-      });
-
-      if (rpcError) {
-        console.error("[AsignacionesPage] rpc_upsert_tracker_assignment failed:", rpcError);
-        throw new Error(
-          rpcError.message || "Error sincronizando tracker_assignments"
-        );
       }
 
       await loadAll();
