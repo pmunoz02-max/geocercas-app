@@ -518,39 +518,29 @@ export default async function handler(req, res) {
           });
         }
 
-        if (personal.user_id && personal.user_id !== trackerUserId) {
-          // Conflict: user_id already set to a different value
-          console.warn(`[invite-tracker] conflict: personal.user_id already set to a different value`, { personal_id: personal.id, org_id, existing: personal.user_id, new: trackerUserId });
-          return res.status(409).json({
-            ok: false,
-            build: BUILD_TAG,
-            error: "personal_user_id_conflict",
-            message: "El personal ya está vinculado a otro usuario.",
-            personal_id: personal.id,
-            org_id,
-            existing_user_id: personal.user_id,
-            new_user_id: trackerUserId
-          });
-        }
+        // IMPORTANTE:
+        // send-tracker-invite-brevo no crea auth.users inmediatamente.
+        // Solo crea/reactiva la invitacion y genera el magic link.
+        // Por tanto, en esta etapa NO se debe exigir trackerUserId
+        // ni hacer PATCH de personal.user_id.
+        // La vinculacion personal.user_id = auth.users.id debe ocurrir
+        // cuando el invitado acepta el link e inicia sesion.
 
-        if (!personal.user_id) {
-          // Si personal.user_id ya es igual a trackerUserId, no hacer PATCH ni retornar error
-          if (trackerUserId && personal.user_id === trackerUserId) {
-            // Ya está vinculado correctamente, continuar sin PATCH ni error
-          } else if (!personal.user_id) {
-            // Solo hacer PATCH si user_id está vacío
-            const patchUrl = `${supabaseUrl}/rest/v1/personal?id=eq.${encodeURIComponent(personal.id)}&org_id=eq.${encodeURIComponent(org_id)}&user_id=is.null`;
-            const patchResp = await fetch(patchUrl, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
-              body: JSON.stringify({ user_id: trackerUserId }),
-            });
-            if (!patchResp.ok) {
-              console.warn("[invite-tracker] failed to patch personal.user_id", await patchResp.text());
-              throw new Error("Failed to update personal.user_id after invite");
-            }
-          }
-        }
+        return res.status(200).json({
+          ok: true,
+          build: BUILD_TAG,
+          invited: true,
+          invite_sent: json?.invite_sent ?? true,
+          invite_reused: json?.invite_reused ?? false,
+          cooldown_active: json?.cooldown_active ?? false,
+          personal_id: personal.id,
+          org_id,
+          email: normalizedEmail,
+          message:
+            json?.message ||
+            "Invitación procesada correctamente. La vinculación del usuario se completará cuando el tracker acepte el enlace.",
+          upstream: json || null,
+        });
       } catch (e) {
         console.warn("[invite-tracker] failed to ensure personal.user_id linkage", e);
         return res.status(500).json({

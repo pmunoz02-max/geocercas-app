@@ -1,3 +1,14 @@
+
+## Update Marzo 2026 – La invitación no vincula user_id inmediatamente
+
+La función `send-tracker-invite-brevo` crea o reutiliza la invitación y genera el magic link, pero no garantiza la creación inmediata de `auth.users`.
+
+Por eso, después del invite:
+- se valida que `personal` exista
+- se responde éxito si la invitación fue procesada
+- NO se exige ni se actualiza `personal.user_id` en esta etapa
+
+La vinculación `personal.user_id = auth.users.id` se completa cuando el tracker acepta el enlace e inicia sesión.
 # Invite Tracker Flow
 
 ## Regla crítica
