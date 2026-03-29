@@ -3,6 +3,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
+
 const BUILD_TAG = "send-tracker-invite-brevo-v30_INVITE_SENT_METRICS_20260318";
 const SEND_COOLDOWN_SECONDS = 180;
 
@@ -526,24 +527,33 @@ serve(async (req) => {
         build_tag: BUILD_TAG,
         diag: {
           callerUserId,
-          org_id,
-          user_email: email,
-          role_raw: ownerRow?.role ?? null,
-          role_norm: roleNorm || null,
-          revoked_at: ownerRow?.revoked_at ?? null,
-          failure_reason: failureReason,
-        },
-      });
-    }
 
-    let assignmentDetails = {
-      found: false,
-      timeWindow: copy.valueNotSpecified,
-      geofenceName: copy.valueNotSpecified,
-      taskName: copy.valueNotSpecified,
-    };
+          try {
+            if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+            if (req.method !== "POST") {
+              return jsonResponse(405, { ok: false, error: "Method not allowed", build_tag: BUILD_TAG });
+            }
 
-    let effectivePersonalId = null;
+            const t0 = Date.now();
+
+            // Inicialización segura de variables de entorno y clientes
+            const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+            const SUPABASE_SERVICE_ROLE_KEY = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
+            const SUPABASE_ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
+            const BREVO_API_KEY = (Deno.env.get("BREVO_API_KEY") || "").trim();
+            const BREVO_SENDER_EMAIL = (Deno.env.get("BREVO_SENDER_EMAIL") || "").trim();
+            const BREVO_SENDER_NAME = (Deno.env.get("BREVO_SENDER_NAME") || "App Geocercas").trim();
+            const BREVO_REPLYTO_EMAIL = (Deno.env.get("BREVO_REPLYTO_EMAIL") || "").trim();
+            const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com").replace(/\/$/, "");
+
+            if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+              throw new Error("Missing env vars");
+            }
+
+            const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false },
+            });
+            const supabaseAdmin = sbAdmin;
     if (assignment_id) {
       try {
         const details = await getAssignmentEmailDetails(sbAdmin, {
