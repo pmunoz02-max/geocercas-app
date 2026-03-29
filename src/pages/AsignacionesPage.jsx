@@ -382,10 +382,7 @@ export default function AsignacionesPage() {
 
   return (
     <div className="p-4 max-w-6xl mx-auto">
-      {/* Debug banner */}
-      <div style={{ background: '#f5f5f5', border: '2px solid #eab308', color: '#92400e', padding: 8, borderRadius: 8, marginBottom: 16, fontSize: 14, fontWeight: 500 }}>
-        <span>DEBUG: org_id=<b>{String(activeOrgId)}</b> | personas: <b>{debugCounts.personas}</b> | geocercas: <b>{debugCounts.geocercas}</b> | actividades: <b>{debugCounts.actividades}</b> | asignaciones: <b>{debugCounts.asignaciones}</b></span>
-      </div>
+      {/* ...existing code... */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
         <h2 className="text-2xl font-semibold text-gray-900 mb-4">
           {editingId ? "Editar asignación" : "Nueva asignación"}
