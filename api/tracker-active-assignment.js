@@ -32,13 +32,25 @@ export default async function handler(req, res) {
     }
     console.log('[taa] step: got org_id', org_id);
 
+
+    console.log('[taa] step: reading env');
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SECRET_KEY;
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !serviceKey) {
-      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Missing Supabase env vars' });
+    console.log('[taa] step: env loaded', {
+      hasSupabaseUrl: !!SUPABASE_URL,
+      hasServiceKey: !!serviceKey,
+    });
+    if (!SUPABASE_URL || !serviceKey) {
+      console.log('[taa] step: missing env');
+      return res.status(500).json({
+        ok: false,
+        error: 'backend_error',
+        message: 'Missing Supabase env vars',
+      });
     }
-    console.log('[taa] step: checked env vars');
+
+    console.log('[taa] step: building tracker_assignments query');
 
     // Resolver tracker_user_id desde JWT (auth user id)
     function decodeJwtPayload(token) {
@@ -88,12 +100,15 @@ export default async function handler(req, res) {
 
     // Paso 1: obtener assignment_ids de tracker_assignments
     const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&select=assignment_id`;
+    console.log('[taa] step: tracker_assignments url', trackerAssignmentsUrl);
+    console.log('[taa] step: tracker_assignments fetch start');
     const trackerAssignmentsResp = await fetch(trackerAssignmentsUrl, {
       headers: {
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
       },
     });
+    console.log('[taa] step: tracker_assignments fetch status', trackerAssignmentsResp.status);
     if (!trackerAssignmentsResp.ok) {
       console.log("[taa] step: tracker_assignments fetch error", trackerAssignmentsUrl, trackerAssignmentsResp.status);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
@@ -154,7 +169,8 @@ export default async function handler(req, res) {
       });
     }
   } catch (err) {
-    console.log('[taa] step: error', err);
+    console.log('[taa] catch message', err?.message || String(err));
+    console.log('[taa] catch stack', err?.stack || null);
     return res.status(500).json({
       ok: false,
       error: "backend_error_500",
