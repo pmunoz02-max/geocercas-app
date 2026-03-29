@@ -272,6 +272,7 @@ export default async function handler(req, res) {
       return send(res, 201, { ok: true, asignacion: data });
     }
 
+
     if (method === "PATCH") {
       const incoming = req.body || {};
       const { id } = incoming;
@@ -311,6 +312,17 @@ export default async function handler(req, res) {
         Object.prototype.hasOwnProperty.call(updateFields, "end_time")
           ? updateFields.end_time
           : currentRow.end_time;
+
+      // Log temporal de entrada PATCH
+      console.log('[PATCH asignaciones]', {
+        VERSION,
+        incoming_id: incoming.id,
+        current_id: currentRow.id,
+        nextOrgId,
+        nextPersonalId,
+        nextStartTime,
+        nextEndTime
+      });
 
       if (!nextStartTime || !nextEndTime) {
         return send(res, 400, {
