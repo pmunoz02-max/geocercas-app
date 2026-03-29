@@ -33,7 +33,7 @@ async function apiFetch(method, body) {
     return { data: null, error: { message: msg, payload } };
   }
 
-  return { data: payload?.data ?? null, error: null };
+  return { data: payload?.asignacion ?? payload?.data ?? null, error: null };
 }
 
 async function apiGetBundle(orgId) {
@@ -95,16 +95,8 @@ export async function updateAsignacion(id, fields = {}) {
   if (!id) return { data: null, error: { message: "missing_id" } };
   // Always include id in PATCH body
   const updatePayload = { id };
-  // Only map start_date/end_date if present in fields
-  if (fields.start_time !== undefined) {
-    updatePayload.start_date = fields.start_time ? new Date(fields.start_time).toISOString().slice(0, 10) : null;
-  }
-  if (fields.end_time !== undefined) {
-    updatePayload.end_date = fields.end_time ? new Date(fields.end_time).toISOString().slice(0, 10) : null;
-  }
-  // Copy all other fields, but do not overwrite with null unless explicitly provided
+  // Copy all fields as-is, including start_time and end_time
   for (const key of Object.keys(fields)) {
-    if (key === "start_time" || key === "end_time") continue;
     if (fields[key] !== undefined) updatePayload[key] = fields[key];
   }
   // Log the update payload
