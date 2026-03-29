@@ -459,6 +459,26 @@ export default async function handler(req, res) {
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
 
+      // Forced insert into tracker_assignments (only specified fields)
+      if (adminSupabase && data) {
+        const forcedInsert = {
+          org_id: data.org_id,
+          tracker_user_id: data.user_id,
+          geofence_id: data.geofence_id || data.geocerca_id,
+          activity_id: data.activity_id,
+          start_date: toDateOnlyOrNull(data.start_time),
+          end_date: toDateOnlyOrNull(data.end_time),
+          active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        try {
+          await adminSupabase.from("tracker_assignments").insert([forcedInsert]);
+        } catch (e) {
+          console.error("[asignaciones] forced tracker_assignments insert failed", e);
+        }
+      }
+
       return send(res, 201, {
         ok: true,
         asignacion: data,
@@ -613,6 +633,26 @@ export default async function handler(req, res) {
       }
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
+
+      // Forced insert into tracker_assignments (only specified fields)
+      if (adminSupabase && data) {
+        const forcedInsert = {
+          org_id: data.org_id,
+          tracker_user_id: data.user_id,
+          geofence_id: data.geofence_id || data.geocerca_id,
+          activity_id: data.activity_id,
+          start_date: toDateOnlyOrNull(data.start_time),
+          end_date: toDateOnlyOrNull(data.end_time),
+          active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        try {
+          await adminSupabase.from("tracker_assignments").insert([forcedInsert]);
+        } catch (e) {
+          console.error("[asignaciones] forced tracker_assignments insert failed", e);
+        }
+      }
 
       return send(res, 200, {
         ok: true,
