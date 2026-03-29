@@ -173,8 +173,8 @@ export default function InvitarTracker() {
 
   // Derive assignment automatically: use the only active assignment if available, otherwise null
   const selectedAssignment = useMemo(() => {
-    if (assignments.length === 1) return assignments[0];
-    return null;
+    if (assignments.length === 0) return null;
+    return assignments[0];
   }, [assignments]);
 
   const assignmentPreview = useMemo(() => {
@@ -397,6 +397,14 @@ export default function InvitarTracker() {
   }, [orgId, selectedPerson]);
 
   async function onSendInvite(e) {
+        if (!selectedAssignment) {
+          setErrMsg(
+            t("inviteTracker.assignment.noActiveForInvite", {
+              defaultValue: "La persona seleccionada no tiene una asignación activa para invitar como tracker.",
+            })
+          );
+          return;
+        }
     e.preventDefault();
     setOkMsg(null);
     setErrMsg(null);
@@ -741,7 +749,6 @@ export default function InvitarTracker() {
                 setSelectedPersonId(v);
                 const person = people.find((p) => String(p.id) === String(v));
                 setEmailInput(person?.email || "");
-                setSelectedAssignmentId("");
                 setOkMsg(null);
                 setErrMsg(null);
               }}
