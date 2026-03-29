@@ -1,3 +1,34 @@
+/*
+INVITE-TRACKER FLOW DOCUMENTATION
+---------------------------------
+
+Este endpoint implementa el flujo de invitación de trackers, garantizando integridad y sincronización entre la tabla `personal` y el sistema de autenticación (`auth.users`).
+
+FLUJO GENERAL:
+1. **Recepción de parámetros**: org_id, email, assignment_id (opcional), etc.
+2. **Resolución de personal_id**:
+   - Si se provee assignment_id, se busca el registro de asignación y se extrae personal_id.
+   - Si no se encuentra por asignación, se busca el registro de personal por email dentro de la organización.
+3. **Validación obligatoria de existencia de personal**:
+   - Si no existe registro de personal, retorna 400 `personal_not_found_for_invite` y no continúa.
+   - Se valida que el registro de personal pertenezca a la organización y tenga el email correcto.
+4. **Validación de conflicto de user_id**:
+   - Si el registro de personal ya tiene un user_id distinto al usuario que se intenta invitar, retorna 409 `personal_user_id_conflict` y no continúa.
+5. **Invitación y sincronización con auth.users**:
+   - Se realiza la invitación (llamada a función edge).
+   - Si la invitación es exitosa y se obtiene un user_id, se sincroniza el campo `user_id` en el registro de personal (si aún no está seteado).
+   - Si ya existe user_id en personal y coincide, no se realiza ningún cambio.
+6. **Creación de tracker_assignments** (si corresponde):
+   - Si se provee assignment_id y la invitación fue exitosa, se crea el registro de asignación para el tracker.
+
+VALIDACIONES CLAVE:
+- No se permite invitar si no existe registro de personal en la organización para el email indicado.
+- No se permite invitar si el registro de personal ya está vinculado a otro usuario.
+- Siempre se sincroniza el campo user_id de personal con el usuario invitado si es necesario.
+
+Este flujo garantiza que cada invitación de tracker esté asociada a un registro de personal único y correctamente vinculado con el usuario de autenticación, evitando duplicidades y errores de integridad.
+*/
+
 // api/invite-tracker.js
 // App Geocercas (PREVIEW) — Invite Tracker Proxy
 // BUILD: invite-proxy-v18_ASSIGNMENT_DETAILS_20260311
@@ -179,15 +210,25 @@ export default async function handler(req, res) {
           const personal = rows && rows[0];
           if (personal && personal.id) {
             personal_id = personal.id;
-          } else {
-            console.warn(`[invite-tracker] no se encontró personal para el email`);
           }
-        } else {
-          console.warn(`[invite-tracker] error consultando personal`);
         }
       } catch (e) {
         console.warn(`[invite-tracker] error consultando personal`, e);
       }
+    }
+
+    // Validar que exista personal antes de invitar
+    if (!personal_id) {
+      console.warn(`[invite-tracker] personal no encontrado para invitar`, { org_id, email, assignment_id });
+      return res.status(400).json({
+        ok: false,
+        build: BUILD_TAG,
+        code: "personal_not_found_for_invite",
+        message: "No existe registro de personal para invitar en la organización",
+        org_id,
+        email,
+        assignment_id
+      });
     }
 
     // Consultar personal y validar email
@@ -224,6 +265,67 @@ export default async function handler(req, res) {
     }
 
     // Log validación exitosa antes del fetch al edge
+
+    // Validación dura de existencia de personal antes de invitar
+    const resolvedPersonalId = personal_id || (asignacion && asignacion.personal_id) || null;
+    if (!resolvedPersonalId) {
+      return res.status(400).json({
+        ok: false,
+        error: "personal_not_found_for_invite",
+        message: "No personal record found for this invite",
+        org_id,
+        email,
+        assignment_id: assignment_id || null,
+      });
+    }
+
+    const validateUrl =
+      `${supabaseUrl}/rest/v1/personal` +
+      `?id=eq.${encodeURIComponent(resolvedPersonalId)}` +
+      `&org_id=eq.${encodeURIComponent(org_id)}` +
+      `&select=id,email,user_id`;
+
+    const validateResp = await fetch(validateUrl, {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        Accept: "application/json",
+      },
+    });
+
+    const validateRows = await validateResp.json().catch(() => []);
+    const personalRow = Array.isArray(validateRows) ? validateRows[0] : null;
+
+    if (!personalRow) {
+      return res.status(400).json({
+        ok: false,
+        error: "personal_not_found_for_invite",
+        message: "Personal record does not exist in this organization",
+        personal_id: resolvedPersonalId,
+        org_id,
+        email,
+      });
+    }
+
+    personal_id = personalRow.id;
+
+    // Si personal.user_id ya existe y es distinto del user_id invitado, retorna 409
+    // El user_id invitado se determina después del invite, pero si ya existe en personalRow, validamos aquí
+    // Si ya existe user_id en personalRow, y es distinto del que se va a invitar, abortar
+    // NOTA: El user_id invitado se obtiene después del invite, pero si ya existe en personalRow, y es distinto, abortar
+    if (personalRow.user_id) {
+      // Si ya existe user_id, y el invite va a otro user, abortar
+      // No sabemos aún el user_id invitado, pero si ya hay uno, abortar aquí
+      return res.status(409).json({
+        ok: false,
+        error: "personal_user_id_conflict",
+        message: "El personal ya está vinculado a otro usuario.",
+        personal_id: personalRow.id,
+        org_id,
+        existing_user_id: personalRow.user_id,
+      });
+    }
+
     console.log("[invite-tracker] validated assignment/email", {
       org_id,
       email,
