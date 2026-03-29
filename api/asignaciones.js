@@ -343,9 +343,23 @@ export default async function handler(req, res) {
     }
 
     if (method === "PATCH") {
-      // Update assignment by id, only writable fields
+      // Only allow updates to asignaciones columns
       const incoming = req.body || {};
-      const { id, period, period_tstz, start_date, end_date, ...fields } = incoming;
+      const {
+        id,
+        personal_id,
+        geofence_id,
+        geocerca_id,
+        activity_id,
+        start_time,
+        end_time,
+        status,
+        estado,
+        frecuencia_envio_sec,
+        frequency_minutes,
+        org_id,
+        period
+      } = incoming;
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
 
       // Fetch current row
@@ -357,8 +371,8 @@ export default async function handler(req, res) {
       if (fetchError || !currentRow) return send(res, 404, { ok: false, error: "not_found" });
 
       // Rebuild effective start_time/end_time
-      const effectiveStart = fields.start_time || currentRow.start_time;
-      const effectiveEnd = fields.end_time || currentRow.end_time;
+      const effectiveStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
+      const effectiveEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
 
       // Always update period from effective start/end
       let newPeriod = null;
@@ -366,18 +380,15 @@ export default async function handler(req, res) {
         const startTz = new Date(effectiveStart).toISOString();
         const endTz = new Date(effectiveEnd).toISOString();
         newPeriod = `tstzrange('${startTz}','${endTz}','[)')`;
-        fields.period = newPeriod;
-      } else {
-        delete fields.period;
       }
 
       // Overlap validation (exclude current id)
-      const overlapUserId = fields.tracker_user_id || fields.personal_id || currentRow.tracker_user_id || currentRow.personal_id;
-      if (overlapUserId && effectiveStart) {
+      const overlapPersonalId = typeof personal_id !== "undefined" ? personal_id : currentRow.personal_id;
+      if (overlapPersonalId && effectiveStart) {
         const { data: overlapRows, error: overlapError } = await supabase
           .from("asignaciones")
-          .select("id,start_time,end_time,tracker_user_id,personal_id,period")
-          .eq(fields.tracker_user_id ? "tracker_user_id" : "personal_id", overlapUserId)
+          .select("id,start_time,end_time,personal_id,period")
+          .eq("personal_id", overlapPersonalId)
           .eq("is_deleted", false)
           .neq("id", id);
         if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
@@ -400,9 +411,24 @@ export default async function handler(req, res) {
         }
       }
 
+      // Build update object with only allowed columns
+      const updateFields = {};
+      if (typeof personal_id !== "undefined") updateFields.personal_id = personal_id;
+      if (typeof geofence_id !== "undefined") updateFields.geofence_id = geofence_id;
+      if (typeof geocerca_id !== "undefined") updateFields.geocerca_id = geocerca_id;
+      if (typeof activity_id !== "undefined") updateFields.activity_id = activity_id;
+      if (typeof start_time !== "undefined") updateFields.start_time = start_time;
+      if (typeof end_time !== "undefined") updateFields.end_time = end_time;
+      if (typeof status !== "undefined") updateFields.status = status;
+      if (typeof estado !== "undefined") updateFields.estado = estado;
+      if (typeof frecuencia_envio_sec !== "undefined") updateFields.frecuencia_envio_sec = frecuencia_envio_sec;
+      if (typeof frequency_minutes !== "undefined") updateFields.frequency_minutes = frequency_minutes;
+      if (typeof org_id !== "undefined") updateFields.org_id = org_id;
+      if (newPeriod) updateFields.period = newPeriod;
+
       const { error } = await supabase
         .from("asignaciones")
-        .update(fields)
+        .update(updateFields)
         .eq("id", id)
         .eq("is_deleted", false);
       if (error) return send(res, 500, { ok: false, error: error.message });
