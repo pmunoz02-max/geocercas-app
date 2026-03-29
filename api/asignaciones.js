@@ -385,7 +385,7 @@ export default async function handler(req, res) {
     }
 
     if (method === "PATCH") {
-      // Only allow updates to real writable columns for public.asignaciones
+      // PATCH: solo columnas válidas, sin period ni tracker_user_id
       const incoming = req.body || {};
       const {
         id,
@@ -403,38 +403,43 @@ export default async function handler(req, res) {
       } = incoming;
       if (!id) return send(res, 400, { ok: false, error: "missing_id" });
 
-      // Fetch current row
+      // Cargar fila actual
       const { data: currentRow, error: fetchError } = await supabase
         .from("asignaciones")
-        .select("*")
+        .select("id, personal_id, org_id, start_time, end_time, is_deleted")
         .eq("id", id)
         .single();
       if (fetchError || !currentRow) return send(res, 404, { ok: false, error: "not_found" });
 
-      // Determine effective values
-      const effectivePersonalId = typeof personal_id !== "undefined" ? personal_id : currentRow.personal_id;
-      const effectiveOrgId = typeof org_id !== "undefined" ? org_id : currentRow.org_id;
-      const effectiveStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
-      const effectiveEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
+      // Calcular valores efectivos
+      const effPersonalId = typeof personal_id !== "undefined" ? personal_id : currentRow.personal_id;
+      const effOrgId = typeof org_id !== "undefined" ? org_id : currentRow.org_id;
+      const effStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
+      const effEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
 
-      // Overlap validation: org_id, personal_id, start_time, end_time, exclude current id robustly
-      if (effectiveOrgId && effectivePersonalId && effectiveStart && effectiveEnd) {
+      // Validar start_time y end_time
+      if (!effStart || !effEnd || new Date(effStart) >= new Date(effEnd)) {
+        return send(res, 400, { ok: false, error: "invalid_range", message: "start_time debe ser menor que end_time" });
+      }
+
+      // Validar traslape solo con org_id, personal_id, start_time, end_time, is_deleted
+      if (effOrgId && effPersonalId) {
         const normId = String(id);
         const { data: overlapRows, error: overlapError } = await supabase
           .from("asignaciones")
           .select("id, start_time, end_time")
-          .eq("org_id", effectiveOrgId)
-          .eq("personal_id", effectivePersonalId)
+          .eq("org_id", effOrgId)
+          .eq("personal_id", effPersonalId)
           .eq("is_deleted", false);
         if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
-        const nStart = new Date(effectiveStart);
-        const nEnd = new Date(effectiveEnd);
+        const nStart = new Date(effStart);
+        const nEnd = new Date(effEnd);
         for (const a of overlapRows || []) {
-          // Robustly exclude current row by id string comparison
           if (!a.id || String(a.id) === normId) continue;
-          const aStart = a.start_time ? new Date(a.start_time) : null;
-          const aEnd = a.end_time ? new Date(a.end_time) : null;
-          if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
+          if (!a.start_time || !a.end_time) continue;
+          const aStart = new Date(a.start_time);
+          const aEnd = new Date(a.end_time);
+          if (aStart < nEnd && aEnd > nStart) {
             return send(res, 409, {
               ok: false,
               error: "overlap",
@@ -445,7 +450,7 @@ export default async function handler(req, res) {
         }
       }
 
-      // Build update object with only allowed columns
+      // Solo columnas válidas
       const updateFields = {};
       if (typeof personal_id !== "undefined") updateFields.personal_id = personal_id;
       if (typeof geofence_id !== "undefined") updateFields.geofence_id = geofence_id;
