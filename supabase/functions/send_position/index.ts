@@ -165,6 +165,15 @@ serve(async (req) => {
 
       const admin = createClient(SB_URL, SB_SERVICE_ROLE);
 
+      // LOG antes de insertar (proxy_hmac)
+      console.log("[send_position] about to insert (proxy_hmac)", {
+        user_id,
+        org_id,
+        lat,
+        lng,
+        mode: "proxy_hmac",
+      });
+
       const row = {
         user_id,
         org_id,

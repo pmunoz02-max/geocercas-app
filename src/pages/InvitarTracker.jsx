@@ -487,6 +487,16 @@ export default function InvitarTracker() {
       }
 
       if (!res.ok) {
+        // Manejo especial para personal_user_id_conflict
+        if (body?.error === "personal_user_id_conflict") {
+          setErrMsg(
+            t("inviteTracker.errors.personalUserIdConflict", {
+              defaultValue:
+                "El registro de personal ya tiene un usuario asignado. Si deseas invitar a otro usuario, primero desvincula el usuario actual desde la administración de Personal.",
+            })
+          );
+          return;
+        }
         const msg = body?.error || body?.message || body?.raw || `HTTP ${res.status}`;
         setErrMsg(
           `${t("inviteTracker.errors.inviteErrorPrefix", {
