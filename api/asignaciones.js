@@ -430,6 +430,7 @@ export default async function handler(req, res) {
         const nStart = new Date(effectiveStart);
         const nEnd = new Date(effectiveEnd);
         for (const a of overlapRows || []) {
+          if (!a.id || a.id === id) continue; // Exclude current id from JS overlap check
           const aStart = a.start_time ? new Date(a.start_time) : null;
           const aEnd = a.end_time ? new Date(a.end_time) : null;
           if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
