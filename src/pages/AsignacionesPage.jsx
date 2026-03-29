@@ -174,8 +174,6 @@ export default function AsignacionesPage() {
   const resolvedSelectedPersonId =
     selectedPerson?.id ?? selectedPerson?.personal_id ?? null;
 
-  const selectedTrackerUserId =
-    selectedPerson?.user_id ?? selectedPerson?.tracker_user_id ?? null;
 
   const geofenceOptions = useMemo(() => {
     return geocercas
@@ -245,7 +243,6 @@ export default function AsignacionesPage() {
       frequency_minutes: parsedFreqMin,
       frecuencia_envio_sec: parsedFreqMin * 60,
       status,
-      ...(selectedTrackerUserId ? { tracker_user_id: selectedTrackerUserId } : {}),
     };
 
     try {
@@ -256,24 +253,25 @@ export default function AsignacionesPage() {
         }
         await loadAll();
         setSuccess("Asignación actualizada correctamente.");
-      } else {
-        const result = await createAsignacion(payload, activeOrgId);
-        if (result?.error) {
-          throw new Error(result.error.message || "Error al guardar asignación");
-        }
-        await loadAll();
-        setSuccess("Asignación guardada correctamente.");
-
-        setSelectedPersonId("");
-        setSelectedGeocercaId("");
-        setSelectedActivityId("");
-        setStartTime("");
-        setEndTime("");
-        setEndTimeError("");
-        setStatus("active");
-        setFreqMin(5);
+        setEditingId(null);
+        setSaving(false);
+        return;
       }
-
+      // ...existing code for createAsignacion...
+      const result = await createAsignacion(payload, activeOrgId);
+      if (result?.error) {
+        throw new Error(result.error.message || "Error al guardar asignación");
+      }
+      await loadAll();
+      setSuccess("Asignación guardada correctamente.");
+      setSelectedPersonId("");
+      setSelectedGeocercaId("");
+      setSelectedActivityId("");
+      setStartTime("");
+      setEndTime("");
+      setEndTimeError("");
+      setStatus("active");
+      setFreqMin(5);
       setEditingId(null);
     } catch (e2) {
       console.error("[AsignacionesPage] submit failed:", e2);
