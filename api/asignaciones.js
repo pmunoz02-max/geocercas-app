@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-direct-sync-01";
+const VERSION = "asignaciones-direct-sync-02";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -201,55 +201,64 @@ async function syncTrackerAssignment(adminSupabase, row) {
     return { ok: false, error: "missing_service_role_key" };
   }
 
-  const orgId = row.org_id;
-  const trackerUserId = row.user_id;
-  const geofenceId = row.geofence_id || row.geocerca_id;
-  const activityId = row.activity_id;
+  const orgId = row?.org_id || null;
+  const trackerUserId = row?.user_id || null;
+  const geofenceId = row?.geofence_id || row?.geocerca_id || null;
+  const activityId = row?.activity_id || null;
+  const startDate = toDateOnlyOrNull(row?.start_time);
+  const endDate = toDateOnlyOrNull(row?.end_time);
+  const active = normalizeActiveStatus(row);
+  const frequencyMinutes = normalizeFrequencyMinutes(row);
 
-  const startDate = row.start_time?.slice(0, 10);
-  const endDate = row.end_time?.slice(0, 10);
-
-  if (!orgId || !trackerUserId || !geofenceId) {
-    return { ok: false, error: "missing_fields" };
+  if (!orgId || !trackerUserId || !geofenceId || !startDate || !endDate) {
+    return { ok: false, error: "missing_sync_fields" };
   }
 
-  console.log("[SYNC] deleting old assignments...");
-
-  // 🔥 BORRA anteriores (clave)
-  await adminSupabase
+  const deleteQuery = adminSupabase
     .from("tracker_assignments")
     .delete()
     .eq("org_id", orgId)
     .eq("tracker_user_id", trackerUserId)
     .eq("geofence_id", geofenceId);
 
-  console.log("[SYNC] inserting new assignment...");
+  const deleteScopedQuery =
+    activityId == null ? deleteQuery.is("activity_id", null) : deleteQuery.eq("activity_id", activityId);
+
+  const { error: deleteError } = await deleteScopedQuery;
+
+  if (deleteError) {
+    console.error("[SYNC DELETE ERROR]", deleteError);
+    return { ok: false, error: deleteError.message };
+  }
+
+  const insertPayload = {
+    tenant_id: orgId,
+    org_id: orgId,
+    tracker_user_id: trackerUserId,
+    geofence_id: geofenceId,
+    activity_id: activityId,
+    start_date: startDate,
+    end_date: endDate,
+    frequency_minutes: frequencyMinutes,
+    active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  console.log("[SYNC INSERT]", insertPayload);
 
   const { data, error } = await adminSupabase
     .from("tracker_assignments")
-    .insert([{
-      org_id: orgId,
-      tenant_id: orgId,
-      tracker_user_id: trackerUserId,
-      geofence_id: geofenceId,
-      activity_id: activityId,
-      start_date: startDate,
-      end_date: endDate,
-      active: true,
-      frequency_minutes: row.frequency_minutes || 5,
-      created_at: new Date().toISOString()
-    }])
+    .insert([insertPayload])
     .select("id")
     .single();
 
   if (error) {
-    console.error("[SYNC ERROR]", error);
+    console.error("[SYNC INSERT ERROR]", error);
     return { ok: false, error: error.message };
   }
 
-  console.log("[SYNC OK]", data);
-
-  return { ok: true, id: data.id };
+  return { ok: true, id: data?.id || null, mode: "delete_insert" };
 }
 
 export default async function handler(req, res) {
@@ -334,13 +343,7 @@ export default async function handler(req, res) {
     if (method === "POST") {
       const incoming = req.body || {};
       const insertFields = buildWritableFields(incoming);
-
-      const {
-        personal_id,
-        org_id,
-        start_time,
-        end_time,
-      } = insertFields;
+      const { personal_id, org_id, start_time, end_time } = insertFields;
 
       if (!org_id || !personal_id || !start_time || !end_time) {
         return send(res, 400, { ok: false, error: "missing_required_fields" });
@@ -407,26 +410,6 @@ export default async function handler(req, res) {
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
 
-      // Forced insert into tracker_assignments (only specified fields)
-      if (adminSupabase && data) {
-        const forcedInsert = {
-          org_id: data.org_id,
-          tracker_user_id: data.user_id,
-          geofence_id: data.geofence_id || data.geocerca_id,
-          activity_id: data.activity_id,
-          start_date: toDateOnlyOrNull(data.start_time),
-          end_date: toDateOnlyOrNull(data.end_time),
-          active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        try {
-          await adminSupabase.from("tracker_assignments").insert([forcedInsert]);
-        } catch (e) {
-          console.error("[asignaciones] forced tracker_assignments insert failed", e);
-        }
-      }
-
       return send(res, 201, {
         ok: true,
         asignacion: data,
@@ -478,16 +461,6 @@ export default async function handler(req, res) {
           ? updateFields.end_time
           : currentRow.end_time;
 
-      console.log("[PATCH asignaciones]", {
-        VERSION,
-        incoming_id: incoming.id,
-        current_id: currentRow.id,
-        nextOrgId,
-        nextPersonalId,
-        nextStartTime,
-        nextEndTime,
-      });
-
       if (!nextStartTime || !nextEndTime) {
         return send(res, 400, {
           ok: false,
@@ -535,7 +508,6 @@ export default async function handler(req, res) {
         }
 
         if (overlapCheck?.conflict) {
-          console.log("[PATCH asignaciones] OVERLAP", overlapCheck.debug);
           return send(res, 409, {
             ok: false,
             error: "overlap",
@@ -581,26 +553,6 @@ export default async function handler(req, res) {
       }
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
-
-      // Forced insert into tracker_assignments (only specified fields)
-      if (adminSupabase && data) {
-        const forcedInsert = {
-          org_id: data.org_id,
-          tracker_user_id: data.user_id,
-          geofence_id: data.geofence_id || data.geocerca_id,
-          activity_id: data.activity_id,
-          start_date: toDateOnlyOrNull(data.start_time),
-          end_date: toDateOnlyOrNull(data.end_time),
-          active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        try {
-          await adminSupabase.from("tracker_assignments").insert([forcedInsert]);
-        } catch (e) {
-          console.error("[asignaciones] forced tracker_assignments insert failed", e);
-        }
-      }
 
       return send(res, 200, {
         ok: true,
