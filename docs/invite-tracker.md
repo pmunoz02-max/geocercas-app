@@ -58,3 +58,6 @@ Solo hay conflicto si `personal.user_id` pertenece a otro usuario distinto.
 
 Después del invite, la relectura de `personal` se hace por `id` del registro.
 No se debe filtrar nuevamente por `org_id` en esa lectura final, porque la validación de organización ya ocurrió antes en el flujo.
+## Update Marzo 2026 – Resolución por email post-invite
+
+Después de invitar, el registro de personal se resuelve usando email + org_id en lugar de personal_id para evitar inconsistencias en el flujo.
