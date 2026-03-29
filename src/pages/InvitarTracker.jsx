@@ -171,16 +171,6 @@ export default function InvitarTracker() {
     return people.find((p) => String(p.id) === String(selectedPersonId)) || null;
   }, [people, selectedPersonId]);
 
-  // Bloquear invitación si la persona ya tiene user_id asignado
-  const inviteBlockedByUserId = useMemo(() => {
-    return Boolean(selectedPerson?.user_id);
-  }, [selectedPerson]);
-
-  const inviteBlockedMessage = inviteBlockedByUserId
-    ? t("inviteTracker.errors.personalAlreadyLinked", {
-        defaultValue: "Esta persona ya está vinculada a un usuario.",
-      })
-    : null;
 
 
   // Derive assignment automatically: use the only active assignment if available, otherwise null
@@ -411,14 +401,6 @@ export default function InvitarTracker() {
   }, [orgId, selectedPerson]);
 
   async function onSendInvite(e) {
-            if (inviteBlockedByUserId) {
-              setErrMsg(
-                t("inviteTracker.errors.personalAlreadyLinked", {
-                  defaultValue: "Esta persona ya está vinculada a un usuario.",
-                })
-              );
-              return;
-            }
         if (!selectedAssignment) {
           setErrMsg(
             t("inviteTracker.assignment.noActiveForInvite", {
@@ -814,15 +796,12 @@ export default function InvitarTracker() {
 
       {/* Assignment select and preview removed: assignment is now derived automatically from selected person */}
 
-          {inviteBlockedMessage && (
-            <div className="text-sm text-red-600 mb-2">{inviteBlockedMessage}</div>
-          )}
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId || inviteBlockedByUserId}
+            disabled={busy || loadingPeople || !orgId}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId || inviteBlockedByUserId
+              busy || loadingPeople || !orgId
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}

@@ -16,3 +16,16 @@ This document describes the current invite-tracker flow for preview environments
 - Assignment is now **required** for all tracker invites. The backend will return an error if assignment_id is missing.
 - All validation and invite logic is handled server-side; the frontend only needs to call `/api/invite-tracker` with the correct parameters.
 - Documentation and flow are up to date for preview/testing only.
+
+## Canonical User Logic (2026-03)
+
+- The `personal` record is the canonical source for tracker-user linkage.
+- If `personal.user_id` exists, it is always reused as the canonical user for the invite. No new auth user is created, and the invite is not blocked.
+- If `personal.user_id` does not exist, the backend will look up or create an auth user by email and proceed with the invite.
+- The invite is never blocked just because `personal.user_id` exists; the same user can be invited again if needed.
+- When the invite is accepted, the tracker role is applied to the user in the target org, even if the user already exists in other orgs.
+- Cross-org membership is supported: accepting the invite grants tracker role in the inviting org, regardless of roles in other orgs.
+- The only cases where the invite is blocked are:
+  - No matching `personal` record exists for the org/email.
+  - The email in `personal` does not match the invite email.
+  - There is a true data inconsistency (e.g., conflicting user IDs).

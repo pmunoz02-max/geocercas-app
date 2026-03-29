@@ -324,29 +324,39 @@ export default async function handler(req, res) {
 
     personal_id = personalRow.id;
 
-    // Permitir invitar si personal.user_id ya corresponde al mismo usuario del email invitado
-    // Solo retornar conflicto si corresponde a otro auth user distinto
+
+    // NUEVA LÓGICA: Si personal.user_id existe, usarlo como canónico y continuar flujo
+    let canonicalUserId = null;
     if (personalRow.user_id) {
-      // Buscar el user_id de auth.users para el email invitado
-      let invitedUserId = null;
+      canonicalUserId = personalRow.user_id;
+      // No buscar ni crear auth user, no lanzar conflicto
+      // Continuar flujo usando canonicalUserId
+    } else {
+      // Si no existe user_id, seguir con el flujo actual de invitación por email
+      // Buscar auth user existente por email usando service key
+      let trackerUserId = null;
+      let reusedExistingUser = false;
       try {
         const supabaseUrl = process.env.SUPABASE_URL;
-        const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
         const userResp = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
           headers: {
-            apikey: adminKey,
-            Authorization: `Bearer ${adminKey}`,
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
           },
         });
         if (userResp.ok) {
           const userJson = await userResp.json();
           const user = Array.isArray(userJson?.users) ? userJson.users[0] : (Array.isArray(userJson) ? userJson[0] : null);
-          if (user && user.id) invitedUserId = user.id;
+          if (user && user.id) {
+            trackerUserId = user.id;
+            reusedExistingUser = true;
+          }
         }
       } catch (e) {
-        console.warn("[invite-tracker] failed to resolve invited user_id for email", email, e);
+        console.warn("[invite-tracker] failed to resolve existing user by email", email, e);
       }
-      if (invitedUserId && personalRow.user_id !== invitedUserId) {
+      // Si hay inconsistencia real, bloquear
+      if (trackerUserId && personalRow.user_id && personalRow.user_id !== trackerUserId) {
         return res.status(409).json({
           ok: false,
           error: "personal_user_id_conflict",
@@ -354,10 +364,10 @@ export default async function handler(req, res) {
           personal_id: personalRow.id,
           org_id,
           existing_user_id: personalRow.user_id,
-          invited_user_id: invitedUserId,
+          invited_user_id: trackerUserId,
         });
       }
-      // Si es el mismo user_id, permitir continuar
+      // Si no hay conflicto, canonicalUserId será el que se obtenga tras la invitación
     }
 
     console.log("[invite-tracker] validated assignment/email", {
