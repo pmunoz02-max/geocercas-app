@@ -417,27 +417,30 @@ export default async function handler(req, res) {
       const effectiveStart = typeof start_time !== "undefined" ? start_time : currentRow.start_time;
       const effectiveEnd = typeof end_time !== "undefined" ? end_time : currentRow.end_time;
 
-      // Overlap validation: org_id, personal_id, start_time, end_time, exclude current id (normalized)
+      // Overlap validation: org_id, personal_id, start_time, end_time, exclude current id robustly
       if (effectiveOrgId && effectivePersonalId && effectiveStart && effectiveEnd) {
-        // Normalize id for comparison
-        const normId = String(id).trim();
+        const normId = String(id);
         const { data: overlapRows, error: overlapError } = await supabase
           .from("asignaciones")
-          .select("id, start_time, end_time, personal_id, org_id")
+          .select("id, start_time, end_time")
           .eq("org_id", effectiveOrgId)
           .eq("personal_id", effectivePersonalId)
-          .eq("is_deleted", false)
-          .neq("id", normId);
+          .eq("is_deleted", false);
         if (overlapError) return send(res, 500, { ok: false, error: overlapError.message });
         const nStart = new Date(effectiveStart);
         const nEnd = new Date(effectiveEnd);
         for (const a of overlapRows || []) {
-          // Exclude current id from JS overlap check using normalized string comparison
-          if (!a.id || String(a.id).trim() === normId) continue;
+          // Robustly exclude current row by id string comparison
+          if (!a.id || String(a.id) === normId) continue;
           const aStart = a.start_time ? new Date(a.start_time) : null;
           const aEnd = a.end_time ? new Date(a.end_time) : null;
           if (aStart && aEnd && aStart < nEnd && aEnd > nStart) {
-            return send(res, 409, { ok: false, error: "overlap", conflict_id: a.id });
+            return send(res, 409, {
+              ok: false,
+              error: "overlap",
+              current_id: normId,
+              conflict_id: a.id
+            });
           }
         }
       }
