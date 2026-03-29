@@ -239,13 +239,15 @@ export default function InvitarTracker() {
       }
 
       try {
-        // 1. Cargar personas activas/vigentes
+        // 1. Cargar personas activas/vigentes (incluyendo user_id)
         const { data, error } = await supabase
           .from("personal")
-          .select("id, org_id, nombre, apellido, email, vigente, activo, activo_bool, is_deleted")
+          .select("id, org_id, nombre, apellido, email, vigente, activo, activo_bool, is_deleted, user_id")
           .eq("org_id", orgId)
           .eq("is_deleted", false)
           .limit(500);
+  // Bloquear invitación si la persona ya tiene user_id asignado
+  const inviteBlockedByUserId = !!selectedPerson?.user_id;
 
         if (cancelled) return;
         if (error) throw error;
@@ -397,6 +399,14 @@ export default function InvitarTracker() {
   }, [orgId, selectedPerson]);
 
   async function onSendInvite(e) {
+            if (inviteBlockedByUserId) {
+              setErrMsg(
+                t("inviteTracker.errors.alreadyLinked", {
+                  defaultValue: "Esta persona ya está vinculada a un usuario y no puede ser invitada nuevamente.",
+                })
+              );
+              return;
+            }
         if (!selectedAssignment) {
           setErrMsg(
             t("inviteTracker.assignment.noActiveForInvite", {
@@ -792,12 +802,19 @@ export default function InvitarTracker() {
 
       {/* Assignment select and preview removed: assignment is now derived automatically from selected person */}
 
+          {inviteBlockedByUserId && (
+            <div className="text-sm text-red-600 mb-2">
+              {t("inviteTracker.errors.alreadyLinked", {
+                defaultValue: "Esta persona ya está vinculada a un usuario y no puede ser invitada nuevamente.",
+              })}
+            </div>
+          )}
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId}
+            disabled={busy || loadingPeople || !orgId || inviteBlockedByUserId}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId
+              busy || loadingPeople || !orgId || inviteBlockedByUserId
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}
