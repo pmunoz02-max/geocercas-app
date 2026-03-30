@@ -538,53 +538,7 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, PRIMARY, lang]);
 
-  const loadActiveAssignment = async (authTokenOverride = "") => {
-    const effectiveToken = String(authTokenOverride || trackerAccessToken || "").trim();
-    if (!trackerReady || !orgId || !effectiveToken) return;
 
-    console.log("[assignment-window] loading");
-    console.log("[assignment-window] query:start", { orgId });
-
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("assignment_load_timeout")), 8000)
-    );
-
-    const fetchPromise = fetch("/api/tracker-active-assignment", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${effectiveToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ org_id: orgId }),
-    }).then(async (res) => {
-      if (!res.ok) throw new Error(`backend_error_${res.status}`);
-      return res.json();
-    });
-
-    const result = await Promise.race([fetchPromise, timeoutPromise]);
-
-    // Use tracker_assignment as source of truth if present
-    if (result.ok && result.tracker_assignment) {
-      setActiveAssignment(result.tracker_assignment);
-      setAssignmentWindowStatus(result.tracker_assignment.active ? "active" : "expired");
-      setAssignmentLoadState(result.tracker_assignment.active ? "active" : "inactive");
-      setAssignmentLoadError("");
-    } else if (result.ok && result.active && result.assignment) {
-      // Fallback: legacy assignment logic
-      const activeNow = isAssignmentActiveNow(result.assignment);
-      setActiveAssignment(result.assignment);
-      setAssignmentWindowStatus(activeNow ? "active" : "expired");
-      setAssignmentLoadState(activeNow ? "active" : "inactive");
-      setAssignmentLoadError("");
-    } else if (result.ok && !result.active) {
-      setActiveAssignment(null);
-      setAssignmentWindowStatus("inactive");
-      setAssignmentLoadState("inactive");
-      setAssignmentLoadError("");
-    } else {
-      throw new Error(result.error || "unknown_error");
-    }
-  };
 
   useEffect(() => {
     if (!trackerReady || !orgId || !trackerAccessToken) return;
