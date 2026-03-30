@@ -69,47 +69,50 @@ async function resolveCurrentOrgId(supabase) {
 }
 
 export default async function handler(req, res) {
-          // ======================
-          // action=costs (preview-only)
-          // ======================
-          if (String(req.query.action || "") === "costs") {
-            // Only allow in preview
-            if (process.env.VERCEL_ENV !== "preview") {
-              return res.status(403).json({ error: "Not available in production." });
-            }
+  // ======================
+  // action=costs (preview-only, bypass auth)
+  // ======================
+  const action = String(req.query.action || "").toLowerCase();
+  const isPreviewCosts = process.env.VERCEL_ENV === "preview" && action === "costs";
 
-            const { start, end } = req.query;
+  if (action === "costs") {
+    // Only allow in preview
+    if (process.env.VERCEL_ENV !== "preview") {
+      return res.status(403).json({ error: "Not available in production." });
+    }
 
-            // Use preview Supabase client (do not import prod client)
-            const { createClient } = await import("@supabase/supabase-js");
-            const SUPABASE_URL = process.env.SUPABASE_PREVIEW_URL;
-            const SUPABASE_KEY = process.env.SUPABASE_PREVIEW_SERVICE_ROLE_KEY;
-            if (!SUPABASE_URL || !SUPABASE_KEY) {
-              return res.status(500).json({ error: "Preview Supabase credentials not set." });
-            }
-            const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    const { start, end } = req.query;
 
-            // Get orgId from session (reuse logic)
-            const orgId = await resolveCurrentOrgId(supabase);
-            if (!orgId) {
-              return res.status(401).json({ error: "No active org for cost report." });
-            }
+    // Use preview Supabase client (do not import prod client)
+    const { createClient } = await import("@supabase/supabase-js");
+    const SUPABASE_URL = process.env.SUPABASE_PREVIEW_URL;
+    const SUPABASE_KEY = process.env.SUPABASE_PREVIEW_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+      return res.status(500).json({ error: "Preview Supabase credentials not set." });
+    }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-            const { data, error } = await supabase.rpc("calculate_tracker_costs_preview", {
-              p_org_id: orgId,
-              p_date_from: start,
-              p_date_to: end,
-              p_rate_per_km: 0.35,
-              p_rate_per_hour: 2.5,
-              p_rate_per_visit: 0,
-            });
+    // Get orgId from session (reuse logic)
+    const orgId = await resolveCurrentOrgId(supabase);
+    if (!orgId) {
+      return res.status(401).json({ error: "No active org for cost report." });
+    }
 
-            if (error) {
-              return res.status(500).json({ ok: false, error: error.message });
-            }
+    const { data, error } = await supabase.rpc("calculate_tracker_costs_preview", {
+      p_org_id: orgId,
+      p_date_from: start,
+      p_date_to: end,
+      p_rate_per_km: 0.35,
+      p_rate_per_hour: 2.5,
+      p_rate_per_visit: 0,
+    });
 
-            return res.json({ ok: true, data });
-          }
+    if (error) {
+      return res.status(500).json({ ok: false, error: error.message });
+    }
+
+    return res.json({ ok: true, data });
+  }
       // ======================
       // Preview-only: report=cost
       // ======================
@@ -156,6 +159,7 @@ export default async function handler(req, res) {
 
         return res.status(200).json({ ok: true, data });
       }
+
   try {
     if (req.method !== "GET") {
       return res.status(405).json({ error: "Method not allowed" });
@@ -193,18 +197,22 @@ export default async function handler(req, res) {
       }
     }
 
-    if (!token) {
-      return res
-        .status(401)
-        .json({ error: "Missing authentication (cookie tg_at or Authorization Bearer)" });
+    // allow costs in preview without auth
+    const hasValidAuth = !!token;
+    // existing auth logic
+    if (!isPreviewCosts) {
+      if (!hasValidAuth) {
+        return res.status(401).json({
+          ok: false,
+          error: "Missing authentication (cookie tg_at or Authorization Bearer)",
+        });
+      }
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },
     });
-
-    const action = String(req.query.action || "").toLowerCase();
 
     // ======================
     // action=filters
