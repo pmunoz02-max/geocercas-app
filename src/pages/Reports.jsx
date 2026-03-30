@@ -546,70 +546,38 @@ export default function Reports() {
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-gray-900">
                   <tr className="border-b border-gray-200">
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.day", "Day")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.person", "Person")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.email", "Email")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.geofence", "Geofence")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.activity", "Activity")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.assignment", "Assignment")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.entry", "Entry")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.exit", "Exit")}
-                    </th>
-                    <th className="p-2 text-center font-semibold">
-                      {tr("reports.table.marks", "Marks")}
-                    </th>
-                    <th className="p-2 text-center font-semibold">
-                      {tr("reports.table.inside", "Inside")}
-                    </th>
-                    <th className="p-2 text-center font-semibold">
-                      {tr("reports.table.distanceM", "Dist (m)")}
-                    </th>
-                    <th className="p-2 text-left font-semibold">
-                      {tr("reports.table.rate", "Rate")}
-                    </th>
+                    <th className="p-2 text-left font-semibold">Fecha</th>
+                    <th className="p-2 text-left font-semibold">Tracker User ID</th>
+                    <th className="p-2 text-left font-semibold">Assignment ID</th>
+                    <th className="p-2 text-left font-semibold">Activity ID</th>
+                    <th className="p-2 text-right font-semibold">Km observados</th>
+                    <th className="p-2 text-right font-semibold">Horas observadas</th>
+                    <th className="p-2 text-right font-semibold">Min sin cobertura</th>
+                    <th className="p-2 text-right font-semibold"># Huecos</th>
+                    <th className="p-2 text-right font-semibold">% Cobertura</th>
+                    <th className="p-2 text-right font-semibold">Nivel confianza</th>
+                    <th className="p-2 text-right font-semibold">Costo total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r, i) => (
                     <tr
-                      key={r.attendance_id ? `${r.attendance_id}-${i}` : i}
+                      key={r.assignment_id ? `${r.assignment_id}-${i}` : i}
                       className={`border-t border-gray-100 hover:bg-gray-50 ${
                         i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
                       }`}
                     >
-                      <td className="p-2 text-gray-900">{r.work_day || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.personal_nombre || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.email || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.geofence_name || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.activity_name || "—"}</td>
-                      <td className="p-2 text-gray-900">
-                        {r.asignacion_id
-                          ? `${String(r.asignacion_id).slice(0, 8)} (${r.asignacion_status || "—"})`
-                          : "—"}
-                      </td>
-                      <td className="p-2 text-gray-900">{r.first_check_in || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.last_check_out || "—"}</td>
-                      <td className="p-2 text-center text-gray-900">{r.total_marks ?? "—"}</td>
-                      <td className="p-2 text-center text-gray-900">{r.inside_count ?? "—"}</td>
-                      <td className="p-2 text-center text-gray-900">{r.avg_distance_m ?? "—"}</td>
-                      <td className="p-2 text-gray-900">
-                        {r.hourly_rate ? `${r.hourly_rate} ${r.currency_code || ""}` : "—"}
-                      </td>
+                      <td className="p-2 text-gray-900">{r.date || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.tracker_user_id || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.assignment_id || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.activity_id || "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.km_observados ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.horas_observadas ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.minutos_sin_cobertura ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.numero_huecos ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.porcentaje_cobertura ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.nivel_confianza ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.costo_total ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
