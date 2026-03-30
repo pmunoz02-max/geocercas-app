@@ -1,48 +1,4 @@
-  // Permanent tracker diagnostics
-  const [trackerDiag, setTrackerDiag] = useState({
-    lastSendOk: null,
-    lastSendAttempt: null,
-    lastSendFailure: null,
-    watchdogRecoveryCount: 0,
-    lastWatchdogAction: null,
-    lastReloadReason: null,
-  });
 import { useEffect, useMemo, useRef, useState } from "react";
-
-// Enhanced: add send health and recovery states
-function deriveTrackerVisualStatus({
-  hasSession,
-  trackerReady,
-  assignmentWindowStatus,
-  assignmentLoadError,
-  lastSendOkAt,
-  resolvedSendIntervalMs,
-  isWatchdogRecovering
-}) {
-  if (!trackerReady) return "Tracker not ready";
-  if (!hasSession) return "No active tracker session";
-  if (assignmentLoadError && assignmentLoadError !== "assignment_load_timeout") {
-    return "Assignment error";
-  }
-  switch (assignmentWindowStatus) {
-    case "inactive":
-      return "No active assignment";
-    case "active": {
-      const now = Date.now();
-      const lastOk = lastSendOkAt || 0;
-      const sinceOk = now - lastOk;
-      if (isWatchdogRecovering) return "Recovering tracker...";
-      if (sinceOk > resolvedSendIntervalMs * 2) return "Tracker stalled";
-      if (sinceOk > resolvedSendIntervalMs) return "Tracker may be delayed";
-      return "Tracker ready";
-    }
-    case "expired":
-      return "Assignment ended";
-    default:
-      return "Preparing tracker...";
-  }
-}
-
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
@@ -53,6 +9,38 @@ const TICK_MS = 30_000;
 
 const LS_TRACKER_ORG_KEY = "geocercas_tracker_org_id";
 const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
+const WATCHDOG_RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
+const WATCHDOG_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
+
+function deriveTrackerVisualStatus({
+  hasSession,
+  trackerReady,
+  assignmentWindowStatus,
+  assignmentLoadError,
+  hasRecentSuccessfulSend,
+  hasAnySuccessfulSend,
+  isWatchdogRecovering,
+}) {
+  if (!trackerReady) return "Tracker not ready";
+  if (!hasSession) return "No active tracker session";
+  if (assignmentLoadError && assignmentLoadError !== "assignment_load_timeout") {
+    return "Assignment error";
+  }
+
+  switch (assignmentWindowStatus) {
+    case "inactive":
+      return "No active assignment";
+    case "active":
+      if (isWatchdogRecovering) return "Recovering tracker...";
+      if (!hasAnySuccessfulSend) return "Waiting first send...";
+      if (!hasRecentSuccessfulSend) return "Tracker stalled";
+      return "Tracker ready";
+    case "expired":
+      return "Assignment ended";
+    default:
+      return "Preparing tracker...";
+  }
+}
 
 function isUuid(v) {
   const s = String(v ?? "").trim();
@@ -197,20 +185,16 @@ export default function TrackerGpsPage() {
   const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
   const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
-  // Watchdog recovery state
   const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
-  // Patch: expose lastSendOkAtRef and resolvedSendIntervalMs
-  const visualStatus = useMemo(() => {
-    return deriveTrackerVisualStatus({
-      hasSession,
-      trackerReady,
-      assignmentWindowStatus,
-      assignmentLoadError,
-      lastSendOkAt: lastSendOkAtRef.current,
-      resolvedSendIntervalMs,
-      isWatchdogRecovering,
-    });
-  }, [hasSession, trackerReady, assignmentWindowStatus, assignmentLoadError, resolvedSendIntervalMs, isWatchdogRecovering]);
+
+  const [trackerDiag, setTrackerDiag] = useState({
+    lastSendOk: null,
+    lastSendAttempt: null,
+    lastSendFailure: null,
+    watchdogRecoveryCount: 0,
+    lastWatchdogAction: null,
+    lastReloadReason: null,
+  });
 
   const [debug, setDebug] = useState({
     session_exists: null,
@@ -251,6 +235,31 @@ export default function TrackerGpsPage() {
     const n = Number(activeAssignment?.frequency_minutes);
     return Number.isFinite(n) && n > 0 ? n * 60 * 1000 : CLIENT_MIN_INTERVAL_MS;
   }, [activeAssignment]);
+
+  const hasAnySuccessfulSend = !!lastSendOkAtRef.current;
+  const hasRecentSuccessfulSend =
+    !!lastSendOkAtRef.current &&
+    Date.now() - lastSendOkAtRef.current <= resolvedSendIntervalMs * 2;
+
+  const visualStatus = useMemo(() => {
+    return deriveTrackerVisualStatus({
+      hasSession,
+      trackerReady,
+      assignmentWindowStatus,
+      assignmentLoadError,
+      hasRecentSuccessfulSend,
+      hasAnySuccessfulSend,
+      isWatchdogRecovering,
+    });
+  }, [
+    hasSession,
+    trackerReady,
+    assignmentWindowStatus,
+    assignmentLoadError,
+    hasRecentSuccessfulSend,
+    hasAnySuccessfulSend,
+    isWatchdogRecovering,
+  ]);
 
   useEffect(() => {
     if (!PRIMARY) {
@@ -375,7 +384,9 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!isActivationBgRunning) return;
     if (blockingUiLoggedRef.current) return;
-    console.warn("[tracker-activation-ui] background sync running without blocking UI", { source: "TrackerGpsPage" });
+    console.warn("[tracker-activation-ui] background sync running without blocking UI", {
+      source: "TrackerGpsPage",
+    });
     blockingUiLoggedRef.current = true;
   }, [isActivationBgRunning]);
 
@@ -462,6 +473,47 @@ export default function TrackerGpsPage() {
     };
   }, [trackerReady, PRIMARY, lang]);
 
+  const loadActiveAssignment = async (authTokenOverride = "") => {
+    const effectiveToken = String(authTokenOverride || trackerAccessToken || "").trim();
+    if (!trackerReady || !orgId || !effectiveToken) return;
+
+    console.log("[assignment-window] loading");
+    console.log("[assignment-window] query:start", { orgId });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("assignment_load_timeout")), 8000)
+    );
+
+    const fetchPromise = fetch("/api/tracker-active-assignment", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${effectiveToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_id: orgId }),
+    }).then(async (res) => {
+      if (!res.ok) throw new Error(`backend_error_${res.status}`);
+      return res.json();
+    });
+
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (result.ok && result.active && result.assignment) {
+      const activeNow = isAssignmentActiveNow(result.assignment);
+      setActiveAssignment(result.assignment);
+      setAssignmentWindowStatus(activeNow ? "active" : "expired");
+      setAssignmentLoadState(activeNow ? "active" : "inactive");
+      setAssignmentLoadError("");
+    } else if (result.ok && !result.active) {
+      setActiveAssignment(null);
+      setAssignmentWindowStatus("inactive");
+      setAssignmentLoadState("inactive");
+      setAssignmentLoadError("");
+    } else {
+      throw new Error(result.error || "unknown_error");
+    }
+  };
+
   useEffect(() => {
     if (!trackerReady || !orgId || !trackerAccessToken) return;
 
@@ -469,43 +521,7 @@ export default function TrackerGpsPage() {
 
     (async () => {
       try {
-        console.log("[assignment-window] loading");
-        console.log("[assignment-window] query:start", { orgId });
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("assignment_load_timeout")), 8000)
-        );
-        console.log("[assignment-window] query:before-await");
-        const fetchPromise = fetch("/api/tracker-active-assignment", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${trackerAccessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ org_id: orgId }),
-        })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`backend_error_${res.status}`);
-            return res.json();
-          });
-        const result = await Promise.race([fetchPromise, timeoutPromise]);
-        console.log("[assignment-window] query:after-await", result);
-
-        if (cancelled) return;
-        if (result.ok && result.active && result.assignment) {
-          console.log("[assignment-window] active", result.assignment);
-          setActiveAssignment(result.assignment);
-          setAssignmentWindowStatus("active");
-          setAssignmentLoadState("active");
-          setAssignmentLoadError("");
-        } else if (result.ok && !result.active) {
-          console.log("[assignment-window] inactive");
-          setActiveAssignment(null);
-          setAssignmentWindowStatus("inactive");
-          setAssignmentLoadState("inactive");
-          setAssignmentLoadError("");
-        } else {
-          throw new Error(result.error || "unknown_error");
-        }
+        await loadActiveAssignment(trackerAccessToken);
       } catch (error) {
         if (error?.message === "assignment_load_timeout") {
           console.error("[assignment-window] timeout");
@@ -526,7 +542,6 @@ export default function TrackerGpsPage() {
       cancelled = true;
     };
   }, [trackerReady, orgId, trackerAccessToken]);
-
 
   useEffect(() => {
     if (assignmentWindowStatus !== "active") {
@@ -584,6 +599,8 @@ export default function TrackerGpsPage() {
       client_used: "supabase-tracker",
     }));
 
+    setTrackerAccessToken(token);
+
     return token;
   }
 
@@ -623,19 +640,22 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
-    setTrackerDiag((d) => ({ ...d, lastSendAttempt: Date.now() }));
+    setTrackerDiag((d) => ({
+      ...d,
+      lastSendAttempt: Date.now(),
+    }));
+
     console.log("[send-position] invoke:start", {
       hasOrg: !!body?.org_id,
       hasLat: Number.isFinite(Number(body?.lat)),
       hasLng: Number.isFinite(Number(body?.lng)),
     });
+
     let timeoutId = null;
     let controller = null;
+
     try {
-      // Always get a fresh JWT for send_position
       const freshToken = await getFreshJwtOrThrow("send_position");
-      // Optionally mirror to state for debug
-      setTrackerAccessToken(freshToken);
       const trackerUserId = String(decodeJwtPayload(freshToken)?.sub || "").trim();
 
       if (!body?.org_id) return null;
@@ -667,7 +687,6 @@ export default function TrackerGpsPage() {
       });
 
       setDebug((d) => ({ ...d, last_http_status: res.status }));
-      setTrackerDiag((d) => ({ ...d, lastSendOk: Date.now(), lastSendFailure: null }));
 
       let j = null;
       try {
@@ -676,11 +695,26 @@ export default function TrackerGpsPage() {
 
       if (!res.ok) {
         const msg = j?.error || j?.message || `HTTP ${res.status}`;
-        setTrackerDiag((d) => ({ ...d, lastSendFailure: `${Date.now()}: ${msg}` }));
+        setTrackerDiag((d) => ({
+          ...d,
+          lastSendFailure: `${new Date().toISOString()} ${msg}`,
+        }));
         throw new Error(`send_position http ${res.status}: ${msg}`);
       }
 
+      setTrackerDiag((d) => ({
+        ...d,
+        lastSendOk: Date.now(),
+        lastSendFailure: null,
+      }));
+
       return j;
+    } catch (e) {
+      setTrackerDiag((d) => ({
+        ...d,
+        lastSendFailure: `${new Date().toISOString()} ${String(e?.message || e)}`,
+      }));
+      throw e;
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
     }
@@ -745,7 +779,9 @@ export default function TrackerGpsPage() {
 
         if (!response.ok || payload?.ok === false) {
           if (payload?.code === "TRACKER_LIMIT_REACHED") {
-            setAcceptError("Has alcanzado el límite de trackers de tu plan. Actualiza a PRO para agregar más trackers.");
+            setAcceptError(
+              "Has alcanzado el límite de trackers de tu plan. Actualiza a PRO para agregar más trackers."
+            );
             setAcceptErrorCode("TRACKER_LIMIT_REACHED");
             setUpgradeRequired(true);
             return false;
@@ -838,14 +874,12 @@ export default function TrackerGpsPage() {
       tryAcceptInvite("mount");
     }
 
-    const { data: sub } = supabaseTracker.auth.onAuthStateChange(
-      async (_event, nextSession) => {
-        if (nextSession?.user) {
-          const success = await tryAcceptInvite("auth-change");
-          if (success) pollSuccess = true;
-        }
+    const { data: sub } = supabaseTracker.auth.onAuthStateChange(async (_event, nextSession) => {
+      if (nextSession?.user) {
+        const success = await tryAcceptInvite("auth-change");
+        if (success) pollSuccess = true;
       }
-    );
+    });
 
     async function tryPoll() {
       if (pollSuccess) {
@@ -979,7 +1013,6 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
-
     console.log("[send-gate] evaluate", {
       hasLastPosition: !!lastPosition,
       sessionUserId: session?.user?.id || "",
@@ -994,15 +1027,43 @@ export default function TrackerGpsPage() {
       lastSentAt: lastSentAtRef.current || 0,
       now: Date.now(),
     });
-    if (!lastPosition) { console.log("[send-gate] blocked:no-lastPosition"); return; }
-    if (!session?.user?.id) { console.log("[send-gate] blocked:no-session-user"); return; }
-    if (!orgId) { console.log("[send-gate] blocked:no-org"); return; }
-    if (!trackerReady) { console.log("[send-gate] blocked:not-ready"); return; }
-    if (!hasSession) { console.log("[send-gate] blocked:no-session"); return; }
-    if (!disclosureAccepted) { console.log("[send-gate] blocked:no-disclosure"); return; }
-    if (membershipStatus !== "ok") { console.log("[send-gate] blocked:membership-not-ok"); return; }
-    if (assignmentWindowStatus !== "active") { console.log("[send-gate] blocked:assignment-not-active"); return; }
-    if (isSendingRef.current) { console.log("[send-gate] blocked:already-sending"); return; }
+
+    if (!lastPosition) {
+      console.log("[send-gate] blocked:no-lastPosition");
+      return;
+    }
+    if (!session?.user?.id) {
+      console.log("[send-gate] blocked:no-session-user");
+      return;
+    }
+    if (!orgId) {
+      console.log("[send-gate] blocked:no-org");
+      return;
+    }
+    if (!trackerReady) {
+      console.log("[send-gate] blocked:not-ready");
+      return;
+    }
+    if (!hasSession) {
+      console.log("[send-gate] blocked:no-session");
+      return;
+    }
+    if (!disclosureAccepted) {
+      console.log("[send-gate] blocked:no-disclosure");
+      return;
+    }
+    if (membershipStatus !== "ok") {
+      console.log("[send-gate] blocked:membership-not-ok");
+      return;
+    }
+    if (assignmentWindowStatus !== "active") {
+      console.log("[send-gate] blocked:assignment-not-active");
+      return;
+    }
+    if (isSendingRef.current) {
+      console.log("[send-gate] blocked:already-sending");
+      return;
+    }
 
     const c = {
       lat: lastPosition.lat,
@@ -1026,21 +1087,9 @@ export default function TrackerGpsPage() {
           timestamp: lastPosition.timestamp ?? Date.now(),
           source: "tracker-gps-web",
         };
-        console.log("[send-gate] sending", {
-          org_id: orgId,
-          lat: c.lat,
-          lng: c.lng,
-          timestamp: lastPosition.timestamp ?? Date.now(),
-          source: "tracker-gps-web",
-        });
 
-        console.log("[send-gate] sending", {
-          org_id: orgId,
-          lat: c.lat,
-          lng: c.lng,
-          timestamp: lastPosition.timestamp ?? Date.now(),
-          source: "tracker-gps-web",
-        });
+        console.log("[send-gate] sending", payload);
+
         try {
           await invokeSendPosition(payload);
         } catch (e) {
@@ -1054,6 +1103,11 @@ export default function TrackerGpsPage() {
           lastSendOkAtRef.current = successAt;
           setLastSend(new Date(successAt));
           setLastError(null);
+          setIsWatchdogRecovering(false);
+          setTrackerDiag((d) => ({
+            ...d,
+            lastSendOk: successAt,
+          }));
         }
       } finally {
         isSendingRef.current = false;
@@ -1111,6 +1165,11 @@ export default function TrackerGpsPage() {
         lastSendOkAtRef.current = now;
         setLastSend(new Date(now));
         setLastError(null);
+        setIsWatchdogRecovering(false);
+        setTrackerDiag((d) => ({
+          ...d,
+          lastSendOk: now,
+        }));
       } catch (e) {
         console.warn("[heartbeat] send failed", e?.message || e);
       } finally {
@@ -1140,112 +1199,127 @@ export default function TrackerGpsPage() {
     if (assignmentWindowStatus !== "active") return;
     if (watchdogIntervalRef.current) return;
 
-
     console.log("[watchdog] started");
-    const RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
-    const RELOAD_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
-    let missedIntervals = 0;
 
     watchdogIntervalRef.current = setInterval(async () => {
       const now = Date.now();
       const lastOk = lastSendOkAtRef.current || 0;
-      const sinceOk = now - lastOk;
-      if (sinceOk <= resolvedSendIntervalMs) {
-        missedIntervals = 0;
+      const sinceOk = lastOk ? now - lastOk : Number.MAX_SAFE_INTEGER;
+      const missedIntervals = Math.floor(sinceOk / resolvedSendIntervalMs);
+
+      if (lastOk && sinceOk <= resolvedSendIntervalMs * 2) {
         setIsWatchdogRecovering(false);
         return;
       }
-      // Count how many intervals have been missed
-      missedIntervals = Math.floor(sinceOk / resolvedSendIntervalMs);
+
+      if (missedIntervals < 3) return;
 
       if (missedIntervals === 3) {
         setIsWatchdogRecovering(true);
         setTrackerDiag((d) => ({
           ...d,
-          watchdogRecoveryCount: (d.watchdogRecoveryCount || 0) + 1,
-          lastWatchdogAction: `${Date.now()}: recovery`,
+          watchdogRecoveryCount: Number(d.watchdogRecoveryCount || 0) + 1,
+          lastWatchdogAction: `${new Date().toISOString()} recovery-start`,
         }));
-        // Step 1: try recovery
-        console.warn("[watchdog] 3 missed intervals: refreshing session, assignment, and GPS");
+
         try {
-          // Refresh tracker session
-          if (PRIMARY?.auth?.refreshSession) {
-            await PRIMARY.auth.refreshSession();
-          }
-        } catch (e) {
-          console.warn("[watchdog] session refresh failed", e);
-        }
-        // Reload active assignment
-        if (typeof window !== "undefined" && window.location) {
+          const freshToken = await getFreshJwtOrThrow("watchdog-recovery");
+
+          setTrackerDiag((d) => ({
+            ...d,
+            lastWatchdogAction: `${new Date().toISOString()} session-refreshed`,
+          }));
+
           try {
-            // Simulate assignment reload by re-calling assignment loader if available
-            if (typeof loadActiveAssignment === "function") {
-              await loadActiveAssignment();
-            } else {
-              // fallback: reload page section
-              setAssignmentLoadState("idle");
-            }
+            await loadActiveAssignment(freshToken);
+            setTrackerDiag((d) => ({
+              ...d,
+              lastWatchdogAction: `${new Date().toISOString()} assignment-reloaded`,
+            }));
           } catch (e) {
             console.warn("[watchdog] assignment reload failed", e);
           }
-        }
-        // Restart geolocation watch
-        if ("geolocation" in navigator) {
-          try {
-            if (watchIdRef.current != null) {
-              navigator.geolocation.clearWatch(watchIdRef.current);
-              watchIdRef.current = null;
-            }
-            watchIdRef.current = navigator.geolocation.watchPosition(
-              (pos) => {
-                console.log("[watchdog] recovered GPS");
-                const c = {
-                  lat: pos.coords.latitude,
-                  lng: pos.coords.longitude,
-                  accuracy: pos.coords.accuracy ?? null,
-                };
-                lastCoordsRef.current = c;
-                setCoords(c);
-                setLastPosition({
-                  lat: c.lat,
-                  lng: c.lng,
-                  accuracy: c.accuracy,
-                  speed: pos.coords.speed ?? null,
-                  heading: pos.coords.heading ?? null,
-                  timestamp: pos.timestamp,
-                });
-              },
-              (err) => {
-                console.warn("[watchdog] restart error", err?.message || err);
-              },
-              {
-                enableHighAccuracy: true,
-                maximumAge: 0,
-                timeout: 20000,
+
+          if ("geolocation" in navigator) {
+            try {
+              if (watchIdRef.current != null) {
+                navigator.geolocation.clearWatch(watchIdRef.current);
+                watchIdRef.current = null;
               }
-            );
-          } catch (e) {
-            console.error("[watchdog] restart failed", e);
+
+              watchIdRef.current = navigator.geolocation.watchPosition(
+                (pos) => {
+                  console.log("[watchdog] recovered GPS");
+                  const c = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy ?? null,
+                  };
+                  lastCoordsRef.current = c;
+                  setCoords(c);
+                  setLastPosition({
+                    lat: c.lat,
+                    lng: c.lng,
+                    accuracy: c.accuracy,
+                    speed: pos.coords.speed ?? null,
+                    heading: pos.coords.heading ?? null,
+                    timestamp: pos.timestamp,
+                  });
+                },
+                (err) => {
+                  console.warn("[watchdog] restart error", err?.message || err);
+                },
+                {
+                  enableHighAccuracy: true,
+                  maximumAge: 0,
+                  timeout: 20000,
+                }
+              );
+
+              setTrackerDiag((d) => ({
+                ...d,
+                lastWatchdogAction: `${new Date().toISOString()} gps-restarted`,
+              }));
+            } catch (e) {
+              console.error("[watchdog] restart failed", e);
+            }
           }
+        } catch (e) {
+          console.warn("[watchdog] recovery failed", e);
+          setTrackerDiag((d) => ({
+            ...d,
+            lastWatchdogAction: `${new Date().toISOString()} recovery-failed`,
+            lastSendFailure: `${new Date().toISOString()} watchdog recovery failed: ${String(
+              e?.message || e
+            )}`,
+          }));
         }
-      } else if (missedIntervals >= 4) {
-        setIsWatchdogRecovering(false);
-        setTrackerDiag((d) => ({
-          ...d,
-          lastWatchdogAction: `${Date.now()}: reload`,
-          lastReloadReason: `No successful send for ${missedIntervals} intervals`,
-        }));
-        // Step 2: reload page if not in cooldown
-        const cooldownUntil = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) || 0);
+
+        return;
+      }
+
+      if (missedIntervals >= 4) {
+        const cooldownUntil = Number(sessionStorage.getItem(WATCHDOG_RELOAD_COOLDOWN_KEY) || 0);
         if (now < cooldownUntil) {
           console.warn("[watchdog] reload skipped due to cooldown");
           return;
         }
-        sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(now + RELOAD_COOLDOWN_MS));
+
+        sessionStorage.setItem(
+          WATCHDOG_RELOAD_COOLDOWN_KEY,
+          String(now + WATCHDOG_RELOAD_COOLDOWN_MS)
+        );
+
+        setTrackerDiag((d) => ({
+          ...d,
+          lastWatchdogAction: `${new Date().toISOString()} reload`,
+          lastReloadReason: `No successful send for ${missedIntervals} intervals`,
+        }));
+
         console.error("[watchdog] 4+ missed intervals: reloading page");
         window.location.reload();
       }
-    }, 60000);
+    }, 60_000);
 
     return () => {
       if (watchdogIntervalRef.current) {
@@ -1259,9 +1333,11 @@ export default function TrackerGpsPage() {
     disclosureAccepted,
     assignmentWindowStatus,
     resolvedSendIntervalMs,
+    trackerAccessToken,
   ]);
 
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
+  const fmtDiagTs = (ts) => (ts ? new Date(ts).toLocaleString() : "—");
 
   if (trackerReady && hasSession && !disclosureAccepted) {
     return (
@@ -1302,39 +1378,21 @@ export default function TrackerGpsPage() {
     );
   }
 
-
-  // Blocked state: no active assignment
-  // Debug panel: show trackerDiag if debug UI enabled
-  const showTrackerDebugPanel = showTrackerDebug;
-
-  // ...existing code...
-
-  if (showTrackerDebugPanel) {
-    // Minimal permanent tracker diagnostics
-    const fmt = (ts) => (ts ? new Date(ts).toLocaleString() : "—");
-    return (
-      <div className="p-4 bg-slate-900 text-slate-100 text-xs rounded-xl border border-slate-700 max-w-xl mx-auto mt-6">
-        <div className="font-bold mb-2">Tracker Diagnostics</div>
-        <div>Last successful send: {fmt(trackerDiag.lastSendOk)}</div>
-        <div>Last send attempt: {fmt(trackerDiag.lastSendAttempt)}</div>
-        <div>Last send failure: {trackerDiag.lastSendFailure || "—"}</div>
-        <div>Watchdog recovery count: {trackerDiag.watchdogRecoveryCount}</div>
-        <div>Last watchdog action: {trackerDiag.lastWatchdogAction || "—"}</div>
-        <div>Last reload reason: {trackerDiag.lastReloadReason || "—"}</div>
-      </div>
-    );
-  }
-
   if (trackerReady && hasSession && assignmentWindowStatus !== "active") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
         <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
-          <h1 className="text-2xl font-bold mb-4">{tt("trackerGps.blocked.title", "Tracker blocked")}</h1>
+          <h1 className="text-2xl font-bold mb-4">
+            {tt("trackerGps.blocked.title", "Tracker blocked")}
+          </h1>
           <div className="text-lg text-amber-300 mb-2">
             {tt("trackerGps.blocked.noActiveAssignment", "No active assignment found.")}
           </div>
           <div className="text-sm text-slate-300 mb-6">
-            {tt("trackerGps.blocked.instructions", "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error.")}
+            {tt(
+              "trackerGps.blocked.instructions",
+              "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error."
+            )}
           </div>
           <button
             onClick={() => navigate("/")}
@@ -1363,7 +1421,8 @@ export default function TrackerGpsPage() {
                     {tt("trackerGps.lastSend", "Last send")}: {formattedLastSend}
                   </div>
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
-                    {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt ({debug.send_fn})
+                    {tt("trackerGps.debugLabels.send", "send")}: fetch(anon)+x-user-jwt (
+                    {debug.send_fn})
                   </div>
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
                     {tt("trackerGps.debugLabels.accept", "accept")}: proxy ({debug.accept_fn})
@@ -1376,6 +1435,9 @@ export default function TrackerGpsPage() {
                   </div>
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
                     assignment_window: {assignmentWindowStatus}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    assignment_load_state: {assignmentLoadState}
                   </div>
                   {activeAssignment?.frequency_minutes ? (
                     <div className="mt-2 text-[11px] text-slate-400 break-all">
@@ -1394,14 +1456,37 @@ export default function TrackerGpsPage() {
                   ) : null}
                   {debug.last_token_ttl_sec != null ? (
                     <div className="mt-2 text-[11px] text-slate-400 break-all">
-                      {tt("trackerGps.debugLabels.tokenTtlSec", "token_ttl_sec")}: {debug.last_token_ttl_sec}
+                      {tt("trackerGps.debugLabels.tokenTtlSec", "token_ttl_sec")}:{" "}
+                      {debug.last_token_ttl_sec}
                     </div>
                   ) : null}
                   {debug.last_http_status != null ? (
                     <div className="mt-2 text-[11px] text-slate-400 break-all">
-                      {tt("trackerGps.debugLabels.lastHttpStatus", "last_http_status")}: {debug.last_http_status}
+                      {tt("trackerGps.debugLabels.lastHttpStatus", "last_http_status")}:{" "}
+                      {debug.last_http_status}
                     </div>
                   ) : null}
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    watchdog_recovering: {String(isWatchdogRecovering)}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    last_send_ok_at: {fmtDiagTs(trackerDiag.lastSendOk)}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    last_send_attempt_at: {fmtDiagTs(trackerDiag.lastSendAttempt)}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    last_send_failure_reason: {trackerDiag.lastSendFailure || "—"}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    watchdog_recovery_count: {trackerDiag.watchdogRecoveryCount}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    last_watchdog_action: {trackerDiag.lastWatchdogAction || "—"}
+                  </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    last_reload_reason: {trackerDiag.lastReloadReason || "—"}
+                  </div>
                   {coords ? (
                     <div className="mt-2 text-xs text-slate-300">
                       {tt("trackerGps.debugLabels.lat", "lat")}: {coords.lat?.toFixed?.(6)} |{" "}
@@ -1414,37 +1499,53 @@ export default function TrackerGpsPage() {
                     </div>
                   )}
                 </div>
+
                 <details className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3">
                   <summary className="cursor-pointer text-sm text-slate-200">
                     {tt("trackerGps.debugCopyPaste", "Debug (copy/paste)")}
                   </summary>
                   <pre className="mt-3 text-[11px] text-slate-300 overflow-auto">
-                    {JSON.stringify(debug, null, 2)}
+                    {JSON.stringify(
+                      {
+                        ...debug,
+                        tracker_diag: trackerDiag,
+                        watchdog_recovering: isWatchdogRecovering,
+                      },
+                      null,
+                      2
+                    )}
                   </pre>
                 </details>
               </>
             )}
+
             <div className="mt-3 text-xs">
-              {tt("trackerGps.stateLabel", "Status")}: <span className="text-slate-100">{visualStatus}</span>
+              {tt("trackerGps.stateLabel", "Status")}:{" "}
+              <span className="text-slate-100">{visualStatus}</span>
             </div>
+
             {isActivationBgRunning ? (
               <div className="mt-2 text-[11px] text-slate-300">Syncing org access...</div>
             ) : null}
+
             {membershipDetail ? (
               <div className="mt-3 text-[11px] text-slate-200 bg-slate-800/40 border border-slate-700 rounded-xl p-3 whitespace-pre-wrap">
                 {membershipDetail}
               </div>
             ) : null}
+
             {acceptError ? (
               <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
                 {acceptError}
               </div>
             ) : null}
+
             {upgradeRequired ? (
               <div className="mt-3">
                 <UpgradeToProButton />
               </div>
             ) : null}
+
             {lastError && !acceptError ? (
               <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
                 {lastError}
@@ -1477,7 +1578,10 @@ export default function TrackerGpsPage() {
         {!trackerReady && (
           <div className="mt-4 text-center">
             <p className="text-sm text-slate-300 mb-3">
-              {tt("trackerGps.errors.notConfigured", "Tracker is not configured in this deployment.")}
+              {tt(
+                "trackerGps.errors.notConfigured",
+                "Tracker is not configured in this deployment."
+              )}
             </p>
 
             {lastError ? (
