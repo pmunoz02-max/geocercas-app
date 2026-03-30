@@ -1,1550 +1,1792 @@
 {
-  "common": {
-    "language": {
-      "es": "Espagnol",
-      "en": "Anglais",
-      "fr": "Français"
-    },
-    "fallbacks": {
-      "noEmail": "Sans e-mail",
-      "noOrg": "Aucune organisation",
-      "noAuth": "Non authentifié"
-    },
-    "roles": {
-      "root": "RACINE",
-      "noRole": "AUCUN RÔLE"
-    },
-    "actions": {
-      "close": "Fermer",
-      "cancel": "Annuler",
-      "save": "Enregistrer",
-      "delete": "Supprimer",
-      "edit": "Modifier",
-      "back": "Retour",
-      "yes": "Oui",
-      "no": "Non",
-      "loading": "Chargement…",
-      "logout": "Se déconnecter",
-      "processing": "Déconnexion…"
-    },
-    "createOrganization": "Créer une organisation",
-    "orgNamePlaceholder": "Nom de l’organisation (ex. Ferme A)",
-    "refreshContext": "Actualiser le contexte",
-    "select": "— Sélectionner —",
-    "sending": "Envoi...",
-    "loading": "Chargement",
-    "search": "Rechercher"
-  },
-  "app": {
-    "brand": "App Geocercas",
-    "title": "App Geocercas",
-    "header": {
-      "loggedAs": "La session a commencé par",
-      "logout": "Sortie",
-      "login": "Se connecter",
-      "goToPanel": "Accéder au tableau de bord",
-      "roleOwner": "Propriétaire",
-      "roleAdmin": "Administrateur",
-      "roleTracker": "Traceur",
-      "organizationLabel": "Organisation",
-      "organizationAriaLabel": "Sélectionner une organisation",
-      "organizationNone": "Aucune organisation",
-      "loginMagic": "Lien magique"
-    },
-    "tabs": {
-      "inicio": "Accueil",
-      "geocerca": "Géofence",
-      "nuevaGeocerca": "Géofence",
-      "personal": "Personnel",
-      "actividades": "Activités",
-      "asignaciones": "Affectations",
-      "reportes": "Rapports",
-      "dashboard": "Tableau des coûts",
-      "dashboardCostos": "Tableau des coûts",
-      "tracker": "Tracker",
-      "invitarTracker": "Inviter un traceur",
-      "admins": "Admins",
-      "home": "Accueil",
-      "invitar_tracker": "Inviter un tracker",
-      "geocercas": "Géofences"
-    }
-  },
-  "landing": {
-    "brandName": "App Geocercas",
-    "brandTagline": "Contrôle du personnel par géofences",
-    "heroBadge": "Contrôle intelligent des champs",
-    "heroTitlePrefix": "Contrôlez votre personnel",
-    "heroTitleHighlight": "avec des géofences intelligentes",
-    "heroTitleSuffix": "partout dans le monde",
-    "heroSubtitle": "L'application Geofencing vous permet d'affecter des personnes à des zones, d'enregistrer des activités et de calculer des coûts en temps réel.",
-    "ctaLogin": "Accéder au panneau de contrôle",
-    "ctaMagic": "Se connecter avec le lien magique",
-    "bulletGeocercasTitle": "Géofences",
-    "bulletGeocercasBody": "Créez et gérez des géofences pour vos champs, fermes, usines ou points de service.",
-    "bulletPersonalTitle": "Personnel",
-    "bulletPersonalBody": "Inscrivez votre personnel et affectez-le à des activités et à des domaines spécifiques.",
-    "bulletCostsTitle": "Coûts",
-    "bulletCostsBody": "Voir les tableaux de bord Power BI avec les coûts par personne, activité et géofence.",
-    "livePanelLabel": "Panneau en direct",
-    "livePanelTitle": "Opérations en temps réel",
-    "demoLiveLabel": "Demo en direct",
-    "demoOperationsAreaLabel": "Zone d'opérations",
-    "demoLoop10sLabel": "Boucle 10 s",
-    "zonesActive": "Zones actives",
-    "statusOnline": "Système en ligne",
-    "assistanceControlTitle": "Contrôle des présences",
-    "assistanceControlBody": "Vérifier qui se trouvait à l'intérieur de chaque géofence, à quelle heure et dans quelle activité.",
-    "multiOrgTitle": "Organisation multiple",
-    "multiOrgBody": "Gérer plusieurs entreprises ou projets à partir d'un seul compte, avec des rôles et des autorisations distincts.",
-    "goToDashboard": "Accéder au tableau de bord",
-    "logout": "Sortie",
-    "footerFaq": "Questions fréquemment posées",
-    "footerSupport": "Soutien",
-    "footerTerms": "Conditions",
-    "footerPrivacy": "Vie privée",
-    "rightsReserved": "Tous droits réservés",
-    "loginButton": "Entrer",
-    "accessTitle": "Accès avec compte autorisé",
-    "accessBody": "Cette application nécessite un compte invité par un administrateur. Si vous n'avez pas d'accès, veuillez demander une invitation à votre organisation.",
-    "accessHint": "Conseil : utilisez « Lien magique » si votre administrateur vous a invité par e-mail.",
-    "reviewNote": "Note : Si vous vérifiez l'application (Google Play), utilisez les informations d'identification fournies dans la console Play (accès à l'application).",
-    "privacyMiniNote": "Confidentialité : La localisation est utilisée uniquement pour les fonctions de géofencing et de suivi, conformément aux autorisations accordées par l'utilisateur.",
-    "login": "Se connecter",
-    "heroTitle": "Gérez votre personnel à l'aide de géofences intelligentes partout dans le monde",
-    "goPanel": "Aller au tableau de bord",
-    "magicEnter": "Se connecter avec le lien magique",
-    "quickAccessTitle": "Accès rapide",
-    "quickAccessDesc": "Si vous préférez, vous pouvez vous connecter à l'aide d'un lien magique (sans mot de passe).",
-    "email": "Courriel",
-    "sending": "Envoi...",
-    "sendMagic": "Envoyer le lien magique",
-    "magicNote": "Important : l’accès fonctionne uniquement avec le véritable lien magique.",
-    "support": "Soutien",
-    "invalidEmail": "Courriel non valide.",
-    "magicLinkSent": "Nous vous avons envoyé un lien d'accès. Vérifiez votre e-mail.",
-    "magicLinkError": "Impossible d'envoyer le lien. Veuillez réessayer."
-  },
-  "login": {
-    "title": "Se connecter",
-    "subtitle": "Connectez-vous à votre compte App Geocercas",
-    "advancedOptions": "Options avancées",
-    "emailLabel": "Courriel",
-    "passwordLabel": "Mot de passe",
-    "passwordLoginButton": "Connexion avec mot de passe",
-    "magicLinkTitle": "Se connecter avec le lien magique",
-    "magicLinkDescription": "Nous vous enverrons un lien sécurisé à votre adresse électronique pour vous permettre de vous connecter sans mot de passe.",
-    "magicLinkButton": "Envoyer le lien magique",
-    "magicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
-    "sessionActive": "Vous avez déjà une session active.",
-    "goToDashboard": "Accéder au tableau de bord",
-    "errors": {
-      "invalidEmail": "Veuillez saisir une adresse électronique valide.",
-      "unknown": "Une erreur s'est produite lors de la connexion."
-    },
-    "modePassword": "Mot de passe",
-    "modeMagic": "Lien magique",
-    "submit": "Entrer",
-    "submitting": "Connexion…",
-    "magicButton": "Envoyer le lien magique",
-    "magicSubmitting": "Envoi du lien...",
-    "magicDescription": "Nous vous enverrons un lien sécurisé à votre adresse électronique afin que vous puissiez vous connecter sans mot de passe.",
-    "emailPlaceholder": "you@example.com",
-    "passwordPlaceholder": "Entrez votre mot de passe",
-    "forgotPassword": "Mot de passe oublié ?",
-    "forgotPasswordAlt": "Vous préférez réinitialiser votre mot de passe ? (envoyer un e-mail)",
-    "loadingSession": "Chargement de votre session…",
-    "errorMissingCredentials": "Le nom d'utilisateur ou le mot de passe est manquant.",
-    "errorMissingEmail": "Vous devez saisir une adresse électronique.",
-    "errorInvalidCredentials": "Informations d'identification non valides.",
-    "errorUnexpected": "Erreur inattendue lors de la connexion.",
-    "userNotAuthorized": "Cet e-mail n'est pas autorisé. Veuillez demander une invitation à l'administrateur.",
-    "errorMagicLink": "Le lien magique n'a pas pu être envoyé.",
-    "infoMagicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
-    "errorMagicLinkUnexpected": "Erreur inattendue lors de l'envoi du lien magique.",
-    "errorResetPassword": "Le courrier de récupération n'a pas pu être envoyé.",
-    "infoResetPasswordSent": "Nous vous avons envoyé un courriel pour réinitialiser votre mot de passe. Vérifiez votre boîte de réception.",
-    "errorResetPasswordUnexpected": "Erreur inattendue lors de l'envoi du courrier de récupération.",
-    "badge": "(LOGIN-V31 NO-JS)",
-    "info": "Connexion WebView/TWA stable : soumission native (pas d'événements JS), anti-limitation de taux par conception.",
-    "email": "Courriel",
-    "password": "Mot de passe",
-    "modeTitle": "Mode : NO-JS (soumission de formulaire en mode natif)",
-    "modeDesc": "Si la connexion est correcte, le serveur redirige vers /auth/callback avec des jetons.",
-    "back": "Retour"
-  },
-  "inicio": {
-    "header": {
-      "badge": "Centre d'aide et de ressources",
-      "title": "Bienvenue sur votre tableau de bord",
-      "subtitle": "De là, vous pouvez accéder aux instructions, aux questions fréquemment posées, à l'assistance et aux nouvelles concernant l'application Geocercas."
-    },
-    "cards": {
-      "instrucciones": {
-        "badge": "Guide rapide",
-        "title": "Instructions",
-        "body": "Suivez les étapes de la création d'organisations, de géofences, de personnel, d'activités et de traqueurs.",
-        "cta": "Voir les instructions"
-      },
-      "faq": {
-        "badge": "Aide",
-        "title": "Questions fréquemment posées",
-        "body": "Trouvez les réponses aux questions les plus courantes sur les invitations, les rôles, les coûts et l'utilisation des traceurs.",
-        "cta": "Voir les questions fréquemment posées"
-      },
-      "videoDemo": {
-        "badge": "Vidéo",
-        "title": "Démonstration vidéo",
-        "body": "Regardez une courte démonstration du fonctionnement réel d’App Geocercas.",
-        "cta": "Voir la vidéo de démonstration"
-      },
-      "soporte": {
-        "badge": "Soutien",
-        "title": "Contact / Support",
-        "body": "Besoin d’aide ? Contactez-nous pour toute question liée à l’assistance technique, à la facturation ou à votre compte.",
-        "cta": "Aller au soutien"
-      },
-      "queEs": {
-        "badge": "Informations",
-        "title": "Qu'est-ce que l'App Geofencing ?",
-        "body": "Découvrez la vision, les cas d'utilisation et les avantages de l'application Geocercas pour votre organisation.",
-        "cta": "En savoir plus"
-      },
-      "novedades": {
-        "badge": "Mises à jour",
-        "title": "Mises à jour / Changelog",
-        "body": "Examinez l'historique des modifications, des nouvelles fonctionnalités, des améliorations et des corrections apportées à la plateforme.",
-        "cta": "Voir le journal des modifications"
-      },
-      "common": {
-        "soon": "Prochainement"
-      }
-    },
-    "userInfo": {
-      "connectedAs": "Connecté comme",
-      "withRole": "avec le rôle",
-      "inOrg": "dans l'organisation",
-      "userLabel": "Utilisateur :",
-      "orgIdLabel": "ID de l'organisation :"
-    }
-  },
-  "geocercas": {
-    "titleNew": "Nouveau géorepère",
-    "subtitleNew": "Dessinez une zone sur la carte et assignez-la à votre personnel ou à des activités.",
-    "panelTitle": "Géorepères",
-    "noGeofences": "Vous n’avez encore aucun géorepère.",
-    "placeholderName": "Nom du géorepère",
-    "buttonDrawByCoords": "Tracer par coordonnées",
-    "buttonSave": "Enregistrer le géorepère",
-    "buttonShowSelected": "Afficher la sélection",
-    "buttonShowAll": "Afficher tout",
-    "buttonDeleteSelected": "Supprimer la sélection",
-    "buttonClearCanvas": "Effacer la carte",
-    "pageTitle": "Géofences",
-    "pageSubtitle": "Gérez les géofences de votre organisation. Vous pouvez y créer de nouvelles géofences et consulter celles qui existent déjà.",
-    "currentOrgLabel": "Organisation actuelle :",
-    "currentUserLabel": "Utilisateur :",
-    "noOrgFallback": "- (aucune organisation sélectionnée)",
-    "cardNewTitle": "Nouvelle géofence",
-    "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
-    "cardNewCta": "Aller à Nouvelle géofence →",
-    "cardListTitle": "Liste des géofences",
-    "cardListBody": "Vous pourrez bientôt voir la liste des géofences existantes et leurs détails ici. Pour l'instant, utilisez l'option Nouvelle géofence pour créer et modifier.",
-    "buttonShowOnMap": "Afficher sur la carte",
-    "loadingDataset": "Chargement du jeu de données...",
-    "cursorHint": "Déplacez la souris sur la carte",
-    "lat": "Lat",
-    "lng": "Lng",
-    "draftLabel": "Brouillon",
-    "pointsLabel": "Pts",
-    "modalTitle": "Tracer par coordonnées",
-    "modalHintRule": "1 point = petit carré | 2 points = rectangle | 3+ = polygone",
-    "modalInstruction": "Format :",
-    "modalOnePerLine": "(un par ligne)",
-    "modalDraw": "Dessiner",
-    "errorNameRequired": "Veuillez saisir un nom pour la géofence.",
-    "errorCoordsInvalid": "Coordonnées invalides. Utilisez le format : lat,lng (une par ligne).",
-    "errorNoShape": "Dessinez une géofence sur la carte ou créez-en une par coordonnées avant d’enregistrer.",
-    "errorSelectAtLeastOne": "Sélectionnez au moins une géofence.",
-    "errorNoGeojson": "Le GeoJSON de la géofence est introuvable.",
-    "deleteConfirm": "Supprimer les géofences sélectionnées ?",
-    "deletedCount": "Supprimées : {{count}}",
-    "savedOk": "Géofence enregistrée avec succès.",
-    "coordsReady": "Forme créée à partir des coordonnées.",
-    "errorSave": "Impossible d’enregistrer la géofence. Veuillez réessayer.",
-    "deleteError": "Impossible de supprimer. Veuillez réessayer.",
-    "errorLoad": "Impossible de charger la géofence.",
-    "showManyOk": "Affichage de {{count}} géofences.",
-    "planUsageTitle": "Géofences",
-    "planAvailableTitle": "Disponibles",
-    "draftYes": "oui",
-    "draftNo": "non",
-    "plan": {
-      "loading": "Chargement du plan...",
-      "error": "Impossible de charger les limites du plan.",
-      "unlimited": "Géofences sans limite configurée.",
-      "usage": "Utilisation actuelle : {{used}} / {{max}} géofences",
-      "unlimitedShort": "Illimitées",
-      "limitReached": "Vous avez atteint la limite de géofences de votre plan actuel. Passez à PRO pour continuer.",
-      "limitReachedTitle": "Vous avez atteint la limite de géofences de votre plan.",
-      "limitReachedBody": "Pour créer davantage de géofences, passez votre organisation à PRO.",
-      "freeHint": "Plan FREE actif. Lorsque vous atteindrez la limite, vous pourrez passer à PRO depuis ici.",
-      "activePaidHint": "Votre organisation dispose d’un plan avec une capacité supérieure activée."
-    }
-  },
-  "personal": {
-    "title": "Personnel",
-    "orgInfoLabel": "Organisation :",
-    "orgFallback": "Aucune organisation",
-    "roleLabel": "Rôle :",
-    "pillCanEdit": "Modifiable",
-    "pillReadOnly": "Lecture seule",
-    "bannerLoadingSession": "Chargement de la session...",
-    "bannerLoginRequired": "Vous devez être connecté pour accéder à cette section.",
-    "bannerRefreshedOk": "Les données ont été actualisées avec succès.",
-    "bannerSelected": "Dossier sélectionné.",
-    "bannerNewMode": "Mode de création de personnel.",
-    "bannerEditMode": "Mode édition.",
-    "bannerCreated": "Personnel créé avec succès.",
-    "bannerUpdated": "Le personnel a été mis à jour avec succès.",
-    "bannerDeletedOk": "Enregistrement supprimé avec succès.",
-    "errorMissingUser": "L'utilisateur authentifié n'a pas pu être obtenu.",
-    "errorNoAuthUser": "Pas d'utilisateur authentifié.",
-    "errorLoad": "Erreur lors du chargement du personnel.",
-    "formTitleNew": "Nouveau personnel",
-    "formTitleEdit": "Modifier le personnel",
-    "errorNoPermissionCreate": "Vous n'avez pas la permission de créer du personnel.",
-    "errorNoPermissionEdit": "Vous n'avez pas le droit de modifier le personnel.",
-    "errorMustSelectForEdit": "Vous devez sélectionner un enregistrement pour le modifier.",
-    "errorNoPermissionSave": "Vous n'avez pas le droit d'enregistrer les modifications.",
-    "errorMissingName": "Le nom est obligatoire.",
-    "errorMissingEmail": "L'adresse électronique est obligatoire.",
-    "errorPhonePolicy": "Le numéro de téléphone doit commencer par + (format international E.164).",
-    "errorSaveNoRecord": "Aucun enregistrement actualisé n'a été reçu.",
-    "errorSave": "Il n'a pas été possible de sauver le personnel.",
-    "errorNoPermissionDelete": "Vous n'avez pas l'autorisation de supprimer du personnel.",
-    "errorMustSelectForDelete": "Vous devez sélectionner un enregistrement pour le supprimer.",
-    "errorDelete": "L'enregistrement n'a pas pu être supprimé.",
-    "confirmDelete": "êtes-vous sûr de vouloir supprimer cet enregistrement (suppression douce) ?",
-    "searchPlaceholder": "Recherche par nom, nom de famille, e-mail ou téléphone...",
-    "onlyActive": "Actif seulement",
-    "buttonRefresh": "Rafraîchir",
-    "buttonFullList": "Voir tous",
-    "buttonNew": "Nouveau",
-    "buttonEdit": "Editer",
-    "buttonSave": "Économiser",
-    "buttonDelete": "Supprimer",
-    "fieldName": "Nom",
-    "fieldLastName": "Nom de famille",
-    "fieldEmail": "Courriel",
-    "fieldPhonePlaceholder": "Téléphone (+593...)",
-    "fieldActive": "Actif",
-    "tableName": "Nom",
-    "tableLastName": "Nom de famille",
-    "tableEmail": "Courriel",
-    "tablePhone": "Téléphone",
-    "tableActive": "Actif",
-    "tableNoResults": "Aucun résultat n'a été trouvé.",
-    "yes": "Oui",
-    "no": "Non",
-    "processing": "Traitement...",
-    "errorDeleteNoRows": "Impossible à supprimer : l'enregistrement n'existe pas ou a déjà été supprimé.",
-    "table": {
-      "loading": "Chargement…",
-      "noActive": "Aucun personnel actif.",
-      "columns": {
-        "firstName": "Prénom",
-        "lastName": "Nom",
-        "email": "E-mail",
-        "phone": "Téléphone",
-        "active": "Actif",
-        "start": "Début",
-        "end": "Fin"
-      }
-    }
-  },
   "actividades": {
-    "title": "Activités",
-    "formTitleNew": "Nouvelle activité",
-    "formTitleEdit": "Modifier l’activité",
-    "fieldName": "Nom de l’activité",
-    "fieldNamePlaceholder": "Ex. Plantation, Irrigation, Récolte",
-    "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Brève description de l’activité…",
-    "fieldCurrency": "Devise",
-    "fieldHourlyRate": "Tarif horaire",
-    "fieldHourlyRatePlaceholder": "Ex. 3,50",
+    "actionActivate": "[FR] Activar",
+    "actionDeactivate": "[FR] Desactivar",
+    "actionDelete": "[FR] Eliminar",
+    "actionEdit": "[FR] Editar",
+    "bannerCreated": "[FR] Actividad creada correctamente.",
+    "bannerDeleted": "[FR] Actividad eliminada.",
+    "bannerUpdated": "[FR] Actividad actualizada correctamente.",
+    "buttonCancel": "[FR] Cancelar",
+    "buttonCreate": "[FR] Crear actividad",
+    "buttonSave": "[FR] Guardar cambios",
+    "buttonUpdate": "[FR] Actualizar actividad",
+    "confirmDelete": "[FR] ¿Seguro que deseas eliminar la actividad \"{{name}}\"?",
     "currencies": {
-      "USD": "Dollar américain",
-      "EUR": "L'euro",
-      "MXN": "Peso mexicain",
-      "COP": "Peso colombien",
-      "PEN": "Sol péruvien",
-      "CLP": "Peso chilien",
-      "ARS": "Peso argentin",
-      "BRL": "Réal brésilien",
-      "CAD": "Dollar canadien",
-      "GBP": "Livre sterling",
-      "LOCAL": "Devise locale"
+      "ARS": "[FR] Peso argentino",
+      "BRL": "[FR] Real brasileño",
+      "CAD": "[FR] Dólar canadiense",
+      "CLP": "[FR] Peso chileno",
+      "COP": "[FR] Peso colombiano",
+      "EUR": "[FR] Euro",
+      "GBP": "[FR] Libra esterlina",
+      "LOCAL": "[FR] Moneda local",
+      "MXN": "[FR] Peso mexicano",
+      "PEN": "[FR] Sol peruano",
+      "USD": "[FR] Dólar estadounidense"
     },
-    "buttonCreate": "Créer l’activité",
-    "buttonSave": "Enregistrer les modifications",
-    "buttonUpdate": "Mettre à jour l’activité",
-    "buttonCancel": "Annuler",
-    "tableTitle": "Liste des activités",
-    "thName": "Activité",
-    "thDescription": "Description",
-    "thCost": "Coût",
-    "thStatus": "Statut",
-    "thActions": "Actions",
-    "statusActive": "Actif",
-    "statusInactive": "Inactif",
-    "actionEdit": "Modifier",
-    "actionDeactivate": "Désactiver",
-    "actionActivate": "Activer",
-    "actionDelete": "Supprimer",
-    "tableNoResults": "Aucune activité enregistrée.",
-    "loading": "Chargement des activités…",
-    "empty": "Aucune activité enregistrée.",
-    "readOnlyNote": "Seuls le propriétaire et les administrateurs peuvent créer ou modifier des activités.",
-    "bannerCreated": "Activité créée avec succès.",
-    "bannerUpdated": "Activité mise à jour.",
-    "bannerDeleted": "Activité supprimée.",
-    "errorLoad": "Erreur lors du chargement des activités.",
-    "errorSave": "Impossible d’enregistrer l’activité.",
-    "errorDelete": "Impossible de supprimer l’activité.",
-    "errorMissingName": "Le nom de l’activité est requis.",
-    "errorMissingCurrency": "La devise est requise.",
-    "errorMissingRate": "Le tarif horaire est requis.",
-    "errorNameRequired": "Le nom de l’activité est requis.",
-    "errorRatePositive": "Le tarif horaire doit être supérieur à 0.",
-    "errorMissingTenant": "Organisation de l’utilisateur introuvable (tenant_id/org_id).",
-    "errorToggle": "Impossible de changer le statut de l’activité.",
-    "confirmDelete": "Êtes-vous sûr de vouloir supprimer l’activité \"{{name}}\" ?"
+    "empty": "[FR] No hay actividades registradas.",
+    "errorDelete": "[FR] No se pudo eliminar la actividad.",
+    "errorLoad": "[FR] Error al cargar las actividades.",
+    "errorMissingCurrency": "[FR] La moneda es obligatoria.",
+    "errorMissingName": "[FR] El nombre de la actividad es obligatorio.",
+    "errorMissingRate": "[FR] La tarifa por hora es obligatoria.",
+    "errorMissingTenant": "[FR] No se encontró la organización del usuario (tenant_id/org_id).",
+    "errorNameRequired": "[FR] El nombre de la actividad es obligatorio.",
+    "errorRatePositive": "[FR] La tarifa por hora debe ser mayor que 0.",
+    "errorSave": "[FR] No se pudo guardar la actividad.",
+    "errorToggle": "[FR] No se pudo cambiar el estado de la actividad.",
+    "fieldCurrency": "[FR] Moneda",
+    "fieldDescription": "[FR] Descripción",
+    "fieldDescriptionPlaceholder": "[FR] Descripción breve de la actividad…",
+    "fieldHourlyRate": "[FR] Tarifa por hora",
+    "fieldHourlyRatePlaceholder": "[FR] Ej. 3.50",
+    "fieldName": "[FR] Nombre de la actividad",
+    "fieldNamePlaceholder": "[FR] Ej. Siembra, Riego, Cosecha",
+    "formTitleEdit": "[FR] Editar actividad",
+    "formTitleNew": "[FR] Nueva actividad",
+    "loading": "[FR] Cargando actividades…",
+    "readOnlyNote": "[FR] Solo el propietario y los administradores pueden crear o editar actividades.",
+    "statusActive": "[FR] Activa",
+    "statusInactive": "[FR] Inactiva",
+    "tableNoResults": "[FR] No hay actividades registradas.",
+    "tableTitle": "[FR] Listado de actividades",
+    "thActions": "[FR] Acciones",
+    "thCost": "[FR] Costo",
+    "thDescription": "[FR] Descripción",
+    "thName": "[FR] Actividad",
+    "thStatus": "[FR] Estado",
+    "title": "[FR] Actividades"
   },
-  "asignaciones": {
-    "title": "Affectations",
-    "filters": {
-      "statusLabel": "Statut",
-      "status": {
-        "todos": "Tous",
-        "activo": "Actives",
-        "inactivo": "Inactives"
-      },
-      "refresh": "Rafraîchir",
-      "refreshLoading": "Mise à jour.."
-    },
-    "form": {
-      "newTitle": "Nouvelle affectation",
-      "editTitle": "Modifier l’affectation",
-      "personLabel": "Personne",
-      "personPlaceholder": "Sélectionner une personne",
-      "activityLabel": "Activité",
-      "activityPlaceholder": "Sélectionner une activité",
-      "geofenceLabel": "Géorepère",
-      "geofencePlaceholder": "Sélectionner un géorepère",
-      "startLabel": "Date/heure de début",
-      "endLabel": "Date/heure de fin",
-      "statusLabel": "Statut",
-      "statusActive": "Actif",
-      "statusInactive": "Inactif",
-      "frequencyLabel": "Fréquence (min)",
-      "saveButton": "Enregistrer l’affectation",
-      "updateButton": "Mettre à jour",
-      "cancelEditButton": "Annuler la modification",
-      "buttonCreate": "Créer une affectation",
-      "buttonUpdate": "Mise à jour de l'allocation",
-      "buttonCancel": "Annuler",
-      "endOptionalHint": "Optionnel",
-      "quickActivity": {
-        "noActivitiesHint": "Aucune activité (créez-en une dans le module Activités ou ci-dessous).",
-        "newButton": "Nouvelle activité",
-        "newNamePlaceholder": "Nom de la nouvelle activité",
-        "saveButton": "Enregistrer l’activité",
-        "saving": "Enregistrement…"
-      }
-    },
-    "table": {
-      "title": "Affectations actives",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géorepère",
-      "start": "Début",
-      "end": "Fin",
-      "status": "Statut",
-      "actions": "Actions",
-      "noResults": "Aucune affectation pour les filtres sélectionnés.",
-      "frequency": "Fréq. (min)"
-    },
+  "admins": {
     "actions": {
-      "edit": "Modifier",
-      "delete": "Supprimer",
-      "activate": "Active",
-      "deactivate": "Inactive"
+      "makeAdmin": "[FR] Convertir en admin",
+      "makeOwner": "[FR] Convertir en propietario",
+      "remove": "[FR] Eliminar acceso"
     },
     "banner": {
-      "created": "Affectation créée avec succès.",
-      "updated": "Affectation mise à jour.",
-      "deleted": "Affectation supprimée."
-    },
-    "messages": {
-      "loadError": "Erreur lors du chargement des affectations.",
-      "catalogError": "Erreur lors du chargement des catalogues (personnel, géofences, activités).",
-      "loadingData": "Chargement des affectations…",
-      "overlapError": "La personne a déjà une mission active qui se chevauche dans cette plage de dates.",
-      "selectPersonAndFence": "Vous devez sélectionner une personne et un géorepère.",
-      "selectDates": "Vous devez renseigner la date/heure de début et de fin.",
-      "frequencyTooLow": "La fréquence minimale autorisée est de 5 minutes.",
-      "frequencyInvalidRange": "La fréquence doit être comprise entre 5 minutes et 12 heures.",
-      "saveGenericError": "Erreur lors de l’enregistrement de l’affectation.",
-      "createGenericError": "L'affectation n'a pas pu être créée.",
-      "createSuccess": "Affectation créée avec succès.",
-      "updateGenericError": "L'affectation n'a pas pu être mise à jour.",
-      "updateSuccess": "L'affectation a été correctement mise à jour.",
-      "deleteError": "Impossible de supprimer l’affectation.",
-      "deleteSuccess": "Affectation supprimée avec succès.",
-      "confirmDelete": "Êtes-vous sûr de vouloir supprimer cette affectation ?",
-      "noPersonal": "Il n’y a aucun personnel actif dans cette organisation. Créez ou réactivez au moins une personne.",
-      "noActivities": "Aucune activité n’a été créée. Créez au moins une activité pour pouvoir affecter."
+      "invitationSent": "[FR] Invitación enviada correctamente.",
+      "removed": "[FR] Administrador eliminado de la organización.",
+      "roleUpdated": "[FR] Rol actualizado."
     },
     "error": {
-      "load": "Erreur de chargement des affectations.",
-      "save": "L'affectation n'a pas pu être sauvegardée.",
-      "delete": "L'affectation n'a pas pu être supprimée.",
-      "missingPerson": "Vous devez sélectionner une personne.",
-      "missingGeofence": "Vous devez sélectionner une géofence.",
-      "missingActivity": "Vous devez sélectionner une activité.",
-      "missingStart": "Vous devez saisir la date et l'heure de début.",
-      "missingEnd": "Vous devez saisir la date et l'heure de fin."
-    }
+      "invite": "[FR] No se pudo enviar la invitación.",
+      "load": "[FR] Error al cargar la lista de administradores.",
+      "remove": "[FR] No se pudo eliminar al administrador.",
+      "updateRole": "[FR] No se pudo actualizar el rol."
+    },
+    "form": {
+      "buttonInvite": "[FR] Enviar invitación",
+      "emailLabel": "[FR] Correo electrónico",
+      "inviteTitle": "[FR] Invitar nuevo administrador",
+      "roleLabel": "[FR] Rol"
+    },
+    "subtitle": "[FR] Gestiona los administradores de tu organización y sus roles.",
+    "table": {
+      "actions": "[FR] Acciones",
+      "email": "[FR] Correo electrónico",
+      "name": "[FR] Nombre",
+      "noResults": "[FR] No hay administradores registrados.",
+      "role": "[FR] Rol",
+      "status": "[FR] Estado"
+    },
+    "title": "[FR] Administradores"
   },
-  "reportes": {
-    "title": "Rapports sur les coûts",
-    "headerSubtitle": "Visualiser et exporter les coûts par personne, par activité et par géofence.",
-    "noAccessBody": "Vous n'avez pas le droit de consulter les rapports de coûts. Ce module n'est accessible qu'aux propriétaires et aux administrateurs.",
-    "loadingReport": "Chargement du rapport...",
-    "filtersTitle": "Filtres",
-    "filtersFrom": "De",
-    "filtersTo": "Pour",
-    "filtersPerson": "Personne",
-    "filtersActivity": "Activité",
-    "filtersGeofence": "Géofence",
-    "filtersAll": "Tous",
-    "filtersClear": "Nettoyer les filtres",
-    "filtersApply": "Appliquer les filtres",
-    "summaryTotalHoursLabel": "Nombre total d'heures",
-    "summaryTotalHoursHelp": "Somme des heures de toutes les affectations dans l'intervalle sélectionné.",
-    "summaryTotalCostLabel": "Coût total",
-    "summaryTotalCostHelp": "Somme des coûts calculés par personne, activité et géofence.",
-    "summaryRecordsLabel": "Dossiers",
-    "summaryRecordsHelp": "Nombre de lignes conformes aux filtres actuels.",
-    "tableTitle": "Ventilation des coûts",
-    "tableExportHelp": "Exporte le détail actuel dans un fichier CSV.",
-    "tableExportButton": "Exporter CSV",
-    "colPersona": "Personne",
-    "colGeocerca": "Géofence",
-    "colActividad": "Activité",
-    "colInicio": "Accueil",
-    "colFin": "Fin",
-    "colHoras": "Heures",
-    "colTarifa": "Taux horaire",
-    "colCosto": "Coût",
-    "colMoneda": "Monnaie",
-    "csvHeaderInicio": "Accueil",
-    "csvHeaderFin": "Fin",
-    "csvHeaderPersona": "Personne",
-    "csvHeaderActividad": "Activité",
-    "csvHeaderGeocerca": "Géofence",
-    "csvHeaderHoras": "Heures",
-    "csvHeaderTarifa": "Taux horaire",
-    "csvHeaderTotal": "Coût total",
-    "csvHeaderCosto": "Coût total",
-    "csvHeaderMoneda": "Monnaie",
-    "buttonDownloadCsv": "Télécharger le CSV",
-    "errorLoad": "Erreur de chargement des rapports.",
-    "errorCsv": "Le fichier CSV n'a pas pu être généré.",
-    "errorLoadFilters": "Erreur de chargement des filtres (personnes, activités, géofences).",
-    "errorRangeInvalid": "La date \"Du\" ne peut être supérieure à la date \"Au\".",
-    "errorViewMissing": "La vue v_cost_detail n'est pas encore créée dans Supabase.",
-    "errorLoadReport": "Erreur de téléchargement du rapport de coûts.",
-    "errorLabel": "Erreur :",
-    "exportNoData": "Il n'y a pas de données à exporter.",
-    "tableEmpty": "Il n'y a pas d'enregistrements pour les filtres sélectionnés.",
-    "personNoName": "Personne non nommée",
-    "geofenceNoName": "Géofence sans nom",
-    "activityNoName": "Activité sans nom",
+  "app": {
+    "brand": "[FR] App Geocercas",
+    "header": {
+      "goToPanel": "[FR] Ir al panel",
+      "loggedAs": "[FR] Sesión iniciada como",
+      "login": "[FR] Iniciar sesión",
+      "loginMagic": "[FR] Link mágico",
+      "logout": "[FR] Salir",
+      "organizationAriaLabel": "[FR] Seleccionar organización",
+      "organizationLabel": "[FR] Organización",
+      "organizationNone": "[FR] Sin organización",
+      "roleAdmin": "[FR] Administrador",
+      "roleOwner": "[FR] Propietario",
+      "roleTracker": "[FR] Tracker"
+    },
+    "tabs": {
+      "actividades": "[FR] Actividades",
+      "admins": "[FR] Administrador",
+      "asignaciones": "[FR] Asignaciones",
+      "dashboard": "[FR] Dashboard Costos",
+      "dashboardCostos": "[FR] Dashboard Costos",
+      "geocerca": "[FR] Geocerca",
+      "geocercas": "[FR] Geocercas",
+      "home": "[FR] Inicio",
+      "inicio": "[FR] Inicio",
+      "invitar_tracker": "[FR] Invitar tracker",
+      "invitarTracker": "[FR] Invitar tracker",
+      "nuevaGeocerca": "[FR] Geocerca",
+      "personal": "[FR] Personal",
+      "reportes": "[FR] Reportes",
+      "tracker": "[FR] Tracker"
+    },
+    "title": "[FR] App Geocercas"
+  },
+  "asignaciones": {
+    "actions": {
+      "activate": "[FR] Activar",
+      "deactivate": "[FR] Desactivar",
+      "delete": "[FR] Eliminar",
+      "edit": "[FR] Editar"
+    },
+    "banner": {
+      "created": "[FR] Asignación creada correctamente.",
+      "deleted": "[FR] Asignación eliminada.",
+      "updated": "[FR] Asignación actualizada."
+    },
+    "error": {
+      "delete": "[FR] No se pudo eliminar la asignación.",
+      "load": "[FR] Error al cargar las asignaciones.",
+      "missingActivity": "[FR] Debe seleccionar una actividad.",
+      "missingEnd": "[FR] Debe ingresar fecha/hora de fin.",
+      "missingGeofence": "[FR] Debe seleccionar una geocerca.",
+      "missingPerson": "[FR] Debe seleccionar una persona.",
+      "missingStart": "[FR] Debe ingresar fecha/hora de inicio.",
+      "save": "[FR] No se pudo guardar la asignación."
+    },
     "filters": {
-      "dateFromLabel": "De",
-      "dateToLabel": "Pour",
-      "personLabel": "Personne",
-      "activityLabel": "Activité",
-      "geofenceLabel": "Géofence",
-      "apply": "Appliquer les filtres",
-      "clear": "Nettoyer les filtres"
+      "refresh": "[FR] Refrescar",
+      "refreshLoading": "[FR] Actualizando…",
+      "status": {
+        "activo": "[FR] Activos",
+        "inactivo": "[FR] Inactivos",
+        "todos": "[FR] Todos"
+      },
+      "statusLabel": "[FR] Estado",
+      "searchPlaceholder": "[FR] Buscar (persona/geocerca)",
+      "statusDefault": "[FR] Estado: todos",
+      "statusAll": "[FR] Estado: todos",
+      "geofenceAll": "[FR] Geocerca: todas",
+      "personalAll": "[FR] Personal: todos"
+    },
+    "form": {
+      "activityLabel": "[FR] Actividad",
+      "activityPlaceholder": "[FR] Selecciona una actividad",
+      "buttonCancel": "[FR] Cancelar",
+      "buttonCreate": "[FR] Crear asignación",
+      "buttonUpdate": "[FR] Actualizar asignación",
+      "cancelEditButton": "[FR] Cancelar edición",
+      "editTitle": "[FR] Editar asignación",
+      "endLabel": "[FR] Fecha/hora fin",
+      "endOptionalHint": "[FR] Opcional",
+      "frequencyLabel": "[FR] Frecuencia (minutos)",
+      "geofenceLabel": "[FR] Geocerca",
+      "geofencePlaceholder": "[FR] Selecciona una geocerca",
+      "newTitle": "[FR] Nueva asignación",
+      "personLabel": "[FR] Persona",
+      "personPlaceholder": "[FR] Selecciona una persona",
+      "quickActivity": {
+        "newButton": "[FR] Nueva actividad",
+        "newNamePlaceholder": "[FR] Nombre de la nueva actividad",
+        "noActivitiesHint": "[FR] No hay actividades (cree una en el módulo Actividades o aquí abajo).",
+        "saveButton": "[FR] Guardar actividad",
+        "saving": "[FR] Guardando…"
+      },
+      "saveButton": "[FR] Guardar asignación",
+      "startLabel": "[FR] Fecha/hora inicio",
+      "statusActive": "[FR] Activa",
+      "statusInactive": "[FR] Inactiva",
+      "statusLabel": "[FR] Estado",
+      "updateButton": "[FR] Actualizar asignación",
+      "newActivityPlaceholder": "[FR] Nombre de la nueva actividad",
+      "saveActivityButton": "[FR] Guardar actividad",
+      "savingActivity": "[FR] Guardando…",
+      "cancelButton": "[FR] Cancelar",
+      "startDateLabel": "[FR] Fecha inicio",
+      "startDatePlaceholder": "[FR] DD/MM/AAAA HH:MM o 2025-11-13T09:11",
+      "endDateLabel": "[FR] Fecha fin (opcional)",
+      "endDatePlaceholder": "[FR] DD/MM/AAAA HH:MM o 2025-11-14T19:17",
+      "activityOptional": "[FR] (Opcional) Seleccione…",
+      "createButtonLabel": "[FR] Crear asignación"
+    },
+    "messages": {
+      "catalogError": "[FR] Error al cargar catálogos (personal, geocercas, actividades).",
+      "confirmDelete": "[FR] ¿Seguro que deseas eliminar esta asignación?",
+      "createGenericError": "[FR] No se pudo crear la asignación.",
+      "createSuccess": "[FR] Asignación creada correctamente.",
+      "deleteError": "[FR] No se pudo eliminar la asignación.",
+      "deleteSuccess": "[FR] Asignación eliminada correctamente.",
+      "frequencyInvalidRange": "[FR] La frecuencia debe estar entre 5 minutos y 12 horas.",
+      "frequencyTooLow": "[FR] La frecuencia mínima permitida es de 5 minutos.",
+      "loadError": "[FR] Error al cargar las asignaciones.",
+      "loadingData": "[FR] Cargando datos de asignaciones…",
+      "noActivities": "[FR] No hay actividades creadas. Crea al menos una Actividad para poder asignar.",
+      "noPersonal": "[FR] No hay personal vigente en esta organización. Reactiva o crea al menos una persona.",
+      "overlapError": "[FR] La persona ya tiene una asignación activa que se solapa en ese rango de fechas.",
+      "saveGenericError": "[FR] Ocurrió un error al guardar la asignación.",
+      "selectDates": "[FR] Debes ingresar fecha y hora de inicio y de fin.",
+      "selectPersonAndFence": "[FR] Debes seleccionar una persona y una geocerca.",
+      "updateGenericError": "[FR] No se pudo actualizar la asignación.",
+      "updateSuccess": "[FR] Asignación actualizada correctamente."
     },
     "table": {
-      "title": "Ventilation des coûts",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "start": "Accueil",
-      "end": "Fin",
-      "hours": "Heures",
-      "rate": "Taux horaire",
-      "total": "Coût total",
-      "currency": "Monnaie",
-      "noResults": "Aucun enregistrement n'a été trouvé pour les filtres sélectionnés."
+      "actions": "[FR] Acciones",
+      "activity": "[FR] Actividad",
+      "end": "[FR] Fin",
+      "frequency": "[FR] Freq (min)",
+      "geofence": "[FR] Geocerca",
+      "noResults": "[FR] No hay asignaciones registradas.",
+      "person": "[FR] Persona",
+      "start": "[FR] Inicio",
+      "status": "[FR] Estado",
+      "title": "[FR] Listado de asignaciones"
+    },
+    "title": "[FR] Asignaciones",
+    "states": {
+      "all": "[FR] todos",
+      "active": "[FR] activa",
+      "inactive": "[FR] inactiva"
+    }
+  },
+  "auth": {
+    "backToLogin": "[FR] Volver al login",
+    "errorTitle": "[FR] No se pudo autenticar",
+    "invalidOrExpiredLink": "[FR] El enlace es inválido, ya expiró o fue utilizado.",
+    "processing": "[FR] Autenticando…",
+    "timeout": "[FR] La autenticación tardó demasiado. Intenta nuevamente.",
+    "signup": {
+      "title": "[FR] Crear cuenta",
+      "subtitle": "[FR] Crea tu cuenta con Magic Link o usa Google.",
+      "labels": {
+        "fullName": "[FR] Nombre completo (opcional)",
+        "email": "[FR] Email"
+      },
+      "placeholders": {
+        "fullName": "[FR] Tu nombre",
+        "email": "[FR] tucorreo@dominio.com"
+      },
+      "buttons": {
+        "creating": "[FR] Enviando...",
+        "create": "[FR] Crear cuenta con Magic Link"
+      },
+      "errors": {
+        "invalidEmail": "[FR] Ingresa un email válido.",
+        "mustAcceptTerms": "[FR] Debes aceptar los Términos y la Política de Privacidad.",
+        "sendFailed": "[FR] No se pudo enviar el Magic Link: {{message}}",
+        "unknown": "[FR] Error desconocido{{#if message}}: {{message}}{{/if}}",
+        "googleFailed": "[FR] No se pudo iniciar con Google: {{message}}",
+        "googleNoUrl": "[FR] No se obtuvo URL de redirección de Google.",
+        "googleUnknown": "[FR] Error desconocido con Google OAuth{{#if message}}: {{message}}{{/if}}"
+      },
+      "messages": {
+        "magicLinkSent": "[FR] Te enviamos un Magic Link. Revisa tu correo y abre el enlace para confirmar tu cuenta."
+      },
+      "terms": {
+        "acceptance": "[FR] Acepto los",
+        "terms": "[FR] Términos",
+        "and": "[FR] y la",
+        "privacy": "[FR] Política de Privacidad"
+      },
+      "alreadyHaveAccount": "[FR] ¿Ya tienes cuenta?",
+      "loginLink": "[FR] Inicia sesión",
+      "separator": "[FR] o",
+      "oauthGoogle": "[FR] Registrarse con Google"
+    }
+  },
+  "authInvite": {
+    "continue": "[FR] Continuar",
+    "expiredOrUsed": "[FR] La invitación es inválida, ya expiró o fue utilizada.",
+    "goToLogin": "[FR] Ir al login",
+    "notInviteLink": "[FR] Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
+    "processing": "[FR] Validando invitación…",
+    "timeout": "[FR] La validación de la invitación tardó demasiado. Intenta nuevamente.",
+    "title": "[FR] Has sido invitado"
+  },
+  "common": {
+    "actions": {
+      "back": "[FR] Volver",
+      "cancel": "[FR] Cancelar",
+      "close": "[FR] Cerrar",
+      "delete": "[FR] Eliminar",
+      "edit": "[FR] Editar",
+      "loading": "[FR] Cargando...",
+      "no": "[FR] No",
+      "logout": "[FR] Cerrar sesión",
+      "processing": "[FR] Saliendo...",
+      "save": "[FR] Guardar",
+      "yes": "[FR] Sí"
+    },
+    "createOrganization": "[FR] Crear organización",
+    "fallbacks": {
+      "noAuth": "[FR] No autenticado",
+      "noEmail": "[FR] Sin email",
+      "noOrg": "[FR] Sin organización"
+    },
+    "language": {
+      "en": "[FR] Inglés",
+      "es": "[FR] Español",
+      "fr": "[FR] Francés"
+    },
+    "orgNamePlaceholder": "[FR] Nombre de la organización (ej. Finca A)",
+    "refreshContext": "[FR] Refrescar contexto",
+    "roles": {
+      "noRole": "[FR] SIN ROL",
+      "root": "[FR] ROOT"
+    },
+    "select": "[FR] — Selecciona —",
+    "sending": "[FR] Enviando...",
+    "show": "[FR] Mostrar",
+    "hide": "[FR] Ocultar",
+    "save": "[FR] Guardar",
+    "cancel": "[FR] Cancelar",
+    "delete": "[FR] Eliminar",
+    "edit": "[FR] Editar",
+    "loading": "[FR] Cargando",
+    "search": "[FR] Buscar",
+    "noResults": "[FR] Sin resultados",
+    "separator": "[FR] —",
+    "zoom": "[FR] Zoom",
+    "refresh": "[FR] Actualizar",
+    "states": {
+      "pending": "[FR] Pendiente",
+      "visible": "[FR] Visible",
+      "hidden": "[FR] Oculta"
     }
   },
   "dashboard": {
-    "title": "Tableau de bord des coûts",
-    "subtitle": "Visualiser les coûts agrégés par personne, activité et géofence.",
     "cards": {
-      "totalCost": "Coût total",
-      "totalHours": "Nombre total d'heures",
-      "totalPersons": "Personnes",
-      "totalGeofences": "Géofencing"
-    },
-    "filters": {
-      "dateFromLabel": "De",
-      "dateToLabel": "Pour",
-      "apply": "Appliquer",
-      "clear": "Nettoyer"
+      "totalCost": "[FR] Costo total",
+      "totalGeofences": "[FR] Geocercas",
+      "totalHours": "[FR] Horas totales",
+      "totalPersons": "[FR] Personas"
     },
     "charts": {
-      "costByActivity": "Coût par activité",
-      "costByPerson": "Coût par personne",
-      "costByGeofence": "Coût par géofence",
-      "hoursByDay": "Heures par jour"
+      "costByActivity": "[FR] Costo por actividad",
+      "costByGeofence": "[FR] Costo por geocerca",
+      "costByPerson": "[FR] Costo por persona",
+      "hoursByDay": "[FR] Horas por día"
     },
-    "errorLoad": "Erreur de chargement du tableau de bord des coûts."
+    "errorLoad": "[FR] Error al cargar el dashboard de costos.",
+    "filters": {
+      "apply": "[FR] Aplicar",
+      "clear": "[FR] Limpiar",
+      "dateFromLabel": "[FR] Desde",
+      "dateToLabel": "[FR] Hasta"
+    },
+    "subtitle": "[FR] Visualiza los costos agregados por persona, actividad y geocerca.",
+    "title": "[FR] Dashboard de costos"
   },
   "dashboardCostos": {
-    "title": "Tableau de bord des coûts",
-    "subtitle": "Visualisez les indicateurs clés de performance et les diagrammes de coûts par personne, par activité et par zone géographique.",
-    "refreshButton": "Rafraîchir les données",
-    "filtersTitle": "Filtres",
-    "filtersFrom": "De",
-    "filtersTo": "Pour",
-    "filtersPerson": "Personne",
-    "filtersActivity": "Activité",
-    "filtersGeofence": "Géofence",
-    "filtersAll": "Tous",
-    "filtersClear": "Nettoyer les filtres",
-    "filtersApply": "Appliquer les filtres",
-    "kpiTotalHours": "Nombre total d'heures",
-    "kpiTotalCost": "Coût total",
-    "kpiRecords": "Dossiers",
-    "kpiCurrencies": "Monnaies",
-    "chartTitle": "Tableau des coûts",
-    "chartDimension": "Dimension",
-    "chartMetric": "Métrique",
-    "dimensionPersona": "Personne",
-    "dimensionActividad": "Activité",
-    "dimensionGeocerca": "Géofence",
-    "dimensionFecha": "Date",
-    "metricCost": "Coût",
-    "metricHours": "Heures",
-    "metricRecords": "Dossiers",
-    "tableTitle": "Détail de la dimension sélectionnée",
-    "colPersona": "Personne",
-    "colActividad": "Activité",
-    "colGeocerca": "Géofence",
-    "colFecha": "Date",
-    "colHoras": "Heures",
-    "colCosto": "Coût",
-    "colMoneda": "Monnaie",
-    "tableNoResults": "Il n'y a pas de données pour les filtres actuels.",
-    "errorLoad": "Erreur de chargement du tableau de bord des coûts.",
-    "exportDataButton": "Exporter des données",
-    "exportChartButton": "Exporter le graphique",
-    "chartType": "Type de graphique",
-    "chartTypeBar": "Barre",
-    "chartTypeLine": "Ligne",
-    "chartTypeArea": "Zone",
-    "chartTypePie": "Tarte",
-    "colCategoria": "Catégorie",
-    "colTarifaPromedio": "Taux moyen",
-    "colRegistros": "Dossiers",
-    "tableEmpty": "Pas de données à afficher"
+    "chartDimension": "[FR] Dimensión",
+    "chartMetric": "[FR] Métrica",
+    "chartTitle": "[FR] Gráfico de costos",
+    "chartType": "[FR] Tipo de gráfico",
+    "chartTypeArea": "[FR] Área",
+    "chartTypeBar": "[FR] Barras",
+    "chartTypeLine": "[FR] Líneas",
+    "chartTypePie": "[FR] Pastel",
+    "colActividad": "[FR] Actividad",
+    "colCategoria": "[FR] Categoría",
+    "colCosto": "[FR] Costo",
+    "colFecha": "[FR] Fecha",
+    "colGeocerca": "[FR] Geocerca",
+    "colHoras": "[FR] Horas",
+    "colMoneda": "[FR] Moneda",
+    "colPersona": "[FR] Persona",
+    "colRegistros": "[FR] Registros",
+    "colTarifaPromedio": "[FR] Tarifa promedio",
+    "dimensionActividad": "[FR] Actividad",
+    "dimensionFecha": "[FR] Fecha",
+    "dimensionGeocerca": "[FR] Geocerca",
+    "dimensionPersona": "[FR] Persona",
+    "errorLoad": "[FR] Error al cargar el dashboard de costos.",
+    "exportChartButton": "[FR] Exportar gráfico",
+    "exportDataButton": "[FR] Exportar datos",
+    "filtersActivity": "[FR] Actividad",
+    "filtersAll": "[FR] Todos",
+    "filtersApply": "[FR] Aplicar filtros",
+    "filtersClear": "[FR] Limpiar filtros",
+    "filtersFrom": "[FR] Desde",
+    "filtersGeofence": "[FR] Geocerca",
+    "filtersPerson": "[FR] Persona",
+    "filtersTitle": "[FR] Filtros",
+    "filtersTo": "[FR] Hasta",
+    "kpiCurrencies": "[FR] Monedas",
+    "kpiRecords": "[FR] Registros",
+    "kpiTotalCost": "[FR] Costo total",
+    "kpiTotalHours": "[FR] Horas totales",
+    "metricCost": "[FR] Costo",
+    "metricHours": "[FR] Horas",
+    "metricRecords": "[FR] Registros",
+    "refreshButton": "[FR] Refrescar datos",
+    "subtitle": "[FR] Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "tableEmpty": "[FR] No hay datos para mostrar",
+    "tableNoResults": "[FR] No hay datos para los filtros actuales.",
+    "tableTitle": "[FR] Detalle para la dimensión seleccionada",
+    "title": "[FR] Dashboard de costos"
   },
-  "admin": {
-    "usersRoles": {
-      "title": "Utilisateurs et rôles",
-      "processing": "Traitement...",
-      "inviteSection": "Inviter un nouvel utilisateur",
-      "emailPlaceholder": "email@exemple.com",
-      "fullNamePlaceholder": "Nom complet",
-      "fullNameLabel": "Nom complet",
-      "roleOwner": "Propriétaire",
-      "inviteButton": "Inviter",
-      "pendingInvitesTitle": "Invitations en attente",
-      "noPending": "Aucune invitation en attente.",
-      "usersTitle": "Utilisateurs",
-      "noUsers": "Aucun utilisateur enregistré.",
-      "table": {
-        "email": "Courriel",
-        "name": "Nom",
-        "role": "Rôle",
-        "date": "Date",
-        "actions": "Actions",
-        "newRole": "Nouveau rôle"
-      },
-      "magicLink": "Lien magique",
-      "deleteButton": "Supprimer",
-      "assignButton": "Attribuer",
-      "confirmDelete": "Supprimer/suspendre {{email}}?",
-      "inviteSuccess": "Invitation envoyée à {{email}}",
-      "assignSuccess": "Rôle \"{{role}}\" attribué à {{email}}",
-      "magicLinkSentInvite": "Invitation envoyée à {{email}}",
-      "magicLinkSentLink": "Lien magique envoyé à {{email}}",
-      "deleteSuccess": "Utilisateur {{email}} supprimé/suspendu"
-    }
+  "forgot": {
+    "back": "[FR] Volver a Login",
+    "email": "[FR] Correo",
+    "emailPh": "[FR] tu@correo.com",
+    "errorEmail": "[FR] Ingresa un correo válido.",
+    "errorGeneric": "[FR] No se pudo enviar el correo.",
+    "noteDesc": "[FR] El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
+    "noteTitle": "[FR] Nota",
+    "send": "[FR] Enviar enlace",
+    "sending": "[FR] Enviando…",
+    "subtitle": "[FR] Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
+    "success": "[FR] ✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador.",
+    "tip": "[FR] Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
+    "title": "[FR] Restablecer contraseña"
   },
-  "tracker": {
-    "title": "Tracker GPS",
-    "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",
-    "status": {
-      "online": "Tracker en ligne",
-      "offline": "Pas de données récentes"
-    },
-    "controls": {
-      "centerOnUser": "Se concentrer sur ma position",
-      "refresh": "Actualiser les positions",
-      "showAll": "Afficher tout",
-      "showInside": "Uniquement à l'intérieur des géofences"
-    },
-    "legend": {
-      "insideFence": "A l'intérieur d'une géofence",
-      "outsideFence": "En dehors de la géofence",
-      "geofence": "Géofence"
-    },
-    "table": {
-      "title": "Dernières positions",
-      "person": "Personne",
-      "activity": "Activité",
-      "geofence": "Géofence",
-      "timestamp": "Date/heure",
-      "status": "État",
-      "noResults": "Aucune position n'a été enregistrée."
-    },
-    "errorLoad": "Erreur de chargement des positions du tracker."
-  },
-  "table": {
-    "name": "Nom",
-    "status": "Statut",
-    "lastPosition": "Dernière position",
-    "lastUpdate": "Dernière mise à jour"
-  },
-  "status": {
-    "online": "En ligne",
-    "stale": "Non actualisé",
-    "offline": "Hors ligne"
-  },
-  "map": {
-    "coordinates": "Coordonnées",
-    "lat": "Lat",
-    "lng": "Lng",
-    "legend": "Légende"
-  },
-  "trackerDashboard": {
-    "title": "Tracker Dashboard",
-    "timeWindows": {
-      "1h": "1 heure",
-      "6h": "6 heures",
-      "12h": "12 heures",
-      "24h": "24 heures"
-    },
-    "sections": {
-      "filters": "Filtres",
-      "diagnostics": "Diagnostic",
-      "map": "Carte"
-    },
-    "labels": {
-      "window": "Fenêtre",
-      "tracker": "Tracker",
-      "geofences": "Géofences",
-      "all": "Tous",
-      "activeOrg": "Organisation active",
-      "activeOrgDebug": "Org (Active)",
-      "detectedPlan": "Plan détecté"
-    },
-    "actions": {
-      "resolveOrgAgain": "Résoudre à nouveau l’org (RPC)",
-      "refresh": "Actualiser",
-      "loading": "Chargement…",
-      "centerGeofence": "Centrer la géofence"
-    },
-    "states": {
-      "validatingPlan": "Validation du plan de l’organisation...",
-      "planValidationFailed": "Impossible de valider le plan de l’organisation.",
-      "moduleUnavailable": "Ce module n’est pas disponible avec le plan actuel de l’organisation.",
-      "requiresPro": "Le tableau de bord de suivi nécessite PRO ou supérieur.",
-      "upgradeHint": "Passez à un plan supérieur pour visualiser les positions, les trajets et les géofences depuis ce panneau.",
-      "upgradeOrgPrompt": "Mettez à niveau cette organisation pour activer Tracker Dashboard.",
-      "resolvingActiveOrg": "Résolution de l’organisation active…"
-    },
-    "messages": {
-      "loadAssignmentsError": "Erreur lors du chargement des affectations (tracker_assignments).",
-      "loadGeofencesError": "Erreur lors du chargement des géofences (geofences).",
-      "loadPositionsError": "Erreur lors du chargement des positions.",
-      "noActiveAssignments": "Il n’y a pas d’affectations actives (tracker_assignments). Affichage de toutes les géofences actives (la géofence par défaut reste présélectionnée).",
-      "noActiveGeofencesForAssignments": "Il existe des affectations, mais aucune géofence active pour ces affectations dans l’org ({{orgId}}).",
-      "fallbackGeofenceShown": "Aucune géofence active n’a été trouvée ; 1 géofence active a été affichée comme solution de secours pour éviter que le tableau de bord reste vide.",
-      "noActiveGeofencesForOrg": "Aucune géofence active n’est disponible pour cette org ({{orgId}}).",
-      "noVisibleGeofences": "Aucune géofence active/visible n’est disponible pour cette org (ou vous n’avez pas la permission de les voir).",
-      "orgResolveError": "Erreur lors de la résolution de l’org"
-    },
-    "badges": {
-      "assignments": "assignations",
-      "trackers": "trackers",
-      "geofences": "géofences",
-      "polys": "polygones",
-      "circles": "cercles",
-      "positions": "positions",
-      "source": "source",
-      "assignedIds": "assignedIds",
-      "selected": "sélectionnées",
-      "bounds": "limites",
-      "viewport": "viewport",
-      "intersects": "intersections"
-    },
-    "map": {
-      "initializing": "Initialisation de la carte…",
-      "statusPrefix": "carte",
-      "circleLabel": "{{name}} (cercle)"
-    },
-    "tooltip": {
-      "tracker": "Tracker",
-      "time": "Heure",
-      "lat": "Lat",
-      "lng": "Lng",
-      "accuracy": "Préc.",
-      "speed": "Vitesse",
-      "source": "Src"
-    },
-    "multiGeofence": {
-      "labelBase": "Géofences",
-      "labelNone": "Géofences : aucune",
-      "labelAll": "Géofences : toutes ({{count}})",
-      "labelSelected": "Géofences : {{count}}",
-      "searchPlaceholder": "Rechercher une géofence…",
-      "showAll": "Afficher toutes",
-      "hideAll": "Masquer toutes",
-      "noResults": "Aucun résultat…",
-      "close": "Fermer"
-    }
-  },
-  "trackerGps": {
-    "title": "Tracker GPS",
-    "lastSend": "Dernier envoi",
-    "waitingCoords": "En attente des coordonnées…",
-    "debugCopyPaste": "Debug (copier/coller)",
-    "stateLabel": "État",
-    "onlyInvited": "Cette page est réservée aux trackers invités.",
-    "goHome": "Aller à l’accueil",
-    "status": {
-      "initializing": "Démarrage du tracker…",
-      "processingMagicLink": "Traitement du lien magique Tracker…",
-      "sessionOkPreparing": "Session OK. Préparation du tracker…",
-      "readingSession": "Lecture de la session du tracker…",
-      "noSession": "Aucune session tracker active.",
-      "noGeolocation": "Cet appareil ne prend pas en charge la géolocalisation.",
-      "active": "Tracker actif",
-      "activating": "Activation du tracker dans l’organisation…",
-      "noPermission": "Tracker sans permission / onboarding",
-      "gpsError": "Erreur GPS"
-    },
-    "errors": {
-      "notConfigured": "Le tracker n’est pas configuré dans ce déploiement.",
-      "noSupabaseClient": "Client Supabase principal introuvable.",
-      "setSession": "Erreur setSession :",
-      "hashSession": "Erreur de session hash :",
-      "openFromMagicLinkOnly": "Ouvrez cette page uniquement depuis votre lien magique Tracker.",
-      "geolocationUnavailable": "Géolocalisation indisponible."
-    },
-    "membership": {
-      "missingOrgId": "org_id manquant dans l’URL. Ouvrez cette page depuis le lien d’invitation : /tracker-gps?org_id=<ORG_ID>.",
-      "checking": "Vérification de l’adhésion…",
-      "noValidTokenUser": "Aucun token/utilisateur valide dans /tracker-gps.",
-      "okSessionCache": "Adhésion OK (cache de session).",
-      "membershipsSelectError": "Erreur de sélection memberships :",
-      "alreadyExists": "L’adhésion existe déjà : role={{role}}",
-      "runningAccept": "Aucune adhésion. Exécution de accept-tracker-invite",
-      "acceptError": "Erreur accept-tracker-invite :",
-      "membershipsRecheckError": "Erreur de revalidation memberships :",
-      "acceptReturnedButNotCreated": "accept-tracker-invite a renvoyé OK mais l’adhésion n’a pas été créée.",
-      "acceptOk": "accept-tracker-invite OK.",
-      "onboardingException": "Exception onboarding :"
-    },
-    "disclosure": {
-      "title": "Localisation en arrière-plan",
-      "body1": "App Geocercas collecte votre position même lorsque l’application est fermée ou que le téléphone est verrouillé afin d’enregistrer les positions et de valider l’entrée et la sortie des géofences pendant la journée de travail.",
-      "body2": "Ces informations sont utilisées uniquement à des fins opérationnelles de l’organisation et ne sont ni partagées avec des tiers ni utilisées à des fins publicitaires. Vous pouvez arrêter le suivi en révoquant l’autorisation de localisation ou en vous déconnectant.",
-      "continue": "Continuer"
-    },
-    "debugLabels": {
-      "send": "send",
-      "accept": "accept",
-      "orgId": "org_id",
-      "membership": "membership",
-      "tokenIss": "token_iss",
-      "tokenTtlSec": "token_ttl_sec",
-      "lastHttpStatus": "last_http_status",
-      "lat": "lat",
-      "lng": "lng",
-      "acc": "acc"
-    }
-  },
-  "inviteTracker": {
-    "orgFallback": "votre organisation",
-    "title": "Inviter un tracker",
-    "subtitle": "Sélectionnez un membre actif de votre personnel ou saisissez une adresse e-mail manuellement pour l’inviter comme tracker dans {{orgName}}.",
-    "form": {
-      "selectLabel": "Sélectionner le personnel actuel (facultatif)",
-      "selectPlaceholder": "-- Sélectionner du personnel --",
-      "selectHelp": "Si vous sélectionnez un membre du personnel, son e-mail sera renseigné automatiquement.",
-      "emailLabel": "E-mail du tracker",
-      "emailPlaceholder": "tracker@example.com",
-      "emailHelp": "Une invitation sera envoyée à cette adresse électronique.",
-      "buttonSending": "Envoi de l’invitation…",
-      "buttonSend": "Envoyer l’invitation"
-    },
-    "diag": {
-      "orgUsed": "Organisation utilisée",
-      "user": "Utilisateur",
-      "membersLoaded": "Membres chargés"
-    },
-    "empty": {
-      "noMembers": "Aucun membre du personnel actif n’est disponible pour être invité."
-    },
-    "ok": {
-      "generated": "Invitation générée avec succès.",
-      "emailSent": "Courriel d’invitation envoyé avec succès.",
-      "fallbackLink": "Le courriel n’a pas pu être envoyé. Utilisez ce lien pour partager l’accès manuellement.",
-      "magicLinkFallback": "Lien magique généré en secours."
-    },
+  "geocercas": {
+    "buttonClearCanvas": "[FR] Limpiar mapa",
+    "buttonDeleteSelected": "[FR] Eliminar seleccionadas",
+    "buttonDrawByCoords": "[FR] Dibujar por coordenadas",
+    "buttonSave": "[FR] Guardar geocerca",
+    "buttonShowAll": "[FR] Mostrar todas",
+    "buttonShowOnMap": "[FR] Mostrar en mapa",
+    "buttonShowSelected": "[FR] Mostrar seleccionadas",
+    "cardListBody": "[FR] Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar.",
+    "cardListTitle": "[FR] Listado de geocercas",
+    "cardNewBody": "[FR] Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
+    "cardNewCta": "[FR] Ir a Nueva geocerca →",
+    "cardNewTitle": "[FR] Nueva geocerca",
+    "currentOrgLabel": "[FR] Organización actual:",
+    "currentUserLabel": "[FR] Usuario:",
+    "cursorHint": "[FR] Mueve el mouse sobre el mapa",
+    "deleteConfirm": "[FR] ¿Eliminar las geocercas seleccionadas?",
+    "deletedCount": "[FR] Eliminadas: {{count}}",
+    "draftLabel": "[FR] Borrador",
+    "errorCoordsInvalid": "[FR] Coordenadas inválidas. Usa formato: lat,lng (una por línea).",
+    "errorNameRequired": "[FR] Escribe un nombre para la geocerca.",
+    "errorNoGeojson": "[FR] No se encontró el GeoJSON de la geocerca.",
+    "errorNoShape": "[FR] Dibuja una geocerca o crea una por coordenadas antes de guardar.",
+    "errorSelectAtLeastOne": "[FR] Selecciona al menos una geocerca.",
+    "lat": "[FR] Lat",
+    "lng": "[FR] Lng",
+    "loadingDataset": "[FR] Cargando dataset...",
+    "modalDraw": "[FR] Draw",
+    "modalHintRule": "[FR] 1 point = small square | 2 points = rectangle | 3+ = polygon",
+    "modalInstruction": "[FR] Format:",
+    "modalOnePerLine": "[FR] (one per line)",
+    "modalTitle": "[FR] Draw by coordinates",
+    "noGeofences": "[FR] Aún no tienes geocercas creadas.",
+    "noOrgFallback": "[FR] — (sin organización seleccionada)",
+    "pageSubtitle": "[FR] Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
+    "pageTitle": "[FR] Geocercas",
+    "panelTitle": "[FR] Geocercas",
+    "placeholderName": "[FR] Nombre de la geocerca",
+    "pointsLabel": "[FR] Pts",
+    "savedOk": "[FR] Geocerca guardada correctamente.",
+    "subtitleNew": "[FR] Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
+    "titleNew": "[FR] Nueva geocerca",
+    "coordsReady": "[FR] Figura creada desde coordenadas.",
+    "errorSave": "[FR] No se pudo guardar la geocerca. Intenta nuevamente.",
+    "deleteError": "[FR] No se pudo eliminar. Intenta nuevamente.",
+    "errorLoad": "[FR] No se pudo cargar la geocerca.",
+    "showManyOk": "[FR] Mostrando {{count}} geocercas.",
+    "planUsageTitle": "[FR] Geocercas",
+    "planAvailableTitle": "[FR] Disponibles",
+    "draftYes": "[FR] sí",
+    "draftNo": "[FR] no",
     "plan": {
-      "validating": "Validation du plan de l’organisation…",
-      "validationError": "Impossible de valider le plan de l’organisation.",
-      "requiresProTitle": "Plan PRO requis",
-      "detectedPlan": "Plan détecté",
-      "freeBlockedBody": "Les invitations de tracker ne sont pas disponibles avec le plan FREE actuel.",
-      "upgradePrompt": "Passez cette organisation à PRO pour activer les invitations de tracker."
-    },
-    "errors": {
-      "emailRequired": "Vous devez saisir une adresse e-mail.",
-      "emailInvalid": "Veuillez saisir une adresse e-mail valide.",
-      "noOrg": "Impossible de résoudre une organisation active pour cet utilisateur.",
-      "planBlocked": "Le plan actuel de l’organisation n’autorise pas les invitations de tracker.",
-      "notInOrg": "Votre utilisateur n’est pas lié à l’organisation active.",
-      "inviteErrorPrefix": "Erreur lors de l’envoi de l’invitation"
-    },
-    "messages": {
-      "serverProblem": "Un problème est survenu lors du contact avec le serveur d’invitation.",
-      "notOk": "L’invitation n’a pas pu être finalisée. Vérifiez l’e-mail et réessayez.",
-      "invited": "Une invitation a été envoyée à {{email}} pour rejoindre {{orgName}} en tant que tracker.",
-      "magiclinkSent": "Un lien magique a été envoyé à {{email}}.",
-      "linkOnlyWithLink": "L’invitation a été créée. Utilisez ce lien pour partager l’accès : {{link}}.",
-      "linkOnlyNoLink": "L’invitation a été créée, mais aucun lien public n’a été reçu.",
-      "createdWithoutEmail": "L’accès tracker a été créé sans envoi d’e-mail.",
-      "genericProcessed": "L’invitation pour {{email}} a été traitée avec succès.",
-      "unexpectedError": "Erreur inattendue lors du traitement de l’invitation."
-    },
-    "backToTracker": "Retour au Tracker",
-    "selectPersonLabel": "Sélectionnez une personne",
-    "onlyExistingNote": "Vous ne pouvez inviter que des personnes déjà existantes dans votre organisation.",
-    "emailLabel": "E-mail du tracker",
-    "emailPlaceholder": "tracker@example.com",
-    "sendInvite": "Envoyer l’invitation"
-  },
-  "admins": {
-    "title": "Administrateurs",
-    "subtitle": "Gérer les administrateurs de votre organisation et leurs rôles.",
-    "table": {
-      "name": "Nom",
-      "email": "Courriel",
-      "role": "Rôle",
-      "status": "État",
-      "actions": "Actions",
-      "noResults": "Aucun administrateur n'est inscrit."
-    },
-    "form": {
-      "inviteTitle": "Inviter un nouvel administrateur",
-      "emailLabel": "Courriel",
-      "roleLabel": "Rôle",
-      "buttonInvite": "Envoyer une invitation"
-    },
-    "actions": {
-      "makeOwner": "Propriétaire de la marque",
-      "makeAdmin": "Faire de l'administration",
-      "remove": "Supprimer l'accès"
-    },
-    "banner": {
-      "invitationSent": "Invitation envoyée avec succès.",
-      "roleUpdated": "Rôle actualisé.",
-      "removed": "Administrateur retiré de l'organisation."
-    },
-    "error": {
-      "load": "Erreur de chargement de la liste des administrateurs.",
-      "invite": "L'invitation n'a pas pu être envoyée.",
-      "updateRole": "Le rôle n'a pas pu être mis à jour.",
-      "remove": "L'administrateur n'a pas pu être supprimé."
+      "loading": "[FR] Cargando plan...",
+      "error": "[FR] No se pudieron cargar los límites del plan.",
+      "unlimited": "[FR] Geocercas sin límite configurado.",
+      "usage": "[FR] Uso actual: {{used}} / {{max}} geocercas",
+      "unlimitedShort": "[FR] Ilimitadas",
+      "limitReached": "[FR] Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
+      "limitReachedTitle": "[FR] Has alcanzado el límite de geocercas de tu plan.",
+      "limitReachedBody": "[FR] Para crear más geocercas, actualiza tu organización a PRO.",
+      "freeHint": "[FR] Plan FREE activo. Cuando alcances el límite, podrás hacer upgrade a PRO desde aquí.",
+      "activePaidHint": "[FR] Tu organización tiene un plan con mayor capacidad habilitada."
     }
   },
   "help": {
     "common": {
-      "breadcrumb": "Centre d'aide",
-      "back": "Retour",
-      "goHome": "Aller à l'accueil",
-      "viewFaq": "Voir FAQ",
-      "badge": "Centre d'aide",
-      "quickGuideBadge": "Guide rapide"
-    },
-    "instructions": {
-      "title": "Guide de configuration rapide",
-      "subtitle": "Suivez les étapes suivantes pour configurer votre organisation, créer des géofences, affecter du personnel et commencer le suivi.",
-      "jumpToSteps": "Aller aux étapes",
-      "viewResult": "Voir le résultat",
-      "tocTitle": "Table des matières",
-      "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
-      "tocSteps": "Étapes",
-      "tocTips": "Meilleures pratiques",
-      "tocResult": "Résultat attendu",
-      "recommendationTitle": "Recommandation",
-      "recommendationBody": "Commencez avec 1 géofence et 1 tracker. Lorsque le flux fonctionne, augmentez le nombre de zones et de personnes.",
-      "stepsTitle": "Pas à pas",
-      "stepsSubtitle": "Une séquence pratique qui fonctionne pour la plupart des organisations.",
-      "steps": [
-        {
-          "title": "Sélectionnez votre organisation",
-          "bullets": [
-            "Utilisez le sélecteur d'organisation pour choisir votre lieu de travail.",
-            "Si vous êtes propriétaire, vous pouvez gérer plusieurs organisations."
-          ]
-        },
-        {
-          "title": "Créez votre première géofence",
-          "bullets": [
-            "Allez dans Geofence et dessinez la zone sur la carte.",
-            "Donnez-lui un nom clair (Ferme A, Champ 3, Usine 1, etc.).",
-            "Enregistrez et vérifiez qu'il apparaît dans Geofences."
-          ]
-        },
-        {
-          "title": "Inscrivez votre personnel",
-          "bullets": [
-            "Allez dans Personnel et créez les fiches des personnes qui travailleront.",
-            "Utilisez une adresse électronique valide si vous les invitez en tant que traqueurs."
-          ]
-        },
-        {
-          "title": "Créer des activités et des tarifs",
-          "bullets": [
-            "Allez dans Activités et définissez les tâches (Récolte, Irrigation, Maintenance...).",
-            "Configurer la devise et les taux horaires pour l'établissement des coûts et des rapports."
-          ]
-        },
-        {
-          "title": "Créer des affectations",
-          "bullets": [
-            "Allez dans Affectations et liez : Personne + Activité + Géo-barrière.",
-            "Définit le début/la fin et l'état actif.",
-            "Définir la fréquence (minimum 5 minutes)."
-          ]
-        },
-        {
-          "title": "Inviter des traqueurs (téléphones de terrain)",
-          "bullets": [
-            "Accédez à l'outil de suivi des invitations et envoyez l'invitation par courrier.",
-            "L’invité peut se connecter avec un lien magique depuis son mobile.",
-            "Au démarrage, le traceur envoie des points GPS en fonction de l'affectation."
-          ]
-        },
-        {
-          "title": "Examiner les rapports et le tableau de bord",
-          "bullets": [
-            "Ouvrez les rapports pour filtrer par géofence/personne/activité et télécharger le fichier CSV.",
-            "Ouvrez le tableau de bord Coûts pour afficher les indicateurs de performance et les graphiques."
-          ]
-        }
-      ],
-      "tipsTitle": "Meilleures pratiques",
-      "bestPractice1Title": "Noms clairs",
-      "bestPractice1Body": "Nommez les géofences et les activités de manière à ce que votre équipe les reconnaisse instantanément (Ferme, Lot, Bloc, Tâche).",
-      "bestPractice2Title": "Commencer petit et passer à l'échelle supérieure",
-      "bestPractice2Body": "Validez l'ensemble du flux avec une personne et un périmètre avant de créer des dizaines d'enregistrements.",
-      "bestPractice3Title": "Maintenir les affectations à jour",
-      "bestPractice3Body": "Fermez ou désactivez les anciennes affectations afin que le traceur ne suive que le plan en cours.",
-      "bestPractice4Title": "Batterie et précision",
-      "bestPractice4Body": "Utilisez une fréquence raisonnable. Une fréquence très élevée consomme plus de batterie et de données mobiles.",
-      "resultTitle": "Ce qu'il faut voir",
-      "resultIntro": "Une fois les étapes franchies, votre organisation devrait disposer des éléments suivants :",
-      "resultBullets": [
-        "Au moins 1 géofence enregistrée et visible sur la carte",
-        "Personnel inscrit et prêt à être affecté",
-        "Activités avec devise et taux horaire",
-        "Affectations actives (personne + activité + géofence)",
-        "Points GPS apparaissant dans le tableau de bord Tracker / Tracking",
-        "Rapports sur les coûts et tableau de bord prêts à être exportés et analysés"
-      ]
+      "back": "[FR] Volver",
+      "badge": "[FR] Centro de ayuda",
+      "breadcrumb": "[FR] Centro de Ayuda",
+      "goHome": "[FR] Ir a Inicio",
+      "quickGuideBadge": "[FR] Guía rápida",
+      "viewFaq": "[FR] Ver FAQ"
     },
     "faq": {
-      "title": "Questions fréquemment posées",
-      "subtitle": "Réponses rapides sur les invitations, les rôles, le suivi, les rapports et la confidentialité des données.",
-      "seeQuickGuide": "Voir le guide rapide",
-      "backToPanel": "Accéder au tableau de bord",
+      "backToPanel": "[FR] Ir al panel",
       "sections": [
         {
-          "title": "Accès et rôles",
           "items": [
             {
-              "q": "comment accéder à l'application ?",
-              "a": "Vous devez être invité par un propriétaire/administrateur d'une organisation. Si vous n'avez pas d'accès, demandez à être invité."
+              "a": "[FR] Necesitas una invitación de un Propietario/Admin de una organización. Si no tienes acceso, solicita que te inviten.",
+              "q": "[FR] ¿Cómo obtengo acceso a la app?"
             },
             {
-              "q": "quelle est la différence entre le propriétaire, l'administrateur et le suiveur ?",
-              "a": "Le propriétaire gère l'organisation et les administrateurs. L'administrateur gère les données opérationnelles (géofences, personnel, activités, affectations). Le traqueur est un utilisateur sur le terrain qui envoie des points GPS."
+              "a": "[FR] Propietario gestiona la organización y administradores. Administrador gestiona datos operativos (geocercas, personal, actividades, asignaciones). Tracker es un usuario de campo que envía puntos GPS.",
+              "q": "[FR] ¿Cuál es la diferencia entre Propietario, Administrador y Tracker?"
             },
             {
-              "q": "Puis-je gérer plus d'une organisation ?",
-              "a": "Oui, les propriétaires peuvent travailler avec plusieurs organisations et passer d'une organisation à l'autre en utilisant le sélecteur d'organisation."
+              "a": "[FR] Sí. Los Propietarios pueden trabajar con varias organizaciones y cambiar usando el selector de organización.",
+              "q": "[FR] ¿Puedo manejar más de una organización?"
             }
-          ]
+          ],
+          "title": "[FR] Acceso y roles"
         },
         {
-          "title": "Suivi",
           "items": [
             {
-              "q": "Pourquoi le message \"Pas de données récentes\" apparaît-il dans Tracker ?",
-              "a": "Il se peut que le traqueur soit hors ligne, qu'il n'ait pas d'autorisations de localisation ou qu'il n'ait pas d'affectation active. Vérifiez les autorisations et les affectations."
+              "a": "[FR] El tracker puede estar sin conexión, sin permisos de ubicación, o sin asignación activa. Verifica permisos y asignaciones.",
+              "q": "[FR] ¿Por qué veo “Sin datos recientes” en Tracker?"
             },
             {
-              "q": "quelle est la fréquence d'envoi de la localisation ?",
-              "a": "La fréquence est définie dans l'affectation. Le minimum autorisé est de 5 minutes pour prendre soin de la batterie et des données."
+              "a": "[FR] La frecuencia se define en la asignación. El mínimo permitido es 5 minutos para cuidar batería y datos.",
+              "q": "[FR] ¿Cada cuánto se envía la ubicación?"
             },
             {
-              "q": "fonctionne-t-il avec un signal faible ?",
-              "a": "Oui, le tracker peut stocker des points et se synchroniser lorsque la connectivité est rétablie (en fonction de votre construction et de vos autorisations)."
+              "a": "[FR] Sí. El tracker puede almacenar puntos y sincronizar cuando regresa la conectividad (según tu build y permisos).",
+              "q": "[FR] ¿Funciona con señal débil?"
             }
-          ]
+          ],
+          "title": "[FR] Tracking"
         },
         {
-          "title": "Coûts et rapports",
           "items": [
             {
-              "q": "comment les coûts sont-ils calculés ?",
-              "a": "Les coûts sont calculés sur la base des allocations (heures) et du taux horaire fixé pour chaque activité."
+              "a": "[FR] Los costos se calculan a partir de las asignaciones (horas) y la tarifa por hora configurada en cada actividad.",
+              "q": "[FR] ¿Cómo se calculan los costos?"
             },
             {
-              "q": "puis-je exporter vers Excel ?",
-              "a": "Oui, les rapports sont exportés au format CSV, que vous pouvez ouvrir dans Excel ou Google Sheets."
+              "a": "[FR] Sí. Los reportes se exportan como CSV, que puedes abrir en Excel o Google Sheets.",
+              "q": "[FR] ¿Puedo exportar a Excel?"
             },
             {
-              "q": "puis-je filtrer par géofence, par personne, par activité et par plage de dates ?",
-              "a": "Oui. Utilisez les filtres des rapports et du tableau de bord Coûts pour cibler les géofences, les personnes, les activités et les dates."
+              "a": "[FR] Sí. Usa los filtros en Reportes y Dashboard Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas.",
+              "q": "[FR] ¿Puedo filtrar por geocerca, persona, actividad y rango de fechas?"
             }
-          ]
+          ],
+          "title": "[FR] Costos y reportes"
         },
         {
-          "title": "Données et vie privée",
           "items": [
             {
-              "q": "Quelles sont les données de localisation stockées ?",
-              "a": "Seuls les points nécessaires au suivi et à la validation par géofence. L'accès est contrôlé par les rôles et l'organisation."
+              "a": "[FR] Solo los puntos necesarios para tracking y validación por geocerca. El acceso está controlado por roles y organización.",
+              "q": "[FR] ¿Qué datos de ubicación se guardan?"
             },
             {
-              "q": "Les traqueurs peuvent-ils consulter les données d'autres organisations ?",
-              "a": "Non. Les données sont isolées par organisation (multi-tenant) et protégées par des règles de sécurité de la base de données."
+              "a": "[FR] No. Los datos están aislados por organización (multi-tenant) y protegidos por reglas de seguridad en base de datos.",
+              "q": "[FR] ¿Un tracker puede ver datos de otras organizaciones?"
             }
-          ]
+          ],
+          "title": "[FR] Datos y privacidad"
         }
-      ]
+      ],
+      "seeQuickGuide": "[FR] Ver guía rápida",
+      "subtitle": "[FR] Respuestas rápidas sobre invitaciones, roles, tracking, reportes y privacidad de datos.",
+      "title": "[FR] Preguntas frecuentes"
+    },
+    "instructions": {
+      "bestPractice1Body": "[FR] Nombra geocercas y actividades de forma que tu equipo las reconozca al instante (Finca, Lote, Bloque, Tarea).",
+      "bestPractice1Title": "[FR] Nombres claros",
+      "bestPractice2Body": "[FR] Valida el flujo completo con una persona y una geocerca antes de crear decenas de registros.",
+      "bestPractice2Title": "[FR] Empieza pequeño y escala",
+      "bestPractice3Body": "[FR] Cierra o desactiva asignaciones antiguas para que el tracker siga solo el plan vigente.",
+      "bestPractice3Title": "[FR] Mantén asignaciones al día",
+      "bestPractice4Body": "[FR] Usa una frecuencia razonable. Una frecuencia muy alta consume más batería y datos móviles.",
+      "bestPractice4Title": "[FR] Batería y precisión",
+      "jumpToSteps": "[FR] Ir a pasos",
+      "recommendationBody": "[FR] Empieza con 1 geocerca y 1 tracker. Cuando el flujo funcione, escala a más zonas y personas.",
+      "recommendationTitle": "[FR] Recomendación",
+      "resultBullets": [
+        "[FR] Al menos 1 geocerca guardada y visible en el mapa",
+        "[FR] Personal registrado y listo para asignaciones",
+        "[FR] Actividades con moneda y tarifa por hora configurada",
+        "[FR] Asignaciones activas (persona + actividad + geocerca)",
+        "[FR] Puntos GPS visibles en Tracker / Dashboard de tracking",
+        "[FR] Reportes y dashboard de costos listos para exportar y analizar"
+      ],
+      "resultIntro": "[FR] Al completar los pasos, tu organización debería tener lo siguiente:",
+      "resultTitle": "[FR] Qué deberías ver",
+      "steps": [
+        {
+          "bullets": [
+            "[FR] Usa el selector de organización para elegir dónde vas a trabajar.",
+            "[FR] Si eres Propietario, puedes administrar varias organizaciones."
+          ],
+          "title": "[FR] Selecciona tu organización"
+        },
+        {
+          "bullets": [
+            "[FR] Ve a Geocerca y dibuja el área en el mapa.",
+            "[FR] Pon un nombre claro (Finca A, Lote 3, Planta 1, etc.).",
+            "[FR] Guarda y verifica que aparezca en Geocercas."
+          ],
+          "title": "[FR] Crea tu primera geocerca"
+        },
+        {
+          "bullets": [
+            "[FR] Ve a Personal y crea los registros de las personas que trabajarán.",
+            "[FR] Usa un correo válido si los vas a invitar como trackers."
+          ],
+          "title": "[FR] Registra tu personal"
+        },
+        {
+          "bullets": [
+            "[FR] Ve a Actividades y define tareas (Cosecha, Riego, Mantenimiento…).",
+            "[FR] Configura moneda y tarifa por hora para calcular costos y reportes."
+          ],
+          "title": "[FR] Crea actividades y tarifas"
+        },
+        {
+          "bullets": [
+            "[FR] Ve a Asignaciones y vincula: Persona + Actividad + Geocerca.",
+            "[FR] Define inicio/fin y estado Activa.",
+            "[FR] Configura frecuencia (mínimo 5 minutos)."
+          ],
+          "title": "[FR] Crea asignaciones"
+        },
+        {
+          "bullets": [
+            "[FR] Ve a Invitar tracker y envía invitación por correo.",
+            "[FR] El invitado puede entrar con Link mágico desde el móvil.",
+            "[FR] Al iniciar, el tracker enviará puntos GPS según la asignación."
+          ],
+          "title": "[FR] Invita trackers (teléfonos de campo)"
+        },
+        {
+          "bullets": [
+            "[FR] Abre Reportes para filtrar por geocerca/persona/actividad y descargar CSV.",
+            "[FR] Abre Dashboard Costos para ver KPIs y gráficos."
+          ],
+          "title": "[FR] Revisa reportes y dashboard"
+        }
+      ],
+      "stepsSubtitle": "[FR] Una secuencia práctica que funciona para la mayoría de organizaciones.",
+      "stepsTitle": "[FR] Paso a paso",
+      "subtitle": "[FR] Sigue estos pasos para configurar tu organización, crear geocercas, asignar personal y empezar a trackear.",
+      "tipsTitle": "[FR] Buenas prácticas",
+      "title": "[FR] Guía rápida de configuración",
+      "tocResult": "[FR] Resultado esperado",
+      "tocSteps": "[FR] Pasos",
+      "tocSubtitle": "[FR] Usa estos accesos para navegar la guía.",
+      "tocTips": "[FR] Buenas prácticas",
+      "tocTitle": "[FR] Tabla de contenido",
+      "viewResult": "[FR] Ver resultado"
     },
     "support": {
-      "title": "Soutien",
-      "subtitle": "Contactez-nous pour une assistance technique, des questions de facturation ou une formation.",
-      "emailLabel": "Courrier de soutien",
-      "notConfigured": "Le contact d'assistance n'est pas encore configuré."
+      "emailLabel": "[FR] Correo de soporte",
+      "notConfigured": "[FR] El contacto de soporte aún no está configurado.",
+      "subtitle": "[FR] Contáctanos para soporte técnico, dudas de facturación o capacitación.",
+      "title": "[FR] Soporte"
     }
   },
-  "resetPassword": {
-    "title": "Réinitialiser le mot de passe",
-    "subtitle": "Créez un nouveau mot de passe pour votre compte.",
-    "loading": "Préparation du lien de récupération…",
-    "invalidOrExpired": "Le lien de récupération n'est pas valide ou a expiré. Demandez-en un nouveau.",
-    "noSession": "Il n'y a pas de session valide pour réinitialiser le mot de passe. Veuillez redemander le lien.",
-    "noticeType": "Session détectée. Si ce lien n'était pas un lien de récupération, reconnectez-vous normalement.",
-    "unexpected": "Une erreur s'est produite lors de la préparation de la réinitialisation du mot de passe.",
-    "newPassword": "Nouveau mot de passe",
-    "newPasswordPlaceholder": "Minimum 8 caractères",
-    "confirmPassword": "Confirmer le mot de passe",
-    "confirmPlaceholder": "Répéter",
-    "passwordMin": "Le mot de passe doit comporter au moins 8 caractères.",
-    "passwordMismatch": "Les mots de passe ne correspondent pas.",
-    "saveButton": "Enregistrer le nouveau mot de passe",
-    "saving": "Enregistrement…",
-    "updateFailed": "Le mot de passe n'a pas pu être mis à jour. Veuillez réessayer.",
-    "updateUnexpected": "Erreur inattendue lors de la mise à jour du mot de passe.",
-    "success": "Le mot de passe a été mis à jour avec succès. Vous pouvez maintenant vous connecter.",
-    "backToLogin": "Se reconnecter",
-    "backHome": "Aller à la page d'atterrissage",
-    "tip": "Conseil : retournez à /login, entrez votre adresse électronique et utilisez \"Mot de passe oublié\" pour générer un nouveau lien."
-  },
-  "authInvite": {
-    "title": "Vous êtes invité",
-    "processing": "Validation de l'invitation...",
-    "notInviteLink": "Ce lien n'est pas une invitation valide. Veuillez utiliser le lien d'invitation que vous avez reçu par courrier.",
-    "expiredOrUsed": "L'invitation n'est pas valable, a expiré ou a été utilisée.",
-    "continue": "Continuer",
-    "goToLogin": "Accéder à la connexion",
-    "timeout": "La validation de l'invitation a pris trop de temps. Veuillez réessayer."
-  },
-  "auth": {
-    "processing": "Authentification...",
-    "timeout": "L'authentification a pris trop de temps. Veuillez réessayer.",
-    "invalidOrExpiredLink": "Le lien n'est pas valide, a expiré ou a été utilisé.",
-    "errorTitle": "Échec de l'authentification",
-    "backToLogin": "Retour à la connexion"
-  },
   "home": {
-    "welcome": "Bienvenue sur App Geocercas",
-    "sessionAs": "Session ouverte en tant que",
-    "labels": {
-      "email": "E-mail :",
-      "orgId": "ID de l’organisation :",
-      "organization": "Organisation :",
-      "role": "Rôle :"
-    },
+    "goToLogin": "[FR] Ir a Login",
+    "goDashboard": "[FR] Ir al dashboard",
+    "deleteAccount": "[FR] Eliminar cuenta",
     "help": {
-      "title": "Centre d’aide",
-      "quick": "Guide rapide",
-      "quickDesc": "Apprenez à utiliser l’application étape par étape.",
-      "faq": "Questions fréquentes",
-      "faqDesc": "Réponses aux questions les plus courantes.",
-      "support": "Soutien",
-      "supportDesc": "Vous avez un problème ou une question ? Contactez-nous.",
-      "news": "Nouveautés",
-      "newsDesc": "Changements, améliorations et mises à jour récentes."
+      "faq": "[FR] Preguntas frecuentes",
+      "faqDesc": "[FR] Respuestas a las dudas más comunes.",
+      "news": "[FR] Novedades",
+      "newsDesc": "[FR] Cambios, mejoras y actualizaciones recientes.",
+      "quick": "[FR] Guía rápida",
+      "quickDesc": "[FR] Aprende cómo usar la app paso a paso.",
+      "support": "[FR] Soporte",
+      "supportDesc": "[FR] ¿Tienes un problema o consulta? Contáctanos.",
+      "title": "[FR] Centro de ayuda"
     },
-    "open": "Ouvrir →",
-    "loadingPermissions": "Résolution des autorisations…",
-    "loginToContinue": "Connectez-vous pour continuer.",
-    "goToLogin": "Aller à Connexion",
-    "goDashboard": "Aller au tableau de bord",
-    "deleteAccount": "Supprimer le compte",
-    "missingContextTitle": "Session ouverte, mais contexte manquant",
-    "missingContextBody": "La session existe ({{email}}), mais votre rôle ou votre organisation active n’a pas encore pu être déterminé.",
-    "orgNotResolved": "(non résolue)",
-    "roleEmpty": "(vide)",
-    "retry": "Réessayer"
+    "labels": {
+      "email": "[FR] Email:",
+      "organization": "[FR] Organización:",
+      "orgId": "[FR] Organización ID:",
+      "role": "[FR] Rol:"
+    },
+    "loadingPermissions": "[FR] Resolviendo permisos…",
+    "loginToContinue": "[FR] Inicia sesión para continuar.",
+    "missingContextBody": "[FR] La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
+    "missingContextTitle": "[FR] Sesión iniciada, pero falta contexto",
+    "open": "[FR] Abrir →",
+    "orgNotResolved": "[FR] (no resuelta)",
+    "retry": "[FR] Reintentar",
+    "roleEmpty": "[FR] (vacío)",
+    "sessionAs": "[FR] Sesión iniciada como",
+    "welcome": "[FR] Bienvenido a App Geocercas"
   },
   "deleteAccount": {
-    "title": "Supprimer le compte",
-    "subtitle": "Demandez la suppression définitive de votre compte App Geocercas et des données associées.",
+    "title": "[FR] Eliminar cuenta",
+    "subtitle": "[FR] Solicita la eliminación permanente de tu cuenta de App Geocercas y de los datos asociados.",
     "warning": {
-      "title": "Avertissement",
-      "body": "La suppression de votre compte est définitive et ne peut pas être annulée."
+      "title": "[FR] Advertencia",
+      "body": "[FR] Eliminar tu cuenta es permanente y no se puede deshacer."
     },
     "whatWillBeDeleted": {
-      "title": "Ce qui sera supprimé",
+      "title": "[FR] Qué se eliminará",
       "items": {
-        "accountInfo": "Informations du compte utilisateur",
-        "profileData": "Données du profil personnel",
-        "trackerAssignments": "Attributions des trackers",
-        "gpsRecords": "Enregistrements de localisation GPS",
-        "geofences": "Géorepérages créés par le compte",
-        "activityLogs": "Journaux d’activité liés au compte"
+        "accountInfo": "[FR] Información de la cuenta de usuario",
+        "profileData": "[FR] Datos del perfil personal",
+        "trackerAssignments": "[FR] Asignaciones de trackers",
+        "gpsRecords": "[FR] Registros de ubicación GPS",
+        "geofences": "[FR] Geocercas creadas por la cuenta",
+        "activityLogs": "[FR] Registros de actividad relacionados con la cuenta"
       }
     },
     "retention": {
-      "title": "Note de conservation",
-      "body": "Certaines données limitées peuvent être temporairement conservées lorsque cela est requis pour des raisons de conformité légale, de prévention de la fraude ou de sécurité."
+      "title": "[FR] Nota de retención",
+      "body": "[FR] Algunos datos limitados pueden conservarse temporalmente cuando sea necesario por cumplimiento legal, prevención de fraude o motivos de seguridad."
     },
     "processingTime": {
-      "title": "Délai de traitement",
-      "body": "Les demandes de suppression de compte sont traitées dans les 30 jours suivant la réception de la demande. Une fois le processus terminé, le compte et les données associées ne pourront pas être récupérés."
+      "title": "[FR] Tiempo de procesamiento",
+      "body": "[FR] Las solicitudes de eliminación de cuenta se procesan dentro de los 30 días posteriores a la recepción de la solicitud. Una vez completado el proceso, la cuenta y los datos asociados no podrán recuperarse."
     },
     "account": {
-      "title": "Compte",
-      "signedInAs": "Connecté en tant que :",
-      "unknownUser": "Utilisateur inconnu"
+      "title": "[FR] Cuenta",
+      "signedInAs": "[FR] Sesión iniciada como:",
+      "unknownUser": "[FR] Usuario desconocido"
     },
-    "confirmCheckbox": "Je comprends que cette action est définitive et que les données de mon compte ne pourront pas être récupérées.",
-    "confirmInputLabel": "Tapez DELETE pour confirmer",
-    "confirmKeyword": "DELETE",
-    "submitButton": "Demander la suppression du compte",
-    "submitting": "Envoi...",
-    "successMessage": "Votre demande de suppression a bien été reçue. Votre compte et les données associées seront supprimés dans un délai de 30 jours.",
-    "publicPolicyLink": "Voir la politique publique de suppression",
+    "confirmCheckbox": "[FR] Entiendo que esta acción es permanente y que los datos de mi cuenta no podrán recuperarse.",
+    "confirmInputLabel": "[FR] Escribe DELETE para confirmar",
+    "confirmKeyword": "[FR] DELETE",
+    "submitButton": "[FR] Solicitar eliminación de cuenta",
+    "submitting": "[FR] Enviando...",
+    "successMessage": "[FR] Tu solicitud de eliminación fue recibida. Tu cuenta y los datos asociados se eliminarán dentro de los próximos 30 días.",
+    "publicPolicyLink": "[FR] Ver política pública de eliminación",
     "errors": {
-      "noAuthenticatedUser": "Aucun utilisateur authentifié actif n’a été trouvé.",
-      "confirmationRequired": "Veuillez confirmer l’action et taper \"DELETE\" pour continuer.",
-      "requestFailed": "Impossible de créer la demande de suppression."
+      "noAuthenticatedUser": "[FR] No se encontró un usuario autenticado activo.",
+      "confirmationRequired": "[FR] Confirma la acción y escribe \"DELETE\" para continuar.",
+      "requestFailed": "[FR] No se pudo crear la solicitud de eliminación."
     }
   },
-  "forgot": {
-    "back": "Retour à la connexion",
-    "title": "Réinitialiser le mot de passe",
-    "subtitle": "Nous vous enverrons un lien pour créer un nouveau mot de passe. Si vous ne le recevez pas, veuillez vérifier les SPAM.",
-    "tip": "Conseil : si le lien échoue, générez-en un nouveau et ouvrez-le dans une fenêtre incognito.",
-    "email": "Courriel",
-    "emailPh": "tu@correo.com",
-    "sending": "Envoi…",
-    "send": "Envoyer le lien",
-    "noteTitle": "Note",
-    "noteDesc": "Le lien passera par /auth/callback et vous enverra à /reset-password pour créer le nouveau mot de passe.",
-    "errorEmail": "Veuillez saisir une adresse électronique valide.",
-    "errorGeneric": "Le courrier n'a pas pu être envoyé.",
-    "success": "✅ Si l’e-mail existe, vous recevrez un lien pour créer un nouveau mot de passe. Vérifiez le dossier SPAM et ouvrez-le dans le même navigateur."
+  "inicio": {
+    "cards": {
+      "common": {
+        "soon": "[FR] Próximamente"
+      },
+      "faq": {
+        "badge": "[FR] Ayuda",
+        "body": "[FR] Encuentra respuestas a las dudas más comunes sobre invitaciones, roles, costos y uso del tracker.",
+        "cta": "[FR] Ver preguntas frecuentes",
+        "title": "[FR] Preguntas frecuentes"
+      },
+      "instrucciones": {
+        "badge": "[FR] Guía rápida",
+        "body": "[FR] Sigue paso a paso cómo configurar organizaciones, geocercas, personal, actividades y trackers.",
+        "cta": "[FR] Ver instrucciones",
+        "title": "[FR] Instrucciones"
+      },
+      "novedades": {
+        "badge": "[FR] Novedades",
+        "body": "[FR] Revisa el historial de cambios, nuevas funciones, mejoras y correcciones de la plataforma.",
+        "cta": "[FR] Ver changelog",
+        "title": "[FR] Novedades / Changelog"
+      },
+      "queEs": {
+        "badge": "[FR] Información",
+        "body": "[FR] Conoce la visión, los casos de uso y los beneficios de App Geocercas para tu organización.",
+        "cta": "[FR] Leer más",
+        "title": "[FR] ¿Qué es App Geocercas?"
+      },
+      "soporte": {
+        "badge": "[FR] Soporte",
+        "body": "[FR] ¿Necesitas ayuda? Contáctanos para soporte técnico, facturación o dudas sobre tu cuenta.",
+        "cta": "[FR] Ir a soporte",
+        "title": "[FR] Contacto / Soporte"
+      },
+      "videoDemo": {
+        "badge": "[FR] Video",
+        "body": "[FR] Mira una demostración corta de cómo funciona App Geocercas en la vida real.",
+        "cta": "[FR] Ver video demo",
+        "title": "[FR] Video demo"
+      }
+    },
+    "header": {
+      "badge": "[FR] Centro de ayuda y recursos",
+      "subtitle": "[FR] Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de App Geocercas.",
+      "title": "[FR] Bienvenido a tu panel"
+    },
+    "userInfo": {
+      "connectedAs": "[FR] Conectado como",
+      "inOrg": "[FR] en la organización",
+      "orgIdLabel": "[FR] ID de organización:",
+      "userLabel": "[FR] Usuario:",
+      "withRole": "[FR] con el rol"
+    }
+  },
+  "inviteTracker": {
+    "backToTracker": "[FR] Volver a Tracker",
+    "emailLabel": "[FR] Correo electrónico del tracker",
+    "emailPlaceholder": "[FR] tracker@ejemplo.com",
+    "errors": {
+      "emailInvalid": "[FR] Ingresa un correo electrónico válido.",
+      "emailRequired": "[FR] Debes ingresar un correo electrónico.",
+      "noOrg": "[FR] No se pudo resolver una organización activa para este usuario.",
+      "planBlocked": "[FR] El plan actual de la organización no permite invitaciones de tracker.",
+      "notInOrg": "[FR] Tu usuario no está vinculado a la organización activa.",
+      "inviteErrorPrefix": "[FR] Error al enviar la invitación"
+    },
+    "form": {
+      "buttonSend": "[FR] Enviar invitación",
+      "buttonSending": "[FR] Enviando invitación…",
+      "emailHelp": "[FR] Se enviará una invitación a este correo.",
+      "emailLabel": "[FR] Correo electrónico del tracker",
+      "emailPlaceholder": "[FR] tracker@ejemplo.com",
+      "selectHelp": "[FR] Si seleccionas un personal, su correo se llenará automáticamente.",
+      "selectLabel": "[FR] Selecciona personal vigente (opcional)",
+      "selectPlaceholder": "[FR] -- Seleccionar personal --"
+    },
+    "diag": {
+      "orgUsed": "[FR] Organización usada",
+      "user": "[FR] Usuario",
+      "membersLoaded": "[FR] Miembros cargados"
+    },
+    "empty": {
+      "noMembers": "[FR] No hay personal activo disponible para invitar."
+    },
+    "ok": {
+      "generated": "[FR] Invitación generada correctamente.",
+      "emailSent": "[FR] Correo de invitación enviado correctamente.",
+      "fallbackLink": "[FR] No se pudo enviar el correo. Usa este enlace para compartir el acceso manualmente.",
+      "magicLinkFallback": "[FR] Link mágico generado como respaldo."
+    },
+    "plan": {
+      "validating": "[FR] Validando plan de la organización…",
+      "validationError": "[FR] No se pudo validar el plan de la organización.",
+      "requiresProTitle": "[FR] Plan PRO requerido",
+      "detectedPlan": "[FR] Plan detectado",
+      "freeBlockedBody": "[FR] Las invitaciones de tracker no están disponibles en el plan FREE actual.",
+      "upgradePrompt": "[FR] Actualiza esta organización a PRO para habilitar invitaciones de tracker."
+    },
+    "messages": {
+      "createdWithoutEmail": "[FR] Se creó el acceso del tracker sin enviar correo electrónico.",
+      "genericProcessed": "[FR] La invitación para {{email}} se procesó correctamente.",
+      "invited": "[FR] Se ha enviado una invitación a {{email}} para unirse como tracker en {{orgName}}.",
+      "linkOnlyNoLink": "[FR] La invitación fue creada, pero no se recibió un enlace público.",
+      "linkOnlyWithLink": "[FR] La invitación fue creada. Usa este enlace para compartir el acceso: {{link}}.",
+      "magiclinkSent": "[FR] Se envió un link mágico de acceso a {{email}}.",
+      "notOk": "[FR] No se pudo completar la invitación. Revisa el correo e inténtalo de nuevo.",
+      "serverProblem": "[FR] Hubo un problema al contactar al servidor de invitaciones.",
+      "unexpectedError": "[FR] Error inesperado al procesar la invitación."
+    },
+    "onlyExistingNote": "[FR] Solo se puede invitar a personas existentes en tu organización.",
+    "orgFallback": "[FR] tu organización",
+    "selectPersonLabel": "[FR] Selecciona una persona",
+    "sendInvite": "[FR] Enviar invitación",
+    "subtitle": "[FR] Selecciona un miembro de tu personal o ingresa un correo manualmente para invitarlo como tracker en {{orgName}}.",
+    "title": "[FR] Invitar tracker"
+  },
+  "landing": {
+    "accessBody": "[FR] Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
+    "accessHint": "[FR] Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
+    "accessTitle": "[FR] Acceso con cuenta autorizada",
+    "assistanceControlBody": "[FR] Verifica quién estuvo dentro de cada geocerca, en qué horario y en qué actividad.",
+    "assistanceControlTitle": "[FR] Control de asistencia",
+    "brandName": "[FR] App Geocercas",
+    "brandTagline": "[FR] Control de personal por geocercas",
+    "bulletCostsBody": "[FR] Consulta paneles tipo Power BI con los costos por persona, actividad y geocerca.",
+    "bulletCostsTitle": "[FR] Costos",
+    "bulletGeocercasBody": "[FR] Crea y administra geocercas para tus campos, fincas, plantas o puntos de servicio.",
+    "bulletGeocercasTitle": "[FR] Geocercas",
+    "bulletPersonalBody": "[FR] Registra a tu personal y asígnalo a actividades y zonas específicas.",
+    "bulletPersonalTitle": "[FR] Personal",
+    "ctaLogin": "[FR] Ir al panel de control",
+    "ctaMagic": "[FR] Entrar con link mágico",
+    "email": "[FR] Email",
+    "footerFaq": "[FR] Preguntas frecuentes",
+    "footerPrivacy": "[FR] Privacidad",
+    "footerSupport": "[FR] Soporte",
+    "footerTerms": "[FR] Términos",
+    "goPanel": "[FR] Go to dashboard",
+    "goToDashboard": "[FR] Ir al panel",
+    "heroBadge": "[FR] Control inteligente de campo",
+    "heroSubtitle": "[FR] App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real.",
+    "heroTitle": "[FR] Manage your staff with smart geofences anywhere in the world",
+    "heroTitleHighlight": "[FR] con geocercas inteligentes",
+    "heroTitlePrefix": "[FR] Controla a tu personal",
+    "heroTitleSuffix": "[FR] en cualquier parte del mundo",
+    "invalidEmail": "[FR] Invalid email.",
+    "livePanelLabel": "[FR] Panel en vivo",
+    "livePanelTitle": "[FR] Operaciones en tiempo real",
+    "demoLiveLabel": "[FR] Demo en vivo",
+    "demoOperationsAreaLabel": "[FR] Area de operaciones",
+    "demoLoop10sLabel": "[FR] Loop 10s",
+    "login": "[FR] Sign in",
+    "loginButton": "[FR] Entrar",
+    "logout": "[FR] Salir",
+    "magicEnter": "[FR] Sign in with magic link",
+    "magicLinkError": "[FR] Could not send the link. Please try again.",
+    "magicLinkSent": "[FR] We sent you an access link. Check your email.",
+    "magicNote": "[FR] Important: access works only with the real Magic Link.",
+    "multiOrgBody": "[FR] Administra varias empresas o proyectos desde una sola cuenta, con roles y permisos separados.",
+    "multiOrgTitle": "[FR] Multi organización",
+    "privacyMiniNote": "[FR] Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
+    "quickAccessDesc": "[FR] If you prefer, you can sign in using a Magic Link (no password).",
+    "quickAccessTitle": "[FR] Quick access",
+    "reviewNote": "[FR] Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
+    "rightsReserved": "[FR] Todos los derechos reservados",
+    "sending": "[FR] Sending...",
+    "sendMagic": "[FR] Send magic link",
+    "statusOnline": "[FR] Sistema en línea",
+    "support": "[FR] Support",
+    "zonesActive": "[FR] Zonas activas"
+  },
+  "login": {
+    "advancedOptions": "[FR] Opciones avanzadas",
+    "back": "[FR] Back",
+    "badge": "[FR] (LOGIN-V31 NO-JS)",
+    "email": "[FR] Email",
+    "emailLabel": "[FR] Correo electrónico",
+    "emailPlaceholder": "[FR] tucorreo@ejemplo.com",
+    "errorInvalidCredentials": "[FR] Credenciales inválidas.",
+    "errorMagicLink": "[FR] No se pudo enviar el link mágico.",
+    "errorMagicLinkUnexpected": "[FR] Error inesperado al enviar el link mágico.",
+    "errorMissingCredentials": "[FR] Faltan usuario o contraseña.",
+    "errorMissingEmail": "[FR] Debes ingresar un correo.",
+    "errorResetPassword": "[FR] No se pudo enviar el correo de recuperación.",
+    "errorResetPasswordUnexpected": "[FR] Error inesperado al enviar el correo de recuperación.",
+    "errors": {
+      "invalidEmail": "[FR] Ingresa un correo electrónico válido.",
+      "unknown": "[FR] Ocurrió un error al iniciar sesión."
+    },
+    "errorUnexpected": "[FR] Error inesperado al iniciar sesión.",
+    "forgotPassword": "[FR] ¿Olvidaste tu contraseña?",
+    "forgotPasswordAlt": "[FR] ¿Prefieres restablecer tu contraseña? (enviar correo)",
+    "goToDashboard": "[FR] Ir al panel",
+    "info": "[FR] Stable WebView/TWA login: native submit (no JS events), anti rate-limit by design.",
+    "infoMagicLinkSent": "[FR] Hemos enviado un link mágico a tu correo.",
+    "infoResetPasswordSent": "[FR] Te enviamos un correo para restablecer tu contraseña. Revisa la bandeja de entrada.",
+    "loadingSession": "[FR] Cargando tu sesión…",
+    "magicButton": "[FR] Enviar link mágico",
+    "magicDescription": "[FR] Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña.",
+    "magicLinkButton": "[FR] Enviar link mágico",
+    "magicLinkDescription": "[FR] Te enviaremos un enlace seguro a tu correo para entrar sin contraseña.",
+    "magicLinkSent": "[FR] Hemos enviado un link mágico a tu correo.",
+    "magicLinkTitle": "[FR] Entrar con link mágico",
+    "magicSubmitting": "[FR] Enviando enlace…",
+    "modeDesc": "[FR] If login is correct, the server redirects to /auth/callback with tokens.",
+    "modeMagic": "[FR] Link mágico",
+    "modePassword": "[FR] Contraseña",
+    "modeTitle": "[FR] Mode: NO-JS (native form submit)",
+    "password": "[FR] Password",
+    "passwordLabel": "[FR] Contraseña",
+    "passwordLoginButton": "[FR] Entrar con contraseña",
+    "passwordPlaceholder": "[FR] Ingresa tu contraseña",
+    "sessionActive": "[FR] Ya tienes una sesión activa.",
+    "submit": "[FR] Entrar",
+    "submitting": "[FR] Ingresando…",
+    "subtitle": "[FR] Accede a tu cuenta de App Geocercas",
+    "title": "[FR] Iniciar sesión",
+    "userNotAuthorized": "[FR] Este correo no está autorizado. Solicita una invitación al administrador."
+  },
+  "personal": {
+    "bannerCreated": "[FR] Personal creado exitosamente.",
+    "bannerDeletedOk": "[FR] Registro eliminado correctamente.",
+    "bannerEditMode": "[FR] Modo edición.",
+    "bannerLoadingSession": "[FR] Cargando sesión…",
+    "bannerLoginRequired": "[FR] Debes iniciar sesión para acceder a esta sección.",
+    "bannerNewMode": "[FR] Modo creación de personal.",
+    "bannerRefreshedOk": "[FR] Datos actualizados correctamente.",
+    "bannerSelected": "[FR] Registro seleccionado.",
+    "bannerUpdated": "[FR] Personal actualizado correctamente.",
+    "buttonDelete": "[FR] Eliminar",
+    "buttonEdit": "[FR] Editar",
+    "buttonFullList": "[FR] Ver todo",
+    "buttonNew": "[FR] Nuevo",
+    "buttonRefresh": "[FR] Actualizar",
+    "buttonSave": "[FR] Guardar",
+    "confirmDelete": "[FR] ¿Está seguro que desea eliminar este registro? (soft delete)",
+    "errorDelete": "[FR] No se pudo eliminar el registro.",
+    "errorDeleteNoRows": "[FR] No se pudo eliminar: el registro no existe o ya fue eliminado.",
+    "errorLoad": "[FR] Error al cargar el personal.",
+    "errorMissingEmail": "[FR] El email es requerido.",
+    "errorMissingName": "[FR] El nombre es requerido.",
+    "errorMissingUser": "[FR] No se pudo obtener el usuario autenticado.",
+    "errorMustSelectForDelete": "[FR] Debes seleccionar un registro para eliminarlo.",
+    "errorMustSelectForEdit": "[FR] Debes seleccionar un registro para editarlo.",
+    "errorNoAuthUser": "[FR] No existe un usuario autenticado.",
+    "errorNoPermissionCreate": "[FR] No tienes permisos para crear personal.",
+    "errorNoPermissionDelete": "[FR] No tienes permisos para eliminar personal.",
+    "errorNoPermissionEdit": "[FR] No tienes permisos para editar personal.",
+    "errorNoPermissionSave": "[FR] No tienes permisos para guardar cambios.",
+    "errorPhonePolicy": "[FR] El teléfono debe comenzar con + (formato internacional E.164).",
+    "errorSave": "[FR] No se pudo guardar el personal.",
+    "errorSaveNoRecord": "[FR] No se recibió registro actualizado.",
+    "fieldActive": "[FR] Activo",
+    "fieldEmail": "[FR] Correo",
+    "fieldLastName": "[FR] Apellido",
+    "fieldName": "[FR] Nombre",
+    "fieldPhonePlaceholder": "[FR] Teléfono (+593…)",
+    "formTitleEdit": "[FR] Editar personal",
+    "formTitleNew": "[FR] Nuevo personal",
+    "no": "[FR] No",
+    "onlyActive": "[FR] Solo activos",
+    "orgFallback": "[FR] Sin organización",
+    "orgInfoLabel": "[FR] Organización:",
+    "pillCanEdit": "[FR] Editable",
+    "pillReadOnly": "[FR] Solo lectura",
+    "processing": "[FR] Procesando…",
+    "roleLabel": "[FR] Rol:",
+    "searchPlaceholder": "[FR] Buscar por nombre, apellido, email o teléfono…",
+    "table": {
+      "columns": {
+        "active": "[FR] Activo",
+        "email": "[FR] Correo",
+        "end": "[FR] Fin",
+        "firstName": "[FR] Nombre",
+        "lastName": "[FR] Apellido",
+        "phone": "[FR] Teléfono",
+        "start": "[FR] Inicio"
+      },
+      "loading": "[FR] Cargando…",
+      "noActive": "[FR] No hay personal activo."
+    },
+    "tableActive": "[FR] Activo",
+    "tableEmail": "[FR] Correo",
+    "tableLastName": "[FR] Apellido",
+    "tableName": "[FR] Nombre",
+    "tableNoResults": "[FR] No se encontraron resultados.",
+    "tablePhone": "[FR] Teléfono",
+    "title": "[FR] Personal",
+    "yes": "[FR] Sí"
+  },
+  "reportes": {
+    "activityNoName": "[FR] Actividad sin nombre",
+    "buttonDownloadCsv": "[FR] Descargar CSV",
+    "colActividad": "[FR] Actividad",
+    "colCosto": "[FR] Costo",
+    "colFin": "[FR] Fin",
+    "colGeocerca": "[FR] Geocerca",
+    "colHoras": "[FR] Horas",
+    "colInicio": "[FR] Inicio",
+    "colMoneda": "[FR] Moneda",
+    "colPersona": "[FR] Persona",
+    "colTarifa": "[FR] Tarifa/hora",
+    "csvHeaderActividad": "[FR] Actividad",
+    "csvHeaderCosto": "[FR] Costo_total",
+    "csvHeaderFin": "[FR] Fin",
+    "csvHeaderGeocerca": "[FR] Geocerca",
+    "csvHeaderHoras": "[FR] Horas",
+    "csvHeaderInicio": "[FR] Inicio",
+    "csvHeaderMoneda": "[FR] Moneda",
+    "csvHeaderPersona": "[FR] Persona",
+    "csvHeaderTarifa": "[FR] Tarifa_hora",
+    "csvHeaderTotal": "[FR] Costo_total",
+    "errorCsv": "[FR] No se pudo generar el archivo CSV.",
+    "errorLabel": "[FR] Error:",
+    "errorLoad": "[FR] Error al cargar los reportes.",
+    "errorLoadFilters": "[FR] Error al cargar filtros (personas, actividades, geocercas).",
+    "errorLoadReport": "[FR] Error al cargar el reporte de costos.",
+    "errorRangeInvalid": "[FR] La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
+    "errorViewMissing": "[FR] La vista v_costos_detalle aún no está creada en Supabase.",
+    "exportNoData": "[FR] No hay datos para exportar.",
+    "filters": {
+      "activityLabel": "[FR] Actividad",
+      "apply": "[FR] Aplicar filtros",
+      "clear": "[FR] Limpiar filtros",
+      "dateFromLabel": "[FR] Desde",
+      "dateToLabel": "[FR] Hasta",
+      "geofenceLabel": "[FR] Geocerca",
+      "personLabel": "[FR] Persona"
+    },
+    "filtersActivity": "[FR] Actividad",
+    "filtersAll": "[FR] Todos",
+    "filtersApply": "[FR] Aplicar filtros",
+    "filtersClear": "[FR] Limpiar filtros",
+    "filtersFrom": "[FR] Desde",
+    "filtersGeofence": "[FR] Geocerca",
+    "filtersPerson": "[FR] Persona",
+    "filtersTitle": "[FR] Filtros",
+    "filtersTo": "[FR] Hasta",
+    "geofenceNoName": "[FR] Geocerca sin nombre",
+    "headerSubtitle": "[FR] Consulta y exporta los costos por persona, actividad y geocerca.",
+    "loadingReport": "[FR] Cargando reporte…",
+    "noAccessBody": "[FR] No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
+    "personNoName": "[FR] Persona sin nombre",
+    "summaryRecordsHelp": "[FR] Cantidad de filas que cumplen con los filtros actuales.",
+    "summaryRecordsLabel": "[FR] Registros",
+    "summaryTotalCostHelp": "[FR] Suma de los costos calculados por persona, actividad y geocerca.",
+    "summaryTotalCostLabel": "[FR] Costo total",
+    "summaryTotalHoursHelp": "[FR] Suma de las horas de todas las asignaciones en el rango seleccionado.",
+    "summaryTotalHoursLabel": "[FR] Horas totales",
+    "table": {
+      "activity": "[FR] Actividad",
+      "currency": "[FR] Moneda",
+      "end": "[FR] Fin",
+      "geofence": "[FR] Geocerca",
+      "hours": "[FR] Horas",
+      "noResults": "[FR] No se encontraron registros para los filtros seleccionados.",
+      "person": "[FR] Persona",
+      "rate": "[FR] Tarifa/hora",
+      "start": "[FR] Inicio",
+      "title": "[FR] Detalle de costos",
+      "total": "[FR] Costo total"
+    },
+    "tableEmpty": "[FR] No hay registros para los filtros seleccionados.",
+    "tableExportButton": "[FR] Exportar CSV",
+    "tableExportHelp": "[FR] Exporta el detalle actual como archivo CSV.",
+    "tableTitle": "[FR] Detalle de costos",
+    "title": "[FR] Reportes de costos"
+  },
+  "resetPassword": {
+    "backHome": "[FR] Ir a la landing",
+    "backToLogin": "[FR] Volver a iniciar sesión",
+    "confirmPassword": "[FR] Confirmar contraseña",
+    "confirmPlaceholder": "[FR] Repite",
+    "invalidOrExpired": "[FR] El enlace de recuperación es inválido o expiró. Solicita uno nuevo.",
+    "loading": "[FR] Preparando enlace de recuperación…",
+    "newPassword": "[FR] Nueva contraseña",
+    "newPasswordPlaceholder": "[FR] Mínimo 8 caracteres",
+    "noSession": "[FR] No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar una.",
+    "noticeType": "[FR] Sesión detectada. Si este enlace no era de recuperación, vuelve a iniciar sesión normalmente.",
+    "passwordMin": "[FR] La contraseña debe tener al menos 8 caracteres.",
+    "passwordMismatch": "[FR] Las contraseñas no coinciden.",
+    "saveButton": "[FR] Guardar nueva contraseña",
+    "saving": "[FR] Guardando…",
+    "subtitle": "[FR] Crea una nueva contraseña para tu cuenta.",
+    "success": "[FR] Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
+    "tip": "[FR] Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace.",
+    "title": "[FR] Restablecer contraseña",
+    "unexpected": "[FR] Ocurrió un error al preparar el restablecimiento de contraseña.",
+    "updateFailed": "[FR] No se pudo actualizar la contraseña. Intenta nuevamente.",
+    "updateUnexpected": "[FR] Error inesperado al actualizar la contraseña."
+  },
+  "tracker": {
+    "controls": {
+      "centerOnUser": "[FR] Centrar en mi posición",
+      "refresh": "[FR] Refrescar posiciones",
+      "showAll": "[FR] Mostrar todos",
+      "showInside": "[FR] Solo dentro de geocercas"
+    },
+    "errorLoad": "[FR] Error al cargar las posiciones de tracker.",
+    "legend": {
+      "geofence": "[FR] Geocerca",
+      "insideFence": "[FR] Dentro de geocerca",
+      "outsideFence": "[FR] Fuera de geocerca"
+    },
+    "status": {
+      "offline": "[FR] Sin datos recientes",
+      "online": "[FR] Tracker en línea"
+    },
+    "subtitle": "[FR] Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
+    "table": {
+      "activity": "[FR] Actividad",
+      "geofence": "[FR] Geocerca",
+      "noResults": "[FR] No hay posiciones registradas.",
+      "person": "[FR] Persona",
+      "status": "[FR] Estado",
+      "timestamp": "[FR] Fecha/hora",
+      "title": "[FR] Últimas posiciones"
+    },
+    "title": "[FR] Tracker GPS"
+  },
+  "table": {
+    "name": "[FR] Nombre",
+    "status": "[FR] Estado",
+    "lastPosition": "[FR] Última posición",
+    "lastUpdate": "[FR] Última actualización"
+  },
+  "status": {
+    "online": "[FR] En línea",
+    "stale": "[FR] Desactualizado",
+    "offline": "[FR] Sin conexión"
+  },
+  "map": {
+    "coordinates": "[FR] Coordenadas",
+    "lat": "[FR] Lat",
+    "lng": "[FR] Lng",
+    "legend": "[FR] Leyenda"
+  },
+  "trackerDashboard": {
+    "title": "[FR] Tracker Dashboard",
+    "timeWindows": {
+      "1h": "[FR] 1 hora",
+      "6h": "[FR] 6 horas",
+      "12h": "[FR] 12 horas",
+      "24h": "[FR] 24 horas"
+    },
+    "sections": {
+      "filters": "[FR] Filtros",
+      "diagnostics": "[FR] Diagnóstico",
+      "map": "[FR] Mapa"
+    },
+    "labels": {
+      "window": "[FR] Ventana",
+      "tracker": "[FR] Tracker",
+      "geofences": "[FR] Geocercas",
+      "all": "[FR] Todos",
+      "activeOrg": "[FR] Org activa",
+      "activeOrgDebug": "[FR] Org (Activa)",
+      "detectedPlan": "[FR] Plan detectado"
+    },
+    "actions": {
+      "resolveOrgAgain": "[FR] Re-resolver org (RPC)",
+      "refresh": "[FR] Actualizar",
+      "loading": "[FR] Cargando…",
+      "centerGeofence": "[FR] Centrar geocerca"
+    },
+    "states": {
+      "validatingPlan": "[FR] Validando plan de la organización...",
+      "planValidationFailed": "[FR] No se pudo validar el plan de la organización.",
+      "moduleUnavailable": "[FR] Este módulo no está disponible en el plan actual de la organización.",
+      "requiresPro": "[FR] El dashboard de tracking requiere PRO o superior.",
+      "upgradeHint": "[FR] Haz upgrade para visualizar posiciones, rutas y geocercas desde este panel.",
+      "upgradeOrgPrompt": "[FR] Actualiza esta organización para habilitar Tracker Dashboard.",
+      "resolvingActiveOrg": "[FR] Resolviendo organización activa…"
+    },
+    "messages": {
+      "loadAssignmentsError": "[FR] Error cargando asignaciones (tracker_assignments).",
+      "loadGeofencesError": "[FR] Error al cargar geocercas (geofences).",
+      "loadPositionsError": "[FR] Error al cargar posiciones.",
+      "noActiveAssignments": "[FR] No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).",
+      "noActiveGeofencesForAssignments": "[FR] Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org ({{orgId}}).",
+      "fallbackGeofenceShown": "[FR] No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío.",
+      "noActiveGeofencesForOrg": "[FR] No hay geocercas activas disponibles para esta org ({{orgId}}).",
+      "noVisibleGeofences": "[FR] No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).",
+      "orgResolveError": "[FR] Error resolviendo org"
+    },
+    "badges": {
+      "assignments": "[FR] assignments",
+      "trackers": "[FR] trackers",
+      "geofences": "[FR] geocercas",
+      "polys": "[FR] polys",
+      "circles": "[FR] circles",
+      "positions": "[FR] posiciones",
+      "source": "[FR] src",
+      "assignedIds": "[FR] assignedIds",
+      "selected": "[FR] selected",
+      "bounds": "[FR] bounds",
+      "viewport": "[FR] viewport",
+      "intersects": "[FR] intersects"
+    },
+    "map": {
+      "initializing": "[FR] Inicializando mapa…",
+      "statusPrefix": "[FR] map",
+      "circleLabel": "[FR] {{name}} (círculo)"
+    },
+    "tooltip": {
+      "tracker": "[FR] Tracker",
+      "time": "[FR] Hora",
+      "lat": "[FR] Lat",
+      "lng": "[FR] Lng",
+      "accuracy": "[FR] Acc",
+      "speed": "[FR] Vel",
+      "source": "[FR] Src"
+    },
+    "multiGeofence": {
+      "labelBase": "[FR] Geocercas",
+      "labelNone": "[FR] Geocercas: Ninguna",
+      "labelAll": "[FR] Geocercas: Todas ({{count}})",
+      "labelSelected": "[FR] Geocercas: {{count}}",
+      "searchPlaceholder": "[FR] Buscar geocerca…",
+      "showAll": "[FR] Mostrar todas",
+      "hideAll": "[FR] Ocultar todas",
+      "noResults": "[FR] Sin resultados…",
+      "close": "[FR] Cerrar"
+    }
+  },
+  "trackerGps": {
+    "title": "[FR] Tracker GPS",
+    "lastSend": "[FR] Último envío",
+    "waitingCoords": "[FR] Esperando coordenadas…",
+    "debugCopyPaste": "[FR] Debug (copiar/pegar)",
+    "stateLabel": "[FR] Estado",
+    "onlyInvited": "[FR] Esta página es solo para trackers invitados.",
+    "goHome": "[FR] Ir al inicio",
+    "status": {
+      "initializing": "[FR] Iniciando tracker…",
+      "processingMagicLink": "[FR] Procesando Magic Link del Tracker…",
+      "sessionOkPreparing": "[FR] Sesión OK. Preparando tracker…",
+      "readingSession": "[FR] Leyendo sesión del tracker…",
+      "noSession": "[FR] No hay una sesión activa del tracker.",
+      "noGeolocation": "[FR] Este dispositivo no soporta geolocalización.",
+      "active": "[FR] Tracker activo",
+      "activating": "[FR] Activando tracker en la organización…",
+      "noPermission": "[FR] Tracker sin permiso / onboarding",
+      "gpsError": "[FR] Error de GPS"
+    },
+    "errors": {
+      "notConfigured": "[FR] El tracker no está configurado en este deployment.",
+      "noSupabaseClient": "[FR] No se encontró el cliente principal de Supabase.",
+      "setSession": "[FR] Error en setSession:",
+      "hashSession": "[FR] Error de sesión por hash:",
+      "openFromMagicLinkOnly": "[FR] Abre esta página solo desde tu Magic Link de Tracker.",
+      "geolocationUnavailable": "[FR] Geolocalización no disponible."
+    },
+    "membership": {
+      "missingOrgId": "[FR] Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps?org_id=<ORG_ID>.",
+      "checking": "[FR] Verificando membresía…",
+      "noValidTokenUser": "[FR] No hay token/usuario válido en /tracker-gps.",
+      "okSessionCache": "[FR] Membresía OK (cache de sesión).",
+      "membershipsSelectError": "[FR] Error en select de memberships:",
+      "alreadyExists": "[FR] La membresía ya existe: role={{role}}",
+      "runningAccept": "[FR] No existe membresía. Ejecutando accept-tracker-invite",
+      "acceptError": "[FR] Error de accept-tracker-invite:",
+      "membershipsRecheckError": "[FR] Error de revalidación de memberships:",
+      "acceptReturnedButNotCreated": "[FR] accept-tracker-invite devolvió OK pero la membresía no fue creada.",
+      "acceptOk": "[FR] accept-tracker-invite OK.",
+      "onboardingException": "[FR] Excepción en onboarding:"
+    },
+    "disclosure": {
+      "title": "[FR] Ubicación en segundo plano",
+      "body1": "[FR] App Geocercas recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
+      "body2": "[FR] Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión.",
+      "continue": "[FR] Continuar"
+    },
+    "debugLabels": {
+      "send": "[FR] send",
+      "accept": "[FR] accept",
+      "orgId": "[FR] org_id",
+      "membership": "[FR] membership",
+      "tokenIss": "[FR] token_iss",
+      "tokenTtlSec": "[FR] token_ttl_sec",
+      "lastHttpStatus": "[FR] last_http_status",
+      "lat": "[FR] lat",
+      "lng": "[FR] lng",
+      "acc": "[FR] acc"
+    }
   },
   "pricing": {
     "common": {
-      "currentPlan": "Plan actuel",
-      "loading": "Chargement...",
-      "unlimited": "Illimitées"
+      "currentPlan": "[FR] Plan actual",
+      "loading": "[FR] Cargando...",
+      "unlimited": "[FR] Ilimitadas"
     },
     "actions": {
-      "goToBilling": "Aller à la facturation",
-      "contactSales": "Contacter les ventes"
+      "goToBilling": "[FR] Ir a Billing",
+      "contactSales": "[FR] Contactar ventas"
     },
     "page": {
-      "title": "Plans et tarifs",
+      "title": "[FR] Planes y precios",
       "previewNotice": {
-        "prefix": "Cet écran fonctionne en",
-        "middle": "et réutilise Stripe en mode",
-        "suffix": "Cela n'affecte pas la production."
+        "prefix": "[FR] Esta pantalla trabaja en",
+        "middle": "[FR] y reutiliza Stripe en modo",
+        "suffix": "[FR] No afecta producción."
       }
     },
     "summary": {
-      "detectedPlan": "Plan détecté",
-      "maxGeofences": "Max. géorepérages",
-      "maxTrackers": "Max. trackers"
+      "detectedPlan": "[FR] Plan detectado",
+      "maxGeofences": "[FR] Máx. geocercas",
+      "maxTrackers": "[FR] Máx. trackers"
     },
     "free": {
-      "title": "Free",
-      "subtitle": "Pour commencer",
-      "price": "$0",
-      "description": "Conçu pour valider l'utilisation initiale de la plateforme.",
-      "currentPlanMessage": "Vous utilisez déjà le plan Free.",
+      "title": "[FR] Free",
+      "subtitle": "[FR] Para comenzar",
+      "price": "[FR] $0",
+      "description": "[FR] Pensado para validar el uso inicial de la plataforma.",
+      "currentPlanMessage": "[FR] Ya estás usando el plan Free.",
       "features": {
-        "validateFlow": "Idéal pour démarrer et valider le flux de base",
-        "upToTrackers": "Jusqu'à {{count}} tracker",
-        "geofenceLimits": "Géorepérages avec limite selon le plan",
-        "billingAndUpgrade": "Accès à la facturation et futur parcours de mise à niveau",
-        "backendEnforcement": "Le backend applique toujours le contrôle réel"
+        "validateFlow": "[FR] Ideal para empezar y validar el flujo base",
+        "upToTrackers": "[FR] Hasta {{count}} tracker",
+        "geofenceLimits": "[FR] Geocercas con límite por plan",
+        "billingAndUpgrade": "[FR] Acceso a Billing y futura ruta de upgrade",
+        "backendEnforcement": "[FR] Backend sigue aplicando enforcement real"
       }
     },
     "pro": {
-      "title": "Pro",
-      "subtitle": "Opération SaaS active",
-      "price": "Stripe TEST",
-      "description": "Plan recommandé pour activer le module Tracker et fonctionner avec abonnement.",
-      "higherPlanMessage": "Votre organisation dispose déjà d'un plan supérieur ou différent de Free.",
-      "reviewBillingMessage": "Consultez la facturation pour le gérer.",
+      "title": "[FR] Pro",
+      "subtitle": "[FR] Operación SaaS activa",
+      "price": "[FR] Stripe TEST",
+      "description": "[FR] Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
+      "higherPlanMessage": "[FR] Tu organización ya tiene un plan superior o distinto de Free.",
+      "reviewBillingMessage": "[FR] Revisa Billing para administrarlo.",
       "features": {
-        "upToTrackers": "Jusqu'à {{count}} trackers par organisation",
-        "upToGeofences": "Jusqu'à {{count}} géorepérages",
-        "trackerEnabled": "Module Tracker activé",
-        "invitesEnabled": "Invitation des trackers activée",
-        "stripeSelfManaged": "Abonnement autogéré avec Stripe"
+        "upToTrackers": "[FR] Hasta {{count}} trackers por organización",
+        "upToGeofences": "[FR] Hasta {{count}} geocercas",
+        "trackerEnabled": "[FR] Módulo Tracker habilitado",
+        "invitesEnabled": "[FR] Invitación de trackers habilitada",
+        "stripeSelfManaged": "[FR] Suscripción autogestionable con Stripe"
       }
     },
     "enterprise": {
-      "title": "Enterprise",
-      "subtitle": "Vente assistée",
-      "price": "Sur mesure",
-      "description": "Pour les organisations nécessitant des conditions commerciales spéciales.",
+      "title": "[FR] Enterprise",
+      "subtitle": "[FR] Venta asistida",
+      "price": "[FR] A medida",
+      "description": "[FR] Para organizaciones que requieren condiciones comerciales especiales.",
       "features": {
-        "salesOnboarding": "Accompagnement commercial et onboarding guidé",
-        "flexibleLimits": "Limites et conditions ajustables",
-        "multiTeamReady": "Préparé pour une opération avec plusieurs équipes",
-        "specialAgreements": "Montée en charge commerciale et accords spéciaux",
-        "directSalesContact": "Contact direct avec les ventes"
+        "salesOnboarding": "[FR] Atención comercial y onboarding guiado",
+        "flexibleLimits": "[FR] Límites y condiciones ajustables",
+        "multiTeamReady": "[FR] Preparado para operación con múltiples equipos",
+        "specialAgreements": "[FR] Escalamiento comercial y acuerdos especiales",
+        "directSalesContact": "[FR] Contacto directo con ventas"
       }
     },
     "notes": {
-      "title": "Notes de cette phase",
-      "backendAuthority": "Le backend reste l'autorité réelle du plan. Cette page reflète seulement le plan et affiche les actions commerciales disponibles.",
-      "proCheckout": "La mise à niveau vers Pro réutilise le flux Stripe Checkout existant. La gestion de l'abonnement utilise Stripe Customer Portal.",
-      "enterpriseSales": "Enterprise est présenté comme canal commercial, sans activer de checkout automatique."
+      "title": "[FR] Notas de esta fase",
+      "backendAuthority": "[FR] El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
+      "proCheckout": "[FR] El upgrade a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
+      "enterpriseSales": "[FR] Enterprise queda presentado como canal comercial, sin activar checkout automático."
     }
   },
   "billing": {
-    "title": "Facturation",
-    "authRequired": "Connectez-vous pour gérer votre abonnement.",
+    "title": "[FR] Facturación",
+    "authRequired": "[FR] Inicia sesión para administrar tu plan.",
     "previewNotice": {
-      "prefix": "Monétisation en",
-      "middle": "(Stripe TEST).",
-      "suffix": "Cela n'affecte pas la production."
+      "prefix": "[FR] Monetización en",
+      "middle": "[FR] (Stripe TEST).",
+      "suffix": "[FR] No afecta producción."
     },
     "actions": {
-      "viewPlans": "Voir les plans"
+      "viewPlans": "[FR] Ver planes"
     },
     "labels": {
-      "email": "Email",
-      "orgId": "ID d’organisation"
+      "email": "[FR] Email",
+      "orgId": "[FR] ID de organización"
     },
     "planState": {
-      "title": "État du plan"
+      "title": "[FR] Estado del plan"
     },
     "states": {
-      "loadingPlanStatus": "Chargement de l’état du plan..."
+      "loadingPlanStatus": "[FR] Cargando estado del plan..."
     },
     "errors": {
-      "loadPlanStatus": "Impossible de charger l’état du plan."
+      "loadPlanStatus": "[FR] No se pudo cargar el estado del plan."
     },
     "cards": {
-      "currentPlan": "Plan actuel",
-      "status": "Statut",
-      "trialUntil": "Essai jusqu’au",
-      "currentPeriodUntil": "Période actuelle jusqu’au"
+      "currentPlan": "[FR] Plan actual",
+      "status": "[FR] Estado",
+      "trialUntil": "[FR] Prueba hasta",
+      "currentPeriodUntil": "[FR] Periodo actual hasta"
     },
     "subscriptionManagement": {
-      "title": "Gestion de l’abonnement",
-      "description": "Ouvrez le portail client Stripe pour mettre à jour votre carte, annuler ou consulter votre abonnement."
+      "title": "[FR] Gestión de suscripción",
+      "description": "[FR] Abre el portal de clientes de Stripe para actualizar tu tarjeta, cancelar o revisar tu suscripción."
     },
     "messages": {
-      "cancelAtPeriodEnd": "Votre abonnement est configuré pour être annulé à la fin de la période actuelle.",
-      "activePlanExists": "Il existe déjà un plan actif pour cette organisation. Le bouton de mise à niveau n’est pas affiché."
+      "cancelAtPeriodEnd": "[FR] Tu suscripción está configurada para cancelarse al final del periodo actual.",
+      "activePlanExists": "[FR] Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
     },
     "compareBeforeUpgrade": {
-      "title": "Voulez-vous comparer avant de passer à un niveau supérieur ?",
-      "description": "Consultez la page des plans pour comparer Free, Pro et Enterprise."
+      "title": "[FR] ¿Quieres comparar antes de actualizar?",
+      "description": "[FR] Revisa la página de planes para comparar Free, Pro y Enterprise."
     },
     "status": {
-      "trialing": "Essai",
-      "active": "Actif",
-      "pastDue": "Paiement en retard",
-      "canceled": "Annulé",
-      "free": "Gratuit"
+      "trialing": "[FR] Prueba",
+      "active": "[FR] Activo",
+      "pastDue": "[FR] Pago vencido",
+      "canceled": "[FR] Cancelado",
+      "free": "[FR] Gratis"
     }
   },
   "reports": {
-    "title": "Rapports",
-    "currentOrg": "Organisation actuelle",
-    "sessionLoading": "Chargement de votre session…",
-    "noActiveSession": "Aucune session active. Veuillez vous reconnecter.",
-    "noActiveOrg": "Aucune organisation active pour cet utilisateur.",
+    "title": "[FR] Reportes",
+    "currentOrg": "[FR] Org actual",
+    "sessionLoading": "[FR] Cargando tu sesión…",
+    "noActiveSession": "[FR] No hay sesión activa. Inicia sesión nuevamente.",
+    "noActiveOrg": "[FR] No hay organización activa para este usuario.",
     "filters": {
-      "title": "Filtres",
-      "subtitle": "Sélectionnez des plages et des listes. Ensuite, appuyez sur Générer.",
-      "reloadLists": "Recharger les listes",
-      "reloadFilters": "Recharger les filtres",
-      "clearSelections": "Effacer les sélections",
-      "clearSelectionsTitle": "Effacer les sélections (ne supprime pas les dates)",
-      "from": "De",
-      "to": "À",
-      "generate": "Générer",
-      "generating": "Génération…",
-      "exportCsv": "Exporter CSV",
-      "tipLabel": "Astuce :",
-      "tipMultiSelect": "Dans les listes multi-sélection, utilisez Ctrl (Windows) / Commande (Mac) pour sélectionner plusieurs éléments.",
-      "geofences": "Géofences",
-      "people": "Personnes",
-      "activities": "Activités",
-      "assignments": "Affectations",
-      "multi": "(multi)",
-      "assignmentFallback": "affectation",
-      "assignmentNote": "Remarque : si vos affectations ne contiennent pas personal_id, le croisement avec les pointages peut revenir vide."
+      "title": "[FR] Filtros",
+      "subtitle": "[FR] Selecciona rangos y listas. Luego presiona Generar.",
+      "reloadLists": "[FR] Recargar listas",
+      "reloadFilters": "[FR] Recargar filtros",
+      "clearSelections": "[FR] Limpiar selecciones",
+      "clearSelectionsTitle": "[FR] Limpiar selecciones (no borra fechas)",
+      "from": "[FR] Desde",
+      "to": "[FR] Hasta",
+      "generate": "[FR] Generar",
+      "generating": "[FR] Generando…",
+      "exportCsv": "[FR] Exportar CSV",
+      "tipLabel": "[FR] Tip:",
+      "tipMultiSelect": "[FR] En listas multi-select usa Ctrl (Windows) / Command (Mac) para seleccionar múltiples.",
+      "geofences": "[FR] Geocercas",
+      "people": "[FR] Personas",
+      "activities": "[FR] Actividades",
+      "assignments": "[FR] Asignaciones",
+      "multi": "[FR] (multi)",
+      "assignmentFallback": "[FR] asignación",
+      "assignmentNote": "[FR] Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacío."
     },
     "results": {
-      "title": "Résultats",
-      "generating": "Génération du rapport…",
-      "rows": "Lignes : {{count}}",
-      "emptyHint": "Il n’y a pas encore de données. Ajustez les filtres et générez.",
-      "loading": "Chargement…",
-      "noDataSelectedFilters": "Aucune donnée avec les filtres sélectionnés."
+      "title": "[FR] Resultados",
+      "generating": "[FR] Generando reporte…",
+      "rows": "[FR] Filas: {{count}}",
+      "emptyHint": "[FR] Aún no hay datos. Ajusta filtros y genera.",
+      "loading": "[FR] Cargando…",
+      "noDataSelectedFilters": "[FR] No hay datos con los filtros seleccionados."
     },
     "table": {
-      "day": "Jour",
-      "person": "Personne",
-      "email": "Email",
-      "geofence": "Géofence",
-      "activity": "Activité",
-      "assignment": "Affectation",
-      "entry": "Entrée",
-      "exit": "Sortie",
-      "marks": "Pointages",
-      "inside": "À l’intérieur",
-      "distanceM": "Dist (m)",
-      "rate": "Tarif",
-      "dash": "—"
+      "day": "[FR] Día",
+      "person": "[FR] Persona",
+      "email": "[FR] Email",
+      "geofence": "[FR] Geocerca",
+      "activity": "[FR] Actividad",
+      "assignment": "[FR] Asignación",
+      "entry": "[FR] Entrada",
+      "exit": "[FR] Salida",
+      "marks": "[FR] Marcajes",
+      "inside": "[FR] Dentro",
+      "distanceM": "[FR] Dist (m)",
+      "rate": "[FR] Tarifa",
+      "dash": "[FR] —"
     },
     "errors": {
-      "loadFilters": "Erreur lors du chargement des filtres.",
-      "noActiveOrgOrSession": "Il n’y a pas d’organisation active ou la session n’est pas prête.",
-      "invalidDateRange": "La date « De » ne peut pas être postérieure à la date « À ».",
-      "generateReport": "Erreur lors de la génération du rapport.",
-      "exportNoData": "Il n’y a pas de données à exporter."
+      "loadFilters": "[FR] Error cargando filtros.",
+      "noActiveOrgOrSession": "[FR] No hay organización activa o la sesión no está lista.",
+      "invalidDateRange": "[FR] La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
+      "generateReport": "[FR] Error generando reporte.",
+      "exportNoData": "[FR] No hay datos para exportar."
     }
   },
   "activityAssignments": {
-    "title": "Affectation d’activités",
-    "subtitle": "Définissez quelle activité chaque personne réalise dans une plage de dates. Une même personne ne peut pas avoir deux activités en même temps.",
-    "session": "Session",
+    "title": "[FR] Asignación de actividades",
+    "subtitle": "[FR] Define qué actividad realiza cada persona en un rango de fechas. La misma persona no puede tener dos actividades al mismo tiempo.",
+    "session": "[FR] Sesión",
     "actions": {
-      "new": "+ Nouvelle affectation",
-      "refresh": "Actualiser",
-      "edit": "Modifier",
-      "delete": "Supprimer",
-      "clear": "Effacer",
-      "newShort": "Nouvelle",
-      "saveChanges": "Enregistrer les modifications",
-      "createAssignment": "Créer l’affectation",
-      "saving": "Enregistrement..."
+      "new": "[FR] + Nueva asignación",
+      "refresh": "[FR] Refrescar",
+      "edit": "[FR] Editar",
+      "delete": "[FR] Eliminar",
+      "clear": "[FR] Limpiar",
+      "newShort": "[FR] Nueva",
+      "saveChanges": "[FR] Guardar cambios",
+      "createAssignment": "[FR] Crear asignación",
+      "saving": "[FR] Guardando..."
     },
     "filters": {
-      "trackerPerson": "Tracker / Personne",
-      "activity": "Activité",
-      "startFrom": "Début à partir de",
-      "endUntil": "Fin jusqu’à",
-      "allTrackers": "Tous",
-      "allActivities": "Toutes"
+      "trackerPerson": "[FR] Tracker / Persona",
+      "activity": "[FR] Actividad",
+      "startFrom": "[FR] Inicio desde",
+      "endUntil": "[FR] Fin hasta",
+      "allTrackers": "[FR] Todos",
+      "allActivities": "[FR] Todas"
     },
     "table": {
-      "title": "Liste des affectations",
-      "loading": "Chargement...",
-      "person": "Personne",
-      "activity": "Activité",
-      "start": "Début",
-      "end": "Fin",
-      "actions": "Actions",
-      "empty": "Il n’y a aucune affectation pour les filtres actuels."
+      "title": "[FR] Listado de asignaciones",
+      "loading": "[FR] Cargando...",
+      "person": "[FR] Persona",
+      "activity": "[FR] Actividad",
+      "start": "[FR] Inicio",
+      "end": "[FR] Fin",
+      "actions": "[FR] Acciones",
+      "empty": "[FR] No hay asignaciones para los filtros actuales."
     },
     "form": {
-      "titleCreate": "Nouvelle affectation",
-      "titleEdit": "Modifier l’affectation",
-      "titleView": "Détails / nouvelle affectation",
-      "trackerPerson": "Personne / Tracker",
-      "activity": "Activité",
-      "startDate": "Date de début",
-      "endDateOptional": "Date de fin (optionnelle)",
-      "selectOption": "Sélectionner..."
+      "titleCreate": "[FR] Nueva asignación",
+      "titleEdit": "[FR] Editar asignación",
+      "titleView": "[FR] Detalles / nueva asignación",
+      "trackerPerson": "[FR] Persona / Tracker",
+      "activity": "[FR] Actividad",
+      "startDate": "[FR] Fecha inicio",
+      "endDateOptional": "[FR] Fecha fin (opcional)",
+      "selectOption": "[FR] Seleccione..."
     },
     "messages": {
-      "initialLoadError": "Erreur lors du chargement des données initiales",
-      "activitiesLoadError": "Impossible de charger les activités",
-      "trackersLoadError": "Impossible de charger les trackers",
-      "assignmentsLoadError": "Impossible de charger les affectations",
-      "requiredFields": "Le tracker, l’activité et la date de début sont obligatoires",
-      "assignedSuccessfully": "Activité affectée avec succès",
-      "updatedSuccessfully": "Affectation mise à jour avec succès",
-      "invalidFormMode": "Mode de formulaire invalide",
-      "constraintOverlap": "Impossible d’affecter cette activité : la personne a déjà une autre activité dans cette plage de dates.",
-      "saveError": "Erreur lors de l’enregistrement de l’affectation d’activité",
-      "deletedSuccessfully": "Affectation supprimée avec succès",
-      "deleteError": "Impossible de supprimer l’affectation d’activité"
+      "initialLoadError": "[FR] Error al cargar datos iniciales",
+      "activitiesLoadError": "[FR] No se pudieron cargar las actividades",
+      "trackersLoadError": "[FR] No se pudieron cargar los trackers",
+      "assignmentsLoadError": "[FR] No se pudieron cargar las asignaciones",
+      "requiredFields": "[FR] Tracker, actividad y fecha de inicio son obligatorios",
+      "assignedSuccessfully": "[FR] Actividad asignada correctamente",
+      "updatedSuccessfully": "[FR] Asignación actualizada correctamente",
+      "invalidFormMode": "[FR] Modo de formulario inválido",
+      "constraintOverlap": "[FR] No se puede asignar esta actividad: la persona ya tiene otra actividad en ese rango de fechas.",
+      "saveError": "[FR] Error al guardar la asignación de actividad",
+      "deletedSuccessfully": "[FR] Asignación eliminada correctamente",
+      "deleteError": "[FR] No se pudo eliminar la asignación de actividad"
     },
     "overlap": {
-      "selectedPerson": "sélectionnée",
-      "otherActivity": "une autre activité",
-      "noEndDate": "sans date de fin",
-      "message": "La personne {{person}} a déjà l’activité « {{activity}} » affectée entre {{start}} et {{end}}."
+      "selectedPerson": "[FR] seleccionada",
+      "otherActivity": "[FR] otra actividad",
+      "noEndDate": "[FR] sin fecha de fin",
+      "message": "[FR] La persona {{person}} ya tiene asignada la actividad \"{{activity}}\" entre {{start}} y {{end}}."
     },
-    "confirmDelete": "Voulez-vous vraiment supprimer l’affectation de « {{activity}} » pour « {{tracker}} » ?",
+    "confirmDelete": "[FR] ¿Seguro que deseas eliminar la asignación de \"{{activity}}\" para \"{{tracker}}\"?",
     "fallbacks": {
-      "activity": "activité",
-      "tracker": "tracker"
+      "activity": "[FR] actividad",
+      "tracker": "[FR] tracker"
+    }
+  },
+  "admin": {
+    "dashboard": {
+      "title": "[FR] Panel de Administración",
+      "configRequired": "[FR] Configuración requerida",
+      "modules": {
+        "geocercas": "[FR] Geocercas",
+        "geocercasV2": "[FR] Geocercas V2",
+        "personal": "[FR] Personal",
+        "reports": "[FR] Reportes"
+      },
+      "modulesDescriptions": {
+        "geocercas": "[FR] Gestiona las geocercas de tu organización",
+        "geocercasV2": "[FR] Geocercas mejoradas con nueva interfaz",
+        "personal": "[FR] Gestiona el personal de campo",
+        "reports": "[FR] Consulta reportes y eventos"
+      },
+      "logout": "[FR] Cerrar sesión"
+    },
+    "geocercasV2": {
+      "title": "[FR] Geocercas",
+      "showAll": "[FR] Mostrar todas",
+      "back": "[FR] ← Volver",
+      "savedGeofencesHeader": "[FR] Geocercas guardadas",
+      "loading": "[FR] Cargando...",
+      "noGeofences": "[FR] No hay geocercas",
+      "status": {
+        "active": "[FR] Activa",
+        "inactive": "[FR] Inactiva"
+      },
+      "actions": {
+        "view": "[FR] Ver",
+        "deactivate": "[FR] Desactivar",
+        "activate": "[FR] Activar",
+        "edit": "[FR] Editar",
+        "editInMap": "[FR] Editar en mapa",
+        "delete": "[FR] Eliminar"
+      },
+      "floatingActions": {
+        "save": "[FR] Guardar",
+        "cancel": "[FR] Cancelar"
+      },
+      "prompt": {
+        "name": "[FR] Nombre de la geocerca:",
+        "newName": "[FR] Nuevo nombre (deja igual si no quieres cambiar):",
+        "editCoords": "[FR] Edita coordenadas (lat,lng por línea). Deja en blanco para mantener:"
+      },
+      "manualForm": {
+        "title": "[FR] Crear geocerca manualmente",
+        "hintFormat": "[FR] Formato: lat,lng por línea. Mínimo 3 líneas.",
+        "saveButton": "[FR] Guardar manual"
+      },
+      "labels": {
+        "personal": "[FR] Personal:",
+        "assignments": "[FR] Asignaciones:"
+      },
+      "mapControls": {
+        "latLngTip": "[FR] Mover cursor para ver Lat/Lng"
+      }
+    },
+    "usersRoles": {
+      "title": "[FR] Usuarios y Roles",
+      "processing": "[FR] Procesando…",
+      "inviteSection": "[FR] Invitar usuario",
+      "emailPlaceholder": "[FR] correo@dominio.com",
+      "fullNamePlaceholder": "[FR] Nombre completo",
+      "fullNameLabel": "[FR] Nombre completo",
+      "roleOwner": "[FR] OWNER",
+      "inviteButton": "[FR] Invitar",
+      "pendingInvitesTitle": "[FR] Invitaciones pendientes",
+      "noPending": "[FR] No hay invitaciones.",
+      "usersTitle": "[FR] Usuarios",
+      "noUsers": "[FR] No hay usuarios registrados.",
+      "table": {
+        "email": "[FR] Email",
+        "name": "[FR] Nombre",
+        "role": "[FR] Rol",
+        "date": "[FR] Fecha",
+        "actions": "[FR] Acciones",
+        "newRole": "[FR] Nuevo Rol"
+      },
+      "magicLink": "[FR] Magic Link",
+      "deleteButton": "[FR] Eliminar",
+      "assignButton": "[FR] Asignar",
+      "confirmDelete": "[FR] ¿Eliminar/suspender a {{email}}?",
+      "inviteSuccess": "[FR] Invitación enviada a {{email}}",
+      "assignSuccess": "[FR] Rol \"{{role}}\" asignado a {{email}}",
+      "magicLinkSentInvite": "[FR] Invitación enviada a {{email}}",
+      "magicLinkSentLink": "[FR] Magic link enviado a {{email}}",
+      "deleteSuccess": "[FR] Usuario {{email}} eliminado/suspendido"
+    },
+    "geofences": {
+      "errors": {
+        "loadFailed": "[FR] No se pudo cargar la lista",
+        "invalidPolygon": "[FR] Dibuja un polígono válido.",
+        "saveFailed": "[FR] Error al guardar",
+        "invalidInput": "[FR] Revisa nombre y al menos 3 coordenadas válidas.",
+        "createFailed": "[FR] No se pudo guardar la geocerca",
+        "statusChangeFailed": "[FR] No se pudo cambiar estado",
+        "deleteFailed": "[FR] No se pudo eliminar",
+        "noCoordinates": "[FR] Geocerca sin coordenadas válidas",
+        "minimumPoints": "[FR] Se requieren al menos 3 puntos válidos.",
+        "editFailed": "[FR] No se pudo editar",
+        "invalidCoordinates": "[FR] Coordenadas inválidas.",
+        "invalidPolygonData": "[FR] Polígono inválido."
+      },
+      "messages": {
+        "created": "[FR] ✅ Geocerca guardada.",
+        "createdManual": "[FR] Geocerca creada (manual).",
+        "activated": "[FR] ✅ Activada",
+        "deactivated": "[FR] ✅ Desactivada",
+        "deleted": "[FR] 🗑️ Eliminada.",
+        "updated": "[FR] ✏️ Geocerca actualizada.",
+        "mapEditActive": "[FR] 🟠 Edición en mapa activa. Ajusta vértices y pulsa 'Guardar cambios'.",
+        "editCancelled": "[FR] Edición cancelada.",
+        "changesSaved": "[FR] ✅ Cambios guardados."
+      },
+      "confirmDelete": "[FR] ¿Eliminar \"{{name}}\"?"
+    }
+  },
+  "trackerPanel": {
+    "title": "[FR] Panel del Tracker",
+    "description": "[FR] Aquí verás tus geocercas asignadas, tu estado (dentro/fuera) y podrás reportar incidencias.",
+    "logout": "[FR] Cerrar sesión"
+  },
+  "mapaTracking": {
+    "traceLabel": "[FR] Rastro:",
+    "timeWindows": {
+      "15min": "[FR] 15 min",
+      "30min": "[FR] 30 min",
+      "60min": "[FR] 60 min"
+    },
+    "refresh": "[FR] Refrescar",
+    "loading": "[FR] Cargando…"
+  },
+  "newOrg": {
+    "title": "[FR] Nueva organización",
+    "labels": {
+      "name": "[FR] Nombre",
+      "slug": "[FR] Slug (opcional)"
+    },
+    "placeholders": {
+      "name": "[FR] Ej. Finca Principal",
+      "slug": "[FR] ej. mi-finca-principal"
+    },
+    "buttons": {
+      "create": "[FR] Crear",
+      "cancel": "[FR] Cancelar"
+    }
+  },
+  "geofenceForm": {
+    "title": "[FR] Nueva geocerca",
+    "fields": {
+      "name": "[FR] Nombre",
+      "coordinates": "[FR] Coordenadas",
+      "onePerLine": "[FR] por línea"
+    },
+    "placeholders": {
+      "name": "[FR] Ej. Campo 1",
+      "example": "[FR] -0.1807, -78.4678"
+    },
+    "labels": {
+      "name": "[FR] Nombre",
+      "coordinates": "[FR] Coordenadas (lat,lng por línea)"
+    },
+    "actions": {
+      "save": "[FR] Guardar geocerca",
+      "saving": "[FR] Guardando..."
+    },
+    "hints": {
+      "mapSelection": "[FR] Dibuja o selecciona en el mapa; si la caja está vacía, ese polígono será usado."
+    },
+    "map": {
+      "lat": "[FR] Lat",
+      "lng": "[FR] Lng",
+      "movePointer": "[FR] Mueve el puntero sobre el mapa…"
+    },
+    "errors": {
+      "minPoints": "[FR] Se requieren al menos 3 puntos."
+    },
+    "fallbacks": {
+      "unnamed": "[FR] Sin nombre"
+    },
+    "messages": {
+      "saved": "[FR] Geocerca guardada correctamente.",
+      "errorPrefix": "[FR] Error",
+      "created": "[FR] Geocerca creada correctamente.",
+      "createError": "[FR] Error al crear geocerca",
+      "updated": "[FR] Geocerca(s) actualizada(s) correctamente.",
+      "updateError": "[FR] Error al actualizar geocerca",
+      "deleted": "[FR] Geocerca(s) eliminada(s) correctamente.",
+      "deleteError": "[FR] Error al eliminar geocerca"
+    }
+  },
+  "geofences": {
+    "labels": {
+      "personal": "[FR] Personal:",
+      "assignments": "[FR] Asignaciones:"
+    },
+    "actions": {
+      "links": "[FR] Vínculos"
     }
   }
 }
