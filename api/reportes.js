@@ -69,6 +69,52 @@ async function resolveCurrentOrgId(supabase) {
 }
 
 export default async function handler(req, res) {
+      // ======================
+      // Preview-only: report=cost
+      // ======================
+      if (String(req.query.report || "") === "cost") {
+        // Only allow in preview
+        if (process.env.VERCEL_ENV !== "preview") {
+          return res.status(403).json({ error: "Not available in production." });
+        }
+
+        const {
+          org_id,
+          date_from,
+          date_to,
+          rate_per_km,
+          rate_per_hour,
+          rate_per_visit,
+        } = req.query;
+
+        if (!org_id || !date_from || !date_to) {
+          return res.status(400).json({ error: "Missing required parameters: org_id, date_from, date_to" });
+        }
+
+        // Use preview Supabase client (do not import prod client)
+        const { createClient } = await import("@supabase/supabase-js");
+        const SUPABASE_URL = process.env.SUPABASE_PREVIEW_URL;
+        const SUPABASE_KEY = process.env.SUPABASE_PREVIEW_SERVICE_ROLE_KEY;
+        if (!SUPABASE_URL || !SUPABASE_KEY) {
+          return res.status(500).json({ error: "Preview Supabase credentials not set." });
+        }
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const { data, error } = await supabase.rpc("calculate_tracker_costs_preview", {
+          org_id,
+          date_from,
+          date_to,
+          rate_per_km: rate_per_km ? Number(rate_per_km) : null,
+          rate_per_hour: rate_per_hour ? Number(rate_per_hour) : null,
+          rate_per_visit: rate_per_visit ? Number(rate_per_visit) : null,
+        });
+
+        if (error) {
+          return res.status(500).json({ ok: false, error: error.message || "RPC error" });
+        }
+
+        return res.status(200).json({ ok: true, data });
+      }
   try {
     if (req.method !== "GET") {
       return res.status(405).json({ error: "Method not allowed" });
