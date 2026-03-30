@@ -20,6 +20,8 @@ function deriveTrackerVisualStatus({
   hasRecentSuccessfulSend,
   hasAnySuccessfulSend,
   isWatchdogRecovering,
+  lastPosition,
+  gpsAcquisitionState,
 }) {
   if (!trackerReady) return "Tracker not ready";
   if (!hasSession) return "No active tracker session";
@@ -31,7 +33,10 @@ function deriveTrackerVisualStatus({
     case "inactive":
       return "No active assignment";
     case "active":
+      if (!lastPosition && gpsAcquisitionState === "acquiring") return "Acquiring GPS...";
+      if (!lastPosition && gpsAcquisitionState === "error") return "GPS unavailable";
       if (isWatchdogRecovering) return "Recovering tracker...";
+      if (!lastPosition) return "Acquiring GPS...";
       if (!hasAnySuccessfulSend) return "Waiting first send...";
       if (!hasRecentSuccessfulSend) return "Tracker stalled";
       return "Tracker ready";
@@ -250,6 +255,8 @@ export default function TrackerGpsPage() {
       hasRecentSuccessfulSend,
       hasAnySuccessfulSend,
       isWatchdogRecovering,
+      lastPosition,
+      gpsAcquisitionState,
     });
   }, [
     hasSession,
@@ -259,7 +266,12 @@ export default function TrackerGpsPage() {
     hasRecentSuccessfulSend,
     hasAnySuccessfulSend,
     isWatchdogRecovering,
+    lastPosition,
+    gpsAcquisitionState,
   ]);
+  // GPS acquisition state: "acquiring" | "acquired" | "error"
+  const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
+  const gpsRetryTimerRef = useRef(null);
 
   useEffect(() => {
     if (!PRIMARY) {
@@ -918,10 +930,14 @@ export default function TrackerGpsPage() {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
     if (assignmentWindowStatus !== "active") return;
 
+    let trackingCancelled = false;
+    setGpsAcquisitionState("acquiring");
+
     async function startTracking() {
       if (!("geolocation" in navigator)) {
         setStatus(tt("trackerGps.status.noGeolocation", "This device does not support geolocation."));
         setLastError(tt("trackerGps.errors.geolocationUnavailable", "Geolocation not available."));
+        setGpsAcquisitionState("error");
         return;
       }
 
@@ -956,22 +972,37 @@ export default function TrackerGpsPage() {
           heading: oneShot.coords.heading ?? null,
           timestamp: oneShot.timestamp,
         });
+        setGpsAcquisitionState("acquired");
       } catch (err) {
         console.warn("[gps] position error", err?.message || err);
+        setGpsAcquisitionState("error");
+        setLastError("Unable to get GPS position. Check browser/location permission and device location services.");
       }
     }
 
-    let trackingCancelled = false;
+    // Retry timer logic
+    function scheduleGpsRetry(delayMs) {
+      if (gpsRetryTimerRef.current) clearTimeout(gpsRetryTimerRef.current);
+      gpsRetryTimerRef.current = setTimeout(() => {
+        if (!trackingCancelled && !lastPosition) {
+          setGpsAcquisitionState("acquiring");
+          startTracking();
+          scheduleGpsRetry(15000); // repeat every 15s
+        }
+      }, delayMs);
+    }
+
+    startTracking();
+    scheduleGpsRetry(20000); // first retry after 20s
 
     const handleSuccess = (pos) => {
       if (trackingCancelled) return;
-
+      setGpsAcquisitionState("acquired");
       const c = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         accuracy: pos.coords.accuracy ?? null,
       };
-
       setLastPosition({
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
@@ -982,15 +1013,19 @@ export default function TrackerGpsPage() {
       });
       lastCoordsRef.current = c;
       setCoords(c);
+      if (gpsRetryTimerRef.current) {
+        clearTimeout(gpsRetryTimerRef.current);
+        gpsRetryTimerRef.current = null;
+      }
     };
 
     const handleError = (err) => {
       if (trackingCancelled) return;
+      setGpsAcquisitionState("error");
       setStatus(tt("trackerGps.status.gpsError", "GPS error"));
-      setLastError(err?.message || String(err));
+      setLastError("Unable to get GPS position. Check browser/location permission and device location services.");
+      // retry will be handled by timer
     };
-
-    startTracking();
 
     if (watchIdRef.current != null && "geolocation" in navigator) {
       navigator.geolocation.clearWatch(watchIdRef.current);
@@ -1009,6 +1044,10 @@ export default function TrackerGpsPage() {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
+      if (gpsRetryTimerRef.current) {
+        clearTimeout(gpsRetryTimerRef.current);
+        gpsRetryTimerRef.current = null;
+      }
     };
   }, [
     trackerReady,
@@ -1017,6 +1056,7 @@ export default function TrackerGpsPage() {
     assignmentWindowStatus,
     membershipStatus,
     lang,
+    lastPosition,
   ]);
 
   useEffect(() => {
