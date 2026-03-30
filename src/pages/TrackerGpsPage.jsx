@@ -691,6 +691,7 @@ export default function TrackerGpsPage() {
     });
 
     const sendPromise = (async () => {
+      console.log("[send-position] token:start");
       const freshToken = await getFreshJwtOrThrow("send_position");
       console.log("[send-position] token:ok");
 
@@ -1187,8 +1188,8 @@ export default function TrackerGpsPage() {
           }));
         }
       } finally {
-        isSendingRef.current = false;
         console.log("[send-gate] lock:off");
+        isSendingRef.current = false;
       }
     })();
 
