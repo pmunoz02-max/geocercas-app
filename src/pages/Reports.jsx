@@ -19,11 +19,64 @@ function toCsvValue(v) {
   return `"${s.replaceAll('"', '""')}"`;
 }
 
-function exportRowsToCSV(rows, filenameBase = "reporte") {
+function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendance") {
   if (!rows?.length) {
     return false;
   }
 
+  // Costos: export only cost columns, friendly headers, formatted percent
+  if (reportType === "cost") {
+    const columns = [
+      { key: "work_date", label: "Fecha" },
+      { key: "tracker_user_id", label: "Tracker" },
+      { key: "assignment_id", label: "Asignación" },
+      { key: "activity_id", label: "Actividad" },
+      { key: "km_observados", label: "Km observados" },
+      { key: "horas_observadas", label: "Horas observadas" },
+      { key: "minutos_sin_cobertura", label: "Min sin cobertura" },
+      { key: "numero_huecos", label: "Huecos" },
+      { key: "porcentaje_cobertura", label: "Cobertura %" },
+      { key: "nivel_confianza", label: "Confianza" },
+      { key: "hourly_rate", label: "Tarifa hora" },
+      { key: "km_rate", label: "Tarifa km" },
+      { key: "currency_code", label: "Moneda" },
+      { key: "costo_total", label: "Costo total" },
+    ];
+    const header = columns.map((c) => toCsvValue(c.label)).join(",");
+    const lines = rows.map((r) =>
+      columns
+        .map((c) => {
+          if (c.key === "porcentaje_cobertura") {
+            // Format as percent with 2 decimals if numeric
+            const v = r[c.key];
+            if (typeof v === "number" && !isNaN(v)) {
+              return toCsvValue((v * 100).toFixed(2) + "%");
+            }
+            return toCsvValue("");
+          }
+          // Prefer work_date, fallback to date for Fecha
+          if (c.key === "work_date") {
+            return toCsvValue(r.work_date || r.date || "");
+          }
+          return toCsvValue(r[c.key]);
+        })
+        .join(",")
+    );
+    const csv = [header, ...lines].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${filenameBase}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+    return true;
+  }
+
+  // Asistencia: export all columns as before
   const columns = Object.keys(rows[0]);
   const header = columns.map(toCsvValue).join(",");
   const lines = rows.map((r) => columns.map((k) => toCsvValue(r[k])).join(","));
@@ -224,7 +277,7 @@ export default function Reports() {
   }
 
   function handleExport() {
-    const ok = exportRowsToCSV(rows, "reportes");
+    const ok = exportRowsToCSV(rows, "reportes", reportType);
     if (!ok) {
       setErrorMsg(tr("reports.errors.noDataToExport", "There is no data to export."));
     }
