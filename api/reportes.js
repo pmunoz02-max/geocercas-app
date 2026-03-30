@@ -83,15 +83,9 @@ export default async function handler(req, res) {
 
     const { start, end } = req.query;
 
-    // Use preview Supabase client (do not import prod client)
-    const { createClient } = await import("@supabase/supabase-js");
-    const SUPABASE_URL = process.env.SUPABASE_PREVIEW_URL;
-    const SUPABASE_KEY = process.env.SUPABASE_PREVIEW_SERVICE_ROLE_KEY;
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-      return res.status(500).json({ error: "Preview Supabase credentials not set." });
-    }
-    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
+    // Reuse the same server-side Supabase client and env vars
+    // (supabase is initialized below after auth logic)
+    // Wait for supabase client initialization below
     // Get orgId from session (reuse logic)
     const orgId = await resolveCurrentOrgId(supabase);
     if (!orgId) {
