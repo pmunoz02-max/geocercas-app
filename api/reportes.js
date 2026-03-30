@@ -16,6 +16,7 @@ import { createClient } from "@supabase/supabase-js";
  *     &activity_ids=uuid,uuid
  *     &asignacion_ids=uuid,uuid
  *     &limit=200&offset=0
+ * - GET /api/reportes?action=costs&start=YYYY-MM-DD&end=YYYY-MM-DD
  */
 
 function getEnv(nameList) {
@@ -69,100 +70,18 @@ async function resolveCurrentOrgId(supabase) {
 }
 
 export default async function handler(req, res) {
-  // ======================
-  // action=costs (preview-only, bypass auth)
-  // ======================
-  const action = String(req.query.action || "").toLowerCase();
-  const isPreviewCosts = process.env.VERCEL_ENV === "preview" && action === "costs";
-
-  if (action === "costs") {
-    // Only allow in preview
-    if (process.env.VERCEL_ENV !== "preview") {
-      return res.status(403).json({ error: "Not available in production." });
-    }
-
-    const { start, end } = req.query;
-
-    // Reuse the same server-side Supabase client and env vars
-    // (supabase is initialized below after auth logic)
-    // Wait for supabase client initialization below
-    // Get orgId from session (reuse logic)
-    const orgId = await resolveCurrentOrgId(supabase);
-    if (!orgId) {
-      return res.status(401).json({ error: "No active org for cost report." });
-    }
-
-    const { data, error } = await supabase.rpc("calculate_tracker_costs_preview", {
-      p_org_id: orgId,
-      p_date_from: start,
-      p_date_to: end,
-      p_rate_per_km: 0.35,
-      p_rate_per_hour: 2.5,
-      p_rate_per_visit: 0,
-    });
-
-    if (error) {
-      return res.status(500).json({ ok: false, error: error.message });
-    }
-
-    return res.json({ ok: true, data });
-  }
-      // ======================
-      // Preview-only: report=cost
-      // ======================
-      if (String(req.query.report || "") === "cost") {
-        // Only allow in preview
-        if (process.env.VERCEL_ENV !== "preview") {
-          return res.status(403).json({ error: "Not available in production." });
-        }
-
-        const {
-          org_id,
-          date_from,
-          date_to,
-          rate_per_km,
-          rate_per_hour,
-          rate_per_visit,
-        } = req.query;
-
-        if (!org_id || !date_from || !date_to) {
-          return res.status(400).json({ error: "Missing required parameters: org_id, date_from, date_to" });
-        }
-
-        // Use preview Supabase client (do not import prod client)
-        const { createClient } = await import("@supabase/supabase-js");
-        const SUPABASE_URL = process.env.SUPABASE_PREVIEW_URL;
-        const SUPABASE_KEY = process.env.SUPABASE_PREVIEW_SERVICE_ROLE_KEY;
-        if (!SUPABASE_URL || !SUPABASE_KEY) {
-          return res.status(500).json({ error: "Preview Supabase credentials not set." });
-        }
-        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        const { data, error } = await supabase.rpc("calculate_tracker_costs_preview", {
-          org_id,
-          date_from,
-          date_to,
-          rate_per_km: rate_per_km ? Number(rate_per_km) : null,
-          rate_per_hour: rate_per_hour ? Number(rate_per_hour) : null,
-          rate_per_visit: rate_per_visit ? Number(rate_per_visit) : null,
-        });
-
-        if (error) {
-          return res.status(500).json({ ok: false, error: error.message || "RPC error" });
-        }
-
-        return res.status(200).json({ ok: true, data });
-      }
-
   try {
     if (req.method !== "GET") {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
+    const action = String(req.query.action || "").toLowerCase();
+
     const SUPABASE_URL = getEnv([
       "SUPABASE_URL",
       "VITE_SUPABASE_URL",
       "NEXT_PUBLIC_SUPABASE_URL",
+      "SB_URL",
     ]);
 
     const SUPABASE_ANON_KEY = getEnv([
@@ -191,16 +110,11 @@ export default async function handler(req, res) {
       }
     }
 
-    // allow costs in preview without auth
-    const hasValidAuth = !!token;
-    // existing auth logic
-    if (!isPreviewCosts) {
-      if (!hasValidAuth) {
-        return res.status(401).json({
-          ok: false,
-          error: "Missing authentication (cookie tg_at or Authorization Bearer)",
-        });
-      }
+    if (!token) {
+      return res.status(401).json({
+        ok: false,
+        error: "Missing authentication (cookie tg_at or Authorization Bearer)",
+      });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -253,8 +167,9 @@ export default async function handler(req, res) {
       if (geocercasRes.error) errors.push({ source: "geocercas", error: geocercasRes.error.message });
       if (personasRes.error) errors.push({ source: "personal", error: personasRes.error.message });
       if (activitiesRes.error) errors.push({ source: "activities", error: activitiesRes.error.message });
-      if (asignacionesRes.error)
+      if (asignacionesRes.error) {
         errors.push({ source: "asignaciones", error: asignacionesRes.error.message });
+      }
 
       if (errors.length) {
         return res.status(400).json({ error: "Failed to load filters", details: errors });
@@ -325,8 +240,63 @@ export default async function handler(req, res) {
       });
     }
 
+    // ======================
+    // action=costs
+    // ======================
+    if (action === "costs") {
+      if (process.env.VERCEL_ENV !== "preview") {
+        return res.status(403).json({
+          ok: false,
+          error: "Not available outside preview.",
+        });
+      }
+
+      const start = req.query.start ? String(req.query.start) : "";
+      const end = req.query.end ? String(req.query.end) : "";
+
+      if (!start || !end) {
+        return res.status(400).json({
+          ok: false,
+          error: "Missing required parameters: start, end",
+        });
+      }
+
+      if (start > end) {
+        return res.status(400).json({
+          ok: false,
+          error: 'La fecha "Desde" no puede ser mayor que "Hasta".',
+        });
+      }
+
+      const orgId = await resolveCurrentOrgId(supabase);
+      if (!orgId) {
+        return res.status(401).json({
+          ok: false,
+          error: "No active org for cost report.",
+        });
+      }
+
+      const { data, error } = await supabase.rpc("calculate_tracker_costs_preview", {
+        p_org_id: orgId,
+        p_date_from: start,
+        p_date_to: end,
+      });
+
+      if (error) {
+        return res.status(500).json({
+          ok: false,
+          error: error.message || "RPC error",
+        });
+      }
+
+      return res.status(200).json({
+        ok: true,
+        data: data || [],
+      });
+    }
+
     return res.status(400).json({
-      error: "Invalid action. Use action=filters or action=report",
+      error: "Invalid action. Use action=filters, action=report or action=costs",
     });
   } catch (e) {
     console.error("[api/reportes] fatal:", e);
