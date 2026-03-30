@@ -1,10 +1,23 @@
+  // Permanent tracker diagnostics
+  const [trackerDiag, setTrackerDiag] = useState({
+    lastSendOk: null,
+    lastSendAttempt: null,
+    lastSendFailure: null,
+    watchdogRecoveryCount: 0,
+    lastWatchdogAction: null,
+    lastReloadReason: null,
+  });
 import { useEffect, useMemo, useRef, useState } from "react";
 
+// Enhanced: add send health and recovery states
 function deriveTrackerVisualStatus({
   hasSession,
   trackerReady,
   assignmentWindowStatus,
   assignmentLoadError,
+  lastSendOkAt,
+  resolvedSendIntervalMs,
+  isWatchdogRecovering
 }) {
   if (!trackerReady) return "Tracker not ready";
   if (!hasSession) return "No active tracker session";
@@ -14,8 +27,15 @@ function deriveTrackerVisualStatus({
   switch (assignmentWindowStatus) {
     case "inactive":
       return "No active assignment";
-    case "active":
+    case "active": {
+      const now = Date.now();
+      const lastOk = lastSendOkAt || 0;
+      const sinceOk = now - lastOk;
+      if (isWatchdogRecovering) return "Recovering tracker...";
+      if (sinceOk > resolvedSendIntervalMs * 2) return "Tracker stalled";
+      if (sinceOk > resolvedSendIntervalMs) return "Tracker may be delayed";
       return "Tracker ready";
+    }
     case "expired":
       return "Assignment ended";
     default:
@@ -177,14 +197,20 @@ export default function TrackerGpsPage() {
   const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
   const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
+  // Watchdog recovery state
+  const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
+  // Patch: expose lastSendOkAtRef and resolvedSendIntervalMs
   const visualStatus = useMemo(() => {
     return deriveTrackerVisualStatus({
       hasSession,
       trackerReady,
       assignmentWindowStatus,
       assignmentLoadError,
+      lastSendOkAt: lastSendOkAtRef.current,
+      resolvedSendIntervalMs,
+      isWatchdogRecovering,
     });
-  }, [hasSession, trackerReady, assignmentWindowStatus, assignmentLoadError]);
+  }, [hasSession, trackerReady, assignmentWindowStatus, assignmentLoadError, resolvedSendIntervalMs, isWatchdogRecovering]);
 
   const [debug, setDebug] = useState({
     session_exists: null,
@@ -597,27 +623,30 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
+    setTrackerDiag((d) => ({ ...d, lastSendAttempt: Date.now() }));
     console.log("[send-position] invoke:start", {
       hasOrg: !!body?.org_id,
       hasLat: Number.isFinite(Number(body?.lat)),
       hasLng: Number.isFinite(Number(body?.lng)),
-      trackerTokenPresent: !!trackerAccessToken,
     });
     let timeoutId = null;
     let controller = null;
     try {
-      const trackerToken = String(trackerAccessToken || "").trim();
-      const trackerUserId = String(decodeJwtPayload(trackerToken)?.sub || "").trim();
+      // Always get a fresh JWT for send_position
+      const freshToken = await getFreshJwtOrThrow("send_position");
+      // Optionally mirror to state for debug
+      setTrackerAccessToken(freshToken);
+      const trackerUserId = String(decodeJwtPayload(freshToken)?.sub || "").trim();
 
       if (!body?.org_id) return null;
       if (!Number.isFinite(Number(body?.lat)) || !Number.isFinite(Number(body?.lng))) return null;
       if (!trackerUserId) return null;
-      if (!trackerToken) return null;
+      if (!freshToken) return null;
 
       setDebug((d) => ({
         ...d,
         last_invoke_fn: "send_position",
-        last_invoke_token_len: trackerToken.length,
+        last_invoke_token_len: freshToken.length,
         last_invoke_auth: "fetch:Authorization=user",
         last_http_status: null,
       }));
@@ -630,7 +659,7 @@ export default function TrackerGpsPage() {
       const res = await fetch("/api/send-position", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${trackerAccessToken}`,
+          Authorization: `Bearer ${freshToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
@@ -638,6 +667,7 @@ export default function TrackerGpsPage() {
       });
 
       setDebug((d) => ({ ...d, last_http_status: res.status }));
+      setTrackerDiag((d) => ({ ...d, lastSendOk: Date.now(), lastSendFailure: null }));
 
       let j = null;
       try {
@@ -646,6 +676,7 @@ export default function TrackerGpsPage() {
 
       if (!res.ok) {
         const msg = j?.error || j?.message || `HTTP ${res.status}`;
+        setTrackerDiag((d) => ({ ...d, lastSendFailure: `${Date.now()}: ${msg}` }));
         throw new Error(`send_position http ${res.status}: ${msg}`);
       }
 
@@ -1109,53 +1140,110 @@ export default function TrackerGpsPage() {
     if (assignmentWindowStatus !== "active") return;
     if (watchdogIntervalRef.current) return;
 
-    console.log("[watchdog] started");
 
-    watchdogIntervalRef.current = setInterval(() => {
+    console.log("[watchdog] started");
+    const RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
+    const RELOAD_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+    let missedIntervals = 0;
+
+    watchdogIntervalRef.current = setInterval(async () => {
       const now = Date.now();
       const lastOk = lastSendOkAtRef.current || 0;
+      const sinceOk = now - lastOk;
+      if (sinceOk <= resolvedSendIntervalMs) {
+        missedIntervals = 0;
+        setIsWatchdogRecovering(false);
+        return;
+      }
+      // Count how many intervals have been missed
+      missedIntervals = Math.floor(sinceOk / resolvedSendIntervalMs);
 
-      if (now - lastOk <= resolvedSendIntervalMs * 3) return;
-      if (!("geolocation" in navigator)) return;
-
-      console.warn("[watchdog] no sends detected → restarting GPS");
-
-      try {
-        if (watchIdRef.current != null) {
-          navigator.geolocation.clearWatch(watchIdRef.current);
-          watchIdRef.current = null;
-        }
-
-        watchIdRef.current = navigator.geolocation.watchPosition(
-          (pos) => {
-            console.log("[watchdog] recovered GPS");
-            const c = {
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              accuracy: pos.coords.accuracy ?? null,
-            };
-            lastCoordsRef.current = c;
-            setCoords(c);
-            setLastPosition({
-              lat: c.lat,
-              lng: c.lng,
-              accuracy: c.accuracy,
-              speed: pos.coords.speed ?? null,
-              heading: pos.coords.heading ?? null,
-              timestamp: pos.timestamp,
-            });
-          },
-          (err) => {
-            console.warn("[watchdog] restart error", err?.message || err);
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 20000,
+      if (missedIntervals === 3) {
+        setIsWatchdogRecovering(true);
+        setTrackerDiag((d) => ({
+          ...d,
+          watchdogRecoveryCount: (d.watchdogRecoveryCount || 0) + 1,
+          lastWatchdogAction: `${Date.now()}: recovery`,
+        }));
+        // Step 1: try recovery
+        console.warn("[watchdog] 3 missed intervals: refreshing session, assignment, and GPS");
+        try {
+          // Refresh tracker session
+          if (PRIMARY?.auth?.refreshSession) {
+            await PRIMARY.auth.refreshSession();
           }
-        );
-      } catch (e) {
-        console.error("[watchdog] restart failed", e);
+        } catch (e) {
+          console.warn("[watchdog] session refresh failed", e);
+        }
+        // Reload active assignment
+        if (typeof window !== "undefined" && window.location) {
+          try {
+            // Simulate assignment reload by re-calling assignment loader if available
+            if (typeof loadActiveAssignment === "function") {
+              await loadActiveAssignment();
+            } else {
+              // fallback: reload page section
+              setAssignmentLoadState("idle");
+            }
+          } catch (e) {
+            console.warn("[watchdog] assignment reload failed", e);
+          }
+        }
+        // Restart geolocation watch
+        if ("geolocation" in navigator) {
+          try {
+            if (watchIdRef.current != null) {
+              navigator.geolocation.clearWatch(watchIdRef.current);
+              watchIdRef.current = null;
+            }
+            watchIdRef.current = navigator.geolocation.watchPosition(
+              (pos) => {
+                console.log("[watchdog] recovered GPS");
+                const c = {
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  accuracy: pos.coords.accuracy ?? null,
+                };
+                lastCoordsRef.current = c;
+                setCoords(c);
+                setLastPosition({
+                  lat: c.lat,
+                  lng: c.lng,
+                  accuracy: c.accuracy,
+                  speed: pos.coords.speed ?? null,
+                  heading: pos.coords.heading ?? null,
+                  timestamp: pos.timestamp,
+                });
+              },
+              (err) => {
+                console.warn("[watchdog] restart error", err?.message || err);
+              },
+              {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 20000,
+              }
+            );
+          } catch (e) {
+            console.error("[watchdog] restart failed", e);
+          }
+        }
+      } else if (missedIntervals >= 4) {
+        setIsWatchdogRecovering(false);
+        setTrackerDiag((d) => ({
+          ...d,
+          lastWatchdogAction: `${Date.now()}: reload`,
+          lastReloadReason: `No successful send for ${missedIntervals} intervals`,
+        }));
+        // Step 2: reload page if not in cooldown
+        const cooldownUntil = Number(sessionStorage.getItem(RELOAD_COOLDOWN_KEY) || 0);
+        if (now < cooldownUntil) {
+          console.warn("[watchdog] reload skipped due to cooldown");
+          return;
+        }
+        sessionStorage.setItem(RELOAD_COOLDOWN_KEY, String(now + RELOAD_COOLDOWN_MS));
+        console.error("[watchdog] 4+ missed intervals: reloading page");
+        window.location.reload();
       }
     }, 60000);
 
@@ -1216,6 +1304,27 @@ export default function TrackerGpsPage() {
 
 
   // Blocked state: no active assignment
+  // Debug panel: show trackerDiag if debug UI enabled
+  const showTrackerDebugPanel = showTrackerDebug;
+
+  // ...existing code...
+
+  if (showTrackerDebugPanel) {
+    // Minimal permanent tracker diagnostics
+    const fmt = (ts) => (ts ? new Date(ts).toLocaleString() : "—");
+    return (
+      <div className="p-4 bg-slate-900 text-slate-100 text-xs rounded-xl border border-slate-700 max-w-xl mx-auto mt-6">
+        <div className="font-bold mb-2">Tracker Diagnostics</div>
+        <div>Last successful send: {fmt(trackerDiag.lastSendOk)}</div>
+        <div>Last send attempt: {fmt(trackerDiag.lastSendAttempt)}</div>
+        <div>Last send failure: {trackerDiag.lastSendFailure || "—"}</div>
+        <div>Watchdog recovery count: {trackerDiag.watchdogRecoveryCount}</div>
+        <div>Last watchdog action: {trackerDiag.lastWatchdogAction || "—"}</div>
+        <div>Last reload reason: {trackerDiag.lastReloadReason || "—"}</div>
+      </div>
+    );
+  }
+
   if (trackerReady && hasSession && assignmentWindowStatus !== "active") {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
