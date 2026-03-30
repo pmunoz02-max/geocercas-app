@@ -222,6 +222,7 @@ export default function TrackerGpsPage() {
     disclosure_mode: "always-on-entry",
   });
 
+  // --- refs and timers ---
   const watchIdRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const isSendingRef = useRef(false);
@@ -233,7 +234,11 @@ export default function TrackerGpsPage() {
   const didHashSessionRef = useRef(false);
   const acceptInFlightRef = useRef(new Set());
   const blockingUiLoggedRef = useRef(false);
+  // GPS acquisition state: "acquiring" | "acquired" | "error"
+  const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
+  const gpsRetryTimerRef = useRef(null);
 
+  // --- assignment and send interval ---
   const PRIMARY = supabaseTracker;
 
   const resolvedSendIntervalMs = useMemo(() => {
@@ -241,11 +246,62 @@ export default function TrackerGpsPage() {
     return Number.isFinite(n) && n > 0 ? n * 60 * 1000 : CLIENT_MIN_INTERVAL_MS;
   }, [activeAssignment]);
 
+  // --- assignment loader ---
+  const loadActiveAssignment = async (authTokenOverride = "") => {
+    const effectiveToken = String(authTokenOverride || trackerAccessToken || "").trim();
+    if (!trackerReady || !orgId || !effectiveToken) return;
+
+    console.log("[assignment-window] loading");
+    console.log("[assignment-window] query:start", { orgId });
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("assignment_load_timeout")), 8000)
+    );
+
+    const fetchPromise = fetch("/api/tracker-active-assignment", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${effectiveToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_id: orgId }),
+    }).then(async (res) => {
+      if (!res.ok) throw new Error(`backend_error_${res.status}`);
+      return res.json();
+    });
+
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+
+    // Use tracker_assignment as source of truth if present
+    if (result.ok && result.tracker_assignment) {
+      setActiveAssignment(result.tracker_assignment);
+      setAssignmentWindowStatus(result.tracker_assignment.active ? "active" : "expired");
+      setAssignmentLoadState(result.tracker_assignment.active ? "active" : "inactive");
+      setAssignmentLoadError("");
+    } else if (result.ok && result.active && result.assignment) {
+      // Fallback: legacy assignment logic
+      const activeNow = isAssignmentActiveNow(result.assignment);
+      setActiveAssignment(result.assignment);
+      setAssignmentWindowStatus(activeNow ? "active" : "expired");
+      setAssignmentLoadState(activeNow ? "active" : "inactive");
+      setAssignmentLoadError("");
+    } else if (result.ok && !result.active) {
+      setActiveAssignment(null);
+      setAssignmentWindowStatus("inactive");
+      setAssignmentLoadState("inactive");
+      setAssignmentLoadError("");
+    } else {
+      throw new Error(result.error || "unknown_error");
+    }
+  };
+
+  // --- send state ---
   const hasAnySuccessfulSend = !!lastSendOkAtRef.current;
   const hasRecentSuccessfulSend =
     !!lastSendOkAtRef.current &&
     Date.now() - lastSendOkAtRef.current <= resolvedSendIntervalMs * 2;
 
+  // --- visual status ---
   const visualStatus = useMemo(() => {
     return deriveTrackerVisualStatus({
       hasSession,
@@ -269,9 +325,6 @@ export default function TrackerGpsPage() {
     lastPosition,
     gpsAcquisitionState,
   ]);
-  // GPS acquisition state: "acquiring" | "acquired" | "error"
-  const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
-  const gpsRetryTimerRef = useRef(null);
 
   useEffect(() => {
     if (!PRIMARY) {
