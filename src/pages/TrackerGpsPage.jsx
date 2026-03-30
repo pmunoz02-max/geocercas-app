@@ -236,7 +236,7 @@ export default function TrackerGpsPage() {
   const blockingUiLoggedRef = useRef(false);
   // GPS acquisition state: "acquiring" | "acquired" | "error"
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
-  const gpsRetryTimerRef = useRef(null);
+
 
   // --- assignment and send interval ---
   const PRIMARY = supabaseTracker;
@@ -960,78 +960,38 @@ export default function TrackerGpsPage() {
     if (assignmentWindowStatus !== "active") return;
 
     let trackingCancelled = false;
+
     setGpsAcquisitionState("acquiring");
+    setLastError(null);
 
-    async function startTracking() {
-      if (!("geolocation" in navigator)) {
-        setStatus(tt("trackerGps.status.noGeolocation", "This device does not support geolocation."));
-        setLastError(tt("trackerGps.errors.geolocationUnavailable", "Geolocation not available."));
-        setGpsAcquisitionState("error");
-        return;
-      }
+    if (!("geolocation" in navigator)) {
+      setStatus(tt("trackerGps.status.noGeolocation", "This device does not support geolocation."));
+      setLastError(tt("trackerGps.errors.geolocationUnavailable", "Geolocation not available."));
+      setGpsAcquisitionState("error");
+      return;
+    }
 
-      if (navigator.permissions?.query) {
-        try {
-          await navigator.permissions.query({ name: "geolocation" });
-        } catch {}
-      }
-
+    if (watchIdRef.current != null) {
       try {
-        const oneShot = await new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 15000,
-          });
-        });
-
-        const c = {
-          lat: oneShot.coords.latitude,
-          lng: oneShot.coords.longitude,
-          accuracy: oneShot.coords.accuracy ?? null,
-        };
-
-        lastCoordsRef.current = c;
-        setCoords(c);
-        setLastPosition({
-          lat: oneShot.coords.latitude,
-          lng: oneShot.coords.longitude,
-          accuracy: oneShot.coords.accuracy ?? null,
-          speed: oneShot.coords.speed ?? null,
-          heading: oneShot.coords.heading ?? null,
-          timestamp: oneShot.timestamp,
-        });
-        setGpsAcquisitionState("acquired");
-      } catch (err) {
-        console.warn("[gps] position error", err?.message || err);
-        setGpsAcquisitionState("error");
-        setLastError("Unable to get GPS position. Check browser/location permission and device location services.");
-      }
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      } catch {}
+      watchIdRef.current = null;
     }
-
-    // Retry timer logic
-    function scheduleGpsRetry(delayMs) {
-      if (gpsRetryTimerRef.current) clearTimeout(gpsRetryTimerRef.current);
-      gpsRetryTimerRef.current = setTimeout(() => {
-        if (!trackingCancelled && !lastPosition) {
-          setGpsAcquisitionState("acquiring");
-          startTracking();
-          scheduleGpsRetry(15000); // repeat every 15s
-        }
-      }, delayMs);
-    }
-
-    startTracking();
-    scheduleGpsRetry(20000); // first retry after 20s
 
     const handleSuccess = (pos) => {
       if (trackingCancelled) return;
+
       setGpsAcquisitionState("acquired");
+      setLastError(null);
+
       const c = {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         accuracy: pos.coords.accuracy ?? null,
       };
+
+      lastCoordsRef.current = c;
+      setCoords(c);
       setLastPosition({
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
@@ -1040,42 +1000,52 @@ export default function TrackerGpsPage() {
         heading: pos.coords.heading ?? null,
         timestamp: pos.timestamp,
       });
-      lastCoordsRef.current = c;
-      setCoords(c);
-      if (gpsRetryTimerRef.current) {
-        clearTimeout(gpsRetryTimerRef.current);
-        gpsRetryTimerRef.current = null;
-      }
+
+      console.log("[gps] watch success", c);
     };
 
     const handleError = (err) => {
       if (trackingCancelled) return;
+
+      console.warn("[gps] watch error", err?.code, err?.message || err);
+
       setGpsAcquisitionState("error");
       setStatus(tt("trackerGps.status.gpsError", "GPS error"));
-      setLastError("Unable to get GPS position. Check browser/location permission and device location services.");
-      // retry will be handled by timer
+
+      const msg =
+        err?.code === 1
+          ? "Location permission denied."
+          : err?.code === 2
+          ? "Location unavailable."
+          : err?.code === 3
+          ? "Location timeout."
+          : "Unable to get GPS position. Check browser/location permission and device location services.";
+
+      setLastError(msg);
     };
 
-    if (watchIdRef.current != null && "geolocation" in navigator) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
+    try {
+      watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 15000,
+        timeout: 30000,
+      });
 
-    watchIdRef.current = navigator.geolocation.watchPosition(handleSuccess, handleError, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 20000,
-    });
+      console.log("[gps] watch:start", { watchId: watchIdRef.current });
+    } catch (e) {
+      console.error("[gps] watch:start failed", e);
+      setGpsAcquisitionState("error");
+      setLastError(String(e?.message || e));
+    }
 
     return () => {
       trackingCancelled = true;
-      if (watchIdRef.current != null && "geolocation" in navigator) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
+
+      if (watchIdRef.current != null) {
+        try {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        } catch {}
         watchIdRef.current = null;
-      }
-      if (gpsRetryTimerRef.current) {
-        clearTimeout(gpsRetryTimerRef.current);
-        gpsRetryTimerRef.current = null;
       }
     };
   }, [
@@ -1085,7 +1055,6 @@ export default function TrackerGpsPage() {
     assignmentWindowStatus,
     membershipStatus,
     lang,
-    lastPosition,
   ]);
 
   useEffect(() => {
