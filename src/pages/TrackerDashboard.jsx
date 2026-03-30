@@ -1,3 +1,50 @@
+// --- Realtime subscription for tracker_latest ---
+useEffect(() => {
+  if (!resolvedOrgId) return;
+
+  let alive = true;
+
+  async function loadInitial() {
+    const { data, error } = await supabase
+      .from("tracker_latest")
+      .select("*")
+      .eq("org_id", resolvedOrgId);
+    if (!error && alive) {
+      setAssignmentTrackers(Array.isArray(data) ? data : []);
+    }
+  }
+
+  loadInitial();
+
+  const channel = supabase
+    .channel(`tracker-latest-${resolvedOrgId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "tracker_latest",
+        filter: `org_id=eq.${resolvedOrgId}`,
+      },
+      (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        setAssignmentTrackers((prev) => {
+          const idx = prev.findIndex((x) => String(x.user_id) === String(row.user_id));
+          if (idx === -1) return [row, ...prev];
+          const next = [...prev];
+          next[idx] = { ...next[idx], ...row };
+          return next;
+        });
+      }
+    )
+    .subscribe();
+
+  return () => {
+    alive = false;
+    supabase.removeChannel(channel);
+  };
+}, [resolvedOrgId]);
 // src/pages/TrackerDashboard.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";

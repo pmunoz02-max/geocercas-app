@@ -159,17 +159,8 @@ export default function Billing() {
 
   const { loading, ready, authenticated, user, currentOrgId, isAdmin } = useAuth();
 
-  const isPreviewBillingNoticeVisible = useMemo(() => {
-    if (import.meta.env.DEV) return true;
-
-    const appEnv = String(import.meta.env.VITE_APP_ENV || "").toLowerCase();
-    if (appEnv === "preview" || appEnv === "test") return true;
-
-    const hostname =
-      typeof window !== "undefined" ? String(window.location?.hostname || "") : "";
-
-    return hostname.startsWith("preview.");
-  }, []);
+  // Remove preview/hostname-based billing logic
+  // All provider selection is now based solely on billing_provider from v_billing_panel
 
   const [billing, setBilling] = useState(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -221,7 +212,8 @@ export default function Billing() {
             active_trackers_7d,
             active_trackers_30d,
             billing_over_limit,
-            over_limit_reason
+            over_limit_reason,
+            billing_provider
           `
           )
           .eq("org_id", currentOrgId)
@@ -275,19 +267,18 @@ export default function Billing() {
     return String(raw).toLowerCase();
   }, [billing]);
 
-  const hasStripeSubscription = useMemo(() => {
-    return (
-      !!billing &&
-      !["unknown", "free"].includes(String(billing?.plan_status || "").toLowerCase())
-    );
-  }, [billing]);
+  // Provider selection logic: only use billing_provider
+  const billingProvider = billing?.billing_provider || null;
 
   const shouldShowManageButton = useMemo(() => {
     if (!currentOrgId) return false;
-    if (!hasStripeSubscription) return false;
-
-    return ["trialing", "active", "past_due", "canceled"].includes(effectivePlanStatus);
-  }, [currentOrgId, hasStripeSubscription, effectivePlanStatus]);
+    if (!billingProvider) return false;
+    // Only show Stripe manage button if provider is stripe and plan is not free/unknown
+    if (billingProvider === "stripe") {
+      return ["trialing", "active", "past_due", "canceled"].includes(effectivePlanStatus);
+    }
+    return false;
+  }, [currentOrgId, billingProvider, effectivePlanStatus]);
 
   const isOverLimit = Boolean(billing?.billing_over_limit);
   const trialEndsAt = billing?.trial_end || null;
@@ -369,13 +360,7 @@ export default function Billing() {
             <h1 className="text-2xl font-semibold text-slate-900">
               {tr("billing.title", "Billing")}
             </h1>
-            {isPreviewBillingNoticeVisible ? (
-              <p className="mt-2 text-slate-600">
-                {tr("billing.previewNotice.prefix", "Monetization in")} <b>PREVIEW</b>{" "}
-                {tr("billing.previewNotice.middle", "(Paddle).")}{" "}
-                {tr("billing.previewNotice.suffix", "It does not affect production.")}
-              </p>
-            ) : null}
+            {/* Preview/hostname billing notice removed. */}
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -388,24 +373,21 @@ export default function Billing() {
           </div>
         </div>
 
-        {/* Bloque Paddle Upgrade visible inmediatamente tras el título - SOLO UNO */}
+        {/* Paddle Upgrade block: show only if billingProvider is paddle, or for free/null upgrade */}
         {(() => {
-          const showUpgrade =
-            !billing ||
-            String(billing?.billing_plan_code).toLowerCase() !== "pro" ||
-            String(billing?.plan_status).toLowerCase() !== "active";
           const orgId = billing?.org_id ?? currentOrgId ?? null;
-          console.log("BillingPage render", {
-            billing,
-            loading: billingLoading,
-            showUpgrade,
-            orgId,
-          });
-          console.log("🔥 SHOW UPGRADE BLOCK", { showUpgrade, orgId });
-          return showUpgrade ? (
+          // Show Paddle upgrade if:
+          // - billingProvider is "paddle"
+          // - OR billingProvider is null/empty (legacy or free orgs)
+          // - OR ctaVariant is "free" (allow upgrade from free)
+          const showPaddleUpgrade =
+            billingProvider === "paddle" ||
+            !billingProvider ||
+            ctaVariant === "free";
+          return showPaddleUpgrade ? (
             <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
               <div className="text-xl font-bold text-slate-900">Geocercas PRO</div>
-              <div className="mt-1 text-sm text-slate-700">USD $29/mes · Paddle (Preview)</div>
+              <div className="mt-1 text-sm text-slate-700">USD $29/mes · Paddle</div>
               <div className="mt-2 text-xs text-slate-700">
                 <b>Org ID:</b>{" "}
                 <span className="font-mono break-all text-slate-900">{orgId || "—"}</span>

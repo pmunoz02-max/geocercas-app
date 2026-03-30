@@ -1,3 +1,15 @@
+# Actualización en Vivo del Dashboard
+
+El dashboard de la aplicación se suscribe en tiempo real a la tabla `tracker_latest` filtrada por `org_id`.
+
+Cuando ocurre un evento INSERT o UPDATE en `tracker_latest` para la organización activa:
+
+- El cliente recibe el cambio mediante el canal realtime correspondiente a su `org_id`.
+- El dashboard fusiona (merge) el tracker actualizado en el estado local, usando `user_id` como clave.
+- Si el tracker ya existe, se actualiza; si no, se agrega al listado.
+- No es necesario recargar la página manualmente: los cambios se reflejan en vivo.
+
+Esto permite que los movimientos y cambios de trackers se vean reflejados instantáneamente en el dashboard, manteniendo la experiencia fluida y actualizada.
 REALTIME_ARCHITECTURE.md
 # REALTIME_ARCHITECTURE
 
