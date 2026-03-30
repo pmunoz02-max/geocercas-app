@@ -1,4 +1,6 @@
+
 // --- Realtime subscription for tracker_latest ---
+// This effect must be declared after resolvedOrgId is defined
 useEffect(() => {
   if (!resolvedOrgId) return;
 
