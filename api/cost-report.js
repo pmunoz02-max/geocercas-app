@@ -1,7 +1,7 @@
-// /api/cost-report.js
+// api/cost-report.js
 // Preview-only API route for tracker cost calculation
 
-const { createClient } = require("@supabase/supabase-js");
+import { createClient } from "@supabase/supabase-js";
 
 function getSingleQueryValue(value) {
   if (Array.isArray(value)) return value[0];
@@ -19,10 +19,9 @@ function parseNumericParam(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
 
-  // Preview only
   if (process.env.VERCEL_ENV !== "preview") {
     return res.status(403).json({
       ok: false,
@@ -30,7 +29,6 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // Allow GET only
   if (req.method !== "GET") {
     return res.status(405).json({
       ok: false,
@@ -46,7 +44,6 @@ module.exports = async function handler(req, res) {
   const rate_per_hour = parseNumericParam(req.query.rate_per_hour, 0);
   const rate_per_visit = parseNumericParam(req.query.rate_per_visit, 0);
 
-  // Minimal required params
   if (!org_id || !date_from || !date_to) {
     return res.status(400).json({
       ok: false,
@@ -85,7 +82,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      data: data || [],
+      data: data ?? [],
     });
   } catch (err) {
     return res.status(500).json({
@@ -93,4 +90,4 @@ module.exports = async function handler(req, res) {
       error: err?.message || "Unexpected server error",
     });
   }
-};
+}
