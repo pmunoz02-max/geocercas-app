@@ -677,17 +677,31 @@ export default function TrackerGpsPage() {
       hasLng: Number.isFinite(Number(body?.lng)),
     });
 
-    let timeoutId = null;
+    let fetchTimeoutId = null;
+    let hardTimeoutId = null;
     let controller = null;
 
-    try {
+    const hardTimeoutPromise = new Promise((_, reject) => {
+      hardTimeoutId = setTimeout(() => {
+        try {
+          controller?.abort();
+        } catch {}
+        reject(new Error("send_position_hard_timeout"));
+      }, 12000);
+    });
+
+    const sendPromise = (async () => {
       const freshToken = await getFreshJwtOrThrow("send_position");
+      console.log("[send-position] token:ok");
+
       const trackerUserId = String(decodeJwtPayload(freshToken)?.sub || "").trim();
 
-      if (!body?.org_id) return null;
-      if (!Number.isFinite(Number(body?.lat)) || !Number.isFinite(Number(body?.lng))) return null;
-      if (!trackerUserId) return null;
-      if (!freshToken) return null;
+      if (!body?.org_id) throw new Error("send_position_missing_org_id");
+      if (!Number.isFinite(Number(body?.lat)) || !Number.isFinite(Number(body?.lng))) {
+        throw new Error("send_position_invalid_coords");
+      }
+      if (!trackerUserId) throw new Error("send_position_missing_tracker_user");
+      if (!freshToken) throw new Error("send_position_missing_token");
 
       setDebug((d) => ({
         ...d,
@@ -698,9 +712,13 @@ export default function TrackerGpsPage() {
       }));
 
       controller = new AbortController();
-      timeoutId = setTimeout(() => {
-        controller?.abort();
+      fetchTimeoutId = setTimeout(() => {
+        try {
+          controller?.abort();
+        } catch {}
       }, 5000);
+
+      console.log("[send-position] fetch:start");
 
       const res = await fetch("/api/send-position", {
         method: "POST",
@@ -712,6 +730,8 @@ export default function TrackerGpsPage() {
         signal: controller.signal,
       });
 
+      console.log("[send-position] fetch:end", { status: res.status });
+
       setDebug((d) => ({ ...d, last_http_status: res.status }));
 
       let j = null;
@@ -721,10 +741,6 @@ export default function TrackerGpsPage() {
 
       if (!res.ok) {
         const msg = j?.error || j?.message || `HTTP ${res.status}`;
-        setTrackerDiag((d) => ({
-          ...d,
-          lastSendFailure: `${new Date().toISOString()} ${msg}`,
-        }));
         throw new Error(`send_position http ${res.status}: ${msg}`);
       }
 
@@ -735,6 +751,10 @@ export default function TrackerGpsPage() {
       }));
 
       return j;
+    })();
+
+    try {
+      return await Promise.race([sendPromise, hardTimeoutPromise]);
     } catch (e) {
       setTrackerDiag((d) => ({
         ...d,
@@ -742,7 +762,8 @@ export default function TrackerGpsPage() {
       }));
       throw e;
     } finally {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (fetchTimeoutId) clearTimeout(fetchTimeoutId);
+      if (hardTimeoutId) clearTimeout(hardTimeoutId);
     }
   }
 
@@ -1132,6 +1153,8 @@ export default function TrackerGpsPage() {
 
     (async () => {
       isSendingRef.current = true;
+      console.log("[send-gate] lock:on");
+
       try {
         const payload = {
           org_id: orgId,
@@ -1165,6 +1188,7 @@ export default function TrackerGpsPage() {
         }
       } finally {
         isSendingRef.current = false;
+        console.log("[send-gate] lock:off");
       }
     })();
 
