@@ -498,7 +498,14 @@ export default function TrackerGpsPage() {
 
     const result = await Promise.race([fetchPromise, timeoutPromise]);
 
-    if (result.ok && result.active && result.assignment) {
+    // Use tracker_assignment as source of truth if present
+    if (result.ok && result.tracker_assignment) {
+      setActiveAssignment(result.tracker_assignment);
+      setAssignmentWindowStatus(result.tracker_assignment.active ? "active" : "expired");
+      setAssignmentLoadState(result.tracker_assignment.active ? "active" : "inactive");
+      setAssignmentLoadError("");
+    } else if (result.ok && result.active && result.assignment) {
+      // Fallback: legacy assignment logic
       const activeNow = isAssignmentActiveNow(result.assignment);
       setActiveAssignment(result.assignment);
       setAssignmentWindowStatus(activeNow ? "active" : "expired");
