@@ -164,6 +164,16 @@ export default function Reports() {
         );
         return;
       }
+      // Require both start and end for costs report type
+      if (reportType === "cost" && (!start || !end)) {
+        setErrorMsg(
+          tr(
+            "reports.errors.missingStartEnd",
+            "Please select both a start and end date to generate the costs report."
+          )
+        );
+        return;
+      }
       if (start && end && start > end) {
         setErrorMsg(
           tr(
@@ -542,6 +552,52 @@ export default function Reports() {
                   "There is no data with the selected filters."
                 )}
               </p>
+            ) : reportType === "cost" ? (
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-gray-900">
+                  <tr className="border-b border-gray-200">
+                    <th className="p-2 text-left font-semibold">Fecha</th>
+                    <th className="p-2 text-left font-semibold">Tracker User ID</th>
+                    <th className="p-2 text-left font-semibold">Assignment ID</th>
+                    <th className="p-2 text-left font-semibold">Activity ID</th>
+                    <th className="p-2 text-right font-semibold">Km observados</th>
+                    <th className="p-2 text-right font-semibold">Horas observadas</th>
+                    <th className="p-2 text-right font-semibold">Min sin cobertura</th>
+                    <th className="p-2 text-right font-semibold"># Huecos</th>
+                    <th className="p-2 text-right font-semibold">% Cobertura</th>
+                    <th className="p-2 text-right font-semibold">Nivel confianza</th>
+                    <th className="p-2 text-right font-semibold">Tarifa hora</th>
+                    <th className="p-2 text-right font-semibold">Tarifa km</th>
+                    <th className="p-2 text-right font-semibold">Moneda</th>
+                    <th className="p-2 text-right font-semibold">Costo total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr
+                      key={r.assignment_id ? `${r.assignment_id}-${i}` : i}
+                      className={`border-t border-gray-100 hover:bg-gray-50 ${
+                        i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                      }`}
+                    >
+                      <td className="p-2 text-gray-900">{r.work_date || r.date || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.tracker_user_id || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.assignment_id || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.activity_id || "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.km_observados ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.horas_observadas ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.minutos_sin_cobertura ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.numero_huecos ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.porcentaje_cobertura ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.nivel_confianza ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.hourly_rate ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.km_rate ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.currency_code ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{r.costo_total ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             ) : (
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-gray-900">
