@@ -590,44 +590,89 @@ export default function TrackerGpsPage() {
   async function getFreshJwtOrThrow(label, { minTtlSeconds = 90 } = {}) {
     const now = Math.floor(Date.now() / 1000);
 
-    const { data: s1, error: e1 } = await PRIMARY.auth.getSession();
+    const applyTokenDebug = (token, exp = 0) => {
+      const ttl2 = exp ? exp - Math.floor(Date.now() / 1000) : null;
+      setDebug((d) => ({ ...d, last_token_ttl_sec: ttl2 }));
+
+      const payload = decodeJwtPayload(token);
+      setTokenIss(payload?.iss ? String(payload.iss) : "");
+      setDebug((d) => ({
+        ...d,
+        token_looks_jwt: looksLikeJwt(token),
+        token_iss: payload?.iss ? String(payload.iss) : "",
+        token_sub: payload?.sub ? String(payload.sub) : "",
+        client_used: "supabase-tracker",
+      }));
+
+      setTrackerAccessToken(token);
+      return token;
+    };
+
+    console.log("[send-position] token:start", { label });
+
+    const localToken = String(trackerAccessToken || "").trim();
+    const localPayload = localToken ? decodeJwtPayload(localToken) : null;
+    const localExp = Number(localPayload?.exp || 0);
+    const localTtl = localExp ? localExp - now : 0;
+
+    if (localToken && looksLikeJwt(localToken) && localTtl > minTtlSeconds) {
+      console.log("[send-position] token:from-state", { ttl: localTtl });
+      return applyTokenDebug(localToken, localExp);
+    }
+
+    const sessionTimeoutMs = 4000;
+    const getSessionWithTimeout = Promise.race([
+      PRIMARY.auth.getSession(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("getSession_timeout")), sessionTimeoutMs)
+      ),
+    ]);
+
+    const { data: s1, error: e1 } = await getSessionWithTimeout;
     if (e1) throw new Error(`getSession error before ${label}: ${e1.message}`);
 
     let token = s1?.session?.access_token || "";
-    let exp = s1?.session?.expires_at || 0;
+    let exp = Number(s1?.session?.expires_at || 0);
 
-    if (!token || !looksLikeJwt(token)) {
-      throw new Error(`${label} blocked: missing/invalid user JWT`);
-    }
+    if (token && looksLikeJwt(token)) {
+      const ttl = exp ? exp - now : 0;
 
-    const ttl = exp ? exp - now : 0;
+      if (ttl > minTtlSeconds) {
+        console.log("[send-position] token:from-session", { ttl });
+        return applyTokenDebug(token, exp);
+      }
 
-    if (!exp || ttl < minTtlSeconds) {
-      const { data: s2, error: e2 } = await PRIMARY.auth.refreshSession();
-      if (e2) throw new Error(`refreshSession error before ${label}: ${e2.message}`);
-      token = s2?.session?.access_token || "";
-      exp = s2?.session?.expires_at || 0;
-      if (!token || !looksLikeJwt(token)) {
-        throw new Error(`${label} blocked: refresh returned invalid user JWT`);
+      if (ttl > 15) {
+        console.log("[send-position] token:using-near-expiry-session", { ttl });
+        return applyTokenDebug(token, exp);
       }
     }
 
-    const ttl2 = exp ? exp - Math.floor(Date.now() / 1000) : null;
-    setDebug((d) => ({ ...d, last_token_ttl_sec: ttl2 }));
+    console.warn("[send-position] token:refresh-needed");
 
-    const payload = decodeJwtPayload(token);
-    setTokenIss(payload?.iss ? String(payload.iss) : "");
-    setDebug((d) => ({
-      ...d,
-      token_looks_jwt: looksLikeJwt(token),
-      token_iss: payload?.iss ? String(payload.iss) : "",
-      token_sub: payload?.sub ? String(payload.sub) : "",
-      client_used: "supabase-tracker",
-    }));
+    const refreshTimeoutMs = 5000;
+    const refreshWithTimeout = Promise.race([
+      PRIMARY.auth.refreshSession(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("refreshSession_timeout")), refreshTimeoutMs)
+      ),
+    ]);
 
-    setTrackerAccessToken(token);
+    const { data: s2, error: e2 } = await refreshWithTimeout;
+    if (e2) throw new Error(`refreshSession error before ${label}: ${e2.message}`);
 
-    return token;
+    token = s2?.session?.access_token || "";
+    exp = Number(s2?.session?.expires_at || 0);
+
+    if (!token || !looksLikeJwt(token)) {
+      throw new Error(`${label} blocked: refresh returned invalid user JWT`);
+    }
+
+    console.log("[send-position] token:ok", {
+      ttl: exp ? exp - Math.floor(Date.now() / 1000) : null,
+    });
+
+    return applyTokenDebug(token, exp);
   }
 
   async function invokeAcceptTrackerInvite(body) {
