@@ -42,6 +42,8 @@ function exportRowsToCSV(rows, filenameBase = "reporte") {
 }
 
 export default function Reports() {
+    // Report type toggle: 'attendance' or 'cost'
+    const [reportType, setReportType] = useState("attendance");
   const { t } = useTranslation();
   const { ready, authenticated, currentOrg } = useAuth();
 
@@ -173,7 +175,7 @@ export default function Reports() {
       }
 
       const params = new URLSearchParams();
-      params.set("action", "report");
+      params.set("action", "costs");
       if (start) params.set("start", start);
       if (end) params.set("end", end);
 
@@ -252,6 +254,32 @@ export default function Reports() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
+      {/* Report type toggle */}
+      <div className="flex items-center gap-4 mb-2">
+        <label className="text-sm font-medium text-gray-900">Tipo de reporte:</label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="radio"
+            name="reportType"
+            value="attendance"
+            checked={reportType === "attendance"}
+            onChange={() => setReportType("attendance")}
+            className="accent-emerald-700"
+          />
+          <span>Asistencia</span>
+        </label>
+        <label className="inline-flex items-center gap-1">
+          <input
+            type="radio"
+            name="reportType"
+            value="cost"
+            checked={reportType === "cost"}
+            onChange={() => setReportType("cost")}
+            className="accent-emerald-700"
+          />
+          <span>Costos</span>
+        </label>
+      </div>
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-gray-900">
           {tr("reports.title", "Reports")}
