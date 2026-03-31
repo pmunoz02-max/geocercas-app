@@ -163,26 +163,35 @@ export default function TrackerGpsPage() {
         (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
       );
 
-      let token = "";
+      let accessToken = "";
+      let refreshToken = "";
       for (const key of keys) {
         try {
           const raw = window.localStorage.getItem(key);
           if (!raw) continue;
           const parsed = JSON.parse(raw);
-          token =
+          accessToken =
             parsed?.access_token ||
             parsed?.currentSession?.access_token ||
             parsed?.session?.access_token ||
             "";
-          if (token) break;
+          refreshToken =
+            parsed?.refresh_token ||
+            parsed?.currentSession?.refresh_token ||
+            parsed?.session?.refresh_token ||
+            "";
+          if (accessToken && refreshToken) break;
         } catch {}
       }
 
-      if (!token) return;
+      if (!accessToken || !refreshToken) return;
 
+      console.log("[ANDROID] checking bridge", window.Android);
       if (window.Android && typeof window.Android.startTracking === "function") {
-        console.log("[ANDROID] starting native tracking (from localStorage)");
-        window.Android.startTracking(token);
+        console.log("[ANDROID] calling startTracking");
+        window.Android.startTracking(accessToken, refreshToken);
+      } else {
+        console.log("[ANDROID] bridge NOT available");
       }
     } catch (err) {
       console.log("[ANDROID] bridge skipped", err);

@@ -731,8 +731,11 @@ serve(async (req) => {
 
     const sentSecondsAgo = secondsSince(openInvite?.brevo_sent_at);
     const cooldownRemaining = Math.max(0, Math.ceil(SEND_COOLDOWN_SECONDS - sentSecondsAgo));
-    const withinCooldown =
-      Number.isFinite(sentSecondsAgo) && sentSecondsAgo < SEND_COOLDOWN_SECONDS;
+    const withinCooldown = false;
+    // SaaS best practice: log warning if within cooldown, but always send email
+    if (Number.isFinite(sentSecondsAgo) && sentSecondsAgo < SEND_COOLDOWN_SECONDS) {
+      console.log("[invite] cooldown ignored for resend");
+    }
 
     const { data: linkData, error: linkErr } = await sbAdmin.auth.admin.generateLink({
       type: "magiclink",
