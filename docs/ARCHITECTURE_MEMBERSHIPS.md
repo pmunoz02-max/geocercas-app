@@ -73,52 +73,11 @@ Comportamiento explícito:
 - Same-org: si ya es `owner` o `admin`, aceptar invitación `tracker` mantiene el rol existente.
 - Cross-org: roles son independientes; ser `owner` en org A no impide ser `tracker` en org B.
 
-
 ## Per-org roles (no globales)
 
 - Un usuario puede tener roles distintos en organizaciones distintas.
 - Toda autorización operativa se evalúa por membresía en `org_id`.
 - No existe un rol global único de negocio para todas las orgs.
-
-## Enforcement de Planes y Límites (Preview)
-
-### Fuente de verdad de límites
-- La vista `org_entitlements` es la única fuente de verdad para límites efectivos por organización.
-- Nunca se debe usar directamente `org_billing` para enforcement de límites.
-
-### Fallback backend
-- Si una Edge Function o flujo backend no puede consultar la vista `org_entitlements`, debe usar la función SQL `resolve_effective_plan_code` y complementar con los datos de `org_billing`.
-
-### Separación de responsabilidades
-- `org_billing` almacena el estado comercial de la suscripción (plan_code, subscribed_plan_code, plan_status, billing_provider, customer_id, subscription_id).
-- `org_entitlements` expone los límites efectivos y capacidades del sistema.
-
-### Regla de consistencia
-- Si existe discrepancia entre `org_billing` y `org_entitlements`, el enforcement SIEMPRE usa `org_entitlements`.
-
-### Backend enforcement obligatorio
-- Toda operación limitada (creación de trackers, geocercas, features premium) debe validar límites en backend antes de ejecutar.
-
-### Frontend
-- Solo refleja límites y estado; nunca es barrera de seguridad.
-
-### Logging obligatorio
-- En cada denegación por límite se debe registrar: org_id, plan_code, operation, limit, current_count, reason.
-
-### Contexto Paddle
-- Paddle activa y actualiza `org_billing` vía webhook.
-- El enforcement operativo depende exclusivamente de `org_entitlements`.
-- Esta separación desacopla la facturación de las capacidades del sistema.
-
-### Ejemplo concreto: creación de trackers
-
-1. Obtener el plan y límites efectivos desde `org_entitlements` para el `org_id` correspondiente.
-2. Contar la cantidad actual de trackers activos para la organización.
-3. Comparar con el límite `max_trackers`.
-4. Si el límite se excede, rechazar la operación y registrar el evento de acuerdo a la política de logging.
-5. Si no se excede, permitir la creación del tracker.
-
----
 
 ## Anti-patterns (prohibidos)
 

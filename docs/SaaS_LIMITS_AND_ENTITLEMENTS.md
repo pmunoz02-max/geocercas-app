@@ -46,74 +46,38 @@ org_id
 Plan information is stored in:
 
 org_billing
+3. Core SaaS Resources
 
-## Enforcement de Planes y Límites (Preview)
+The following resources define the main operational limits.
 
-### 1. Fuente de verdad de límites
-- La vista `org_entitlements` es la única fuente de verdad para límites efectivos por organización.
-- Nunca se debe usar directamente `org_billing` para enforcement de límites.
+Resource	Description
+Trackers	active tracked users/devices
+Geofences	number of geofences per organization
+Tracking frequency	minimum allowed position interval
+Historical data	retention period
+Events	geofence events retention
+Admins	number of organization administrators
 
-### 2. Fallback backend
-- Si una Edge Function o flujo backend no puede consultar la vista `org_entitlements`, debe usar la función SQL `resolve_effective_plan_code` y complementar con los datos de `org_billing` para determinar el plan efectivo y aplicar los límites correspondientes.
+These limits protect system stability and enable tiered pricing.
 
-### 3. Separación de responsabilidades
-- `org_billing` almacena únicamente el estado comercial de la suscripción (campos: `plan_code`, `subscribed_plan_code`, `plan_status`, `billing_provider`, `customer_id`, `subscription_id`).
-- `org_entitlements` expone los límites efectivos y capacidades del sistema para cada organización.
+4. SaaS Plans (Example)
 
-### 4. Regla de consistencia
-- Si existe discrepancia entre `org_billing` y `org_entitlements`, el enforcement SIEMPRE usa `org_entitlements`.
+The platform may support multiple subscription tiers.
 
-### 5. Backend enforcement obligatorio
-- Toda operación limitada (por ejemplo, creación de trackers, geocercas, features premium) debe validar los límites en backend antes de ejecutar la acción.
-
-### 6. Frontend
-- El frontend solo refleja límites y estado, nunca es barrera de seguridad.
-
-### 7. Logging obligatorio
-- En cada denegación por límite se debe registrar:
-	- `org_id`
-	- `plan_code`
-	- `operation`
-	- `limit`
-	- `current_count`
-	- `reason`
-
-### 8. Contexto Paddle
-- Paddle activa y actualiza `org_billing` vía webhook.
-- El enforcement operativo depende exclusivamente de `org_entitlements`.
-- Esta separación desacopla la facturación de las capacidades del sistema.
-
-### 9. Ejemplo concreto: creación de trackers
-
-**Flujo de enforcement:**
-1. Obtener el plan y límites efectivos desde `org_entitlements` para el `org_id` correspondiente.
-2. Contar la cantidad actual de trackers activos para la organización.
-3. Comparar con el límite `max_trackers`.
-4. Si el límite se excede, rechazar la operación y registrar el evento de acuerdo a la política de logging.
-5. Si no se excede, permitir la creación del tracker.
-
-**Ejemplo SQL:**
-```sql
--- Obtener límites efectivos
-SELECT max_trackers FROM org_entitlements WHERE org_id = :org_id;
-
--- Contar trackers actuales
-SELECT COUNT(*) FROM trackers WHERE org_id = :org_id AND status = 'active';
-
--- Lógica de enforcement (pseudocódigo)
-IF current_count >= max_trackers THEN
-	-- Loguear denegación con org_id, plan_code, operation, limit, current_count, reason
-	RAISE EXCEPTION 'Tracker limit reached';
-END IF;
-```
-
-### 10. Restricciones
-- No crear nuevas tablas.
-- No cambiar contratos existentes.
-- No modificar la estructura de `org_billing`.
-- No modificar SQL existente; solo documentar el uso correcto.
-
----
+Plan	Target
+Basic	small teams
+Professional	medium organizations
+Enterprise	large deployments
+5. Example Plan Limits
+Basic Plan
+Feature	Limit
+Trackers	10
+Geofences	20
+Tracking frequency	2–5 minutes
+Position retention	30 days
+Event retention	90 days
+Admins	2
+Professional Plan
 Feature	Limit
 Trackers	100
 Geofences	200

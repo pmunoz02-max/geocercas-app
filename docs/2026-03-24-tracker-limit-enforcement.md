@@ -2,7 +2,7 @@
 
 ## Contexto
 
-Se implementa enforcement real de lÌmites de trackers por plan en backend.
+Se implementa enforcement real de l√≠mites de trackers por plan en backend.
 
 ## Fuente de verdad
 
@@ -15,15 +15,15 @@ El control se realiza en:
 
 - `public.rpc_upsert_tracker_assignment`
 
-## LÛgica
+## L√≥gica
 
 1. Resolver `org_id`
 2. Obtener `max_trackers`
 3. Contar trackers activos:
    - `count(distinct tracker_user_id)`
    - `tracker_assignments.active = true`
-4. Si supera lÌmite:
-   - Se lanza excepciÛn `TRACKER_LIMIT_REACHED`
+4. Si supera l√≠mite:
+   - Se lanza excepci√≥n `TRACKER_LIMIT_REACHED`
 
 ## Helpers alineados
 
@@ -32,9 +32,9 @@ El control se realiza en:
 
 ## Decisiones
 
-- No usar `org_billing` para enforcement
-- Backend como ˙nica fuente de control
-- Frontend solo refleja error
+- ‚ùå No usar `org_billing` para enforcement
+- ‚úÖ Backend como √∫nica fuente de control
+- ‚úÖ Frontend solo refleja error
 
 ## Estado
 

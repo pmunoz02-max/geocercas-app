@@ -5,11 +5,14 @@
 
 ## Ambientes
 
+
 ### Preview
 - para desarrollo
+- billing: Paddle (migrado)
 
 ### Producción
 - https://app.tugeocercas.com
+- billing: Stripe legacy (no migrado)
 
 ## Flujo de deploy
 

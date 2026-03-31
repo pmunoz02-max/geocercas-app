@@ -1,4 +1,4 @@
-# Tracker Invite Rule — Active Assignment Required
+# Tracker Invite Rule â€” Active Assignment Required
 
 ## Context
 
@@ -26,35 +26,15 @@ Implemented in:
 
 - api/invite-tracker.js
 
-Before sending an invite, the system validates the existence of at least one active assignment in `tracker_assignments`.
+Before sending an invite, the system validates:
 
-If validation fails, the API returns:
+- existence of at least one active assignment in `tracker_assignments`
 
-- code: TRACKER_REQUIRES_ACTIVE_ASSIGNMENT
-- message: Solo se puede invitar a trackers con asignaciones activas
+If validation fails:
 
-### Frontend (UX Enforcement)
-
-Implemented in:
-
-- src/components/tracker/TrackerPage.jsx
-
-Behavior:
-
-- "Invitar" button is disabled when `has_active_assignment = false`
-- Tooltip explains the restriction
-
-### Data Source
-
-The flag `has_active_assignment` is computed in:
-
-- src/lib/trackersApi.js
-
-Using:
-
-- subquery over `tracker_assignments`
-
-## Scope
-
-- Preview environment only
-- No production impact
+```json
+{
+  "ok": false,
+  "code": "TRACKER_REQUIRES_ACTIVE_ASSIGNMENT",
+  "message": "Solo se puede invitar a trackers con asignaciones activas"
+}

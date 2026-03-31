@@ -58,3 +58,9 @@ El objetivo es:
 | KNOWN_ISSUES | problemas conocidos |
 
 **Esta documentación debe mantenerse actualizada en cada cambio importante.**
+
+## Migración Billing Preview (Paddle)
+
+- Preview usa Paddle para billing y upgrade PRO
+- Producción sigue en Stripe legacy
+- Ver [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md) para detalles, arquitectura y troubleshooting

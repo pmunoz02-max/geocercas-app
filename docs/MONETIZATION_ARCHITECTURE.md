@@ -1,7 +1,13 @@
 MONETIZATION_ARCHITECTURE.md
+
 # MONETIZATION_ARCHITECTURE
 
 Este documento define la arquitectura de monetización del sistema **App Geocercas**.
+
+## Entornos y Proveedores
+
+- **Producción:** Stripe legacy (no migrado)
+- **Preview:** Paddle (migrado, Stripe deshabilitado)
 
 El objetivo es permitir que la plataforma funcione como **SaaS comercial escalable**, soportando:
 
@@ -48,21 +54,24 @@ Las organizaciones pueden tener:
 
 ---
 
+
 # Tabla de Facturación
 
 La tabla base para monetización es:
 
-
 org_billing
 
-
-Esta tabla debe contener información como:
+Incluye soporte para Stripe (producción) y Paddle (preview):
 
 - plan activo
 - límites aplicables
 - estado de suscripción
 - fechas de renovación
 - flags de features habilitadas
+- billing_provider (stripe|paddle)
+- paddle_customer_id, paddle_subscription_id, paddle_price_id, last_paddle_event_at (solo preview)
+
+Ver detalles en [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md)
 
 ---
 

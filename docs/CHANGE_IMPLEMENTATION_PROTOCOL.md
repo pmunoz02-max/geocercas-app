@@ -66,9 +66,17 @@ desde un deployment validado en preview.
 
 ---
 
+
 # Protocolo de Implementación de Cambios
 
 Cada cambio debe seguir las siguientes fases.
+
+## Migración Billing Preview (Paddle)
+
+- No mezclar preview con producción
+- No hacer push a main sin validar migración
+- Toda migración de billing requiere update de docs
+- Ver [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md)
 
 ---
 
