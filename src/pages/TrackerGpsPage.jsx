@@ -1,11 +1,13 @@
 // Inicia tracking nativo Android cuando el tracker inicia sesión y hay access_token
 useEffect(() => {
-  if (!session?.access_token) return;
+  if (!session || typeof session !== "object") return;
+  const token = session.access_token;
+  if (!token) return;
   if (window.Android && typeof window.Android.startTracking === "function") {
     console.log("[ANDROID] starting native tracking");
-    window.Android.startTracking(session.access_token);
+    window.Android.startTracking(token);
   }
-}, [session?.access_token]);
+}, [session]);
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
