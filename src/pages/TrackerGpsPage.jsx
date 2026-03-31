@@ -1,13 +1,27 @@
 // Inicia tracking nativo Android cuando el tracker inicia sesión y hay access_token
+// Llama a startTracking leyendo el access_token desde localStorage (sin depender de session)
 useEffect(() => {
-  if (!session || typeof session !== "object") return;
-  const token = session.access_token;
+  // Supabase almacena la sesión en localStorage con una clave que contiene "sb-" y termina en "-auth-token"
+  const keys = Object.keys(window.localStorage || {}).filter(k => k.startsWith("sb-") && k.endsWith("-auth-token"));
+  let token = null;
+  for (const k of keys) {
+    try {
+      const val = window.localStorage.getItem(k);
+      if (val) {
+        const parsed = JSON.parse(val);
+        if (parsed && typeof parsed === "object" && parsed.access_token) {
+          token = parsed.access_token;
+          break;
+        }
+      }
+    } catch {}
+  }
   if (!token) return;
   if (window.Android && typeof window.Android.startTracking === "function") {
-    console.log("[ANDROID] starting native tracking");
+    console.log("[ANDROID] starting native tracking (from localStorage)");
     window.Android.startTracking(token);
   }
-}, [session]);
+}, []);
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
