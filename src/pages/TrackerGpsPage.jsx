@@ -63,6 +63,44 @@ function pickOrgIdFromSearch(search) {
   return null;
 }
 
+
+function getStoredTrackerOrgId() {
+  try {
+    const local = String(localStorage.getItem(LS_TRACKER_ORG_KEY) || "").trim();
+    if (isUuid(local)) return local;
+  } catch {}
+  try {
+    const session = String(sessionStorage.getItem(LS_TRACKER_ORG_KEY) || "").trim();
+    if (isUuid(session)) return session;
+  } catch {}
+  return "";
+}
+
+function getAcceptDedupeKey(orgId, userId) {
+  const safeOrgId = String(orgId || "").trim();
+  const safeUserId = String(userId || "").trim();
+  if (!safeOrgId || !safeUserId) return "";
+  return `accept_invite_${safeOrgId}_${safeUserId}`;
+}
+
+function hasAcceptedTrackerInviteLocally(orgId, userId) {
+  const safeOrgId = String(orgId || "").trim();
+  if (!safeOrgId) return false;
+
+  try {
+    if (sessionStorage.getItem(`${SS_ACCEPTED_PREFIX}${safeOrgId}`) === "1") return true;
+  } catch {}
+
+  const dedupeKey = getAcceptDedupeKey(safeOrgId, userId);
+  if (!dedupeKey) return false;
+
+  try {
+    return localStorage.getItem(dedupeKey) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function decodeJwtPayload(token) {
   try {
     const part = String(token || "").split(".")[1];
@@ -464,13 +502,28 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     const pOrg = String(params?.orgId || "").trim();
     const qOrg = pickOrgIdFromSearch(location?.search || "");
-    const picked = isUuid(pOrg) ? pOrg : isUuid(qOrg) ? qOrg : "";
+    const storedOrg = getStoredTrackerOrgId();
+    const picked = isUuid(pOrg)
+      ? pOrg
+      : isUuid(qOrg)
+      ? qOrg
+      : isUuid(storedOrg)
+      ? storedOrg
+      : "";
+
+    const orgSource = isUuid(pOrg)
+      ? "path"
+      : isUuid(qOrg)
+      ? "query"
+      : isUuid(storedOrg)
+      ? "storage"
+      : "none";
 
     setDebug((d) => ({
       ...d,
       router_search: location?.search || "",
       path_orgId: pOrg || "",
-      org_source: isUuid(pOrg) ? "path" : isUuid(qOrg) ? "query" : "none",
+      org_source: orgSource,
     }));
 
     if (picked) {
@@ -478,6 +531,11 @@ export default function TrackerGpsPage() {
       try {
         localStorage.setItem(LS_TRACKER_ORG_KEY, picked);
       } catch {}
+      try {
+        sessionStorage.setItem(LS_TRACKER_ORG_KEY, picked);
+      } catch {}
+      setMembershipStatus((prev) => (prev === "failed" ? "pending" : prev));
+      setMembershipDetail("");
       return;
     }
 
@@ -486,7 +544,7 @@ export default function TrackerGpsPage() {
     setMembershipDetail(
       tt(
         "trackerGps.membership.missingOrgId",
-        "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
+        "Missing org_id in URL or storage. Open this page from the invitation link at least once: /tracker-gps?org_id=<ORG_ID>."
       )
     );
   }, [location.search, params?.orgId, lang]);
@@ -939,36 +997,35 @@ export default function TrackerGpsPage() {
     setUpgradeRequired(false);
     try {
       const params = new URLSearchParams(window.location.search);
-      const urlOrgId = params.get("org_id");
+      const urlOrgId = String(params.get("org_id") || "").trim();
+      const storedOrgId = getStoredTrackerOrgId();
 
-      if (urlOrgId) {
-        localStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
-        sessionStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
+      if (isUuid(urlOrgId)) {
+        try {
+          localStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
+          sessionStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
+        } catch {}
       }
 
-      const savedAccepted = sessionStorage.getItem(`${SS_ACCEPTED_PREFIX}${urlOrgId || ""}`) || "";
-      if (savedAccepted === "1") return true;
-
-      const org_id =
-        urlOrgId ||
-        localStorage.getItem(LS_TRACKER_ORG_KEY) ||
-        sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
-        "";
+      const org_id = String(urlOrgId || storedOrgId || orgId || "").trim();
 
       const { data } = await supabaseTracker.auth.getSession();
-      const userId = data?.session?.user?.id;
+      const userId = data?.session?.user?.id || "";
 
       console.log("[accept-invite] start", { reason, org_id, userId });
 
-      if (!org_id) return false;
+      if (!org_id || !isUuid(org_id)) return false;
       if (!userId) return false;
 
-      const dedupeKey = "accept_invite_" + org_id + "_" + userId;
-      if (localStorage.getItem(dedupeKey)) {
-        sessionStorage.setItem(`${SS_ACCEPTED_PREFIX}${org_id}`, "1");
+      if (hasAcceptedTrackerInviteLocally(org_id, userId)) {
+        try {
+          sessionStorage.setItem(`${SS_ACCEPTED_PREFIX}${org_id}`, "1");
+        } catch {}
         return true;
       }
 
+      const dedupeKey = getAcceptDedupeKey(org_id, userId);
+      if (!dedupeKey) return false;
       if (acceptInFlightRef.current.has(dedupeKey)) return false;
 
       acceptInFlightRef.current.add(dedupeKey);
@@ -1024,44 +1081,61 @@ export default function TrackerGpsPage() {
   };
 
   useEffect(() => {
-    if (!trackerReady || !hasSession || !PRIMARY) return;
+    if (!trackerReady || !PRIMARY) return;
 
-    const params = new URLSearchParams(window.location.search);
-    const urlOrgId = params.get("org_id") || "";
-
-    if (urlOrgId) {
-      localStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
-      sessionStorage.setItem(LS_TRACKER_ORG_KEY, urlOrgId);
-    }
-
-    const resolvedOrgId = String(
-      urlOrgId ||
-        localStorage.getItem(LS_TRACKER_ORG_KEY) ||
-        sessionStorage.getItem(LS_TRACKER_ORG_KEY) ||
-        ""
-    ).trim();
-
+    const resolvedOrgId = String(orgId || getStoredTrackerOrgId() || "").trim();
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) return;
-    if (onboardingLockRef.current) return;
-    onboardingLockRef.current = true;
 
     let cancelled = false;
 
     (async () => {
       try {
-        setIsActivationBgRunning(true);
         const { data: sData } = await PRIMARY.auth.getSession();
         const sessionUser = sData?.session?.user || null;
         const userId = sessionUser?.id || "";
 
-        if (userId && resolvedOrgId) {
-          await tryAcceptInvite("background");
+        if (!hasSession || !userId) {
+          if (!cancelled) {
+            setMembershipStatus("pending");
+          }
+          return;
+        }
+
+        try {
+          localStorage.setItem(LS_TRACKER_ORG_KEY, resolvedOrgId);
+        } catch {}
+        try {
+          sessionStorage.setItem(LS_TRACKER_ORG_KEY, resolvedOrgId);
+        } catch {}
+
+        if (hasAcceptedTrackerInviteLocally(resolvedOrgId, userId)) {
+          if (!cancelled) {
+            setMembershipStatus("ok");
+            setMembershipDetail("");
+            setAcceptError("");
+            setAcceptErrorCode("");
+            setUpgradeRequired(false);
+          }
+          return;
+        }
+
+        if (onboardingLockRef.current) return;
+        onboardingLockRef.current = true;
+        if (!cancelled) setIsActivationBgRunning(true);
+
+        const accepted = await tryAcceptInvite("onboarding-once");
+
+        if (!cancelled) {
+          if (accepted) {
+            setMembershipStatus("ok");
+            setMembershipDetail("");
+          } else {
+            setMembershipStatus("pending");
+          }
         }
       } finally {
         if (!cancelled) {
           setIsActivationBgRunning(false);
-          setMembershipStatus("ok");
-          setMembershipDetail("");
         }
         onboardingLockRef.current = false;
       }
@@ -1070,55 +1144,7 @@ export default function TrackerGpsPage() {
     return () => {
       cancelled = true;
     };
-  }, [trackerReady, hasSession, orgId, PRIMARY, lang]);
-
-  useEffect(() => {
-    if (!trackerReady) return;
-
-    let interval;
-    let timeout;
-    let pollSuccess = false;
-
-    if (hasSession && orgId) {
-      tryAcceptInvite("activation").then((success) => {
-        if (success) pollSuccess = true;
-      });
-    } else {
-      tryAcceptInvite("mount");
-    }
-
-    const { data: sub } = supabaseTracker.auth.onAuthStateChange(async (_event, nextSession) => {
-      if (nextSession?.user) {
-        const success = await tryAcceptInvite("auth-change");
-        if (success) pollSuccess = true;
-      }
-    });
-
-    async function tryPoll() {
-      if (pollSuccess) {
-        clearInterval(interval);
-        clearTimeout(timeout);
-        return;
-      }
-      const success = await tryAcceptInvite("polling");
-      if (success) {
-        pollSuccess = true;
-        clearInterval(interval);
-        clearTimeout(timeout);
-      }
-    }
-
-    interval = setInterval(tryPoll, 1000);
-    timeout = setTimeout(() => {
-      clearInterval(interval);
-    }, 15000);
-
-    return () => {
-      sub?.subscription?.unsubscribe?.();
-      clearInterval(interval);
-      clearTimeout(timeout);
-    };
-  }, [trackerReady, hasSession, orgId]);
+  }, [trackerReady, hasSession, orgId, PRIMARY]);
 
   useEffect(() => {
     if (!trackerReady || !hasSession || !disclosureAccepted) return;
