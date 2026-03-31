@@ -1,3 +1,57 @@
+// Restaura sesión Supabase desde localStorage si está disponible antes de enviar posiciones
+useEffect(() => {
+  const restoreSession = async () => {
+    try {
+      const { data } = await supabaseTracker.auth.getSession();
+
+      if (data?.session?.access_token) {
+        console.log("[tracker] session already active");
+        return;
+      }
+
+      console.log("[tracker] trying to restore session from localStorage");
+
+      const storage = window.localStorage || {};
+      const keys = Object.keys(storage).filter(
+        (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+      );
+
+      for (const key of keys) {
+        try {
+          const raw = localStorage.getItem(key);
+          if (!raw) continue;
+
+          const parsed = JSON.parse(raw);
+
+          const access_token =
+            parsed?.access_token ||
+            parsed?.currentSession?.access_token;
+
+          const refresh_token =
+            parsed?.refresh_token ||
+            parsed?.currentSession?.refresh_token;
+
+          if (access_token && refresh_token) {
+            console.log("[tracker] restoring session");
+
+            await supabaseTracker.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+
+            return;
+          }
+        } catch {}
+      }
+
+      console.warn("[tracker] no session could be restored");
+    } catch (e) {
+      console.error("[tracker] restore failed", e);
+    }
+  };
+
+  restoreSession();
+}, []);
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
