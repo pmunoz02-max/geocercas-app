@@ -1659,23 +1659,38 @@ export default function TrackerDashboard() {
 
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree) return;
-    if (isHistoryRequested) return;
+    if (!resolvedOrgId) return;
 
-    const intervalId = window.setInterval(() => {
-      loadLatestPositionsForDashboard(resolvedOrgId, { showSpinner: false });
-    }, 15000);
+    console.log("[dashboard] polling started", resolvedOrgId);
+
+    let isActive = true;
+
+    const tick = async () => {
+      if (!isActive) return;
+
+      try {
+        console.log("[dashboard] polling tick");
+
+        await loadLatestPositionsForDashboard(resolvedOrgId, {
+          showSpinner: false,
+        });
+
+      } catch (e) {
+        console.warn("[dashboard] polling error", e);
+      }
+    };
+
+    // Ejecuta inmediatamente
+    tick();
+
+    const intervalId = setInterval(tick, 15000);
 
     return () => {
-      window.clearInterval(intervalId);
+      console.log("[dashboard] polling stopped");
+      isActive = false;
+      clearInterval(intervalId);
     };
-  }, [
-    resolvedOrgId,
-    entitlementsLoading,
-    isFree,
-    isHistoryRequested,
-    loadLatestPositionsForDashboard,
-  ]);
+  }, [resolvedOrgId]);
 
   const personalByUserId = useMemo(() => {
     const m = new Map();
