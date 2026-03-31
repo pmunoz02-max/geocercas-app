@@ -1,27 +1,3 @@
-// Inicia tracking nativo Android cuando el tracker inicia sesión y hay access_token
-// Llama a startTracking leyendo el access_token desde localStorage (sin depender de session)
-useEffect(() => {
-  // Supabase almacena la sesión en localStorage con una clave que contiene "sb-" y termina en "-auth-token"
-  const keys = Object.keys(window.localStorage || {}).filter(k => k.startsWith("sb-") && k.endsWith("-auth-token"));
-  let token = null;
-  for (const k of keys) {
-    try {
-      const val = window.localStorage.getItem(k);
-      if (val) {
-        const parsed = JSON.parse(val);
-        if (parsed && typeof parsed === "object" && parsed.access_token) {
-          token = parsed.access_token;
-          break;
-        }
-      }
-    } catch {}
-  }
-  if (!token) return;
-  if (window.Android && typeof window.Android.startTracking === "function") {
-    console.log("[ANDROID] starting native tracking (from localStorage)");
-    window.Android.startTracking(token);
-  }
-}, []);
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -177,6 +153,42 @@ export default function TrackerGpsPage() {
       return String(import.meta.env.VITE_TRACKER_DEBUG_UI || "").trim().toLowerCase() === "true";
     }
   }, [location.search]);
+
+  // Native Android bridge: start background tracking when tracker session token exists.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    try {
+      const storage = window.localStorage || {};
+      const keys = Object.keys(storage).filter(
+        (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
+      );
+
+      let token = "";
+      for (const key of keys) {
+        try {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          token =
+            parsed?.access_token ||
+            parsed?.currentSession?.access_token ||
+            parsed?.session?.access_token ||
+            "";
+          if (token) break;
+        } catch {}
+      }
+
+      if (!token) return;
+
+      if (window.Android && typeof window.Android.startTracking === "function") {
+        console.log("[ANDROID] starting native tracking (from localStorage)");
+        window.Android.startTracking(token);
+      }
+    } catch (err) {
+      console.log("[ANDROID] bridge skipped", err);
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
