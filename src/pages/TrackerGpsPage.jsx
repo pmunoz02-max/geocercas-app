@@ -1,4 +1,7 @@
-// Recuperación al volver al frente: reload assignment y forzar envío si corresponde
+
+// ...existing code...
+
+// (Mover este bloque justo después de declarar los useState y useRef principales)
 useEffect(() => {
   if (!trackerReady || !hasSession || !orgId) return;
   if (!disclosureAccepted) return;
