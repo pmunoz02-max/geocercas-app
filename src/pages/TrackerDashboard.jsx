@@ -1,3 +1,21 @@
+useEffect(() => {
+  if (!resolvedOrgId || entitlementsLoading || isFree) return;
+  if (isHistoryRequested) return;
+
+  const intervalId = window.setInterval(() => {
+    loadLatestPositionsForDashboard(resolvedOrgId, { showSpinner: false });
+  }, 15000);
+
+  return () => {
+    window.clearInterval(intervalId);
+  };
+}, [
+  resolvedOrgId,
+  entitlementsLoading,
+  isFree,
+  isHistoryRequested,
+  loadLatestPositionsForDashboard,
+]);
 
 // src/pages/TrackerDashboard.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
