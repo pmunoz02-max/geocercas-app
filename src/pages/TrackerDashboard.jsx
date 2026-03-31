@@ -1589,7 +1589,6 @@ export default function TrackerDashboard() {
   }, [resolvedOrgId, assignmentTrackers, entitlementsLoading, isFree, isHistoryRequested, timeWindowId]);
 
   useEffect(() => {
-    if (!previewUiEnabled) return;
     if (!resolvedOrgId || entitlementsLoading || isFree) return;
     if (isHistoryRequested) return;
 

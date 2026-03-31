@@ -57,7 +57,7 @@ export default function AcceptInvite() {
       return;
     }
 
-    navigate("/orgs", { replace: true });
+    navigate("/tracker-gps", { replace: true });
   };
 
   return (
