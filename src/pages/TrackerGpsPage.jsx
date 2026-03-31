@@ -1,3 +1,86 @@
+// Recuperación al volver al frente: reload assignment y forzar envío si corresponde
+useEffect(() => {
+  if (!trackerReady || !hasSession || !orgId) return;
+  if (!disclosureAccepted) return;
+
+  let running = false;
+
+  const recoverNow = async (reason = "resume") => {
+    if (running) return;
+    running = true;
+
+    try {
+      console.log("[resume-recovery] start", { reason });
+
+      const freshToken = await getFreshJwtOrThrow(`resume-${reason}`, {
+        minTtlSeconds: 30,
+      });
+
+      await loadActiveAssignment(freshToken);
+
+      const c = lastCoordsRef.current;
+      if (
+        c &&
+        assignmentWindowStatus === "active" &&
+        !isSendingRef.current
+      ) {
+        const now = Date.now();
+
+        await invokeSendPosition({
+          org_id: orgId,
+          lat: c.lat,
+          lng: c.lng,
+          accuracy: c.accuracy,
+          timestamp: now,
+          source: `tracker-resume-${reason}`,
+        });
+
+        lastSentAtRef.current = now;
+        lastSendOkAtRef.current = now;
+        setLastSend(new Date(now));
+        setLastError(null);
+        setIsWatchdogRecovering(false);
+        setTrackerDiag((d) => ({
+          ...d,
+          lastSendOk: now,
+          lastWatchdogAction: `${new Date().toISOString()} resume-${reason}`,
+        }));
+      }
+
+      console.log("[resume-recovery] done", { reason });
+    } catch (e) {
+      console.warn("[resume-recovery] failed", reason, e);
+      setLastError(`resume recovery error: ${String(e?.message || e)}`);
+    } finally {
+      running = false;
+    }
+  };
+
+  const onVisibility = () => {
+    if (document.visibilityState === "visible") {
+      recoverNow("visibility");
+    }
+  };
+
+  const onFocus = () => recoverNow("focus");
+  const onOnline = () => recoverNow("online");
+
+  document.addEventListener("visibilitychange", onVisibility);
+  window.addEventListener("focus", onFocus);
+  window.addEventListener("online", onOnline);
+
+  return () => {
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("focus", onFocus);
+    window.removeEventListener("online", onOnline);
+  };
+}, [
+  trackerReady,
+  hasSession,
+  orgId,
+  disclosureAccepted,
+  assignmentWindowStatus,
+]);
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
