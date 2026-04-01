@@ -371,7 +371,10 @@ export default function TrackerGpsPage() {
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
 
   useEffect(() => {
-    if (isWebSendBlocked()) return;
+    if (isWebSendBlocked()) {
+      console.log("[gps] resume recovery blocked: native Android active");
+      return;
+    }
     if (!trackerReady || !hasSession || !orgId) return;
     if (!disclosureAccepted) return;
 
@@ -920,6 +923,13 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
+    if (isWebSendBlocked()) {
+      console.log("[gps] invokeSendPosition blocked: native Android active", {
+        source: body?.source || "unknown",
+      });
+      throw new Error("web_send_blocked_native_android_active");
+    }
+
     setTrackerDiag((d) => ({
       ...d,
       lastSendAttempt: Date.now(),
@@ -1316,7 +1326,10 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
-    if (isWebSendBlocked()) return;
+    if (isWebSendBlocked()) {
+      console.log("[gps] send blocked: native Android active");
+      return;
+    }
 
     console.log("[send-gate] evaluate", {
       hasLastPosition: !!lastPosition,
@@ -1438,7 +1451,10 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
-    if (isWebSendBlocked()) return;
+    if (isWebSendBlocked()) {
+      console.log("[gps] heartbeat blocked: native Android active");
+      return;
+    }
     if (!trackerReady || !hasSession || !orgId) return;
     if (!disclosureAccepted) return;
     if (membershipStatus !== "ok") return;
@@ -1503,7 +1519,10 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
-    if (isWebSendBlocked()) return;
+    if (isWebSendBlocked()) {
+      console.log("[gps] watchdog blocked: native Android active");
+      return;
+    }
     if (!trackerReady || !hasSession) return;
     if (!disclosureAccepted) return;
     if (assignmentWindowStatus !== "active") return;
