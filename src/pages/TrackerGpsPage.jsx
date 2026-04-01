@@ -11,107 +11,6 @@ const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 const WATCHDOG_RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
 const WATCHDOG_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
 
-function deriveTrackerVisualStatus({
-  hasSession,
-  trackerReady,
-  assignmentWindowStatus,
-  assignmentLoadError,
-  hasRecentSuccessfulSend,
-  hasAnySuccessfulSend,
-  isWatchdogRecovering,
-  lastPosition,
-  gpsAcquisitionState,
-}) {
-  if (!trackerReady) return "Tracker not ready";
-  if (!hasSession) return "No active tracker session";
-  if (assignmentLoadError && assignmentLoadError !== "assignment_load_timeout") {
-    return "Assignment error";
-  }
-
-  switch (assignmentWindowStatus) {
-    case "inactive":
-      return "No active assignment";
-    case "active":
-      if (!lastPosition && gpsAcquisitionState === "acquiring") return "Acquiring GPS...";
-      if (!lastPosition && gpsAcquisitionState === "error") return "GPS unavailable";
-      if (isWatchdogRecovering) return "Recovering tracker...";
-      if (!lastPosition) return "Acquiring GPS...";
-      if (!hasAnySuccessfulSend) return "Waiting first send...";
-      if (!hasRecentSuccessfulSend) return "Tracker stalled";
-      return "Tracker ready";
-    case "expired":
-      return "Assignment ended";
-    default:
-      return "Preparing tracker...";
-  }
-}
-
-function isUuid(v) {
-  const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-function pickOrgIdFromSearch(search) {
-  try {
-    const sp = new URLSearchParams(search || "");
-    const candidates = [sp.get("org"), sp.get("org_id"), sp.get("orgId")].filter(Boolean);
-    for (const c of candidates) {
-      if (isUuid(c)) return String(c);
-    }
-  } catch {}
-  return null;
-}
-
-function decodeJwtPayload(token) {
-  try {
-    const part = String(token || "").split(".")[1];
-    if (!part) return null;
-    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function looksLikeJwt(token) {
-  const t = String(token || "");
-  return t.split(".").length === 3;
-}
-
-function parseHashTokens(hash) {
-  const h = String(hash || "");
-  const hp = new URLSearchParams(h.startsWith("#") ? h.slice(1) : h);
-  return {
-    access_token: hp.get("access_token") || "",
-    refresh_token: hp.get("refresh_token") || "",
-  };
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function sanitizeLang(v) {
-  const l = String(v || "").trim().toLowerCase().slice(0, 2);
-  return l === "en" || l === "fr" || l === "es" ? l : "es";
-}
-
-function parseLocalDateBoundary(dateStr, endOfDay = false) {
-  if (!dateStr) return null;
-  const s = String(dateStr).trim();
-  if (!s) return null;
-  const d = new Date(`${s}T${endOfDay ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function isAssignmentActiveNow(row, now = new Date()) {
-  if (!row || row.active !== true) return false;
-  const start = parseLocalDateBoundary(row.start_date, false);
-  const end = parseLocalDateBoundary(row.end_date, true);
-  if (!start || !end) return false;
-  return now >= start && now <= end;
-}
-
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -152,6 +51,66 @@ export default function TrackerGpsPage() {
       return String(import.meta.env.VITE_TRACKER_DEBUG_UI || "").trim().toLowerCase() === "true";
     }
   }, [location.search]);
+
+  const ANDROID_DIAG_DISMISS_KEY = "geocercas_android_diag_dismissed";
+  const [androidDiag, setAndroidDiag] = useState(null);
+  const [androidDiagDismissed, setAndroidDiagDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(ANDROID_DIAG_DISMISS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const recheckAndroidDiag = () => {
+    if (typeof window === "undefined") return;
+    if (!window.Android || typeof window.Android.getTrackingDiagnosticsJson !== "function") return;
+
+    try {
+      const raw = window.Android.getTrackingDiagnosticsJson();
+      if (!raw) return;
+
+      const diag = JSON.parse(raw);
+      setAndroidDiag(diag);
+
+      const normalizedManufacturer = String(diag?.manufacturer || "").toLowerCase();
+      const hasIssue =
+        diag?.battery_optimization_ignored === false ||
+        diag?.background_restricted === true ||
+        ["xiaomi", "huawei", "oppo", "vivo", "realme", "tecno", "infinix"].some((x) =>
+          normalizedManufacturer.includes(x)
+        );
+
+      if (hasIssue) {
+        setAndroidDiagDismissed(false);
+        try {
+          localStorage.removeItem(ANDROID_DIAG_DISMISS_KEY);
+        } catch {}
+      }
+    } catch {
+      setAndroidDiag(null);
+    }
+  };
+
+  useEffect(() => {
+    recheckAndroidDiag();
+
+    const onFocus = () => recheckAndroidDiag();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") {
+        recheckAndroidDiag();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
 
   // Native Android bridge: start background tracking when tracker session token exists.
   useEffect(() => {
@@ -245,33 +204,36 @@ export default function TrackerGpsPage() {
     lastReloadReason: null,
   });
 
-  const [androidDiag, setAndroidDiag] = useState(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!window.Android || typeof window.Android.getTrackingDiagnosticsJson !== "function") return;
-
-    try {
-      const raw = window.Android.getTrackingDiagnosticsJson();
-      if (!raw) return;
-      const diag = JSON.parse(raw);
-      setAndroidDiag(diag);
-    } catch {
-      setAndroidDiag(null);
-    }
-  }, []);
-
-  const isAndroidBridge = !!androidDiag;
+  const hasAndroidBridge = !!androidDiag;
   const androidManufacturer = String(androidDiag?.manufacturer || "").toLowerCase();
-  const needsBatteryOptimizationHelp =
-    isAndroidBridge && androidDiag?.battery_optimization_ignored === false;
-  const needsBackgroundRestrictionHelp =
-    isAndroidBridge && androidDiag?.background_restricted === true;
-  const needsAutoStartHelp =
-    isAndroidBridge &&
+  const needsBattOpt =
+    hasAndroidBridge && androidDiag?.battery_optimization_ignored === false;
+  const needsBgRestrict =
+    hasAndroidBridge && androidDiag?.background_restricted === true;
+  const needsAutoStart =
+    hasAndroidBridge &&
     ["xiaomi", "huawei", "oppo", "vivo", "realme", "tecno", "infinix"].some((x) =>
       androidManufacturer.includes(x)
     );
+  const shouldShowAndroidWarning =
+    hasAndroidBridge &&
+    !androidDiagDismissed &&
+    (needsBattOpt || needsBgRestrict || needsAutoStart);
+
+  const handleAndroidDiagDismiss = () => {
+    setAndroidDiagDismissed(true);
+    try {
+      localStorage.setItem(ANDROID_DIAG_DISMISS_KEY, "1");
+    } catch {}
+  };
+
+  const handleAndroidDiagSettings = (fn) => {
+    try {
+      fn?.();
+    } catch {}
+    handleAndroidDiagDismiss();
+    setTimeout(() => recheckAndroidDiag(), 1200);
+  };
 
 
   const [debug, setDebug] = useState({
@@ -1662,11 +1624,17 @@ export default function TrackerGpsPage() {
           {tt("trackerGps.title", "Tracker GPS")}
         </h1>
 
-        {isAndroidBridge &&
-        (needsBatteryOptimizationHelp ||
-          needsBackgroundRestrictionHelp ||
-          needsAutoStartHelp) ? (
-          <div className="mt-3 rounded-xl bg-yellow-950/60 border border-yellow-700 p-3 text-xs text-yellow-200">
+        {shouldShowAndroidWarning && (
+          <div className="mt-4 rounded-xl bg-yellow-950/60 border border-yellow-700 p-3 text-xs text-yellow-200 relative">
+            <button
+              className="absolute top-2 right-2 text-yellow-300 hover:text-yellow-100 text-lg font-bold bg-transparent border-none"
+              onClick={handleAndroidDiagDismiss}
+              title="Descartar advertencia"
+              type="button"
+            >
+              ×
+            </button>
+
             <div className="font-semibold mb-1">
               {tt("trackerGps.androidDiag.title", "Mejora la estabilidad del tracking")}
             </div>
@@ -1678,50 +1646,72 @@ export default function TrackerGpsPage() {
               )}
             </div>
 
-            {needsBatteryOptimizationHelp ? (
+            <div className="mb-1">
+              {tt("trackerGps.androidDiag.manufacturer", "Fabricante")}:{" "}
+              <span className="font-mono">{androidDiag?.manufacturer || "—"}</span> | SDK:{" "}
+              <span className="font-mono">{androidDiag?.sdk_int ?? "—"}</span>
+            </div>
+
+            <div className="mb-1">
+              {tt("trackerGps.androidDiag.batteryIgnored", "Optimización ignorada")}:{" "}
+              <span className="font-mono">
+                {String(androidDiag?.battery_optimization_ignored)}
+              </span>
+            </div>
+
+            <div className="mb-1">
+              {tt("trackerGps.androidDiag.backgroundRestricted", "Segundo plano restringido")}:{" "}
+              <span className="font-mono">{String(androidDiag?.background_restricted)}</span>
+            </div>
+
+            {needsBattOpt && (
               <button
                 className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
-                onClick={() => {
-                  try {
-                    window.Android?.openBatteryOptimizationSettings?.();
-                  } catch {}
-                }}
+                onClick={() =>
+                  handleAndroidDiagSettings(() =>
+                    window.Android?.openBatteryOptimizationSettings?.()
+                  )
+                }
+                type="button"
               >
                 {tt(
-                  "trackerGps.androidDiag.batteryOptimization",
-                  "Permitir batería sin restricciones"
+                  "trackerGps.androidDiag.openBatteryOptimization",
+                  "Permitir exclusión de optimización de batería"
                 )}
               </button>
-            ) : null}
+            )}
 
-            {needsBackgroundRestrictionHelp ? (
+            {needsBgRestrict && (
               <button
                 className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
-                onClick={() => {
-                  try {
-                    window.Android?.openAppBatterySettings?.();
-                  } catch {}
-                }}
+                onClick={() =>
+                  handleAndroidDiagSettings(() => window.Android?.openAppBatterySettings?.())
+                }
+                type="button"
               >
-                {tt("trackerGps.androidDiag.background", "Permitir segundo plano")}
+                {tt(
+                  "trackerGps.androidDiag.openAppBatterySettings",
+                  "Permitir ejecución en segundo plano"
+                )}
               </button>
-            ) : null}
+            )}
 
-            {needsAutoStartHelp ? (
+            {needsAutoStart && (
               <button
                 className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
-                onClick={() => {
-                  try {
-                    window.Android?.openAutoStartSettings?.();
-                  } catch {}
-                }}
+                onClick={() =>
+                  handleAndroidDiagSettings(() => window.Android?.openAutoStartSettings?.())
+                }
+                type="button"
               >
-                {tt("trackerGps.androidDiag.autoStart", "Permitir auto inicio")}
+                {tt(
+                  "trackerGps.androidDiag.openAutoStartSettings",
+                  "Permitir auto-inicio de la app"
+                )}
               </button>
-            ) : null}
+            )}
           </div>
-        ) : null}
-
+        )}
 
         {trackerReady && hasSession && (
           <>
