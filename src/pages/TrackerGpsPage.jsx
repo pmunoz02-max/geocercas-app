@@ -11,6 +11,85 @@ const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 const WATCHDOG_RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
 const WATCHDOG_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
 
+
+function sanitizeLang(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "es";
+  if (raw.startsWith("es")) return "es";
+  if (raw.startsWith("en")) return "en";
+  if (raw.startsWith("fr")) return "fr";
+  return "es";
+}
+
+function isUuid(value) {
+  const s = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+function sleep(ms) {
+  const n = Number(ms);
+  return new Promise((resolve) => setTimeout(resolve, Number.isFinite(n) && n >= 0 ? n : 0));
+}
+
+function parseHashTokens(hash) {
+  try {
+    const raw = String(hash || "").replace(/^#/, "");
+    const sp = new URLSearchParams(raw);
+    const access_token = String(sp.get("access_token") || "").trim();
+    const refresh_token = String(sp.get("refresh_token") || "").trim();
+    return { access_token, refresh_token };
+  } catch {
+    return { access_token: "", refresh_token: "" };
+  }
+}
+
+function looksLikeJwt(token) {
+  const s = String(token || "").trim();
+  return /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/.test(s);
+}
+
+function decodeJwtPayload(token) {
+  try {
+    if (!looksLikeJwt(token)) return null;
+    const parts = String(token).split(".");
+    if (parts.length < 2) return null;
+    const payloadPart = parts[1];
+    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+    const binary =
+      typeof window !== "undefined" && typeof window.atob === "function"
+        ? window.atob(padded)
+        : "";
+    const bytes = Array.from(binary, (c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
+    const json = decodeURIComponent(bytes);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function isAssignmentActiveNow(assignment) {
+  try {
+    if (!assignment || typeof assignment !== "object") return false;
+    if (assignment.active === true) return true;
+    if (assignment.active === false) return false;
+
+    const now = Date.now();
+    const startsAt = assignment.starts_at || assignment.start_at || assignment.start_time || null;
+    const endsAt = assignment.ends_at || assignment.end_at || assignment.end_time || null;
+
+    const startMs = startsAt ? new Date(startsAt).getTime() : null;
+    const endMs = endsAt ? new Date(endsAt).getTime() : null;
+
+    if (Number.isFinite(startMs) && now < startMs) return false;
+    if (Number.isFinite(endMs) && now > endMs) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // --- Helper to pick org_id from query string ---
 function pickOrgIdFromSearch(search) {
   try {
