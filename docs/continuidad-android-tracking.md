@@ -17,3 +17,6 @@ Pendiente validar en dispositivo:
 - ANDROID_BRIDGE startTracking called
 - TRACKING_API TrackingService created
 - source=tracker-native-android en backend
+
+---
+2026-03-31: Android preview URLs actualizadas y versionCode/versionName incrementados para nuevo build de prueba.
