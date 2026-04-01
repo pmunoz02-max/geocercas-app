@@ -2,18 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
-// --- Helper: isUuid ---
-function isUuid(v) {
-  const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-// --- Helper: sanitizeLang ---
-function sanitizeLang(v) {
-  const raw = String(v ?? "").trim().toLowerCase();
-  const two = raw.slice(0, 2);
-  return ["es", "en", "fr"].includes(two) ? two : "es";
-}
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
@@ -23,30 +11,119 @@ const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 const WATCHDOG_RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
 const WATCHDOG_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
 
-// --- Helper to pick org_id from query string ---
+function sanitizeLang(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "es";
+  if (raw.startsWith("es")) return "es";
+  if (raw.startsWith("en")) return "en";
+  if (raw.startsWith("fr")) return "fr";
+  return "es";
+}
+
+function isUuid(value) {
+  const s = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+function sleep(ms) {
+  const n = Number(ms);
+  return new Promise((resolve) =>
+    setTimeout(resolve, Number.isFinite(n) && n >= 0 ? n : 0)
+  );
+}
+
+function parseHashTokens(hash) {
+  try {
+    const raw = String(hash || "").replace(/^#/, "");
+    const sp = new URLSearchParams(raw);
+    const access_token = String(sp.get("access_token") || "").trim();
+    const refresh_token = String(sp.get("refresh_token") || "").trim();
+    return { access_token, refresh_token };
+  } catch {
+    return { access_token: "", refresh_token: "" };
+  }
+}
+
+function looksLikeJwt(token) {
+  const s = String(token || "").trim();
+  return /^[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+$/.test(s);
+}
+
+function decodeJwtPayload(token) {
+  try {
+    if (!looksLikeJwt(token)) return null;
+    const parts = String(token).split(".");
+    if (parts.length < 2) return null;
+    const payloadPart = parts[1];
+    const normalized = payloadPart.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4 || 4)) % 4);
+    const binary =
+      typeof window !== "undefined" && typeof window.atob === "function"
+        ? window.atob(padded)
+        : "";
+    const bytes = Array.from(
+      binary,
+      (c) => "%" + c.charCodeAt(0).toString(16).padStart(2, "0")
+    ).join("");
+    const json = decodeURIComponent(bytes);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function isAssignmentActiveNow(assignment) {
+  try {
+    if (!assignment || typeof assignment !== "object") return false;
+    if (assignment.active === true) return true;
+    if (assignment.active === false) return false;
+
+    const now = Date.now();
+    const startsAt = assignment.starts_at || assignment.start_at || assignment.start_time || null;
+    const endsAt = assignment.ends_at || assignment.end_at || assignment.end_time || null;
+
+    const startMs = startsAt ? new Date(startsAt).getTime() : null;
+    const endMs = endsAt ? new Date(endsAt).getTime() : null;
+
+    if (Number.isFinite(startMs) && now < startMs) return false;
+    if (Number.isFinite(endMs) && now > endMs) return false;
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function pickOrgIdFromSearch(search) {
   try {
     const sp = new URLSearchParams(search || "");
     const orgId = sp.get("org_id") || sp.get("org") || sp.get("orgId");
     if (!orgId) return null;
     const s = String(orgId).trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)) return null;
-    return s;
+    return isUuid(s) ? s : null;
   } catch {
     return null;
   }
 }
 
-// --- Tracker health status helper ---
 function deriveTrackerVisualStatus(health = {}) {
-  // Accepts: { service_running, battery_optimization_ignored, background_restricted, lastSendOk, lastSendFailure, assignmentWindowStatus, gpsAcquisitionState }
   try {
     if (health.service_running === false) return "offline";
-    if (health.assignmentWindowStatus === "inactive" || health.assignmentWindowStatus === "expired") return "offline";
+    if (
+      health.assignmentWindowStatus === "inactive" ||
+      health.assignmentWindowStatus === "expired"
+    ) {
+      return "offline";
+    }
     if (health.gpsAcquisitionState === "error") return "offline";
-    if (health.battery_optimization_ignored === false) return "degraded";
     if (health.background_restricted === true) return "degraded";
-    if (typeof health.lastSendOk === "number" && Date.now() - health.lastSendOk > 10 * 60 * 1000) return "unstable";
+    if (health.battery_optimization_ignored === false) return "degraded";
+    if (
+      typeof health.lastSendOk === "number" &&
+      Date.now() - health.lastSendOk > 10 * 60 * 1000
+    ) {
+      return "unstable";
+    }
     if (health.lastSendFailure) return "unstable";
     return "stable";
   } catch {
@@ -54,7 +131,19 @@ function deriveTrackerVisualStatus(health = {}) {
   }
 }
 
+function hasAndroidNativeBridge() {
+  return (
+    typeof window !== "undefined" &&
+    !!window.Android &&
+    typeof window.Android.startTracking === "function"
+  );
+}
+
 export default function TrackerGpsPage() {
+  function isWebSendBlocked() {
+    return hasAndroidNativeBridge();
+  }
+
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -154,8 +243,6 @@ export default function TrackerGpsPage() {
     };
   }, []);
 
-
-  // Native Android bridge: start background tracking when tracker session token exists.
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -278,7 +365,6 @@ export default function TrackerGpsPage() {
     setTimeout(() => recheckAndroidDiag(), 1200);
   };
 
-
   const [debug, setDebug] = useState({
     session_exists: null,
     token_looks_jwt: null,
@@ -300,7 +386,6 @@ export default function TrackerGpsPage() {
     disclosure_mode: "always-on-entry",
   });
 
-  // --- refs and timers ---
   const watchIdRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const isSendingRef = useRef(false);
@@ -312,10 +397,10 @@ export default function TrackerGpsPage() {
   const didHashSessionRef = useRef(false);
   const acceptInFlightRef = useRef(new Set());
   const blockingUiLoggedRef = useRef(false);
-  // GPS acquisition state: "acquiring" | "acquired" | "error"
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
 
   useEffect(() => {
+    if (isWebSendBlocked()) return;
     if (!trackerReady || !hasSession || !orgId) return;
     if (!disclosureAccepted) return;
 
@@ -399,8 +484,6 @@ export default function TrackerGpsPage() {
     activeAssignment,
   ]);
 
-
-  // --- assignment and send interval ---
   const PRIMARY = supabaseTracker;
 
   const resolvedSendIntervalMs = useMemo(() => {
@@ -408,7 +491,6 @@ export default function TrackerGpsPage() {
     return Number.isFinite(n) && n > 0 ? n * 60 * 1000 : CLIENT_MIN_INTERVAL_MS;
   }, [activeAssignment]);
 
-  // --- assignment loader ---
   const loadActiveAssignment = async (authTokenOverride = "") => {
     const effectiveToken = String(authTokenOverride || trackerAccessToken || "").trim();
     if (!trackerReady || !orgId || !effectiveToken) return;
@@ -434,14 +516,12 @@ export default function TrackerGpsPage() {
 
     const result = await Promise.race([fetchPromise, timeoutPromise]);
 
-    // Use tracker_assignment as source of truth if present
     if (result.ok && result.tracker_assignment) {
       setActiveAssignment(result.tracker_assignment);
       setAssignmentWindowStatus(result.tracker_assignment.active ? "active" : "expired");
       setAssignmentLoadState(result.tracker_assignment.active ? "active" : "inactive");
       setAssignmentLoadError("");
     } else if (result.ok && result.active && result.assignment) {
-      // Fallback: legacy assignment logic
       const activeNow = isAssignmentActiveNow(result.assignment);
       setActiveAssignment(result.assignment);
       setAssignmentWindowStatus(activeNow ? "active" : "expired");
@@ -457,13 +537,11 @@ export default function TrackerGpsPage() {
     }
   };
 
-  // --- send state ---
   const hasAnySuccessfulSend = !!lastSendOkAtRef.current;
   const hasRecentSuccessfulSend =
     !!lastSendOkAtRef.current &&
     Date.now() - lastSendOkAtRef.current <= resolvedSendIntervalMs * 2;
 
-  // --- visual status ---
   const visualStatus = useMemo(() => {
     return deriveTrackerVisualStatus({
       hasSession,
@@ -699,8 +777,6 @@ export default function TrackerGpsPage() {
       } catch {}
     };
   }, [trackerReady, PRIMARY, lang]);
-
-
 
   useEffect(() => {
     if (!trackerReady || !orgId || !trackerAccessToken) return;
@@ -1269,6 +1345,8 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
+    if (isWebSendBlocked()) return;
+
     console.log("[send-gate] evaluate", {
       hasLastPosition: !!lastPosition,
       sessionUserId: session?.user?.id || "",
@@ -1389,6 +1467,7 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
+    if (isWebSendBlocked()) return;
     if (!trackerReady || !hasSession || !orgId) return;
     if (!disclosureAccepted) return;
     if (membershipStatus !== "ok") return;
@@ -1453,6 +1532,7 @@ export default function TrackerGpsPage() {
   ]);
 
   useEffect(() => {
+    if (isWebSendBlocked()) return;
     if (!trackerReady || !hasSession) return;
     if (!disclosureAccepted) return;
     if (assignmentWindowStatus !== "active") return;
