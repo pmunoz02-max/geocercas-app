@@ -11,6 +11,23 @@ const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 const WATCHDOG_RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
 const WATCHDOG_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
 
+// --- Tracker health status helper ---
+function deriveTrackerVisualStatus(health = {}) {
+  // Accepts: { service_running, battery_optimization_ignored, background_restricted, lastSendOk, lastSendFailure, assignmentWindowStatus, gpsAcquisitionState }
+  try {
+    if (health.service_running === false) return "offline";
+    if (health.assignmentWindowStatus === "inactive" || health.assignmentWindowStatus === "expired") return "offline";
+    if (health.gpsAcquisitionState === "error") return "offline";
+    if (health.battery_optimization_ignored === false) return "degraded";
+    if (health.background_restricted === true) return "degraded";
+    if (typeof health.lastSendOk === "number" && Date.now() - health.lastSendOk > 10 * 60 * 1000) return "unstable";
+    if (health.lastSendFailure) return "unstable";
+    return "stable";
+  } catch {
+    return "unstable";
+  }
+}
+
 export default function TrackerGpsPage() {
   const navigate = useNavigate();
   const location = useLocation();
