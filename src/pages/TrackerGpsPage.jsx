@@ -245,6 +245,35 @@ export default function TrackerGpsPage() {
     lastReloadReason: null,
   });
 
+  const [androidDiag, setAndroidDiag] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.Android || typeof window.Android.getTrackingDiagnosticsJson !== "function") return;
+
+    try {
+      const raw = window.Android.getTrackingDiagnosticsJson();
+      if (!raw) return;
+      const diag = JSON.parse(raw);
+      setAndroidDiag(diag);
+    } catch {
+      setAndroidDiag(null);
+    }
+  }, []);
+
+  const isAndroidBridge = !!androidDiag;
+  const androidManufacturer = String(androidDiag?.manufacturer || "").toLowerCase();
+  const needsBatteryOptimizationHelp =
+    isAndroidBridge && androidDiag?.battery_optimization_ignored === false;
+  const needsBackgroundRestrictionHelp =
+    isAndroidBridge && androidDiag?.background_restricted === true;
+  const needsAutoStartHelp =
+    isAndroidBridge &&
+    ["xiaomi", "huawei", "oppo", "vivo", "realme", "tecno", "infinix"].some((x) =>
+      androidManufacturer.includes(x)
+    );
+
+
   const [debug, setDebug] = useState({
     session_exists: null,
     token_looks_jwt: null,
@@ -1632,6 +1661,67 @@ export default function TrackerGpsPage() {
         <h1 className="text-lg font-semibold text-center">
           {tt("trackerGps.title", "Tracker GPS")}
         </h1>
+
+        {isAndroidBridge &&
+        (needsBatteryOptimizationHelp ||
+          needsBackgroundRestrictionHelp ||
+          needsAutoStartHelp) ? (
+          <div className="mt-3 rounded-xl bg-yellow-950/60 border border-yellow-700 p-3 text-xs text-yellow-200">
+            <div className="font-semibold mb-1">
+              {tt("trackerGps.androidDiag.title", "Mejora la estabilidad del tracking")}
+            </div>
+
+            <div className="mb-2">
+              {tt(
+                "trackerGps.androidDiag.body",
+                "Este teléfono puede limitar el tracking en segundo plano. Para reducir cortes, revisa batería, permisos en segundo plano y auto inicio."
+              )}
+            </div>
+
+            {needsBatteryOptimizationHelp ? (
+              <button
+                className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
+                onClick={() => {
+                  try {
+                    window.Android?.openBatteryOptimizationSettings?.();
+                  } catch {}
+                }}
+              >
+                {tt(
+                  "trackerGps.androidDiag.batteryOptimization",
+                  "Permitir batería sin restricciones"
+                )}
+              </button>
+            ) : null}
+
+            {needsBackgroundRestrictionHelp ? (
+              <button
+                className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
+                onClick={() => {
+                  try {
+                    window.Android?.openAppBatterySettings?.();
+                  } catch {}
+                }}
+              >
+                {tt("trackerGps.androidDiag.background", "Permitir segundo plano")}
+              </button>
+            ) : null}
+
+            {needsAutoStartHelp ? (
+              <button
+                className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
+                onClick={() => {
+                  try {
+                    window.Android?.openAutoStartSettings?.();
+                  } catch {}
+                }}
+              >
+                {tt("trackerGps.androidDiag.autoStart", "Permitir auto inicio")}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
 
         {trackerReady && hasSession && (
           <>
