@@ -11,6 +11,20 @@ const SS_ACCEPTED_PREFIX = "geocercas_tracker_accept_ok:";
 const WATCHDOG_RELOAD_COOLDOWN_KEY = "geocercas_tracker_watchdog_reload_cooldown";
 const WATCHDOG_RELOAD_COOLDOWN_MS = 10 * 60 * 1000;
 
+// --- Helper to pick org_id from query string ---
+function pickOrgIdFromSearch(search) {
+  try {
+    const sp = new URLSearchParams(search || "");
+    const orgId = sp.get("org_id") || sp.get("org") || sp.get("orgId");
+    if (!orgId) return null;
+    const s = String(orgId).trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
 // --- Tracker health status helper ---
 function deriveTrackerVisualStatus(health = {}) {
   // Accepts: { service_running, battery_optimization_ignored, background_restricted, lastSendOk, lastSendFailure, assignmentWindowStatus, gpsAcquisitionState }
