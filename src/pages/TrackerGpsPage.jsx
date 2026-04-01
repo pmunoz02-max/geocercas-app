@@ -132,14 +132,7 @@ function deriveTrackerVisualStatus(health = {}) {
 }
 
 function hasAndroidNativeBridge() {
-  if (typeof window === "undefined") return false;
-
-  const android = window.Android;
-  if (!android) return false;
-
-  if (typeof android === "object") return true;
-
-  return false;
+  return typeof window !== "undefined" && !!window.Android;
 }
 
 function canStartAndroidTracking() {
@@ -196,6 +189,14 @@ export default function TrackerGpsPage() {
   }, [location.search]);
 
   const ANDROID_DIAG_DISMISS_KEY = "geocercas_android_diag_dismissed";
+
+  const [androidBridgeDiagnostics, setAndroidBridgeDiagnostics] = useState({
+    present: false,
+    methodNames: [],
+    userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+    webSendBlocked: false,
+  });
+
   const [androidDiag, setAndroidDiag] = useState(null);
   const [androidDiagDismissed, setAndroidDiagDismissed] = useState(() => {
     try {
@@ -204,6 +205,77 @@ export default function TrackerGpsPage() {
       return false;
     }
   });
+
+  const [status, setStatus] = useState("");
+  const [coords, setCoords] = useState(null);
+  const [lastSend, setLastSend] = useState(null);
+  const [lastError, setLastError] = useState(null);
+
+  const [hasSession, setHasSession] = useState(false);
+  const [session, setSession] = useState(null);
+  const [trackerReady, setTrackerReady] = useState(true);
+  const [orgId, setOrgId] = useState(null);
+  const [lastPosition, setLastPosition] = useState(null);
+
+  const [membershipStatus, setMembershipStatus] = useState("pending");
+  const [membershipDetail, setMembershipDetail] = useState("");
+  const [tokenIss, setTokenIss] = useState("");
+  const [isActivationBgRunning, setIsActivationBgRunning] = useState(false);
+  const [trackerAccessToken, setTrackerAccessToken] = useState("");
+  const [disclosureAccepted, setDisclosureAccepted] = useState(true);
+
+  const [acceptError, setAcceptError] = useState("");
+  const [acceptErrorCode, setAcceptErrorCode] = useState("");
+  const [upgradeRequired, setUpgradeRequired] = useState(false);
+  const [activeAssignment, setActiveAssignment] = useState(null);
+  const [assignmentWindowStatus, setAssignmentWindowStatus] = useState("unknown");
+  const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
+  const [assignmentLoadError, setAssignmentLoadError] = useState("");
+
+  const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
+
+  const [trackerDiag, setTrackerDiag] = useState({
+    lastSendOk: null,
+    lastSendAttempt: null,
+    lastSendFailure: null,
+    watchdogRecoveryCount: 0,
+    lastWatchdogAction: null,
+    lastReloadReason: null,
+  });
+
+  const [debug, setDebug] = useState({
+    session_exists: null,
+    token_looks_jwt: null,
+    token_iss: "",
+    token_sub: "",
+    org_source: "none",
+    router_search: "",
+    path_orgId: "",
+    client_used: "supabase-tracker",
+    supabase_url: "",
+    send_mode: "send_position:fetch(anon)+x-user-jwt; accept:proxy",
+    send_fn: "send_position",
+    accept_fn: "/api/accept-tracker-invite",
+    last_invoke_fn: "",
+    last_invoke_auth: "unknown",
+    last_invoke_token_len: 0,
+    last_token_ttl_sec: null,
+    last_http_status: null,
+    disclosure_mode: "always-on-entry",
+  });
+
+  const watchIdRef = useRef(null);
+  const lastCoordsRef = useRef(null);
+  const isSendingRef = useRef(false);
+  const lastSentAtRef = useRef(0);
+  const lastSendOkAtRef = useRef(0);
+  const heartbeatIntervalRef = useRef(null);
+  const watchdogIntervalRef = useRef(null);
+  const onboardingLockRef = useRef(false);
+  const didHashSessionRef = useRef(false);
+  const acceptInFlightRef = useRef(new Set());
+  const blockingUiLoggedRef = useRef(false);
+  const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
 
   const recheckAndroidDiag = () => {
     if (typeof window === "undefined") return;
@@ -234,6 +306,55 @@ export default function TrackerGpsPage() {
       setAndroidDiag(null);
     }
   };
+
+  useEffect(() => {
+    try {
+      let methodNames = [];
+      let present = false;
+      const webSendBlocked = isWebSendBlocked();
+
+      if (typeof window !== "undefined" && window.Android) {
+        present = true;
+
+        try {
+          methodNames = Object.keys(window.Android).filter(
+            (k) => typeof window.Android[k] === "function"
+          );
+        } catch {
+          methodNames = [];
+        }
+
+        if (methodNames.length === 0) {
+          [
+            "startTracking",
+            "stopTracking",
+            "getTrackingDiagnosticsJson",
+            "openBatteryOptimizationSettings",
+            "openAppBatterySettings",
+            "openAutoStartSettings",
+          ].forEach((name) => {
+            if (typeof window.Android?.[name] === "function") methodNames.push(name);
+          });
+        }
+      }
+
+      const payload = {
+        present,
+        methodNames,
+        userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        webSendBlocked,
+      };
+
+      setAndroidBridgeDiagnostics(payload);
+
+      console.log("[ANDROID DIAGNOSTICS] window.Android present:", payload.present);
+      console.log("[ANDROID DIAGNOSTICS] method names:", payload.methodNames);
+      console.log("[ANDROID DIAGNOSTICS] userAgent:", payload.userAgent);
+      console.log("[ANDROID DIAGNOSTICS] web send blocked:", payload.webSendBlocked);
+    } catch (e) {
+      console.warn("[ANDROID DIAGNOSTICS] failed", e);
+    }
+  }, []);
 
   useEffect(() => {
     recheckAndroidDiag();
@@ -285,43 +406,6 @@ export default function TrackerGpsPage() {
     })();
   }, [i18n, lang]);
 
-  const [status, setStatus] = useState("");
-  const [coords, setCoords] = useState(null);
-  const [lastSend, setLastSend] = useState(null);
-  const [lastError, setLastError] = useState(null);
-
-  const [hasSession, setHasSession] = useState(false);
-  const [session, setSession] = useState(null);
-  const [trackerReady, setTrackerReady] = useState(true);
-  const [orgId, setOrgId] = useState(null);
-  const [lastPosition, setLastPosition] = useState(null);
-
-  const [membershipStatus, setMembershipStatus] = useState("pending");
-  const [membershipDetail, setMembershipDetail] = useState("");
-  const [tokenIss, setTokenIss] = useState("");
-  const [isActivationBgRunning, setIsActivationBgRunning] = useState(false);
-  const [trackerAccessToken, setTrackerAccessToken] = useState("");
-  const [disclosureAccepted, setDisclosureAccepted] = useState(true);
-
-  const [acceptError, setAcceptError] = useState("");
-  const [acceptErrorCode, setAcceptErrorCode] = useState("");
-  const [upgradeRequired, setUpgradeRequired] = useState(false);
-  const [activeAssignment, setActiveAssignment] = useState(null);
-  const [assignmentWindowStatus, setAssignmentWindowStatus] = useState("unknown");
-  const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
-  const [assignmentLoadError, setAssignmentLoadError] = useState("");
-
-  const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
-
-  const [trackerDiag, setTrackerDiag] = useState({
-    lastSendOk: null,
-    lastSendAttempt: null,
-    lastSendFailure: null,
-    watchdogRecoveryCount: 0,
-    lastWatchdogAction: null,
-    lastReloadReason: null,
-  });
-
   const hasAndroidBridge = !!androidDiag;
   const androidManufacturer = String(androidDiag?.manufacturer || "").toLowerCase();
   const needsBattOpt =
@@ -352,40 +436,6 @@ export default function TrackerGpsPage() {
     handleAndroidDiagDismiss();
     setTimeout(() => recheckAndroidDiag(), 1200);
   };
-
-  const [debug, setDebug] = useState({
-    session_exists: null,
-    token_looks_jwt: null,
-    token_iss: "",
-    token_sub: "",
-    org_source: "none",
-    router_search: "",
-    path_orgId: "",
-    client_used: "supabase-tracker",
-    supabase_url: "",
-    send_mode: "send_position:fetch(anon)+x-user-jwt; accept:proxy",
-    send_fn: "send_position",
-    accept_fn: "/api/accept-tracker-invite",
-    last_invoke_fn: "",
-    last_invoke_auth: "unknown",
-    last_invoke_token_len: 0,
-    last_token_ttl_sec: null,
-    last_http_status: null,
-    disclosure_mode: "always-on-entry",
-  });
-
-  const watchIdRef = useRef(null);
-  const lastCoordsRef = useRef(null);
-  const isSendingRef = useRef(false);
-  const lastSentAtRef = useRef(0);
-  const lastSendOkAtRef = useRef(0);
-  const heartbeatIntervalRef = useRef(null);
-  const watchdogIntervalRef = useRef(null);
-  const onboardingLockRef = useRef(false);
-  const didHashSessionRef = useRef(false);
-  const acceptInFlightRef = useRef(new Set());
-  const blockingUiLoggedRef = useRef(false);
-  const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
 
   useEffect(() => {
     if (isWebSendBlocked()) {
@@ -1849,6 +1899,24 @@ export default function TrackerGpsPage() {
 
         {trackerReady && hasSession && (
           <>
+            <div className="mt-4 rounded-xl bg-slate-950 border border-emerald-700 p-3 text-xs text-emerald-300">
+              <div className="font-bold mb-1">Android Bridge Diagnostics</div>
+              <div>
+                window.Android present: <b>{String(androidBridgeDiagnostics.present)}</b>
+              </div>
+              <div>
+                Available methods:{" "}
+                <b>{androidBridgeDiagnostics.methodNames.join(", ") || "(none)"}</b>
+              </div>
+              <div>
+                User agent:{" "}
+                <span className="break-all">{androidBridgeDiagnostics.userAgent}</span>
+              </div>
+              <div>
+                Web send blocked: <b>{String(androidBridgeDiagnostics.webSendBlocked)}</b>
+              </div>
+            </div>
+
             {showTrackerDebug && (
               <>
                 <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-3 text-sm">
@@ -1922,6 +1990,9 @@ export default function TrackerGpsPage() {
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
                     last_reload_reason: {trackerDiag.lastReloadReason || "—"}
                   </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    status_text: {status || "—"}
+                  </div>
                   {coords ? (
                     <div className="mt-2 text-xs text-slate-300">
                       {tt("trackerGps.debugLabels.lat", "lat")}: {coords.lat?.toFixed?.(6)} |{" "}
@@ -1945,6 +2016,8 @@ export default function TrackerGpsPage() {
                         ...debug,
                         tracker_diag: trackerDiag,
                         watchdog_recovering: isWatchdogRecovering,
+                        android_bridge_diagnostics: androidBridgeDiagnostics,
+                        status,
                       },
                       null,
                       2
@@ -1977,7 +2050,8 @@ export default function TrackerGpsPage() {
 
             {upgradeRequired ? (
               <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
-                El límite de trackers del plan fue alcanzado. Contacta al administrador para actualizar el plan.
+                El límite de trackers del plan fue alcanzado. Contacta al administrador para
+                actualizar el plan.
               </div>
             ) : null}
 
