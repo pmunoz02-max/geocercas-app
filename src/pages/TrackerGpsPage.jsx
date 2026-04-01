@@ -132,6 +132,17 @@ function deriveTrackerVisualStatus(health = {}) {
 }
 
 function hasAndroidNativeBridge() {
+  if (typeof window === "undefined") return false;
+
+  const android = window.Android;
+  if (!android) return false;
+
+  if (typeof android === "object") return true;
+
+  return false;
+}
+
+function canStartAndroidTracking() {
   return (
     typeof window !== "undefined" &&
     !!window.Android &&
@@ -246,16 +257,22 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (window.Android && typeof window.Android.startTracking === "function") {
+    if (!hasAndroidNativeBridge()) {
+      console.log("[ANDROID] bridge not available");
+      return;
+    }
+
+    if (canStartAndroidTracking()) {
       console.log("[ANDROID] bridge detected, calling startTracking");
       try {
         window.Android.startTracking();
       } catch (err) {
         console.error("[ANDROID] startTracking failed", err);
       }
-    } else {
-      console.log("[ANDROID] bridge not available");
+      return;
     }
+
+    console.log("[ANDROID] bridge detected without startTracking; web sender remains blocked");
   }, []);
 
   useEffect(() => {
