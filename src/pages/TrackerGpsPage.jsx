@@ -2,6 +2,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
+// --- Helper: isUuid ---
+function isUuid(v) {
+  const s = String(v ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+// --- Helper: sanitizeLang ---
+function sanitizeLang(v) {
+  const raw = String(v ?? "").trim().toLowerCase();
+  const two = raw.slice(0, 2);
+  return ["es", "en", "fr"].includes(two) ? two : "es";
+}
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
