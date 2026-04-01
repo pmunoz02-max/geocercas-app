@@ -868,6 +868,8 @@ export default function TrackerDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
   const [personalRows, setPersonalRows] = useState([]);
+  const [trackerStatusRows, setTrackerStatusRows] = useState([]);
+  const [trackerCounts, setTrackerCounts] = useState(null);
   const [positions, setPositions] = useState([]);
   const [geofenceEvents, setGeofenceEvents] = useState([]);
 
@@ -912,6 +914,8 @@ export default function TrackerDashboard() {
     setAssignments([]);
     setAssignmentTrackers([]);
     setPersonalRows([]);
+    setTrackerStatusRows([]);
+    setTrackerCounts(null);
     setPositions([]);
     positionsRef.current = [];
     setGeofenceEvents([]);
@@ -1300,6 +1304,95 @@ export default function TrackerDashboard() {
     return Array.from(latestByUser.values());
   }
 
+  const fetchDashboardData = useCallback(
+    async (currentOrgId, options = { showSpinner: true }) => {
+      const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) {
+        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
+        return;
+      }
+
+      const { showSpinner } = options;
+
+      try {
+        if (showSpinner) setLoading(true);
+        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: "tracker_health" }));
+        setErrorMsg("");
+
+        const refreshRes = await supabase.rpc("rpc_refresh_tracker_health", {
+          p_org_id: safeOrgId,
+        });
+
+        if (refreshRes.error) {
+          console.error("[tracker-dashboard] rpc_refresh_tracker_health error:", refreshRes.error);
+          setErrorMsg("Error refreshing tracker health.");
+          setTrackerStatusRows([]);
+          setTrackerCounts(null);
+          return;
+        }
+
+        const statusRes = await supabase.rpc("rpc_tracker_dashboard_status", {
+          p_org_id: safeOrgId,
+        });
+
+        if (statusRes.error) {
+          console.error("[tracker-dashboard] rpc_tracker_dashboard_status error:", statusRes.error);
+          setErrorMsg("Error loading tracker dashboard status.");
+          setTrackerStatusRows([]);
+          setTrackerCounts(null);
+          return;
+        }
+
+        const countsRes = await supabase.rpc("rpc_tracker_dashboard_counts", {
+          p_org_id: safeOrgId,
+        });
+
+        if (countsRes.error) {
+          console.error("[tracker-dashboard] rpc_tracker_dashboard_counts error:", countsRes.error);
+          setErrorMsg("Error loading tracker dashboard counts.");
+          setTrackerStatusRows(Array.isArray(statusRes.data) ? statusRes.data : []);
+          setTrackerCounts(null);
+        } else {
+          const countsRow = Array.isArray(countsRes.data) && countsRes.data.length > 0
+            ? countsRes.data[0]
+            : null;
+          setTrackerCounts(countsRow);
+        }
+
+        const statusRows = Array.isArray(statusRes.data) ? statusRes.data : [];
+        setTrackerStatusRows(statusRows);
+
+        const latestRes = await loadLatestPositions(safeOrgId);
+        let finalRows = latestRes?.rows || [];
+        let source = "tracker_latest";
+
+        if (finalRows.length === 0) {
+          const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+          const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
+          finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
+          source = "positions";
+        }
+
+        finalRows = (finalRows || []).filter((p) => {
+          const lat = Number(p?.lat);
+          const lng = Number(p?.lng);
+          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
+        });
+
+        setPositions(finalRows);
+        setDiag((d) => ({
+          ...d,
+          positionsFound: finalRows.length,
+          positionsSource: source,
+        }));
+      } finally {
+        if (showSpinner) setLoading(false);
+      }
+    },
+    [timeWindowId]
+  );
+
+
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       const safeOrgId = normalizeUuid(currentOrgId);
@@ -1498,7 +1591,7 @@ export default function TrackerDashboard() {
     if (isHistoryRequested) {
       await fetchPositions(currentOrgId, { showSpinner: true });
     } else {
-      await loadLatestPositionsForDashboard(currentOrgId, { showSpinner: true });
+      await fetchDashboardData(currentOrgId, { showSpinner: true });
     }
   }, [
     assignments,
@@ -1533,59 +1626,14 @@ export default function TrackerDashboard() {
     let cancelled = false;
 
     (async () => {
-      setLoading(true);
-      setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
-      setErrorMsg("");
-
-      try {
-        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-        const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
-
-        const latestRows = await loadLatestPositionsSafe(resolvedOrgId);
-        console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
-
-        let source = "tracker_latest";
-        let finalRows = latestRows;
-
-        if (latestRows.length > 0) {
-          logLiveMetric("tracker_latest_used", {
-            orgId: resolvedOrgId,
-            rows: latestRows.length,
-          });
-        }
-
-        if (latestRows.length === 0) {
-          const fallbackRows = await loadPositionsFallbackSafe(resolvedOrgId, selectedWindowHours);
-          console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
-          logLiveMetric("fallback_positions_used", {
-            orgId: resolvedOrgId,
-            rows: fallbackRows.length,
-          });
-          source = "positions";
-          finalRows = fallbackRows;
-        }
-
-        finalRows = (finalRows || []).filter((p) => {
-          const lat = Number(p?.lat);
-          const lng = Number(p?.lng);
-          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
-        });
-
-        console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
-
-        if (cancelled) return;
-
-        setPositions(finalRows);
-        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await fetchDashboardData(resolvedOrgId, { showSpinner: true });
+      if (cancelled) return;
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [resolvedOrgId, assignmentTrackers, entitlementsLoading, isFree, isHistoryRequested, timeWindowId]);
+  }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, fetchDashboardData]);
 
   useEffect(() => {
     if (!previewUiEnabled) return;
@@ -1671,7 +1719,7 @@ export default function TrackerDashboard() {
       try {
         console.log("[dashboard] polling tick");
 
-        await loadLatestPositionsForDashboard(resolvedOrgId, {
+        await fetchDashboardData(resolvedOrgId, {
           showSpinner: false,
         });
 
@@ -1709,6 +1757,16 @@ export default function TrackerDashboard() {
     return m;
   }, [personalRows]);
 
+
+  const healthByUserId = useMemo(() => {
+    const m = new Map();
+    (trackerStatusRows || []).forEach((row) => {
+      const uid = row?.tracker_user_id || row?.user_id || null;
+      if (uid) m.set(String(uid), row);
+    });
+    return m;
+  }, [trackerStatusRows]);
+
   const trackersUi = useMemo(() => {
     const map = new Map();
 
@@ -1718,6 +1776,15 @@ export default function TrackerDashboard() {
       const lat = Number(item?.lat);
       const lng = Number(item?.lng);
       return Number.isFinite(lat) && Number.isFinite(lng) && isValidLatLng(lat, lng);
+    };
+
+    const mapBackendStatus = (value) => {
+      const v = String(value || "").toLowerCase();
+      if (v === "active") return "online";
+      if (v === "stale") return "stale";
+      if (v === "restricted") return "restricted";
+      if (v === "pending_permissions") return "pending";
+      return "offline";
     };
 
     for (const row of positions || []) {
@@ -1736,7 +1803,8 @@ export default function TrackerDashboard() {
       const lng = Number(row?.lng);
 
       if (!map.has(trackerKey)) {
-        const live = getTrackerLiveStatus(row);
+        const backendHealth = healthByUserId.get(String(row.user_id || ""));
+        const live = backendHealth ? { status: mapBackendStatus(backendHealth.status), ageSec: null } : getTrackerLiveStatus(row);
         map.set(trackerKey, {
           key: trackerKey,
           tracker_key: trackerKey,
@@ -1763,7 +1831,8 @@ export default function TrackerDashboard() {
 
       const existing = map.get(trackerKey);
       if (latestTs > (existing?.latestTs ?? 0)) {
-        const live = getTrackerLiveStatus(row);
+        const backendHealth = healthByUserId.get(String(row.user_id || ""));
+        const live = backendHealth ? { status: mapBackendStatus(backendHealth.status), ageSec: null } : getTrackerLiveStatus(row);
         map.set(trackerKey, {
           ...existing,
           key: trackerKey,
@@ -1797,13 +1866,15 @@ export default function TrackerDashboard() {
         const fullName = p?.full_name || p?.nombre || [firstName, lastName].filter(Boolean).join(" ") || null;
         const email = p?.email || null;
         const baseLabel = fullName || email || user_id;
+        const backendHealth = healthByUserId.get(String(user_id));
+        const offlineStatus = backendHealth ? mapBackendStatus(backendHealth.status) : "offline";
         map.set(user_id, {
           key: user_id,
           tracker_key: user_id,
           user_id,
           personal_id: null,
           personalId: null,
-          label: `[OFFLINE] ${baseLabel}`,
+          label: `[${String(offlineStatus).toUpperCase()}] ${baseLabel}`,
           baseLabel,
           trackerLabel: baseLabel,
           firstName,
@@ -1811,7 +1882,7 @@ export default function TrackerDashboard() {
           fullName,
           email,
           latest: null,
-          live: { status: "offline", ageSec: null },
+          live: { status: offlineStatus, ageSec: null },
           latestTs: 0,
           lat: null,
           lng: null,
@@ -1830,7 +1901,7 @@ export default function TrackerDashboard() {
 
       return String(a.baseLabel || a.label || "").localeCompare(String(b.baseLabel || b.label || ""));
     });
-  }, [positions, assignmentTrackers, personalById, personalByUserId]);
+  }, [positions, assignmentTrackers, personalById, personalByUserId, healthByUserId]);
 
   const searchNeedle = normalizeSearchText(trackerSearch);
 
@@ -2026,6 +2097,15 @@ export default function TrackerDashboard() {
   }, [allTrackerMarkers, selectedTrackerId, statusFilter]);
 
   const trackerStatusSummary = useMemo(() => {
+    if (trackerCounts) {
+      return {
+        total: Number(trackerCounts.total_trackers || 0),
+        online: Number(trackerCounts.active_count || 0),
+        stale: Number(trackerCounts.stale_count || 0),
+        offline: Number(trackerCounts.offline_count || 0),
+      };
+    }
+
     let total = 0;
     let online = 0;
     let stale = 0;
@@ -2033,7 +2113,7 @@ export default function TrackerDashboard() {
 
     for (const item of allTrackerMarkers || []) {
       total += 1;
-      const live = getTrackerLiveStatus(item?.latest);
+      const live = item?.live || getTrackerLiveStatus(item?.latest);
 
       if (live.status === "online") online += 1;
       else if (live.status === "stale") stale += 1;
@@ -2041,7 +2121,7 @@ export default function TrackerDashboard() {
     }
 
     return { total, online, stale, offline };
-  }, [allTrackerMarkers]);
+  }, [allTrackerMarkers, trackerCounts]);
 
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
@@ -2248,7 +2328,7 @@ export default function TrackerDashboard() {
               onClick={() => {
                 if (!resolvedOrgId) return;
                 if (isHistoryRequested) fetchPositions(resolvedOrgId, { showSpinner: true });
-                else loadLatestPositionsForDashboard(resolvedOrgId, { showSpinner: true });
+                else fetchDashboardData(resolvedOrgId, { showSpinner: true });
               }}
               className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
                          hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
