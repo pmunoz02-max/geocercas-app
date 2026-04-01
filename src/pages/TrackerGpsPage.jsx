@@ -246,44 +246,15 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    try {
-      const storage = window.localStorage || {};
-      const keys = Object.keys(storage).filter(
-        (k) => k.startsWith("sb-") && k.endsWith("-auth-token")
-      );
-
-      let accessToken = "";
-      let refreshToken = "";
-      for (const key of keys) {
-        try {
-          const raw = window.localStorage.getItem(key);
-          if (!raw) continue;
-          const parsed = JSON.parse(raw);
-          accessToken =
-            parsed?.access_token ||
-            parsed?.currentSession?.access_token ||
-            parsed?.session?.access_token ||
-            "";
-          refreshToken =
-            parsed?.refresh_token ||
-            parsed?.currentSession?.refresh_token ||
-            parsed?.session?.refresh_token ||
-            "";
-          if (accessToken && refreshToken) break;
-        } catch {}
+    if (window.Android && typeof window.Android.startTracking === "function") {
+      console.log("[ANDROID] bridge detected, calling startTracking");
+      try {
+        window.Android.startTracking();
+      } catch (err) {
+        console.error("[ANDROID] startTracking failed", err);
       }
-
-      if (!accessToken || !refreshToken) return;
-
-      console.log("[ANDROID] checking bridge", window.Android);
-      if (window.Android && typeof window.Android.startTracking === "function") {
-        console.log("[ANDROID] calling startTracking");
-        window.Android.startTracking(accessToken, refreshToken);
-      } else {
-        console.log("[ANDROID] bridge NOT available");
-      }
-    } catch (err) {
-      console.log("[ANDROID] bridge skipped", err);
+    } else {
+      console.log("[ANDROID] bridge not available");
     }
   }, []);
 
