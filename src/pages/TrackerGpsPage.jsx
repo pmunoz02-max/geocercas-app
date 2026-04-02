@@ -13,6 +13,34 @@ async function getAuthHeaders() {
   };
 }
 
+// Generic fetch helper for JSON with Authorization
+async function fetchJsonWithAuth(url, { method = "GET", body, credentials = "include", headers = {}, signal, jwt } = {}) {
+  let authHeaders = {};
+  if (jwt) {
+    authHeaders = { Authorization: `Bearer ${jwt}` };
+  } else {
+    authHeaders = await getAuthHeaders();
+  }
+  const res = await fetch(url, {
+    method,
+    credentials,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders,
+      ...headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+    signal,
+  });
+  let json = null;
+  try {
+    json = await res.json();
+  } catch {
+    json = null;
+  }
+  return { res, json };
+}
+
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
 
@@ -1048,21 +1076,13 @@ export default function TrackerGpsPage() {
       last_http_status: null,
     }));
 
-    const res = await fetch("/api/accept-tracker-invite", {
+    const { res, json: j } = await fetchJsonWithAuth("/api/accept-tracker-invite", {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${userJwt}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
+      body,
+      jwt: userJwt,
     });
 
     setDebug((d) => ({ ...d, last_http_status: res.status }));
-
-    let j = null;
-    try {
-      j = await res.json();
-    } catch {}
 
     if (!res.ok) {
       const msg = j?.error || j?.message || `HTTP ${res.status}`;
@@ -1226,24 +1246,12 @@ export default function TrackerGpsPage() {
 
       try {
 
-        const authHeaders = await getAuthHeaders();
-        const response = await fetch("/api/accept-tracker-invite", {
+
+        const { res: response, json: payload } = await fetchJsonWithAuth("/api/accept-tracker-invite", {
           method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            ...authHeaders,
-          },
-          body: JSON.stringify({ org_id }),
+          body: { org_id },
           signal: controller.signal,
         });
-
-        let payload = null;
-        try {
-          payload = await response.json();
-        } catch {
-          payload = null;
-        }
 
         if (!response.ok || payload?.ok === false) {
           if (payload?.code === "TRACKER_LIMIT_REACHED") {
