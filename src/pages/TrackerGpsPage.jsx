@@ -1,7 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { supabase } from "../lib/supabaseClient";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
+// Helper to get Authorization header from Supabase session
+async function getAuthHeaders() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  if (!token) return {};
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
@@ -1215,9 +1225,15 @@ export default function TrackerGpsPage() {
       const timer = setTimeout(() => controller.abort(), 4000);
 
       try {
+
+        const authHeaders = await getAuthHeaders();
         const response = await fetch("/api/accept-tracker-invite", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders,
+          },
           body: JSON.stringify({ org_id }),
           signal: controller.signal,
         });
