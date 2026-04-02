@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const build_tag = "send_position-v19_positions_only_preview_20260316";
+const build_tag = "send_position-v20_enforcement_fixed";
 
 function buildCorsHeaders(origin: string | null) {
   return {
@@ -52,39 +52,40 @@ function pickBearer(h: string | null) {
 }
 
 function getEnv() {
-  const SB_URL =
-    Deno.env.get("SB_URL") ||
-    Deno.env.get("SUPABASE_URL") ||
-    Deno.env.get("API_URL") ||
-    "";
-
-  const SB_SERVICE_ROLE =
-    Deno.env.get("SB_SERVICE_ROLE") ||
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
-    Deno.env.get("SB_SERVICE_ROLE_KEY") ||
-    "";
-
-  const TRACKER_PROXY_SECRET =
-    Deno.env.get("TRACKER_PROXY_SECRET") ||
-    Deno.env.get("PROXY_SECRET") ||
-    Deno.env.get("INVITE_PROXY_SECRET") ||
-    "";
-
-  return { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET };
+  return {
+    SB_URL: Deno.env.get("SUPABASE_URL") || "",
+    SB_SERVICE_ROLE: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+    TRACKER_PROXY_SECRET: Deno.env.get("TRACKER_PROXY_SECRET") || "",
+  };
 }
 
-// recorded_at y created_at son NOT NULL en tu esquema.
-// - Si el cliente manda "recorded_at": lo respetamos (si es ISO válido)
-// - Si no manda: usamos now()
-// - created_at: usamos now() siempre (universal, sin depender de defaults)
 function pickTimestamps(body: any) {
   const nowIso = new Date().toISOString();
-
   const rec = String(body?.recorded_at || "").trim();
   const recorded_at = rec && !Number.isNaN(Date.parse(rec)) ? rec : nowIso;
+  return { recorded_at, created_at: nowIso };
+}
 
-  const created_at = nowIso;
-  return { recorded_at, created_at };
+async function checkCanSend(admin: any, user_id: string, org_id: string, cors: any) {
+  const { data, error } = await admin.rpc("rpc_tracker_can_send", { p_user_id: user_id });
+
+  if (error) {
+    console.error("[send_position] rpc_tracker_can_send error", error);
+    return { ok: false, response: json({ error: "enforcement_check_failed" }, 500, cors) };
+  }
+
+  if (data !== true) {
+    console.warn("[send_position] tracker_blocked_by_plan", { user_id, org_id });
+    return {
+      ok: false,
+      response: new Response(JSON.stringify({ error: "tracker_limit_reached" }), {
+        status: 403,
+        headers: cors,
+      }),
+    };
+  }
+
+  return { ok: true };
 }
 
 serve(async (req) => {
@@ -93,192 +94,87 @@ serve(async (req) => {
 
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
-  const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
-
-  if (req.method === "GET") {
-    return json(
-      {
-        ok: true,
-        build_tag,
-        now: new Date().toISOString(),
-        env: {
-          has_SB_URL: !!SB_URL,
-          has_SB_SERVICE_ROLE: !!SB_SERVICE_ROLE,
-          has_TRACKER_PROXY_SECRET: !!TRACKER_PROXY_SECRET,
-        },
-        headers_seen: {
-          has_authorization: !!req.headers.get("authorization"),
-          has_x_user_jwt: !!req.headers.get("x-user-jwt"),
-          has_x_proxy_ts: !!req.headers.get("x-proxy-ts"),
-          has_x_proxy_signature: !!req.headers.get("x-proxy-signature"),
-        },
-        hint:
-          "POST web_auth: send x-user-jwt (raw jwt or Bearer <jwt>) OR Authorization. Proxy mode requires x-proxy-* + a secret.",
-        schema_note: "positions requires recorded_at + created_at (NOT NULL). Function sets them.",
-      },
-      200,
-      CORS,
-    );
+  if (req.method !== "POST") {
+    return json({ ok: false, error: "Method not allowed" }, 405, CORS);
   }
 
-  if (req.method !== "POST") return json({ ok: false, build_tag, error: "Method not allowed" }, 405, CORS);
-
   try {
+    const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
+
     if (!SB_URL || !SB_SERVICE_ROLE) {
-      return json(
-        { ok: false, build_tag, error: "Missing required env vars (SB_URL / SB_SERVICE_ROLE)" },
-        500,
-        CORS,
-      );
+      return json({ error: "Missing env" }, 500, CORS);
     }
 
     const rawBody = await req.text();
-    let body: any;
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      return json({ ok: false, build_tag, error: "Invalid JSON body" }, 400, CORS);
-    }
-
+    const body = JSON.parse(rawBody);
     const { recorded_at, created_at } = pickTimestamps(body);
 
-    // Proxy HMAC mode
+    const admin = createClient(SB_URL, SB_SERVICE_ROLE);
+
+    // === PROXY MODE ===
     const ts = req.headers.get("x-proxy-ts");
     const signature = req.headers.get("x-proxy-signature");
-    const hasProxyHeaders = Boolean(ts && signature);
 
-    if (hasProxyHeaders) {
-      if (!TRACKER_PROXY_SECRET) {
-        return json({ ok: false, build_tag, error: "Proxy mode requires proxy secret" }, 500, CORS);
-      }
-
-      const fn = "send_position";
-      const expected = await hmacHex(TRACKER_PROXY_SECRET, `${fn}.${ts}.${rawBody}`);
+    if (ts && signature) {
+      const expected = await hmacHex(TRACKER_PROXY_SECRET, `send_position.${ts}.${rawBody}`);
       if (expected !== signature) {
-        return json({ ok: false, build_tag, error: "Invalid proxy signature" }, 401, CORS);
+        return json({ error: "Invalid signature" }, 401, CORS);
       }
 
-      const { user_id, org_id, lat, lng } = body ?? {};
-      if (!user_id || !org_id || typeof lat !== "number" || typeof lng !== "number") {
-        return json({ ok: false, build_tag, error: "Missing/invalid fields (proxy mode)" }, 400, CORS);
-      }
+      const { user_id, org_id, lat, lng } = body;
 
-      const admin = createClient(SB_URL, SB_SERVICE_ROLE);
+      const check = await checkCanSend(admin, user_id, org_id, CORS);
+      if (!check.ok) return check.response;
 
-      // LOG antes de insertar (proxy_hmac)
-      console.log("[send_position] about to insert (proxy_hmac)", {
+      const { error } = await admin.from("positions").insert({
         user_id,
         org_id,
         lat,
         lng,
-        mode: "proxy_hmac",
-      });
-
-      const row = {
-        user_id,
-        org_id,
-        personal_id: body?.personal_id ?? null,
-        asignacion_id: body?.asignacion_id ?? null,
-        lat,
-        lng,
-        accuracy: body?.accuracy ?? null,
-        speed: body?.speed ?? null,
-        heading: body?.heading ?? null,
-        battery: body?.battery ?? null,
-        is_mock: body?.is_mock ?? null,
-        source: body?.source ?? "proxy_hmac",
+        source: "proxy_hmac",
         recorded_at,
         created_at,
-      };
+      });
 
-      const source = row.source ?? null;
-      const { data: insertedPos, error: posError } = await admin.from("positions").insert(row).select("id").single();
-      if (posError) {
-        console.error("[send_position] positions_insert_failed", {
-          org_id,
-          user_id: String(user_id),
-          error: posError?.message ?? posError,
-        });
-        return json({ ok: false, build_tag, error: posError.message }, 500, CORS);
+      if (error) {
+        return json({ error: error.message }, 500, CORS);
       }
 
-      console.log("[send_position] inserted into positions", insertedPos?.id);
-      console.log("[send_position] positions_insert_ok", {
-        org_id,
-        user_id: String(user_id),
-        recorded_at: recorded_at ?? null,
-        source: source ?? null,
-        inserted_id: insertedPos?.id ?? null,
-      });
-      console.log("[send_position] tracker_latest sync handled by DB trigger");
-
-      return json({ ok: true, build_tag, mode: "proxy_hmac" }, 200, CORS);
+      return json({ ok: true }, 200, CORS);
     }
 
-    // Web auth mode
-    const userJwtHeader = req.headers.get("x-user-jwt");
-    const authHeader = req.headers.get("authorization");
-    const effectiveUserAuth = pickBearer(userJwtHeader || authHeader);
+    // === WEB MODE ===
+    const jwt = pickBearer(req.headers.get("x-user-jwt") || req.headers.get("authorization"));
+    if (!jwt) return json({ error: "Missing JWT" }, 401, CORS);
 
-    if (!effectiveUserAuth) {
-      return json({ ok: false, build_tag, error: "Missing x-user-jwt/Authorization (web mode)" }, 401, CORS);
-    }
-
-    const admin = createClient(SB_URL, SB_SERVICE_ROLE, {
-      global: { headers: { Authorization: effectiveUserAuth } },
+    const userClient = createClient(SB_URL, SB_SERVICE_ROLE, {
+      global: { headers: { Authorization: jwt } },
     });
 
-    const { data: userData, error: userErr } = await admin.auth.getUser();
-    if (userErr || !userData?.user?.id) {
-      return json({ ok: false, build_tag, error: "Invalid JWT", detail: userErr?.message ?? null }, 401, CORS);
-    }
+    const { data: userData } = await userClient.auth.getUser();
+    const user_id = userData?.user?.id;
 
-    const user_id = userData.user.id;
-    const { org_id, lat, lng } = body ?? {};
-    if (!org_id || typeof lat !== "number" || typeof lng !== "number") {
-      return json({ ok: false, build_tag, error: "Missing/invalid fields (web mode)" }, 400, CORS);
-    }
+    const { org_id, lat, lng } = body;
 
-    const row = {
+    const check = await checkCanSend(userClient, user_id, org_id, CORS);
+    if (!check.ok) return check.response;
+
+    const { error } = await userClient.from("positions").insert({
       user_id,
       org_id,
-      personal_id: body?.personal_id ?? null,
-      asignacion_id: body?.asignacion_id ?? null,
       lat,
       lng,
-      accuracy: body?.accuracy ?? null,
-      speed: body?.speed ?? null,
-      heading: body?.heading ?? null,
-      battery: body?.battery ?? null,
-      is_mock: body?.is_mock ?? null,
-      source: body?.source ?? "tracker-gps-web",
+      source: "tracker-native-android",
       recorded_at,
       created_at,
-    };
+    });
 
-    const source = row.source ?? null;
-    const { data: insertedPos, error: posError } = await admin.from("positions").insert(row).select("id").single();
-    if (posError) {
-      console.error("[send_position] positions_insert_failed", {
-        org_id,
-        user_id: String(user_id),
-        error: posError?.message ?? posError,
-      });
-      return json({ ok: false, build_tag, error: posError.message }, 500, CORS);
+    if (error) {
+      return json({ error: error.message }, 500, CORS);
     }
 
-    console.log("[send_position] inserted into positions", insertedPos?.id);
-    console.log("[send_position] positions_insert_ok", {
-      org_id,
-      user_id: String(user_id),
-      recorded_at: recorded_at ?? null,
-      source: source ?? null,
-      inserted_id: insertedPos?.id ?? null,
-    });
-    console.log("[send_position] tracker_latest sync handled by DB trigger");
-
-    return json({ ok: true, build_tag, mode: "web_auth" }, 200, CORS);
-  } catch (err: any) {
-    return json({ ok: false, build_tag, error: err?.message ?? String(err) }, 500, CORS);
+    return json({ ok: true }, 200, CORS);
+  } catch (e) {
+    return json({ error: String(e) }, 500, CORS);
   }
 });
