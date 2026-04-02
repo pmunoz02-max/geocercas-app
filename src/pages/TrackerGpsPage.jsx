@@ -143,6 +143,18 @@ function canStartAndroidTracking() {
   );
 }
 
+function StatusCard({ title, body, children }) {
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
+      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
+        <h1 className="text-2xl font-bold mb-4">{title}</h1>
+        {body ? <div className="text-sm text-slate-300 whitespace-pre-wrap">{body}</div> : null}
+        {children ? <div className="mt-5">{children}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 export default function TrackerGpsPage() {
   function isWebSendBlocked() {
     return hasAndroidNativeBridge();
@@ -213,8 +225,9 @@ export default function TrackerGpsPage() {
 
   const [hasSession, setHasSession] = useState(false);
   const [session, setSession] = useState(null);
-  const [trackerReady, setTrackerReady] = useState(true);
+  const [trackerReady, setTrackerReady] = useState(false);
   const [orgId, setOrgId] = useState(null);
+  const [orgIdError, setOrgIdError] = useState("");
   const [lastPosition, setLastPosition] = useState(null);
 
   const [membershipStatus, setMembershipStatus] = useState("pending");
@@ -233,6 +246,8 @@ export default function TrackerGpsPage() {
   const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
   const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
+  const [sessionBootstrapState, setSessionBootstrapState] = useState("booting");
+  const [sessionBootstrapError, setSessionBootstrapError] = useState("");
 
   const [trackerDiag, setTrackerDiag] = useState({
     lastSendOk: null,
@@ -262,6 +277,7 @@ export default function TrackerGpsPage() {
     last_token_ttl_sec: null,
     last_http_status: null,
     disclosure_mode: "always-on-entry",
+    session_bootstrap_state: "booting",
   });
 
   const watchIdRef = useRef(null);
@@ -536,6 +552,9 @@ export default function TrackerGpsPage() {
     const effectiveToken = String(authTokenOverride || trackerAccessToken || "").trim();
     if (!trackerReady || !orgId || !effectiveToken) return;
 
+    setAssignmentLoadState("loading");
+    setAssignmentLoadError("");
+
     console.log("[assignment-window] loading");
     console.log("[assignment-window] query:start", { orgId });
 
@@ -558,9 +577,10 @@ export default function TrackerGpsPage() {
     const result = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (result.ok && result.tracker_assignment) {
+      const activeNow = isAssignmentActiveNow(result.tracker_assignment);
       setActiveAssignment(result.tracker_assignment);
-      setAssignmentWindowStatus(result.tracker_assignment.active ? "active" : "expired");
-      setAssignmentLoadState(result.tracker_assignment.active ? "active" : "inactive");
+      setAssignmentWindowStatus(activeNow ? "active" : "expired");
+      setAssignmentLoadState(activeNow ? "active" : "inactive");
       setAssignmentLoadError("");
     } else if (result.ok && result.active && result.assignment) {
       const activeNow = isAssignmentActiveNow(result.assignment);
@@ -594,6 +614,8 @@ export default function TrackerGpsPage() {
       isWatchdogRecovering,
       lastPosition,
       gpsAcquisitionState,
+      lastSendOk: trackerDiag.lastSendOk,
+      lastSendFailure: trackerDiag.lastSendFailure,
     });
   }, [
     hasSession,
@@ -605,6 +627,8 @@ export default function TrackerGpsPage() {
     isWatchdogRecovering,
     lastPosition,
     gpsAcquisitionState,
+    trackerDiag.lastSendOk,
+    trackerDiag.lastSendFailure,
   ]);
 
   useEffect(() => {
@@ -612,6 +636,8 @@ export default function TrackerGpsPage() {
       setTrackerReady(false);
       setHasSession(false);
       setSession(null);
+      setSessionBootstrapState("error");
+      setSessionBootstrapError("Tracker Supabase client not found.");
       setLastError("Tracker Supabase client not found.");
       return;
     }
@@ -636,20 +662,34 @@ export default function TrackerGpsPage() {
 
     if (picked) {
       setOrgId(picked);
+      setOrgIdError("");
       try {
         localStorage.setItem(LS_TRACKER_ORG_KEY, picked);
+        sessionStorage.setItem(LS_TRACKER_ORG_KEY, picked);
       } catch {}
       return;
     }
 
+    let stored = "";
+    try {
+      stored =
+        String(localStorage.getItem(LS_TRACKER_ORG_KEY) || sessionStorage.getItem(LS_TRACKER_ORG_KEY) || "").trim();
+    } catch {}
+
+    if (isUuid(stored)) {
+      setOrgId(stored);
+      setOrgIdError("");
+      return;
+    }
+
     setOrgId(null);
-    setMembershipStatus("failed");
-    setMembershipDetail(
-      tt(
-        "trackerGps.membership.missingOrgId",
-        "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
-      )
+    const msg = tt(
+      "trackerGps.membership.missingOrgId",
+      "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
     );
+    setOrgIdError(msg);
+    setMembershipStatus("failed");
+    setMembershipDetail(msg);
   }, [location.search, params?.orgId, lang]);
 
   useEffect(() => {
@@ -660,12 +700,17 @@ export default function TrackerGpsPage() {
     if (!access_token || !refresh_token || !looksLikeJwt(access_token)) return;
 
     didHashSessionRef.current = true;
+    setSessionBootstrapState("booting");
+    setSessionBootstrapError("");
 
     (async () => {
       try {
         const { error } = await PRIMARY.auth.setSession({ access_token, refresh_token });
         if (error) {
-          setLastError(`${tt("trackerGps.errors.setSession", "setSession error:")} ${error.message}`);
+          const msg = `${tt("trackerGps.errors.setSession", "setSession error:")} ${error.message}`;
+          setLastError(msg);
+          setSessionBootstrapState("error");
+          setSessionBootstrapError(msg);
           return;
         }
 
@@ -683,9 +728,12 @@ export default function TrackerGpsPage() {
 
         setLastError(null);
       } catch (e) {
-        setLastError(
-          `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(e?.message || e)}`
-        );
+        const msg = `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(
+          e?.message || e
+        )}`;
+        setLastError(msg);
+        setSessionBootstrapState("error");
+        setSessionBootstrapError(msg);
       }
     })();
   }, [trackerReady, PRIMARY, lang]);
@@ -763,36 +811,56 @@ export default function TrackerGpsPage() {
     };
 
     (async () => {
-      let nextSession = null;
-      for (let i = 0; i < 15; i++) {
-        const { data } = await PRIMARY.auth.getSession();
-        nextSession = data?.session ?? null;
-        if (nextSession?.access_token) break;
-        await sleep(150);
-      }
-      if (cancelled) return;
+      try {
+        setSessionBootstrapState("booting");
+        setSessionBootstrapError("");
+        setDebug((d) => ({ ...d, session_bootstrap_state: "booting" }));
 
-      const tokenB = nextSession?.access_token || "";
-      const ok = !!tokenB && looksLikeJwt(tokenB);
+        let nextSession = null;
+        for (let i = 0; i < 15; i++) {
+          const { data } = await PRIMARY.auth.getSession();
+          nextSession = data?.session ?? null;
+          if (nextSession?.access_token) break;
+          await sleep(150);
+        }
+        if (cancelled) return;
 
-      setDebug((d) => ({ ...d, session_exists: !!nextSession }));
-      updateDebugFromToken(tokenB);
+        const tokenB = nextSession?.access_token || "";
+        const ok = !!tokenB && looksLikeJwt(tokenB);
 
-      if (!ok) {
-        setSession(null);
-        setHasSession(false);
-        setLastError(
-          tt(
+        setDebug((d) => ({ ...d, session_exists: !!nextSession }));
+        updateDebugFromToken(tokenB);
+
+        if (!ok) {
+          setSession(null);
+          setHasSession(false);
+          const msg = tt(
             "trackerGps.errors.openFromMagicLinkOnly",
             "Open this page only from your Tracker Magic Link."
-          )
-        );
-        return;
-      }
+          );
+          setLastError(msg);
+          setSessionBootstrapState("no_session");
+          setSessionBootstrapError(msg);
+          setDebug((d) => ({ ...d, session_bootstrap_state: "no_session" }));
+          return;
+        }
 
-      setSession(nextSession);
-      setHasSession(true);
-      setLastError(null);
+        setSession(nextSession);
+        setHasSession(true);
+        setLastError(null);
+        setSessionBootstrapState("ready");
+        setSessionBootstrapError("");
+        setDebug((d) => ({ ...d, session_bootstrap_state: "ready" }));
+      } catch (e) {
+        if (cancelled) return;
+        const msg = String(e?.message || e);
+        setSession(null);
+        setHasSession(false);
+        setLastError(msg);
+        setSessionBootstrapState("error");
+        setSessionBootstrapError(msg);
+        setDebug((d) => ({ ...d, session_bootstrap_state: "error" }));
+      }
     })();
 
     const { data: sub } = PRIMARY.auth.onAuthStateChange((_event, nextSession) => {
@@ -804,9 +872,14 @@ export default function TrackerGpsPage() {
         setSession(nextSession);
         setHasSession(true);
         setLastError(null);
+        setSessionBootstrapState("ready");
+        setSessionBootstrapError("");
+        setDebug((d) => ({ ...d, session_bootstrap_state: "ready" }));
       } else {
         setSession(null);
         setHasSession(false);
+        setSessionBootstrapState("no_session");
+        setDebug((d) => ({ ...d, session_bootstrap_state: "no_session" }));
       }
     });
 
@@ -835,7 +908,7 @@ export default function TrackerGpsPage() {
         if (!cancelled) {
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
-          setAssignmentLoadState("inactive");
+          setAssignmentLoadState("error");
           setAssignmentLoadError(error?.message || "Assignment load failed");
         }
       } finally {
@@ -1735,6 +1808,31 @@ export default function TrackerGpsPage() {
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
   const fmtDiagTs = (ts) => (ts ? new Date(ts).toLocaleString() : "—");
 
+  const showBootstrapLoading =
+    trackerReady && sessionBootstrapState === "booting" && !hasSession;
+
+  const showMissingOrgState = trackerReady && !orgId && !!orgIdError;
+
+  const showMissingSessionState =
+    trackerReady &&
+    !hasSession &&
+    (sessionBootstrapState === "no_session" || sessionBootstrapState === "error");
+
+  const showAssignmentLoadingState =
+    trackerReady &&
+    hasSession &&
+    !!orgId &&
+    (assignmentLoadState === "idle" ||
+      assignmentLoadState === "loading" ||
+      assignmentWindowStatus === "unknown");
+
+  const showBlockedAssignmentState =
+    trackerReady &&
+    hasSession &&
+    !!orgId &&
+    !showAssignmentLoadingState &&
+    assignmentWindowStatus !== "active";
+
   if (trackerReady && hasSession && !disclosureAccepted) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
@@ -1774,30 +1872,105 @@ export default function TrackerGpsPage() {
     );
   }
 
-  if (trackerReady && hasSession && assignmentWindowStatus !== "active") {
+  if (showBootstrapLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
-        <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
-          <h1 className="text-2xl font-bold mb-4">
-            {tt("trackerGps.blocked.title", "Tracker blocked")}
-          </h1>
-          <div className="text-lg text-amber-300 mb-2">
-            {tt("trackerGps.blocked.noActiveAssignment", "No active assignment found.")}
-          </div>
-          <div className="text-sm text-slate-300 mb-6">
-            {tt(
-              "trackerGps.blocked.instructions",
-              "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error."
-            )}
-          </div>
-          <button
-            onClick={() => navigate("/")}
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
-          >
-            {tt("trackerGps.goHome", "Go to home")}
-          </button>
+      <StatusCard
+        title={tt("trackerGps.loading.title", "Cargando Geocercas…")}
+        body={tt(
+          "trackerGps.loading.body",
+          "Estamos validando tu acceso como tracker. Este paso no debería tardar más de unos segundos."
+        )}
+      >
+        <div className="text-xs text-slate-400">
+          session_bootstrap_state: {sessionBootstrapState}
         </div>
-      </div>
+      </StatusCard>
+    );
+  }
+
+  if (showMissingOrgState) {
+    return (
+      <StatusCard
+        title={tt("trackerGps.missingOrg.title", "Falta el enlace correcto")}
+        body={orgIdError}
+      >
+        <button
+          onClick={() => navigate("/")}
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+        >
+          {tt("trackerGps.goHome", "Go to home")}
+        </button>
+      </StatusCard>
+    );
+  }
+
+  if (showMissingSessionState) {
+    return (
+      <StatusCard
+        title={tt("trackerGps.onlyInvitedTitle", "Esta página es solo para trackers invitados")}
+        body={
+          sessionBootstrapError ||
+          lastError ||
+          tt("trackerGps.onlyInvited", "This page is only for invited trackers.")
+        }
+      >
+        <div className="text-xs text-slate-400 mb-4">
+          session_bootstrap_state: {sessionBootstrapState}
+        </div>
+        <button
+          onClick={() => navigate("/")}
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+        >
+          {tt("trackerGps.goHome", "Go to home")}
+        </button>
+      </StatusCard>
+    );
+  }
+
+  if (showAssignmentLoadingState) {
+    return (
+      <StatusCard
+        title={tt("trackerGps.assignment.loadingTitle", "Cargando Geocercas…")}
+        body={tt(
+          "trackerGps.assignment.loadingBody",
+          "Estamos verificando tu asignación activa y preparando el tracking."
+        )}
+      >
+        <div className="text-xs text-slate-400">
+          assignment_load_state: {assignmentLoadState} | assignment_window: {assignmentWindowStatus}
+        </div>
+        {assignmentLoadError ? (
+          <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
+            {assignmentLoadError}
+          </div>
+        ) : null}
+      </StatusCard>
+    );
+  }
+
+  if (showBlockedAssignmentState) {
+    return (
+      <StatusCard
+        title={tt("trackerGps.blocked.title", "Tracker blocked")}
+        body={
+          assignmentLoadError
+            ? assignmentLoadError
+            : tt(
+                "trackerGps.blocked.instructions",
+                "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error."
+              )
+        }
+      >
+        <div className="text-lg text-amber-300 mb-4">
+          {tt("trackerGps.blocked.noActiveAssignment", "No active assignment found.")}
+        </div>
+        <button
+          onClick={() => navigate("/")}
+          className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+        >
+          {tt("trackerGps.goHome", "Go to home")}
+        </button>
+      </StatusCard>
     );
   }
 
@@ -1942,6 +2115,9 @@ export default function TrackerGpsPage() {
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
                     assignment_load_state: {assignmentLoadState}
                   </div>
+                  <div className="mt-2 text-[11px] text-slate-400 break-all">
+                    session_bootstrap_state: {sessionBootstrapState}
+                  </div>
                   {activeAssignment?.frequency_minutes ? (
                     <div className="mt-2 text-[11px] text-slate-400 break-all">
                       frequency_minutes: {activeAssignment.frequency_minutes}
@@ -2018,6 +2194,9 @@ export default function TrackerGpsPage() {
                         watchdog_recovering: isWatchdogRecovering,
                         android_bridge_diagnostics: androidBridgeDiagnostics,
                         status,
+                        session_bootstrap_error: sessionBootstrapError,
+                        org_id_error: orgIdError,
+                        assignment_load_error: assignmentLoadError,
                       },
                       null,
                       2
@@ -2061,27 +2240,6 @@ export default function TrackerGpsPage() {
               </div>
             ) : null}
           </>
-        )}
-
-        {trackerReady && !hasSession && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-slate-300 mb-3">
-              {tt("trackerGps.onlyInvited", "This page is only for invited trackers.")}
-            </p>
-
-            {lastError ? (
-              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
-                {lastError}
-              </div>
-            ) : null}
-
-            <button
-              onClick={() => navigate("/")}
-              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
-            >
-              {tt("trackerGps.goHome", "Go to home")}
-            </button>
-          </div>
         )}
 
         {!trackerReady && (
