@@ -1896,18 +1896,27 @@ export default function TrackerGpsPage() {
     );
   }
 
+  const DebugPanel = (
+    <div className="mt-6 p-3 rounded-xl bg-slate-800 border border-slate-700 text-left text-xs text-slate-300 whitespace-pre-wrap">
+      <div>sessionBootstrapState: {sessionBootstrapState}</div>
+      <div>hasSession: {String(!!hasSession)}</div>
+      <div>orgId: {orgId || "(none)"}</div>
+      <div>assignmentLoadState: {assignmentLoadState}</div>
+      <div>assignmentWindowStatus: {assignmentWindowStatus}</div>
+      <div>trackerAccessToken: {trackerAccessToken ? "present" : "missing"}</div>
+    </div>
+  );
+
   if (showBootstrapLoading) {
     return (
       <StatusCard
-        title={tt("trackerGps.loading.title", "Cargando Geocercas…")}
+        title={tt("trackerGps.loading.bootingTitle", "Validando sesión del tracker…")}
         body={tt(
-          "trackerGps.loading.body",
-          "Estamos validando tu acceso como tracker. Este paso no debería tardar más de unos segundos."
+          "trackerGps.loading.bootingBody",
+          "Estamos procesando el acceso desde tu enlace de invitación."
         )}
       >
-        <div className="text-xs text-slate-400">
-          session_bootstrap_state: {sessionBootstrapState}
-        </div>
+        {DebugPanel}
       </StatusCard>
     );
   }
@@ -1915,9 +1924,10 @@ export default function TrackerGpsPage() {
   if (showMissingOrgState) {
     return (
       <StatusCard
-        title={tt("trackerGps.missingOrg.title", "Falta el enlace correcto")}
-        body={orgIdError}
+        title={tt("trackerGps.missingOrg.title", "Falta org_id")}
+        body={tt("trackerGps.missingOrg.body", "El enlace no contiene una organización válida.")}
       >
+        {DebugPanel}
         <button
           onClick={() => navigate("/")}
           className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
@@ -1931,16 +1941,10 @@ export default function TrackerGpsPage() {
   if (showMissingSessionState) {
     return (
       <StatusCard
-        title={tt("trackerGps.onlyInvitedTitle", "Esta página es solo para trackers invitados")}
-        body={
-          sessionBootstrapError ||
-          lastError ||
-          tt("trackerGps.onlyInvited", "This page is only for invited trackers.")
-        }
+        title={tt("trackerGps.missingSession.title", "Sesión de tracker no disponible")}
+        body={tt("trackerGps.missingSession.body", "El enlace abrió la app, pero no se pudo establecer la sesión.")}
       >
-        <div className="text-xs text-slate-400 mb-4">
-          session_bootstrap_state: {sessionBootstrapState}
-        </div>
+        {DebugPanel}
         <button
           onClick={() => navigate("/")}
           className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
@@ -1954,15 +1958,13 @@ export default function TrackerGpsPage() {
   if (showAssignmentLoadingState) {
     return (
       <StatusCard
-        title={tt("trackerGps.assignment.loadingTitle", "Cargando Geocercas…")}
+        title={tt("trackerGps.assignment.loadingTitle", "Cargando asignación activa…")}
         body={tt(
           "trackerGps.assignment.loadingBody",
-          "Estamos verificando tu asignación activa y preparando el tracking."
+          "Estamos verificando la geocerca, actividad y ventana horaria."
         )}
       >
-        <div className="text-xs text-slate-400">
-          assignment_load_state: {assignmentLoadState} | assignment_window: {assignmentWindowStatus}
-        </div>
+        {DebugPanel}
         {assignmentLoadError ? (
           <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
             {assignmentLoadError}
@@ -1975,16 +1977,10 @@ export default function TrackerGpsPage() {
   if (showBlockedAssignmentState) {
     return (
       <StatusCard
-        title={tt("trackerGps.blocked.title", "Tracker blocked")}
-        body={
-          assignmentLoadError
-            ? assignmentLoadError
-            : tt(
-                "trackerGps.blocked.instructions",
-                "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error."
-              )
-        }
+        title={tt("trackerGps.blocked.title", "Sin asignación activa")}
+        body={tt("trackerGps.blocked.body", "No existe una asignación activa para este tracker en este momento.")}
       >
+        {DebugPanel}
         <div className="text-lg text-amber-300 mb-4">
           {tt("trackerGps.blocked.noActiveAssignment", "No active assignment found.")}
         </div>
