@@ -2048,9 +2048,31 @@ export default function TrackerGpsPage() {
               </>
             )}
 
+
             <div className="mt-3 text-xs">
-              {tt("trackerGps.stateLabel", "Status")}:{" "}
+              {tt("trackerGps.stateLabel", "Status")}: {" "}
               <span className="text-slate-100">{visualStatus}</span>
+            </div>
+            <div className="mt-2 text-xs text-slate-400">
+              hasSession: {String(hasSession)}
+            </div>
+            <div className="text-xs text-slate-400">
+              trackerReady: {String(trackerReady)}
+            </div>
+            <div className="text-xs text-slate-400 break-all">
+              orgId: {orgId || "—"}
+            </div>
+            <div className="text-xs text-slate-400">
+              membershipStatus: {membershipStatus || "—"}
+            </div>
+            <div className="text-xs text-slate-400">
+              assignmentLoadState: {assignmentLoadState || "—"}
+            </div>
+            <div className="text-xs text-slate-400">
+              assignmentWindowStatus: {assignmentWindowStatus || "—"}
+            </div>
+            <div className="text-xs text-amber-300 break-all">
+              acceptError: {acceptError || "—"}
             </div>
 
             {isActivationBgRunning ? (
