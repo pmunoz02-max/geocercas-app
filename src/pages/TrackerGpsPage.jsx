@@ -2445,7 +2445,4 @@ export default function TrackerGpsPage() {
                     </div>
                   </div>
                 );
-              } catch (err) {
-                setFatalError(err);
-                return null;
-              }
+              // Removed misplaced catch block and rebalanced braces
