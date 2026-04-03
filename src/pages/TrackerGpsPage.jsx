@@ -1,45 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../lib/supabaseClient";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
-// Helper to get Authorization header from Supabase session
-async function getAuthHeaders() {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
-  if (!token) return {};
-  return {
-    Authorization: `Bearer ${token}`,
-  };
-}
-
-// Generic fetch helper for JSON with Authorization
-async function fetchJsonWithAuth(url, { method = "GET", body, credentials = "include", headers = {}, signal, jwt } = {}) {
-  let authHeaders = {};
-  if (jwt) {
-    authHeaders = { Authorization: `Bearer ${jwt}` };
-  } else {
-    authHeaders = await getAuthHeaders();
-  }
-  const res = await fetch(url, {
-    method,
-    credentials,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders,
-      ...headers,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    signal,
-  });
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    json = null;
-  }
-  return { res, json };
-}
 
 const CLIENT_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
@@ -181,44 +143,7 @@ function canStartAndroidTracking() {
   );
 }
 
-function StatusCard({ title, body, children }) {
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
-      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
-        <h1 className="text-2xl font-bold mb-4">{title}</h1>
-        {body ? <div className="text-sm text-slate-300 whitespace-pre-wrap">{body}</div> : null}
-        {children ? <div className="mt-5">{children}</div> : null}
-      </div>
-    </div>
-  );
-}
-
 export default function TrackerGpsPage() {
-      // Fatal error boundary state
-      const [fatalError, setFatalError] = useState(null);
-    // Accept invite after session and orgId are ready, but before trackerReady
-    useEffect(() => {
-      if (!hasSession) return;
-      if (!orgId) return;
-      if (trackerReady) return;
-
-      console.log("[tracker] triggering accept-invite");
-
-      (async () => {
-        try {
-          const res = await fetchJsonWithAuth("/api/accept-tracker-invite", {
-            method: "POST",
-            body: JSON.stringify({ org_id: orgId }),
-          });
-
-          console.log("[tracker] accept-invite OK", res);
-
-          setTrackerReady(true);
-        } catch (e) {
-          console.error("[tracker] accept-invite FAILED", e);
-        }
-      })();
-    }, [hasSession, orgId, trackerReady]);
   function isWebSendBlocked() {
     return hasAndroidNativeBridge();
   }
@@ -288,9 +213,8 @@ export default function TrackerGpsPage() {
 
   const [hasSession, setHasSession] = useState(false);
   const [session, setSession] = useState(null);
-  const [trackerReady, setTrackerReady] = useState(false);
+  const [trackerReady, setTrackerReady] = useState(true);
   const [orgId, setOrgId] = useState(null);
-  const [orgIdError, setOrgIdError] = useState("");
   const [lastPosition, setLastPosition] = useState(null);
 
   const [membershipStatus, setMembershipStatus] = useState("pending");
@@ -309,8 +233,6 @@ export default function TrackerGpsPage() {
   const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
   const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
-  const [sessionBootstrapState, setSessionBootstrapState] = useState("booting");
-  const [sessionBootstrapError, setSessionBootstrapError] = useState("");
 
   const [trackerDiag, setTrackerDiag] = useState({
     lastSendOk: null,
@@ -340,7 +262,6 @@ export default function TrackerGpsPage() {
     last_token_ttl_sec: null,
     last_http_status: null,
     disclosure_mode: "always-on-entry",
-    session_bootstrap_state: "booting",
   });
 
   const watchIdRef = useRef(null);
@@ -355,6 +276,28 @@ export default function TrackerGpsPage() {
   const acceptInFlightRef = useRef(new Set());
   const blockingUiLoggedRef = useRef(false);
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
+
+  useEffect(() => {
+    if (!hasSession) return;
+    if (!orgId) return;
+    if (trackerReady) return;
+
+    console.log("[tracker] triggering accept-invite");
+
+    (async () => {
+      try {
+        const { res, json } = await fetchJsonWithAuth("/api/accept-tracker-invite", {
+          method: "POST",
+          body: { org_id: orgId },
+        });
+
+        console.log("[tracker] accept-invite OK", { status: res?.status, json });
+        setTrackerReady(true);
+      } catch (e) {
+        console.error("[tracker] accept-invite FAILED", e);
+      }
+    })();
+  }, [hasSession, orgId, trackerReady]);
 
   const recheckAndroidDiag = () => {
     if (typeof window === "undefined") return;
@@ -615,9 +558,6 @@ export default function TrackerGpsPage() {
     const effectiveToken = String(authTokenOverride || trackerAccessToken || "").trim();
     if (!trackerReady || !orgId || !effectiveToken) return;
 
-    setAssignmentLoadState("loading");
-    setAssignmentLoadError("");
-
     console.log("[assignment-window] loading");
     console.log("[assignment-window] query:start", { orgId });
 
@@ -640,10 +580,9 @@ export default function TrackerGpsPage() {
     const result = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (result.ok && result.tracker_assignment) {
-      const activeNow = isAssignmentActiveNow(result.tracker_assignment);
       setActiveAssignment(result.tracker_assignment);
-      setAssignmentWindowStatus(activeNow ? "active" : "expired");
-      setAssignmentLoadState(activeNow ? "active" : "inactive");
+      setAssignmentWindowStatus(result.tracker_assignment.active ? "active" : "expired");
+      setAssignmentLoadState(result.tracker_assignment.active ? "active" : "inactive");
       setAssignmentLoadError("");
     } else if (result.ok && result.active && result.assignment) {
       const activeNow = isAssignmentActiveNow(result.assignment);
@@ -677,8 +616,6 @@ export default function TrackerGpsPage() {
       isWatchdogRecovering,
       lastPosition,
       gpsAcquisitionState,
-      lastSendOk: trackerDiag.lastSendOk,
-      lastSendFailure: trackerDiag.lastSendFailure,
     });
   }, [
     hasSession,
@@ -690,8 +627,6 @@ export default function TrackerGpsPage() {
     isWatchdogRecovering,
     lastPosition,
     gpsAcquisitionState,
-    trackerDiag.lastSendOk,
-    trackerDiag.lastSendFailure,
   ]);
 
   useEffect(() => {
@@ -699,12 +634,9 @@ export default function TrackerGpsPage() {
       setTrackerReady(false);
       setHasSession(false);
       setSession(null);
-      setSessionBootstrapState("error");
-      setSessionBootstrapError("Tracker Supabase client not found.");
       setLastError("Tracker Supabase client not found.");
       return;
     }
-    setTrackerReady(true);
     setDebug((d) => ({
       ...d,
       supabase_url: (import.meta.env.VITE_SUPABASE_URL || "").trim(),
@@ -725,34 +657,20 @@ export default function TrackerGpsPage() {
 
     if (picked) {
       setOrgId(picked);
-      setOrgIdError("");
       try {
         localStorage.setItem(LS_TRACKER_ORG_KEY, picked);
-        sessionStorage.setItem(LS_TRACKER_ORG_KEY, picked);
       } catch {}
       return;
     }
 
-    let stored = "";
-    try {
-      stored =
-        String(localStorage.getItem(LS_TRACKER_ORG_KEY) || sessionStorage.getItem(LS_TRACKER_ORG_KEY) || "").trim();
-    } catch {}
-
-    if (isUuid(stored)) {
-      setOrgId(stored);
-      setOrgIdError("");
-      return;
-    }
-
     setOrgId(null);
-    const msg = tt(
-      "trackerGps.membership.missingOrgId",
-      "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
-    );
-    setOrgIdError(msg);
     setMembershipStatus("failed");
-    setMembershipDetail(msg);
+    setMembershipDetail(
+      tt(
+        "trackerGps.membership.missingOrgId",
+        "Missing org_id in URL. Open this page from the invitation link: /tracker-gps?org_id=<ORG_ID>."
+      )
+    );
   }, [location.search, params?.orgId, lang]);
 
   useEffect(() => {
@@ -763,17 +681,12 @@ export default function TrackerGpsPage() {
     if (!access_token || !refresh_token || !looksLikeJwt(access_token)) return;
 
     didHashSessionRef.current = true;
-    setSessionBootstrapState("booting");
-    setSessionBootstrapError("");
 
     (async () => {
       try {
         const { error } = await PRIMARY.auth.setSession({ access_token, refresh_token });
         if (error) {
-          const msg = `${tt("trackerGps.errors.setSession", "setSession error:")} ${error.message}`;
-          setLastError(msg);
-          setSessionBootstrapState("error");
-          setSessionBootstrapError(msg);
+          setLastError(`${tt("trackerGps.errors.setSession", "setSession error:")} ${error.message}`);
           return;
         }
 
@@ -791,12 +704,9 @@ export default function TrackerGpsPage() {
 
         setLastError(null);
       } catch (e) {
-        const msg = `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(
-          e?.message || e
-        )}`;
-        setLastError(msg);
-        setSessionBootstrapState("error");
-        setSessionBootstrapError(msg);
+        setLastError(
+          `${tt("trackerGps.errors.hashSession", "hash session error:")} ${String(e?.message || e)}`
+        );
       }
     })();
   }, [trackerReady, PRIMARY, lang]);
@@ -874,61 +784,36 @@ export default function TrackerGpsPage() {
     };
 
     (async () => {
-      try {
-        setSessionBootstrapState("booting");
-        setSessionBootstrapError("");
-        setDebug((d) => ({ ...d, session_bootstrap_state: "booting" }));
+      let nextSession = null;
+      for (let i = 0; i < 15; i++) {
+        const { data } = await PRIMARY.auth.getSession();
+        nextSession = data?.session ?? null;
+        if (nextSession?.access_token) break;
+        await sleep(150);
+      }
+      if (cancelled) return;
 
-        let nextSession = null;
-        for (let i = 0; i < 25; i++) {
-          const { data } = await PRIMARY.auth.getSession();
-          nextSession = data?.session ?? null;
+      const tokenB = nextSession?.access_token || "";
+      const ok = !!tokenB && looksLikeJwt(tokenB);
 
-          if (nextSession?.access_token && looksLikeJwt(nextSession.access_token)) {
-            break;
-          }
+      setDebug((d) => ({ ...d, session_exists: !!nextSession }));
+      updateDebugFromToken(tokenB);
 
-          await sleep(200);
-        }
-        if (cancelled) return;
-
-        const tokenB = nextSession?.access_token || "";
-        const ok = !!tokenB && looksLikeJwt(tokenB);
-
-        setDebug((d) => ({ ...d, session_exists: !!nextSession }));
-        updateDebugFromToken(tokenB);
-
-        // Explicit fallback if session is not OK
-        if (!ok) {
-          setSession(null);
-          setHasSession(false);
-          const msg = tt(
-            "trackerGps.errors.openFromMagicLinkOnly",
-            "Open this page only from your Tracker Magic Link."
-          );
-          setLastError(msg);
-          setSessionBootstrapState("no_session");
-          setSessionBootstrapError(msg);
-          setDebug((d) => ({ ...d, session_bootstrap_state: "no_session" }));
-          return;
-        }
-
-        setSession(nextSession);
-        setHasSession(true);
-        setLastError(null);
-        setSessionBootstrapState("ready");
-        setSessionBootstrapError("");
-        setDebug((d) => ({ ...d, session_bootstrap_state: "ready" }));
-      } catch (e) {
-        if (cancelled) return;
-        const msg = String(e?.message || e);
+      if (!ok) {
         setSession(null);
         setHasSession(false);
-        setLastError(msg);
-        setSessionBootstrapState("error");
-        setSessionBootstrapError(msg);
-        setDebug((d) => ({ ...d, session_bootstrap_state: "error" }));
+        setLastError(
+          tt(
+            "trackerGps.errors.openFromMagicLinkOnly",
+            "Open this page only from your Tracker Magic Link."
+          )
+        );
+        return;
       }
+
+      setSession(nextSession);
+      setHasSession(true);
+      setLastError(null);
     })();
 
     const { data: sub } = PRIMARY.auth.onAuthStateChange((_event, nextSession) => {
@@ -940,14 +825,9 @@ export default function TrackerGpsPage() {
         setSession(nextSession);
         setHasSession(true);
         setLastError(null);
-        setSessionBootstrapState("ready");
-        setSessionBootstrapError("");
-        setDebug((d) => ({ ...d, session_bootstrap_state: "ready" }));
       } else {
         setSession(null);
         setHasSession(false);
-        setSessionBootstrapState("no_session");
-        setDebug((d) => ({ ...d, session_bootstrap_state: "no_session" }));
       }
     });
 
@@ -976,7 +856,7 @@ export default function TrackerGpsPage() {
         if (!cancelled) {
           setActiveAssignment(null);
           setAssignmentWindowStatus("inactive");
-          setAssignmentLoadState("error");
+          setAssignmentLoadState("inactive");
           setAssignmentLoadError(error?.message || "Assignment load failed");
         }
       } finally {
@@ -1106,13 +986,21 @@ export default function TrackerGpsPage() {
       last_http_status: null,
     }));
 
-    const { res, json: j } = await fetchJsonWithAuth("/api/accept-tracker-invite", {
+    const res = await fetch("/api/accept-tracker-invite", {
       method: "POST",
-      body,
-      jwt: userJwt,
+      headers: {
+        Authorization: `Bearer ${userJwt}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     });
 
     setDebug((d) => ({ ...d, last_http_status: res.status }));
+
+    let j = null;
+    try {
+      j = await res.json();
+    } catch {}
 
     if (!res.ok) {
       const msg = j?.error || j?.message || `HTTP ${res.status}`;
@@ -1275,13 +1163,19 @@ export default function TrackerGpsPage() {
       const timer = setTimeout(() => controller.abort(), 4000);
 
       try {
-
-
-        const { res: response, json: payload } = await fetchJsonWithAuth("/api/accept-tracker-invite", {
+        const response = await fetch("/api/accept-tracker-invite", {
           method: "POST",
-          body: { org_id },
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ org_id }),
           signal: controller.signal,
         });
+
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
 
         if (!response.ok || payload?.ok === false) {
           if (payload?.code === "TRACKER_LIMIT_REACHED") {
@@ -1862,236 +1756,71 @@ export default function TrackerGpsPage() {
   const formattedLastSend = lastSend ? lastSend.toLocaleTimeString() : "—";
   const fmtDiagTs = (ts) => (ts ? new Date(ts).toLocaleString() : "—");
 
-  const showBootstrapLoading =
-    trackerReady && sessionBootstrapState === "booting" && !hasSession;
-
-  const showMissingOrgState = trackerReady && !orgId && !!orgIdError;
-
-  const showMissingSessionState =
-    trackerReady &&
-    !hasSession &&
-    (sessionBootstrapState === "no_session" || sessionBootstrapState === "error");
-
-  const showAssignmentLoadingState =
-    trackerReady &&
-    hasSession &&
-    !!orgId &&
-    (assignmentLoadState === "idle" ||
-      assignmentLoadState === "loading" ||
-      assignmentWindowStatus === "unknown");
-
-  const showBlockedAssignmentState =
-    trackerReady &&
-    hasSession &&
-    !!orgId &&
-    !showAssignmentLoadingState &&
-    assignmentWindowStatus !== "active";
-
-  // Fatal error boundary visible state
-    // Log render state for debugging
-    console.log("[tracker-render]", {
-      trackerReady,
-      hasSession,
-      orgId,
-      sessionBootstrapState,
-      assignmentLoadState,
-      assignmentWindowStatus,
-      lastError,
-    });
-  if (fatalError) {
+  if (trackerReady && hasSession && !disclosureAccepted) {
     return (
-      <StatusCard
-        title={tt("trackerGps.fatalError.title", "Error fatal en Tracker")}
-        body={tt("trackerGps.fatalError.body", "Ocurrió un error inesperado en la aplicación. Intenta recargar la página o contacta soporte si el problema persiste.")}
-      >
-        <div className="text-xs text-red-400 mt-3 whitespace-pre-wrap">
-          {String(fatalError?.message || fatalError)}
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5">
+          <h1 className="text-lg font-semibold text-center">
+            {tt("trackerGps.disclosure.title", "Background location")}
+          </h1>
+
+          <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-slate-200 space-y-4">
+            <p>
+              {tt(
+                "trackerGps.disclosure.body1",
+                "App Geocercas collects your location even when the app is closed or the phone is locked in order to record positions and validate geofence entry and exit during the workday."
+              )}
+            </p>
+
+            <p>
+              {tt(
+                "trackerGps.disclosure.body2",
+                "This information is used only for the organization's operational purposes and is not shared with third parties or used for advertising. You can stop tracking by revoking location permission or signing out."
+              )}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setDisclosureAccepted(true);
+              setLastError(null);
+            }}
+            className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-slate-950 font-semibold hover:bg-emerald-400 transition"
+          >
+            {tt("trackerGps.disclosure.continue", "Continue")}
+          </button>
         </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold mt-4"
-        >
-          {tt("trackerGps.fatalError.reload", "Recargar página")}
-        </button>
-      </StatusCard>
+      </div>
     );
   }
 
-  // Main render logic with error boundary
-  try {
-    if (!trackerReady) {
-      return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4">
-          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5">
-            <h1 className="text-lg font-semibold">Tracker GPS</h1>
-            <div className="mt-3 text-sm text-slate-300">trackerReady: false</div>
-            <div className="text-sm text-slate-300">hasSession: {String(hasSession)}</div>
-            <div className="text-sm text-slate-300">orgId: {orgId || "—"}</div>
-            <div className="text-sm text-slate-300">
-              sessionBootstrapState: {sessionBootstrapState || "—"}
-            </div>
-            <div className="text-sm text-slate-300">
-              assignmentLoadState: {assignmentLoadState || "—"}
-            </div>
-            <div className="text-sm text-slate-300">
-              assignmentWindowStatus: {assignmentWindowStatus || "—"}
-            </div>
-            <div className="mt-3 text-xs text-amber-300">{lastError || "Tracker not ready yet."}</div>
-          </div>
-        </div>
-      );
-    }
-    if (trackerReady && hasSession && !disclosureAccepted) {
-      return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
-          <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-5">
-            <h1 className="text-lg font-semibold text-center">
-              {tt("trackerGps.disclosure.title", "Background location")}
-            </h1>
-
-            <div className="mt-4 rounded-xl bg-slate-950 border border-slate-800 p-4 text-sm text-slate-200 space-y-4">
-              <p>
-                {tt(
-                  "trackerGps.disclosure.body1",
-                  "App Geocercas collects your location even when the app is closed or the phone is locked in order to record positions and validate geofence entry and exit during the workday."
-                )}
-              </p>
-
-              <p>
-                {tt(
-                  "trackerGps.disclosure.body2",
-                  "This information is used only for the organization's operational purposes and is not shared with third parties or used for advertising. You can stop tracking by revoking location permission or signing out."
-                )}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDisclosureAccepted(true);
-                setLastError(null);
-              }}
-              className="mt-4 w-full rounded-xl bg-emerald-500 px-4 py-3 text-slate-950 font-semibold hover:bg-emerald-400 transition"
-            >
-              {tt("trackerGps.disclosure.continue", "Continue")}
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    const DebugPanel = (
-      <div className="mt-6 p-3 rounded-xl bg-slate-800 border border-slate-700 text-left text-xs text-slate-300 whitespace-pre-wrap">
-        <div>sessionBootstrapState: {sessionBootstrapState}</div>
-        <div>hasSession: {String(!!hasSession)}</div>
-        <div>orgId: {orgId || "(none)"}</div>
-        <div>assignmentLoadState: {assignmentLoadState}</div>
-        <div>assignmentWindowStatus: {assignmentWindowStatus}</div>
-        <div>trackerAccessToken: {trackerAccessToken ? "present" : "missing"}</div>
-      </div>
-    );
-
-    if (showBootstrapLoading) {
-      return (
-        <StatusCard
-          title={tt("trackerGps.loading.bootingTitle", "Validando sesión del tracker…")}
-          body={tt(
-            "trackerGps.loading.bootingBody",
-            "Estamos procesando el acceso desde tu enlace de invitación."
-          )}
-        >
-          <div className="text-xs text-slate-400 mt-3">
-            session_bootstrap_state: {sessionBootstrapState}
-          </div>
-          <div className="text-xs text-slate-400 mt-2">
-            hasSession: {String(hasSession)}
-          </div>
-          <div className="text-xs text-slate-400">
-            trackerReady: {String(trackerReady)}
-          </div>
-          <div className="text-xs text-slate-400">
-            orgId: {orgId}
-          </div>
-          <div className="text-xs text-slate-400">
-            tracker_access_token: {trackerAccessToken ? "present" : "missing"}
-          </div>
-          {DebugPanel}
-        </StatusCard>
-      );
-    }
-
-    if (showMissingOrgState) {
-      return (
-        <StatusCard
-          title={tt("trackerGps.missingOrg.title", "Falta org_id")}
-          body={tt("trackerGps.missingOrg.body", "El enlace no contiene una organización válida.")}
-        >
-          {DebugPanel}
-          <button
-            onClick={() => navigate("/")}
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
-          >
-            {tt("trackerGps.goHome", "Go to home")}
-          </button>
-        </StatusCard>
-      );
-    }
-
-    if (showMissingSessionState) {
-      return (
-        <StatusCard
-          title={tt("trackerGps.missingSession.title", "Sesión de tracker no disponible")}
-          body={tt("trackerGps.missingSession.body", "El enlace abrió la app, pero no se pudo establecer la sesión.")}
-        >
-          {DebugPanel}
-          <button
-            onClick={() => navigate("/")}
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
-          >
-            {tt("trackerGps.goHome", "Go to home")}
-          </button>
-        </StatusCard>
-      );
-    }
-
-    if (showAssignmentLoadingState) {
-      return (
-        <StatusCard
-          title={tt("trackerGps.assignment.loadingTitle", "Cargando asignación activa…")}
-          body={tt(
-            "trackerGps.assignment.loadingBody",
-            "Estamos verificando la geocerca, actividad y ventana horaria."
-          )}
-        >
-          {DebugPanel}
-          {assignmentLoadError ? (
-            <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
-              {assignmentLoadError}
-            </div>
-          ) : null}
-        </StatusCard>
-      );
-    }
-
-    if (showBlockedAssignmentState) {
-      return (
-        <StatusCard
-          title={tt("trackerGps.blocked.title", "Sin asignación activa")}
-          body={tt("trackerGps.blocked.body", "No existe una asignación activa para este tracker en este momento.")}
-        >
-          {DebugPanel}
-          <div className="text-lg text-amber-300 mb-4">
+  if (trackerReady && hasSession && assignmentWindowStatus !== "active") {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
+          <h1 className="text-2xl font-bold mb-4">
+            {tt("trackerGps.blocked.title", "Tracker blocked")}
+          </h1>
+          <div className="text-lg text-amber-300 mb-2">
             {tt("trackerGps.blocked.noActiveAssignment", "No active assignment found.")}
           </div>
+          <div className="text-sm text-slate-300 mb-6">
+            {tt(
+              "trackerGps.blocked.instructions",
+              "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error."
+            )}
+          </div>
           <button
             onClick={() => navigate("/")}
             className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
           >
             {tt("trackerGps.goHome", "Go to home")}
           </button>
-        </StatusCard>
-      );
-    }
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
@@ -2234,9 +1963,6 @@ export default function TrackerGpsPage() {
                   <div className="mt-2 text-[11px] text-slate-400 break-all">
                     assignment_load_state: {assignmentLoadState}
                   </div>
-                  <div className="mt-2 text-[11px] text-slate-400 break-all">
-                    session_bootstrap_state: {sessionBootstrapState}
-                  </div>
                   {activeAssignment?.frequency_minutes ? (
                     <div className="mt-2 text-[11px] text-slate-400 break-all">
                       frequency_minutes: {activeAssignment.frequency_minutes}
@@ -2313,9 +2039,6 @@ export default function TrackerGpsPage() {
                         watchdog_recovering: isWatchdogRecovering,
                         android_bridge_diagnostics: androidBridgeDiagnostics,
                         status,
-                        session_bootstrap_error: sessionBootstrapError,
-                        org_id_error: orgIdError,
-                        assignment_load_error: assignmentLoadError,
                       },
                       null,
                       2
@@ -2326,123 +2049,86 @@ export default function TrackerGpsPage() {
             )}
 
             <div className="mt-3 text-xs">
-                return (
-                  <div className="min-h-screen bg-slate-950 text-slate-100 flex items-start justify-center px-3 py-6">
-                    <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-4">
-                      <h1 className="text-lg font-semibold text-center">
-                        {tt("trackerGps.title", "Tracker GPS")}
-                      </h1>
+              {tt("trackerGps.stateLabel", "Status")}:{" "}
+              <span className="text-slate-100">{visualStatus}</span>
+            </div>
 
-                      {shouldShowAndroidWarning && (
-                        <div className="mt-4 rounded-xl bg-yellow-950/60 border border-yellow-700 p-3 text-xs text-yellow-200 relative">
-                          <button
-                            className="absolute top-2 right-2 text-yellow-300 hover:text-yellow-100 text-lg font-bold bg-transparent border-none"
-                            onClick={handleAndroidDiagDismiss}
-                            title="Descartar advertencia"
-                            type="button"
-                          >
-                            ×
-                          </button>
+            {isActivationBgRunning ? (
+              <div className="mt-2 text-[11px] text-slate-300">Syncing org access...</div>
+            ) : null}
 
-                          <div className="font-semibold mb-1">
-                            {tt("trackerGps.androidDiag.title", "Mejora la estabilidad del tracking")}
-                          </div>
+            {membershipDetail ? (
+              <div className="mt-3 text-[11px] text-slate-200 bg-slate-800/40 border border-slate-700 rounded-xl p-3 whitespace-pre-wrap">
+                {membershipDetail}
+              </div>
+            ) : null}
 
-                          <div className="mb-2">
-                            {tt(
-                              "trackerGps.androidDiag.body",
-                              "Este teléfono puede limitar el tracking en segundo plano. Para reducir cortes, revisa batería, permisos en segundo plano y auto inicio."
-                            )}
-                          </div>
+            {acceptError ? (
+              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
+                {acceptError}
+              </div>
+            ) : null}
 
-                          <div className="mb-1">
-                            {tt("trackerGps.androidDiag.manufacturer", "Fabricante")}: {" "}
-                            <span className="font-mono">{androidDiag?.manufacturer || "—"}</span> | SDK: {" "}
-                            <span className="font-mono">{androidDiag?.sdk_int ?? "—"}</span>
-                          </div>
+            {upgradeRequired ? (
+              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
+                El límite de trackers del plan fue alcanzado. Contacta al administrador para
+                actualizar el plan.
+              </div>
+            ) : null}
 
-                          <div className="mb-1">
-                            {tt("trackerGps.androidDiag.batteryIgnored", "Optimización ignorada")}: {" "}
-                            <span className="font-mono">
-                              {String(androidDiag?.battery_optimization_ignored)}
-                            </span>
-                          </div>
+            {lastError && !acceptError ? (
+              <div className="mt-3 text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3">
+                {lastError}
+              </div>
+            ) : null}
+          </>
+        )}
 
-                          <div className="mb-1">
-                            {tt("trackerGps.androidDiag.backgroundRestricted", "Segundo plano restringido")}: {" "}
-                            <span className="font-mono">{String(androidDiag?.background_restricted)}</span>
-                          </div>
+        {trackerReady && !hasSession && (
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-300 mb-3">
+              {tt("trackerGps.onlyInvited", "This page is only for invited trackers.")}
+            </p>
 
-                          {needsBattOpt && (
-                            <button
-                              className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
-                              onClick={() =>
-                                handleAndroidDiagSettings(() =>
-                                  window.Android?.openBatteryOptimizationSettings?.()
-                                )
-                              }
-                              type="button"
-                            >
-                              {tt(
-                                "trackerGps.androidDiag.openBatteryOptimization",
-                                "Permitir exclusión de optimización de batería"
-                              )}
-                            </button>
-                          )}
+            {lastError ? (
+              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
+                {lastError}
+              </div>
+            ) : null}
 
-                          {needsBgRestrict && (
-                            <button
-                              className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
-                              onClick={() =>
-                                handleAndroidDiagSettings(() => window.Android?.openAppBatterySettings?.())
-                              }
-                              type="button"
-                            >
-                              {tt(
-                                "trackerGps.androidDiag.openAppBatterySettings",
-                                "Permitir ejecución en segundo plano"
-                              )}
-                            </button>
-                          )}
+            <button
+              onClick={() => navigate("/")}
+              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+            >
+              {tt("trackerGps.goHome", "Go to home")}
+            </button>
+          </div>
+        )}
 
-                          {needsAutoStart && (
-                            <button
-                              className="mt-2 w-full rounded bg-yellow-400/90 text-yellow-900 font-semibold py-2"
-                              onClick={() =>
-                                handleAndroidDiagSettings(() => window.Android?.openAutoStartSettings?.())
-                              }
-                              type="button"
-                            >
-                              {tt(
-                                "trackerGps.androidDiag.openAutoStartSettings",
-                                "Permitir auto-inicio de la app"
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      )}
+        {!trackerReady && (
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-300 mb-3">
+              {tt(
+                "trackerGps.errors.notConfigured",
+                "Tracker is not configured in this deployment."
+              )}
+            </p>
 
-                      {trackerReady && hasSession && (
-                        <>
-                          <div className="mt-4 rounded-xl bg-slate-950 border border-emerald-700 p-3 text-xs text-emerald-300">
-                            <div className="font-bold mb-1">Android Bridge Diagnostics</div>
-                            <div>
-                              window.Android present: <b>{String(androidBridgeDiagnostics.present)}</b>
-                            </div>
-                            <div>
-                              Available methods: {" "}
-                              <b>{androidBridgeDiagnostics.methodNames.join(", ") || "(none)"}</b>
-                            </div>
-                            <div>
-                              User agent: {" "}
-                              <span className="break-all">{androidBridgeDiagnostics.userAgent}</span>
-                            </div>
-                          </div>
-                        </>
-                      )}
+            {lastError ? (
+              <div className="text-xs text-amber-300 bg-amber-950/30 border border-amber-800 rounded-xl p-3 text-left">
+                {lastError}
+              </div>
+            ) : null}
 
-                      {/* ...rest of the main UI... */}
-                    </div>
-                  </div>
-                );
-              // Removed misplaced catch block and rebalanced braces
+            <button
+              onClick={() => navigate("/")}
+              className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
+            >
+              {tt("trackerGps.goHome", "Go to home")}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
