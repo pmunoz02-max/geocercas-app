@@ -232,6 +232,30 @@ export default function TrackerGpsPage() {
   const [assignmentLoadState, setAssignmentLoadState] = useState("idle");
   const [assignmentLoadError, setAssignmentLoadError] = useState("");
 
+  // --- Tracking started state ---
+  const [trackingStarted, setTrackingStarted] = useState(false);
+
+  useEffect(() => {
+    if (!trackerReady) return;
+    if (assignmentWindowStatus !== "active") return;
+    if (trackingStarted) return;
+
+    console.log("[tracker] STARTING TRACKING");
+
+    try {
+      if (window.Android && typeof window.Android.startTracking === "function") {
+        console.log("[tracker] using Android bridge");
+        window.Android.startTracking(window.location.href);
+      } else {
+        console.log("[tracker] web tracking mode enabled");
+      }
+
+      setTrackingStarted(true);
+    } catch (e) {
+      console.error("[tracker] startTracking FAILED", e);
+    }
+  }, [trackerReady, assignmentWindowStatus, trackingStarted]);
+
   const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
 
   const [trackerDiag, setTrackerDiag] = useState({
@@ -2073,6 +2097,9 @@ export default function TrackerGpsPage() {
             </div>
             <div className="text-xs text-amber-300 break-all">
               acceptError: {acceptError || "—"}
+            </div>
+            <div className="text-xs text-slate-400">
+              trackingStarted: {String(trackingStarted)}
             </div>
 
             {isActivationBgRunning ? (
