@@ -202,17 +202,24 @@ export default function AuthCallback() {
         }
 
         let session = null;
-
         for (let i = 0; i < 15; i++) {
           const { data } = await authClient.auth.getSession();
           session = data?.session ?? null;
-
           if (session?.access_token && session?.refresh_token) {
             break;
           }
-
           await new Promise((resolve) => setTimeout(resolve, 200));
         }
+
+        // Visible debug info before redirect
+        setStatus(
+          [
+            `trackerFlow: ${String(isTrackerFlow)}`,
+            `next: ${next}`,
+            `session detected: ${!!session?.access_token}`,
+            "Redirigiendo…"
+          ].join("\n")
+        );
 
         console.log("[AUTH CALLBACK] session present:", !!session);
         console.log(
@@ -246,11 +253,19 @@ export default function AuthCallback() {
           console.log("[AUTH CALLBACK] tracker flow detected, skipping bootstrapCookie");
         }
 
-        setStatus("Entrando…");
-        if (!alive) return;
-
-        console.log("[AUTH CALLBACK] redirecting to next:", next);
-        window.location.assign(next);
+        setTimeout(() => {
+          setStatus(
+            [
+              `trackerFlow: ${String(isTrackerFlow)}`,
+              `next: ${next}`,
+              `session detected: ${!!session?.access_token}`,
+              "Redirigiendo…"
+            ].join("\n")
+          );
+          if (!alive) return;
+          console.log("[AUTH CALLBACK] redirecting to next:", next);
+          window.location.assign(next);
+        }, 600);
       } catch (e: any) {
         if (!alive) return;
 
