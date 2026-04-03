@@ -855,11 +855,15 @@ export default function TrackerGpsPage() {
         setDebug((d) => ({ ...d, session_bootstrap_state: "booting" }));
 
         let nextSession = null;
-        for (let i = 0; i < 15; i++) {
+        for (let i = 0; i < 25; i++) {
           const { data } = await PRIMARY.auth.getSession();
           nextSession = data?.session ?? null;
-          if (nextSession?.access_token) break;
-          await sleep(150);
+
+          if (nextSession?.access_token && looksLikeJwt(nextSession.access_token)) {
+            break;
+          }
+
+          await sleep(200);
         }
         if (cancelled) return;
 
@@ -869,6 +873,7 @@ export default function TrackerGpsPage() {
         setDebug((d) => ({ ...d, session_exists: !!nextSession }));
         updateDebugFromToken(tokenB);
 
+        // Explicit fallback if session is not OK
         if (!ok) {
           setSession(null);
           setHasSession(false);
@@ -1916,6 +1921,12 @@ export default function TrackerGpsPage() {
           "Estamos procesando el acceso desde tu enlace de invitación."
         )}
       >
+        <div className="text-xs text-slate-400 mt-3">
+          session_bootstrap_state: {sessionBootstrapState}
+        </div>
+        <div className="text-xs text-slate-400">
+          tracker_access_token: {trackerAccessToken ? "present" : "missing"}
+        </div>
         {DebugPanel}
       </StatusCard>
     );

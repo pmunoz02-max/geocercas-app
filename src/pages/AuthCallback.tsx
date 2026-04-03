@@ -201,8 +201,18 @@ export default function AuthCallback() {
           }
         }
 
-        const { data } = await authClient.auth.getSession();
-        const session = data?.session;
+        let session = null;
+
+        for (let i = 0; i < 15; i++) {
+          const { data } = await authClient.auth.getSession();
+          session = data?.session ?? null;
+
+          if (session?.access_token && session?.refresh_token) {
+            break;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
 
         console.log("[AUTH CALLBACK] session present:", !!session);
         console.log(
@@ -214,6 +224,13 @@ export default function AuthCallback() {
 
         if (!session?.access_token || !session?.refresh_token) {
           throw new Error("No se pudo establecer sesión desde el callback.");
+        }
+
+        if (isTrackerFlow) {
+          try {
+            sessionStorage.setItem("tracker_auth_callback_ok", "1");
+            sessionStorage.setItem("tracker_auth_callback_next", next);
+          } catch {}
         }
 
         if (!isTrackerFlow) {
