@@ -194,6 +194,29 @@ function StatusCard({ title, body, children }) {
 }
 
 export default function TrackerGpsPage() {
+    // Accept invite after session and orgId are ready, but before trackerReady
+    useEffect(() => {
+      if (!hasSession) return;
+      if (!orgId) return;
+      if (trackerReady) return;
+
+      console.log("[tracker] triggering accept-invite");
+
+      (async () => {
+        try {
+          const res = await fetchJsonWithAuth("/api/accept-tracker-invite", {
+            method: "POST",
+            body: JSON.stringify({ org_id: orgId }),
+          });
+
+          console.log("[tracker] accept-invite OK", res);
+
+          setTrackerReady(true);
+        } catch (e) {
+          console.error("[tracker] accept-invite FAILED", e);
+        }
+      })();
+    }, [hasSession, orgId, trackerReady]);
   function isWebSendBlocked() {
     return hasAndroidNativeBridge();
   }
@@ -1923,6 +1946,15 @@ export default function TrackerGpsPage() {
       >
         <div className="text-xs text-slate-400 mt-3">
           session_bootstrap_state: {sessionBootstrapState}
+        </div>
+        <div className="text-xs text-slate-400 mt-2">
+          hasSession: {String(hasSession)}
+        </div>
+        <div className="text-xs text-slate-400">
+          trackerReady: {String(trackerReady)}
+        </div>
+        <div className="text-xs text-slate-400">
+          orgId: {orgId}
         </div>
         <div className="text-xs text-slate-400">
           tracker_access_token: {trackerAccessToken ? "present" : "missing"}
