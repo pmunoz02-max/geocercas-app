@@ -743,16 +743,23 @@ serve(async (req) => {
       options: { redirectTo },
     });
 
-    if (linkErr || !linkData?.properties?.action_link) {
+
+    const tokenHash = String(linkData.properties.hashed_token || "");
+    if (!tokenHash) {
       return jsonResponse(500, {
         ok: false,
         error: "generateLink failed",
-        detail: linkErr?.message || "no action_link",
+        detail: "Missing token_hash from Supabase generateLink",
         build_tag: BUILD_TAG,
       });
     }
 
-    const actionLink = String(linkData.properties.action_link);
+    const actionLink =
+      `${APP_PREVIEW_URL}/auth/callback` +
+      `?token_hash=${encodeURIComponent(tokenHash)}` +
+      `&type=magiclink` +
+      `&lang=${encodeURIComponent(lang)}` +
+      `&next=${encodeURIComponent(`/tracker-gps?org_id=${org_id}&lang=${lang}`)}`;
 
     try {
       console.error("[metrics] invite_sent reached", {
