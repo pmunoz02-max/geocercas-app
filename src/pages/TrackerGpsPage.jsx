@@ -213,7 +213,7 @@ export default function TrackerGpsPage() {
 
   const [hasSession, setHasSession] = useState(false);
   const [session, setSession] = useState(null);
-  const [trackerReady, setTrackerReady] = useState(() => !!supabaseTracker);
+  const [trackerReady, setTrackerReady] = useState(true);
   const [orgId, setOrgId] = useState(null);
   const [lastPosition, setLastPosition] = useState(null);
 
@@ -294,8 +294,6 @@ export default function TrackerGpsPage() {
   const [lastSendStatus, setLastSendStatus] = useState(null);
   const [lastSendError, setLastSendError] = useState("");
   const [lastSentAt, setLastSentAt] = useState(null);
-  const [lastCoords, setLastCoords] = useState(null);
-  const [lastAccuracy, setLastAccuracy] = useState(null);
 
   const watchIdRef = useRef(null);
   const lastCoordsRef = useRef(null);
@@ -309,6 +307,28 @@ export default function TrackerGpsPage() {
   const acceptInFlightRef = useRef(new Set());
   const blockingUiLoggedRef = useRef(false);
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
+
+  useEffect(() => {
+    if (!hasSession) return;
+    if (!orgId) return;
+    if (trackerReady) return;
+
+    console.log("[tracker] triggering accept-invite");
+
+    (async () => {
+      try {
+        const { res, json } = await fetchJsonWithAuth("/api/accept-tracker-invite", {
+          method: "POST",
+          body: { org_id: orgId },
+        });
+
+        console.log("[tracker] accept-invite OK", { status: res?.status, json });
+        setTrackerReady(true);
+      } catch (e) {
+        console.error("[tracker] accept-invite FAILED", e);
+      }
+    })();
+  }, [hasSession, orgId, trackerReady]);
 
   const recheckAndroidDiag = () => {
     if (typeof window === "undefined") return;
@@ -648,13 +668,11 @@ export default function TrackerGpsPage() {
       setLastError("Tracker Supabase client not found.");
       return;
     }
-
-    setTrackerReady(true);
     setDebug((d) => ({
       ...d,
       supabase_url: (import.meta.env.VITE_SUPABASE_URL || "").trim(),
     }));
-  }, [PRIMARY]);
+  }, [PRIMARY, lang]);
 
   useEffect(() => {
     const pOrg = String(params?.orgId || "").trim();
@@ -888,7 +906,6 @@ export default function TrackerGpsPage() {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      setGpsWatchStarted(false);
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
         heartbeatIntervalRef.current = null;
@@ -1025,9 +1042,6 @@ export default function TrackerGpsPage() {
   }
 
   async function invokeSendPosition(body) {
-    let fetchTimeoutId = null;
-    let hardTimeoutId = null;
-
     if (isWebSendBlocked()) {
       console.log("[gps] invokeSendPosition blocked: native Android active", {
         source: body?.source || "unknown",
@@ -1037,6 +1051,7 @@ export default function TrackerGpsPage() {
 
     setSendPositionStarted(true);
     setLastSendError("");
+    let fetchTimeoutId = null;
     try {
       const freshToken = await getFreshJwtOrThrow("send_position");
       console.log("[send-position] token:ok");
@@ -1079,7 +1094,6 @@ export default function TrackerGpsPage() {
 
       console.log("[send-position] fetch:end", { status: res.status });
 
-      setLastSendStatus(res.status);
       setDebug((d) => ({ ...d, last_http_status: res.status }));
 
       let j = null;
@@ -1097,13 +1111,11 @@ export default function TrackerGpsPage() {
       setSendPositionStarted(false);
       return j;
     } catch (e) {
-      setLastSendStatus(null);
       setLastSendError(String(e?.message || e));
       setSendPositionStarted(false);
       throw e;
     } finally {
       if (fetchTimeoutId) clearTimeout(fetchTimeoutId);
-      if (hardTimeoutId) clearTimeout(hardTimeoutId);
     }
   }
 
@@ -1146,17 +1158,25 @@ export default function TrackerGpsPage() {
       if (acceptInFlightRef.current.has(dedupeKey)) return false;
 
       acceptInFlightRef.current.add(dedupeKey);
-      const timer = setTimeout(() => {}, 4000);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
 
       try {
-        const payload = await Promise.race([
-          invokeAcceptTrackerInvite({ org_id }),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("accept_tracker_invite_timeout")), 4000)
-          ),
-        ]);
+        const response = await fetch("/api/accept-tracker-invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ org_id }),
+          signal: controller.signal,
+        });
 
-        if (payload?.ok === false) {
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+
+        if (!response.ok || payload?.ok === false) {
           if (payload?.code === "TRACKER_LIMIT_REACHED") {
             setAcceptError(
               "Has alcanzado el límite de trackers de tu plan. Actualiza a PRO para agregar más trackers."
@@ -1165,7 +1185,7 @@ export default function TrackerGpsPage() {
             setUpgradeRequired(true);
             return false;
           }
-          setAcceptError(payload?.message || payload?.error || "accept failed");
+          setAcceptError(payload?.message || payload?.error || `HTTP ${response.status}`);
           setAcceptErrorCode(payload?.code || "");
           setUpgradeRequired(false);
           return false;
@@ -1175,7 +1195,7 @@ export default function TrackerGpsPage() {
         sessionStorage.setItem(`${SS_ACCEPTED_PREFIX}${org_id}`, "1");
         return true;
       } catch (error) {
-        if (String(error?.message || "") === "accept_tracker_invite_timeout") return false;
+        if (error?.name === "AbortError") return false;
         setAcceptError(String(error?.message || error));
         setAcceptErrorCode("");
         setUpgradeRequired(false);
@@ -1327,8 +1347,6 @@ export default function TrackerGpsPage() {
 
       lastCoordsRef.current = c;
       setCoords(c);
-      setLastCoords(c);
-      setLastAccuracy(pos.coords.accuracy ?? null);
       setLastPosition({
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
@@ -1385,7 +1403,6 @@ export default function TrackerGpsPage() {
         } catch {}
         watchIdRef.current = null;
       }
-      setGpsWatchStarted(false);
     };
   }, [
     trackerReady,
@@ -2071,30 +2088,6 @@ export default function TrackerGpsPage() {
             <div className="text-xs text-slate-400">
               trackingStarted: {String(trackingStarted)}
             </div>
-            <div className="text-xs text-slate-400">
-              gpsWatchStarted: {String(gpsWatchStarted)}
-            </div>
-            <div className="text-xs text-slate-400 break-all">
-              lastCoords: {lastCoords ? `${lastCoords.lat}, ${lastCoords.lng}` : "—"}
-            </div>
-            <div className="text-xs text-slate-400">
-              lastAccuracy: {lastAccuracy ?? "—"}
-            </div>
-            <div className="text-xs text-slate-400">
-              sendPositionStarted: {String(sendPositionStarted)}
-            </div>
-            <div className="text-xs text-slate-400">
-              lastSendOk: {lastSendOk ? new Date(lastSendOk).toLocaleString() : "—"}
-            </div>
-            <div className="text-xs text-slate-400">
-              lastSendStatus: {lastSendStatus ?? "—"}
-            </div>
-            <div className="text-xs text-amber-300 break-all">
-              lastSendError: {lastSendError || "—"}
-            </div>
-            <div className="text-xs text-slate-400">
-              lastSentAt: {lastSentAt ? new Date(lastSentAt).toLocaleString() : "—"}
-            </div>
 
             {isActivationBgRunning ? (
               <div className="mt-2 text-[11px] text-slate-300">Syncing org access...</div>
@@ -2174,4 +2167,4 @@ export default function TrackerGpsPage() {
       </div>
     </div>
   );
-}s
+}
