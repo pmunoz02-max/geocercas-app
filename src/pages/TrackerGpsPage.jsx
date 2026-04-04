@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
@@ -148,10 +148,15 @@ export default function TrackerGpsPage() {
     return hasAndroidNativeBridge();
   }
 
-  const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
   const { t, i18n } = useTranslation();
+
+  const retryTrackerFlow = () => {
+    try {
+      window.location.reload();
+    } catch {}
+  };
 
   const tt = (key, fallback, options = {}) => {
     try {
@@ -1823,10 +1828,10 @@ export default function TrackerGpsPage() {
             <div>activeAssignment: {activeAssignment ? JSON.stringify(activeAssignment) : "null"}</div>
           </div>
           <button
-            onClick={() => navigate("/")}
+            onClick={retryTrackerFlow}
             className="rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
           >
-            {tt("trackerGps.goHome", "Go to home")}
+            {tt("trackerGps.retry", "Retry")}
           </button>
         </div>
       </div>
@@ -2133,10 +2138,10 @@ export default function TrackerGpsPage() {
             ) : null}
 
             <button
-              onClick={() => navigate("/")}
+              onClick={retryTrackerFlow}
               className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
             >
-              {tt("trackerGps.goHome", "Go to home")}
+              {tt("trackerGps.retry", "Retry")}
             </button>
           </div>
         )}
@@ -2157,10 +2162,10 @@ export default function TrackerGpsPage() {
             ) : null}
 
             <button
-              onClick={() => navigate("/")}
+              onClick={retryTrackerFlow}
               className="mt-4 rounded-lg bg-emerald-500 px-4 py-2 text-slate-950 font-semibold"
             >
-              {tt("trackerGps.goHome", "Go to home")}
+              {tt("trackerGps.retry", "Retry")}
             </button>
           </div>
         )}

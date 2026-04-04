@@ -2,12 +2,11 @@
 import React from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
-import { useAuthSafe } from "@/context/auth.js";
+import { AuthProvider, useAuthSafe } from "@/context/auth.js";
 
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
-import RequireAuth from "./components/RequireAuth.jsx";
 
 // Public pages
 import Landing from "./pages/Landing.jsx";
@@ -130,7 +129,7 @@ function AdminRoute({ children }) {
   return children;
 }
 
-function AppRoutes() {
+function MainAppRoutes() {
   return (
     <Routes>
       {/* 🌐 Public */}
@@ -149,10 +148,6 @@ function AppRoutes() {
       {/* ✅ Tracker Accept (PUBLIC) */}
       <Route path="/tracker-accept" element={<TrackerAcceptRedirect />} />
 
-      {/* ✅ Tracker GPS (PUBLIC) */}
-      <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-      <Route path="/tracker-gps/:orgId" element={<TrackerGpsPage />} />
-
       {/* 🔐 Password flows */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
@@ -166,143 +161,140 @@ function AppRoutes() {
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
       {/* 🔒 Protected */}
-      <Route element={<RequireAuth />}>
-        <Route
-          element={
-            <AuthGuard>
-              <ProtectedShell />
-            </AuthGuard>
-          }
-        >
-          <Route path="/inicio" element={<Inicio />} />
+      <Route
+        element={
+          <AuthGuard>
+            <ProtectedShell />
+          </AuthGuard>
+        }
+      >
+        <Route path="/inicio" element={<Inicio />} />
 
           {/* ✅ Billing / Pricing */}
-          <Route
-            path="/billing"
-            element={
-              <RequireOrg>
-                <Billing />
-              </RequireOrg>
-            }
-          />
-          <Route path="/account" element={<Account />} />
-          <Route
-            path="/pricing"
-            element={
-              <RequireOrg>
-                <Pricing />
-              </RequireOrg>
-            }
-          />
-          <Route path="/billing/success" element={<BillingSuccess />} />
-          <Route path="/billing/cancel" element={<BillingCancel />} />
+        <Route
+          path="/billing"
+          element={
+            <RequireOrg>
+              <Billing />
+            </RequireOrg>
+          }
+        />
+        <Route path="/account" element={<Account />} />
+        <Route
+          path="/pricing"
+          element={
+            <RequireOrg>
+              <Pricing />
+            </RequireOrg>
+          }
+        />
+        <Route path="/billing/success" element={<BillingSuccess />} />
+        <Route path="/billing/cancel" element={<BillingCancel />} />
 
-          <Route
-            path="/settings/delete-account"
-            element={
-              <RequireOrg>
-                <DeleteAccountPage />
-              </RequireOrg>
-            }
-          />
+        <Route
+          path="/settings/delete-account"
+          element={
+            <RequireOrg>
+              <DeleteAccountPage />
+            </RequireOrg>
+          }
+        />
 
-          <Route
-            path="/geocerca"
-            element={
-              <RequireOrg>
-                <NuevaGeocerca />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/geocercas"
-            element={
-              <RequireOrg>
-                <GeocercasPage />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/personal"
-            element={
-              <RequireOrg>
-                <Personal />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/actividades"
-            element={
-              <RequireOrg>
-                <ActividadesPage />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/asignaciones"
-            element={
-              <RequireOrg>
-                <AsignacionesPage />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/reportes"
-            element={
-              <RequireOrg>
-                <Reports />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <RequireOrg>
-                <CostosDashboardPage />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/tracker"
-            element={
-              <RequireOrg>
-                <TrackerDashboard />
-              </RequireOrg>
-            }
-          />
-          <Route
-            path="/invitar-tracker"
-            element={
-              <RequireOrg>
-                <InvitarTracker />
-              </RequireOrg>
-            }
-          />
+        <Route
+          path="/geocerca"
+          element={
+            <RequireOrg>
+              <NuevaGeocerca />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/geocercas"
+          element={
+            <RequireOrg>
+              <GeocercasPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/personal"
+          element={
+            <RequireOrg>
+              <Personal />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/actividades"
+          element={
+            <RequireOrg>
+              <ActividadesPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/asignaciones"
+          element={
+            <RequireOrg>
+              <AsignacionesPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/reportes"
+          element={
+            <RequireOrg>
+              <Reports />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/dashboard"
+          element={
+            <RequireOrg>
+              <CostosDashboardPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/tracker"
+          element={
+            <RequireOrg>
+              <TrackerDashboard />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/invitar-tracker"
+          element={
+            <RequireOrg>
+              <InvitarTracker />
+            </RequireOrg>
+          }
+        />
 
-          <Route
-            path="/admins"
-            element={
-              <AdminRoute>
-                <InvitarAdmin />
-              </AdminRoute>
-            }
-          />
+        <Route
+          path="/admins"
+          element={
+            <AdminRoute>
+              <InvitarAdmin />
+            </AdminRoute>
+          }
+        />
 
-          <Route
-            path="/help/instructions" element={<InstructionsPage />} />
-          <Route path="/help/faq" element={<FaqPage />} />
-          <Route path="/help/support" element={<SupportPage />} />
-          <Route path="/help/changelog" element={<ChangelogPage />} />
+        <Route path="/help/instructions" element={<InstructionsPage />} />
+        <Route path="/help/faq" element={<FaqPage />} />
+        <Route path="/help/support" element={<SupportPage />} />
+        <Route path="/help/changelog" element={<ChangelogPage />} />
 
-          <Route
-            path="/settings"
-            element={
-              <RequireOrg>
-                <DeleteAccountPage />
-              </RequireOrg>
-            }
-          />
-        </Route>
+        <Route
+          path="/settings"
+          element={
+            <RequireOrg>
+              <DeleteAccountPage />
+            </RequireOrg>
+          }
+        />
       </Route>
 
       {/* Fallback */}
@@ -311,6 +303,19 @@ function AppRoutes() {
   );
 }
 
+function MainApp() {
+  return (
+    <AuthProvider>
+      <MainAppRoutes />
+    </AuthProvider>
+  );
+}
+
 export default function App() {
-  return <AppRoutes />;
+  return (
+    <Routes>
+      <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+      <Route path="/*" element={<MainApp />} />
+    </Routes>
+  );
 }
