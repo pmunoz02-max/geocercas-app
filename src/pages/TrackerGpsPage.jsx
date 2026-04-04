@@ -314,6 +314,10 @@ export default function TrackerGpsPage() {
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
 
   useEffect(() => {
+    console.log("[TRACKER_BUILD] 2026-04-04-A");
+  }, []);
+
+  useEffect(() => {
     if (!hasSession) return;
     if (!orgId) return;
     if (trackerReady) return;
