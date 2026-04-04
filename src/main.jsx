@@ -21,16 +21,11 @@ const isTrackerRoute =
 
 console.log("[TRACKER_BOOT] main.jsx tracker bypass", { isTrackerRoute });
 
-if (!isTrackerRoute) {
-  // Aquí iría registerSW o cualquier bootstrap PWA si se añade en el futuro.
-  // Por ahora no hay plugin PWA activo en vite.config.js.
-} else {
-  // En rutas tracker: desregistrar cualquier SW residual y no montar PWA.
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.getRegistrations().then((regs) => {
-      regs.forEach((r) => r.unregister());
-    }).catch(() => {});
-  }
+if ("serviceWorker" in navigator) {
+  // PWA/SW hard-disabled globally: unregister any residual service worker.
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister());
+  }).catch(() => {});
 }
 // ────────────────────────────────────────────────────────────────────────────
 
