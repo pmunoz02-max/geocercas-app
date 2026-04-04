@@ -1,3 +1,28 @@
+  // Intro state for background location screen
+  const [showIntro, setShowIntro] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowIntro(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+  // PRIORITY: Show intro screen before any other UI
+  if (showIntro) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
+          <h1 className="text-2xl font-bold mb-4">Background location</h1>
+          <div className="text-base text-slate-300 mb-6">
+            Esta app requiere acceso a tu ubicación en segundo plano para registrar posiciones y validar geocercas durante tu jornada laboral.
+          </div>
+          <div className="text-xs text-slate-400">
+            No compartimos tu ubicación con terceros ni la usamos para publicidad. Puedes detener el tracking revocando el permiso o cerrando sesión.
+          </div>
+        </div>
+      </div>
+    );
+  }
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
