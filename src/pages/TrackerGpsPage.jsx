@@ -1796,6 +1796,7 @@ export default function TrackerGpsPage() {
   }
 
   if (trackerReady && hasSession && assignmentWindowStatus !== "active") {
+    // DEBUG: Show all variables used in the loading condition
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-3 py-6">
         <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 text-center">
@@ -1810,6 +1811,16 @@ export default function TrackerGpsPage() {
               "trackerGps.blocked.instructions",
               "You cannot send positions because there is no active assignment for you at this time. Please contact your administrator if you believe this is an error."
             )}
+          </div>
+          <div className="my-4 p-3 rounded bg-slate-800 text-left text-xs text-emerald-300 border border-emerald-700">
+            <div><b>DEBUG: Loading condition variables</b></div>
+            <div>trackerReady: {String(trackerReady)}</div>
+            <div>hasSession: {String(hasSession)}</div>
+            <div>assignmentWindowStatus: {String(assignmentWindowStatus)}</div>
+            <div>assignmentLoadState: {String(assignmentLoadState)}</div>
+            <div>orgId: {String(orgId)}</div>
+            <div>trackerAccessToken: {String(!!trackerAccessToken)}</div>
+            <div>activeAssignment: {activeAssignment ? JSON.stringify(activeAssignment) : "null"}</div>
           </div>
           <button
             onClick={() => navigate("/")}
