@@ -22,13 +22,7 @@
       ]
     },
     {
-      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|site\\.webmanifest)$",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" }
-      ]
-    },
-    {
-      "source": "/(service-worker\\.js|sw\\.js|workbox-.*\\.js)$",
+      "source": "/(favicon\\.ico|robots\\.txt|sitemap\\.xml)$",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, max-age=0" }
       ]

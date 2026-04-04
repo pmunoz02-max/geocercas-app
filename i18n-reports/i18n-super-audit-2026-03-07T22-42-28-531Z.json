@@ -20381,8 +20381,8 @@
       "line": 3,
       "column": 16,
       "kind": "string-literal",
-      "text": "/sw.js",
-      "context": "// src/tracker/registerServiceWorker.js const SW_URL = \"/sw.js\"; const SW_SCOPE = \"/\"; // Define universalmente dónde SI",
+      "text": "/sw-disabled.js",
+      "context": "// src/tracker/registerServiceWorker.js const SW_URL = \"/sw-disabled.js\"; const SW_SCOPE = \"/\"; // Define universalmente dónde SI",
       "suggestedKey": "tracker.sw_js"
     },
     {
