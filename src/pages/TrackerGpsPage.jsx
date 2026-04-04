@@ -135,14 +135,6 @@ function hasAndroidNativeBridge() {
   return typeof window !== "undefined" && !!window.Android;
 }
 
-function canStartAndroidTracking() {
-  return (
-    typeof window !== "undefined" &&
-    !!window.Android &&
-    typeof window.Android.startTracking === "function"
-  );
-}
-
 export default function TrackerGpsPage() {
   function isWebSendBlocked() {
     return hasAndroidNativeBridge();
