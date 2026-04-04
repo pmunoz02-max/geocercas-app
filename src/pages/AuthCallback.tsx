@@ -25,7 +25,11 @@ function parseHashParams(hash: string) {
   return out;
 }
 
-async function bootstrapCookie(accessToken: string, refreshToken: string, expiresIn?: number) {
+async function bootstrapCookie(
+  accessToken: string,
+  refreshToken: string,
+  expiresIn?: number
+) {
   const res = await fetch("/api/auth/bootstrap", {
     method: "POST",
     headers: {
@@ -59,10 +63,10 @@ function normalizeAuthErrorMessage(raw: string) {
     return {
       title: "El enlace de acceso ya no es válido",
       detail:
-        "Esto pasa si el enlace expiró o si fue abierto/escaneado antes, por ejemplo por una previsualización del correo o si se abrió dos veces.",
+        "Esto pasa si el enlace expiró o si fue abierto o escaneado antes, por ejemplo por una previsualización del correo o si se abrió dos veces.",
       tips: [
         "Usa el correo más reciente y ábrelo solo una vez.",
-        "Evita abrirlo dentro de un navegador interno del mail. Si puedes, usa Abrir en Chrome.",
+        "Evita abrirlo dentro de un navegador interno del correo. Si puedes, usa Abrir en Chrome.",
         "Si vuelve a fallar, pide al Owner que reenvíe la invitación.",
       ],
     };
@@ -75,7 +79,7 @@ function normalizeAuthErrorMessage(raw: string) {
     return {
       title: "No se pudo completar el login",
       detail:
-        "No se pudo establecer la sesión desde el callback. Esto suele ocurrir si el callback procesa el enlace con el cliente incorrecto o si el enlace fue consumido o expiró.",
+        "No se pudo establecer la sesión desde el callback. Esto suele ocurrir si el enlace fue consumido, expiró o fue procesado con el cliente incorrecto.",
       tips: [
         "Reintenta con un enlace nuevo.",
         "Abre el enlace en el mismo dispositivo donde lo recibiste.",
@@ -102,6 +106,17 @@ function isTrackerNextPath(next: string) {
   return value.includes("/tracker-gps");
 }
 
+async function waitForSession(authClient: typeof supabase | typeof supabaseTracker) {
+  let session = null;
+  for (let i = 0; i < 20; i++) {
+    const { data } = await authClient.auth.getSession();
+    session = data?.session ?? null;
+    if (session?.access_token && session?.refresh_token) return session;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return session;
+}
+
 export default function AuthCallback() {
   const location = useLocation();
   const [status, setStatus] = useState<string>("Procesando autenticación…");
@@ -117,9 +132,7 @@ export default function AuthCallback() {
     return safeNextPath(n || "/inicio");
   }, [location.search]);
 
-  const isTrackerFlow = useMemo(() => {
-    return isTrackerNextPath(next);
-  }, [next]);
+  const isTrackerFlow = useMemo(() => isTrackerNextPath(next), [next]);
 
   useEffect(() => {
     let alive = true;
@@ -148,12 +161,6 @@ export default function AuthCallback() {
 
         const authClient = isTrackerFlow ? supabaseTracker : supabase;
 
-        console.log("[AUTH CALLBACK] trackerFlow:", isTrackerFlow, "next:", next);
-        console.log(
-          "[AUTH CALLBACK] client:",
-          isTrackerFlow ? "supabaseTracker" : "supabase"
-        );
-
         if (isTrackerFlow && !authClient) {
           throw new Error("Tracker auth client not available for tracker callback flow.");
         }
@@ -162,22 +169,17 @@ export default function AuthCallback() {
         const type = normalizeOtpType(getQueryParam(location.search, "type"));
 
         if (token_hash) {
-          setStatus("Confirmando sesión (token_hash)…");
-          console.log("[AUTH CALLBACK] verifyOtp via token_hash", { type });
-
+          setStatus("Confirmando sesión…");
           const { error: vErr } = await authClient.auth.verifyOtp({
             type: type as any,
             token_hash,
           });
-
           if (vErr) throw vErr;
         } else {
           const code = getQueryParam(location.search, "code");
 
           if (code) {
-            setStatus("Confirmando sesión (code)…");
-            console.log("[AUTH CALLBACK] exchangeCodeForSession via code");
-
+            setStatus("Intercambiando código…");
             const { error: exErr } = await authClient.auth.exchangeCodeForSession(code);
             if (exErr) throw exErr;
           } else {
@@ -185,49 +187,17 @@ export default function AuthCallback() {
             const refresh_token = hp.refresh_token || "";
 
             if (access_token && refresh_token) {
-              setStatus("Confirmando sesión (token)…");
-              console.log("[AUTH CALLBACK] setSession via hash tokens");
-
+              setStatus("Restaurando sesión…");
               const { error: ssErr } = await authClient.auth.setSession({
                 access_token,
                 refresh_token,
               });
-
               if (ssErr) throw ssErr;
-            } else {
-              setStatus("Confirmando sesión…");
-              console.log("[AUTH CALLBACK] no token_hash, no code, no hash tokens; fallback to getSession");
             }
           }
         }
 
-        let session = null;
-        for (let i = 0; i < 15; i++) {
-          const { data } = await authClient.auth.getSession();
-          session = data?.session ?? null;
-          if (session?.access_token && session?.refresh_token) {
-            break;
-          }
-          await new Promise((resolve) => setTimeout(resolve, 200));
-        }
-
-        // Visible debug info before redirect
-        setStatus(
-          [
-            `trackerFlow: ${String(isTrackerFlow)}`,
-            `next: ${next}`,
-            `session detected: ${!!session?.access_token}`,
-            "Redirigiendo…"
-          ].join("\n")
-        );
-
-        console.log("[AUTH CALLBACK] session present:", !!session);
-        console.log(
-          "[AUTH CALLBACK] access token present:",
-          !!session?.access_token,
-          "refresh token present:",
-          !!session?.refresh_token
-        );
+        const session = await waitForSession(authClient);
 
         if (!session?.access_token || !session?.refresh_token) {
           throw new Error("No se pudo establecer sesión desde el callback.");
@@ -237,35 +207,27 @@ export default function AuthCallback() {
           try {
             sessionStorage.setItem("tracker_auth_callback_ok", "1");
             sessionStorage.setItem("tracker_auth_callback_next", next);
+            sessionStorage.setItem("tracker_active", "1");
           } catch {}
-        }
-
-        if (!isTrackerFlow) {
+        } else {
           setStatus("Creando cookies seguras…");
-          console.log("[AUTH CALLBACK] bootstrapCookie for main auth client");
-
           await bootstrapCookie(
             session.access_token,
             session.refresh_token,
             typeof session.expires_in === "number" ? session.expires_in : undefined
           );
-        } else {
-          console.log("[AUTH CALLBACK] tracker flow detected, skipping bootstrapCookie");
         }
 
-        setTimeout(() => {
-          setStatus(
-            [
-              `trackerFlow: ${String(isTrackerFlow)}`,
-              `next: ${next}`,
-              `session detected: ${!!session?.access_token}`,
-              "Redirigiendo…"
-            ].join("\n")
-          );
-          if (!alive) return;
-          console.log("[AUTH CALLBACK] redirecting to next:", next);
-          window.location.assign(next);
-        }, 600);
+        if (!alive) return;
+
+        setStatus("Redirigiendo…");
+
+        try {
+          const cleanUrl = `${window.location.pathname}${window.location.search}`;
+          window.history.replaceState({}, document.title, cleanUrl);
+        } catch {}
+
+        window.location.replace(next);
       } catch (e: any) {
         if (!alive) return;
 
@@ -273,7 +235,6 @@ export default function AuthCallback() {
         const meta = normalizeAuthErrorMessage(raw);
 
         console.error("[AUTH CALLBACK] failed:", raw);
-
         setError(raw);
         setErrorMeta(meta);
         setStatus(meta.title || "No se pudo completar el login.");
@@ -293,7 +254,7 @@ export default function AuthCallback() {
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-6">
       <div className="max-w-md w-full rounded-2xl border border-white/10 bg-white/[0.04] p-5">
         <div className="text-lg font-semibold">Auth Callback</div>
-        <div className="mt-2 text-sm opacity-80">{status}</div>
+        <div className="mt-2 text-sm opacity-80 whitespace-pre-line">{status}</div>
 
         <div className="mt-4 text-xs opacity-60 break-all">
           trackerFlow: {String(isTrackerFlow)}

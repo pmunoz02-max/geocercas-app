@@ -57,7 +57,6 @@ export default function Login() {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  // ====== MODO (universal) ======
   const hasModeInUrl = useMemo(
     () => hasQueryParam(location.search, "mode"),
     [location.search]
@@ -81,19 +80,14 @@ export default function Login() {
   }, [hasModeInUrl, modeFromUrl, modeFromStorage]);
 
   const [mode, setMode] = useState<Mode>(initialMode);
-
-  // ====== FORM ======
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-
   const [nextInput, setNextInput] = useState("/inicio");
-
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
-  // ====== NEXT / ERR from URL ======
   const nextFromUrl = useMemo(() => {
     const n = getQueryParam(location.search, "next");
     return safeNextPath(n || "/inicio");
@@ -112,20 +106,15 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
-  // ✅ Solo sincronizar desde URL si `mode=` existe
   useEffect(() => {
     if (!hasModeInUrl) return;
     if (modeFromUrl !== mode) setMode(modeFromUrl);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasModeInUrl, modeFromUrl]);
+  }, [hasModeInUrl, modeFromUrl, mode]);
 
-  // ✅ Persist mode
   useEffect(() => {
     try {
       localStorage.setItem(MODE_LS_KEY, mode);
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [mode]);
 
   function setModePersist(nextMode: Mode) {
@@ -138,18 +127,17 @@ export default function Login() {
     navigate(`/login?${sp.toString()}`, { replace: true });
   }
 
-  // ====== ENV (debug + UX universal) ======
   const supabaseUrlHost = useMemo(
     () => hostFromUrl(import.meta.env.VITE_SUPABASE_URL),
     []
   );
+
   const siteUrl = useMemo(() => {
     const envUrl = (import.meta.env.VITE_SITE_URL || "").trim();
     if (envUrl) return envUrl;
     return window.location.origin;
   }, []);
 
-  // ====== Redirects ======
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput);
     const url = new URL("/auth/callback", siteUrl);
@@ -220,7 +208,6 @@ export default function Login() {
     try {
       setBusy(true);
 
-      // 1) MAGIC LINK
       if (mode === "magic") {
         const { error } = await supabase.auth.signInWithOtp({
           email: cleanEmail,
@@ -231,7 +218,6 @@ export default function Login() {
         return;
       }
 
-      // 2) PASSWORD (session hydration robusta + bootstrap siempre)
       if (mode === "password") {
         if (!password || password.length < 6) {
           setErr(t("login.errorMissingCredentials"));
@@ -271,19 +257,17 @@ export default function Login() {
           })
         );
 
-        // ✅ FIX UNIVERSAL: hard redirect evita parpadeo/loops por guards
         const dest = safeNextPath(nextInput);
         window.location.assign(dest);
         return;
       }
 
-      // 3) RESET PASSWORD
       if (mode === "reset") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: resetRedirectTo,
         });
-        if (error) throw error;
 
+        if (error) throw error;
         setMsg(t("login.infoResetPasswordSent"));
         return;
       }
@@ -332,10 +316,6 @@ export default function Login() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6 auth-bg">
       <div className="w-full max-w-md">
-        {/* ... TU JSX original sin cambios ... */}
-        {/* (lo dejé igual; solo cambiamos el post-bootstrap) */}
-
-        {/* Mantengo TODO tal como lo pegaste */}
         <div className="mb-6 text-center">
           <div className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
             {t("landing.heroBadge")}
