@@ -288,6 +288,13 @@ export default function TrackerGpsPage() {
     disclosure_mode: "always-on-entry",
   });
 
+  const [gpsWatchStarted, setGpsWatchStarted] = useState(false);
+  const [sendPositionStarted, setSendPositionStarted] = useState(false);
+  const [lastSendOk, setLastSendOk] = useState(null);
+  const [lastSendStatus, setLastSendStatus] = useState(null);
+  const [lastSendError, setLastSendError] = useState("");
+  const [lastSentAt, setLastSentAt] = useState(null);
+
   const watchIdRef = useRef(null);
   const lastCoordsRef = useRef(null);
   const isSendingRef = useRef(false);
@@ -1042,32 +1049,9 @@ export default function TrackerGpsPage() {
       throw new Error("web_send_blocked_native_android_active");
     }
 
-    setTrackerDiag((d) => ({
-      ...d,
-      lastSendAttempt: Date.now(),
-    }));
-
-    console.log("[send-position] invoke:start", {
-      hasOrg: !!body?.org_id,
-      hasLat: Number.isFinite(Number(body?.lat)),
-      hasLng: Number.isFinite(Number(body?.lng)),
-    });
-
-    let fetchTimeoutId = null;
-    let hardTimeoutId = null;
-    let controller = null;
-
-    const hardTimeoutPromise = new Promise((_, reject) => {
-      hardTimeoutId = setTimeout(() => {
-        try {
-          controller?.abort();
-        } catch {}
-        reject(new Error("send_position_hard_timeout"));
-      }, 12000);
-    });
-
-    const sendPromise = (async () => {
-      console.log("[send-position] token:start");
+    setSendPositionStarted(true);
+    setLastSendError("");
+    try {
       const freshToken = await getFreshJwtOrThrow("send_position");
       console.log("[send-position] token:ok");
 
@@ -1088,7 +1072,7 @@ export default function TrackerGpsPage() {
         last_http_status: null,
       }));
 
-      controller = new AbortController();
+      const controller = new AbortController();
       fetchTimeoutId = setTimeout(() => {
         try {
           controller?.abort();
@@ -1121,22 +1105,13 @@ export default function TrackerGpsPage() {
         throw new Error(`send_position http ${res.status}: ${msg}`);
       }
 
-      setTrackerDiag((d) => ({
-        ...d,
-        lastSendOk: Date.now(),
-        lastSendFailure: null,
-      }));
-
+      setLastSendOk(Date.now());
+      setLastSentAt(Date.now());
+      setSendPositionStarted(false);
       return j;
-    })();
-
-    try {
-      return await Promise.race([sendPromise, hardTimeoutPromise]);
     } catch (e) {
-      setTrackerDiag((d) => ({
-        ...d,
-        lastSendFailure: `${new Date().toISOString()} ${String(e?.message || e)}`,
-      }));
+      setLastSendError(String(e?.message || e));
+      setSendPositionStarted(false);
       throw e;
     } finally {
       if (fetchTimeoutId) clearTimeout(fetchTimeoutId);
@@ -1410,9 +1385,10 @@ export default function TrackerGpsPage() {
         maximumAge: 15000,
         timeout: 30000,
       });
-
+      setGpsWatchStarted(true);
       console.log("[gps] watch:start", { watchId: watchIdRef.current });
     } catch (e) {
+      setGpsWatchStarted(false);
       console.error("[gps] watch:start failed", e);
       setGpsAcquisitionState("error");
       setLastError(String(e?.message || e));
