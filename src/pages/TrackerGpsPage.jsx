@@ -242,14 +242,19 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     if (!trackerReady) return;
+    if (!orgId) return;
     if (assignmentWindowStatus !== "active") return;
     if (trackingStarted) return;
 
-    console.log("[tracker] STARTING TRACKING");
+    console.log("[tracker] STARTING TRACKING", {
+      orgId,
+      hasAndroidBridge: !!window.Android,
+      href: window.location.href,
+    });
 
     try {
       if (window.Android && typeof window.Android.startTracking === "function") {
-        console.log("[tracker] using Android bridge");
+        console.log("[tracker] using Android bridge with tracker URL");
         window.Android.startTracking(window.location.href);
       } else {
         console.log("[tracker] web tracking mode enabled");
@@ -259,7 +264,7 @@ export default function TrackerGpsPage() {
     } catch (e) {
       console.error("[tracker] startTracking FAILED", e);
     }
-  }, [trackerReady, assignmentWindowStatus, trackingStarted]);
+  }, [trackerReady, orgId, assignmentWindowStatus, trackingStarted]);
 
   const [isWatchdogRecovering, setIsWatchdogRecovering] = useState(false);
 
@@ -312,10 +317,6 @@ export default function TrackerGpsPage() {
   const acceptInFlightRef = useRef(new Set());
   const blockingUiLoggedRef = useRef(false);
   const [gpsAcquisitionState, setGpsAcquisitionState] = useState("acquiring");
-
-  useEffect(() => {
-    console.log("[TRACKER_BUILD] 2026-04-04-B");
-  }, []);
 
   useEffect(() => {
     if (!hasSession) return;
@@ -438,24 +439,11 @@ export default function TrackerGpsPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    if (!hasAndroidNativeBridge()) {
-      console.log("[ANDROID] bridge not available");
-      return;
-    }
-
-    if (canStartAndroidTracking()) {
-      console.log("[ANDROID] bridge detected, calling startTracking");
-      try {
-        window.Android.startTracking();
-      } catch (err) {
-        console.error("[ANDROID] startTracking failed", err);
-      }
-      return;
-    }
-
-    console.log("[ANDROID] bridge detected without startTracking; web sender remains blocked");
+    console.log("[TRACKER_BUILD] 2026-04-04-C TrackerGpsPage mounted", {
+      path: window.location.pathname,
+      search: window.location.search,
+      hasAndroidBridge: hasAndroidNativeBridge(),
+    });
   }, []);
 
   useEffect(() => {

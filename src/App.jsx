@@ -315,9 +315,6 @@ export default function App() {
   return (
     <Routes>
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-      <Route path="/tracker-gps/" element={<TrackerGpsPage />} />
-      <Route path="/tracker-gps/:orgId" element={<TrackerGpsPage />} />
-      <Route path="/tracker-gps/*" element={<TrackerGpsPage />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
   );
