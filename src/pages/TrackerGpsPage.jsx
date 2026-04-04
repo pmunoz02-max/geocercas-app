@@ -138,7 +138,7 @@ function hasAndroidNativeBridge() {
 export default function TrackerGpsPage() {
   return (
     <div style={{fontSize: "40px", color: "red"}}>
-      TRACKER TEST OK 2026-04-04
+      TRACKER OK 2026 FINAL
     </div>
   );
 
