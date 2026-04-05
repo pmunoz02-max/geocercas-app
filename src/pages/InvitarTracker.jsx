@@ -107,8 +107,8 @@ export default function InvitarTracker() {
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
 
-  const [peopleWithActiveAssignments, setPeopleWithActiveAssignments] = useState([]);
-  const [activeAssignmentsCount, setActiveAssignmentsCount] = useState(0);
+  const [people, setPeople] = useState([]);
+  const [activeOrgAssignments, setActiveOrgAssignments] = useState([]);
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [assignments, setAssignments] = useState([]);
@@ -152,6 +152,26 @@ export default function InvitarTracker() {
     if (l.startsWith("fr")) return "fr";
     return "es";
   }, [i18n]);
+
+  const activeAssignedUserIds = useMemo(() => {
+    return new Set(
+      (Array.isArray(activeOrgAssignments) ? activeOrgAssignments : [])
+        .map((row) => String(row?.tracker_user_id || "").trim())
+        .filter(Boolean)
+    );
+  }, [activeOrgAssignments]);
+
+  const peopleWithActiveAssignments = useMemo(() => {
+    const filtered = (Array.isArray(people) ? people : []).filter((row) => {
+      const userId = String(row?.user_id || "").trim();
+      return userId && activeAssignedUserIds.has(userId);
+    });
+
+    filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
+    return filtered;
+  }, [people, activeAssignedUserIds]);
+
+  const activeAssignmentsCount = activeOrgAssignments.length;
 
   const allowedEmails = useMemo(() => {
     const set = new Set();
@@ -227,8 +247,8 @@ export default function InvitarTracker() {
       setErrMsg(null);
 
       if (!orgId) {
-        setPeopleWithActiveAssignments([]);
-        setActiveAssignmentsCount(0);
+        setPeople([]);
+        setActiveOrgAssignments([]);
         setLoadingPeople(false);
         setErrMsg(
           t("inviteTracker.errors.noOrg", {
@@ -239,8 +259,8 @@ export default function InvitarTracker() {
       }
 
       if (entitlementsLoading || isFree) {
-        setPeopleWithActiveAssignments([]);
-        setActiveAssignmentsCount(0);
+        setPeople([]);
+        setActiveOrgAssignments([]);
         setLoadingPeople(false);
         return;
       }
@@ -258,6 +278,8 @@ export default function InvitarTracker() {
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
+        setPeople(rows);
+
         // 2) Fuente de verdad: tracker_assignments activos en la org actual
         const { data: trackerAssignments, error: taErr } = await supabase
           .from("tracker_assignments")
@@ -269,26 +291,11 @@ export default function InvitarTracker() {
         if (taErr) throw taErr;
 
         const safeAssignments = Array.isArray(trackerAssignments) ? trackerAssignments : [];
-        setActiveAssignmentsCount(safeAssignments.length);
-
-        const activeTrackerUserIds = new Set(
-          safeAssignments
-            .map((row) => String(row?.tracker_user_id || "").trim())
-            .filter(Boolean)
-        );
-
-        // 3) Dropdown final: solo personal de esta org con user_id incluido en tracker_assignments activos
-        const filtered = rows.filter((row) => {
-          const userId = String(row?.user_id || "").trim();
-          return userId && activeTrackerUserIds.has(userId);
-        });
-
-        filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
-        setPeopleWithActiveAssignments(filtered);
+        setActiveOrgAssignments(safeAssignments);
       } catch (e) {
         if (cancelled) return;
-        setPeopleWithActiveAssignments([]);
-        setActiveAssignmentsCount(0);
+        setPeople([]);
+        setActiveOrgAssignments([]);
         setErrMsg(String(e?.message || e));
       } finally {
         if (!cancelled) setLoadingPeople(false);
