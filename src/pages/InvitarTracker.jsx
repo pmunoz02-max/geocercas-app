@@ -107,7 +107,8 @@ export default function InvitarTracker() {
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
 
-  const [people, setPeople] = useState([]);
+  const [peopleWithActiveAssignments, setPeopleWithActiveAssignments] = useState([]);
+  const [activeAssignmentsCount, setActiveAssignmentsCount] = useState(0);
   const [selectedPersonId, setSelectedPersonId] = useState("");
   const [emailInput, setEmailInput] = useState("");
   const [assignments, setAssignments] = useState([]);
@@ -154,22 +155,24 @@ export default function InvitarTracker() {
 
   const allowedEmails = useMemo(() => {
     const set = new Set();
-    for (const r of people) {
+    for (const r of peopleWithActiveAssignments) {
       const e = normalizeEmail(r?.email || "");
       if (e) set.add(e);
     }
     return set;
-  }, [people]);
+  }, [peopleWithActiveAssignments]);
 
   const inviteBlockedByPlan = useMemo(() => {
     return !entitlementsLoading && isFree;
   }, [entitlementsLoading, isFree]);
 
+  const hasActiveAssignmentsInOrg = activeAssignmentsCount > 0;
+
 
   const selectedPerson = useMemo(() => {
     if (!selectedPersonId) return null;
-    return people.find((p) => String(p.id) === String(selectedPersonId)) || null;
-  }, [people, selectedPersonId]);
+    return peopleWithActiveAssignments.find((p) => String(p.id) === String(selectedPersonId)) || null;
+  }, [peopleWithActiveAssignments, selectedPersonId]);
 
 
 
@@ -224,7 +227,8 @@ export default function InvitarTracker() {
       setErrMsg(null);
 
       if (!orgId) {
-        setPeople([]);
+        setPeopleWithActiveAssignments([]);
+        setActiveAssignmentsCount(0);
         setLoadingPeople(false);
         setErrMsg(
           t("inviteTracker.errors.noOrg", {
@@ -235,7 +239,8 @@ export default function InvitarTracker() {
       }
 
       if (entitlementsLoading || isFree) {
-        setPeople([]);
+        setPeopleWithActiveAssignments([]);
+        setActiveAssignmentsCount(0);
         setLoadingPeople(false);
         return;
       }
@@ -263,8 +268,11 @@ export default function InvitarTracker() {
 
         if (taErr) throw taErr;
 
+        const safeAssignments = Array.isArray(trackerAssignments) ? trackerAssignments : [];
+        setActiveAssignmentsCount(safeAssignments.length);
+
         const activeTrackerUserIds = new Set(
-          (Array.isArray(trackerAssignments) ? trackerAssignments : [])
+          safeAssignments
             .map((row) => String(row?.tracker_user_id || "").trim())
             .filter(Boolean)
         );
@@ -276,10 +284,11 @@ export default function InvitarTracker() {
         });
 
         filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
-        setPeople(filtered);
+        setPeopleWithActiveAssignments(filtered);
       } catch (e) {
         if (cancelled) return;
-        setPeople([]);
+        setPeopleWithActiveAssignments([]);
+        setActiveAssignmentsCount(0);
         setErrMsg(String(e?.message || e));
       } finally {
         if (!cancelled) setLoadingPeople(false);
@@ -294,9 +303,9 @@ export default function InvitarTracker() {
 
   useEffect(() => {
     if (!selectedPersonId) return;
-    const person = people.find((p) => String(p.id) === String(selectedPersonId));
+    const person = peopleWithActiveAssignments.find((p) => String(p.id) === String(selectedPersonId));
     setEmailInput(person?.email || "");
-  }, [selectedPersonId, people]);
+  }, [selectedPersonId, peopleWithActiveAssignments]);
 
   useEffect(() => {
     let cancelled = false;
@@ -568,7 +577,7 @@ export default function InvitarTracker() {
 
   const selectPlaceholder = loadingPeople
     ? t("common.actions.loading", { defaultValue: "Cargando…" })
-    : people.length === 0
+    : peopleWithActiveAssignments.length === 0
       ? t("inviteTracker.empty.noActiveAssignments", { defaultValue: "Sin personal con asignación activa" })
       : t("common.select", { defaultValue: "— Selecciona —" });
 
@@ -700,11 +709,11 @@ export default function InvitarTracker() {
           </div>
           <div className="mt-1">
             <b>{t("inviteTracker.diag.membersLoaded", { defaultValue: "Personal cargado" })}:</b>{" "}
-            {loadingPeople ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(people.length)}
+            {loadingPeople ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(peopleWithActiveAssignments.length)}
           </div>
           <div className="mt-1">
-            <b>{t("inviteTracker.assignment.loaded", { defaultValue: "Asignaciones cargadas" })}:</b>{" "}
-            {loadingAssignments ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(assignments.length)}
+            <b>{t("inviteTracker.assignment.activeLoaded", { defaultValue: "Asignaciones activas (base dropdown)" })}:</b>{" "}
+            {loadingPeople ? t("common.actions.loading", { defaultValue: "Cargando…" }) : String(activeAssignmentsCount)}
           </div>
         </div>
 
@@ -754,15 +763,15 @@ export default function InvitarTracker() {
               onChange={(e) => {
                 const v = e.target.value;
                 setSelectedPersonId(v);
-                const person = people.find((p) => String(p.id) === String(v));
+                const person = peopleWithActiveAssignments.find((p) => String(p.id) === String(v));
                 setEmailInput(person?.email || "");
                 setOkMsg(null);
                 setErrMsg(null);
               }}
-              disabled={loadingPeople || people.length === 0}
+              disabled={loadingPeople || !hasActiveAssignmentsInOrg || peopleWithActiveAssignments.length === 0}
             >
               <option value="">{selectPlaceholder}</option>
-              {people.map((p) => (
+              {peopleWithActiveAssignments.map((p) => (
                 <option key={p.id} value={p.id}>
                   {pickPersonalLabel(p)}
                 </option>
@@ -801,10 +810,10 @@ export default function InvitarTracker() {
 
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId}
+            disabled={busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId
+              busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}
