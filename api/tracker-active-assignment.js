@@ -156,6 +156,7 @@ export default async function handler(req, res) {
         console.log('[taa] ORG ACCESS: owner lookup error', ownerOrgErr);
       } else if (ownerOrg?.id) {
         orgAccess = 'owner';
+        invitationState = 'not_applicable';
         orgAccessMeta = {
           role: 'owner',
           email: jwtEmail,
@@ -384,7 +385,7 @@ export default async function handler(req, res) {
           access_role: orgAccessMeta.role,
         });
         if (orgAccess !== 'none') {
-          if (!invitationState) {
+          if (!invitationState && orgAccess !== 'owner') {
             invitationState = 'invitation_accepted_not_bootstrapped';
           }
           console.log('[taa] RESOLVE PASS 2: org access resolved, bootstrapping/syncing personal row', {
