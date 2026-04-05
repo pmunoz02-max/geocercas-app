@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const build_tag = "send_position-v20_enforcement_fixed";
+const build_tag = "send_position-v21-operational-flags";
 
 function buildCorsHeaders(origin: string | null) {
   return {
@@ -21,14 +21,17 @@ function buildCorsHeaders(origin: string | null) {
     ].join(", "),
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
+    Vary: "Origin",
   };
 }
 
 function json(body: unknown, status: number, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json; charset=utf-8" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json; charset=utf-8",
+    },
   });
 }
 
@@ -42,7 +45,9 @@ async function hmacHex(secret: string, msg: string) {
     ["sign"],
   );
   const sigBuf = await crypto.subtle.sign("HMAC", key, encoder.encode(msg));
-  return Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(sigBuf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function pickBearer(h: string | null) {
@@ -59,15 +64,144 @@ function getEnv() {
   };
 }
 
-function pickTimestamps(body: any) {
-  const nowIso = new Date().toISOString();
-  const rec = String(body?.recorded_at || "").trim();
-  const recorded_at = rec && !Number.isNaN(Date.parse(rec)) ? rec : nowIso;
-  return { recorded_at, created_at: nowIso };
+function parseJsonSafely(raw: string) {
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return null;
+  }
 }
 
-async function checkCanSend(admin: any, user_id: string, org_id: string, cors: any) {
-  const { data, error } = await admin.rpc("rpc_tracker_can_send", { p_user_id: user_id });
+function pickIsoDate(value: unknown): string | null {
+  const s = String(value ?? "").trim();
+  if (!s) return null;
+  return Number.isNaN(Date.parse(s)) ? null : new Date(s).toISOString();
+}
+
+function normalizeNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeInteger(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number.parseInt(String(value), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeBoolean(value: unknown): boolean | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v === "true") return true;
+    if (v === "false") return false;
+  }
+  return null;
+}
+
+function buildPayloads(body: Record<string, unknown>, fallbackSource: string) {
+  const nowIso = new Date().toISOString();
+
+  const source =
+    typeof body.source === "string" && body.source.trim()
+      ? body.source.trim()
+      : fallbackSource;
+
+  const deviceRecordedAt =
+    pickIsoDate(body.device_recorded_at) ??
+    pickIsoDate(body.recorded_at) ??
+    nowIso;
+
+  const positionsRecordedAt =
+    pickIsoDate(
+      (body.positions_payload as Record<string, unknown> | undefined)?.recorded_at,
+    ) ??
+    pickIsoDate(body.recorded_at) ??
+    deviceRecordedAt;
+
+  const positionsPayload = {
+    battery:
+      normalizeInteger(
+        (body.positions_payload as Record<string, unknown> | undefined)?.battery,
+      ) ?? normalizeInteger(body.battery),
+    is_mock:
+      normalizeBoolean(
+        (body.positions_payload as Record<string, unknown> | undefined)?.is_mock,
+      ) ?? normalizeBoolean(body.is_mock),
+    source:
+      ((body.positions_payload as Record<string, unknown> | undefined)?.source as string | undefined) ||
+      source,
+    speed:
+      normalizeNumber(
+        (body.positions_payload as Record<string, unknown> | undefined)?.speed,
+      ) ?? normalizeNumber(body.speed),
+    heading:
+      normalizeNumber(
+        (body.positions_payload as Record<string, unknown> | undefined)?.heading,
+      ) ?? normalizeNumber(body.heading),
+    recorded_at: positionsRecordedAt,
+  };
+
+  const trackerLatestPayload = {
+    permissions_ok:
+      normalizeBoolean(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)
+          ?.permissions_ok,
+      ) ?? normalizeBoolean(body.permissions_ok),
+    battery_optimized:
+      normalizeBoolean(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)
+          ?.battery_optimized,
+      ) ?? normalizeBoolean(body.battery_optimized),
+    background_allowed:
+      normalizeBoolean(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)
+          ?.background_allowed,
+      ) ?? normalizeBoolean(body.background_allowed),
+    service_running:
+      normalizeBoolean(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)
+          ?.service_running,
+      ) ?? normalizeBoolean(body.service_running),
+    source:
+      ((body.tracker_latest_payload as Record<string, unknown> | undefined)?.source as string | undefined) ||
+      source,
+    battery:
+      normalizeInteger(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)?.battery,
+      ) ?? normalizeInteger(body.battery),
+    is_mock:
+      normalizeBoolean(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)?.is_mock,
+      ) ?? normalizeBoolean(body.is_mock),
+    speed:
+      normalizeNumber(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)?.speed,
+      ) ?? normalizeNumber(body.speed),
+    heading:
+      normalizeNumber(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)?.heading,
+      ) ?? normalizeNumber(body.heading),
+    device_recorded_at:
+      pickIsoDate(
+        (body.tracker_latest_payload as Record<string, unknown> | undefined)
+          ?.device_recorded_at,
+      ) ?? deviceRecordedAt,
+  };
+
+  return {
+    positionsPayload,
+    trackerLatestPayload,
+    created_at: nowIso,
+  };
+}
+
+async function checkCanSend(client: any, user_id: string, org_id: string, cors: Record<string, string>) {
+  const { data, error } = await client.rpc("rpc_tracker_can_send", {
+    p_user_id: user_id,
+  });
 
   if (error) {
     console.error("[send_position] rpc_tracker_can_send error", error);
@@ -78,11 +212,52 @@ async function checkCanSend(admin: any, user_id: string, org_id: string, cors: a
     console.warn("[send_position] tracker_blocked_by_plan", { user_id, org_id });
     return {
       ok: false,
-      response: new Response(JSON.stringify({ error: "tracker_limit_reached" }), {
-        status: 403,
-        headers: cors,
-      }),
+      response: json({ error: "tracker_limit_reached" }, 403, cors),
     };
+  }
+
+  return { ok: true };
+}
+
+async function updateTrackerLatestOperationalState(
+  admin: any,
+  params: {
+    org_id: string;
+    user_id: string;
+    trackerLatestPayload: Record<string, unknown>;
+  },
+) {
+  const { org_id, user_id, trackerLatestPayload } = params;
+
+  const updatePayload = {
+    ...trackerLatestPayload,
+    user_id,
+    org_id,
+  };
+
+  const { data, error } = await admin
+    .from("tracker_latest")
+    .update(updatePayload)
+    .eq("org_id", org_id)
+    .eq("user_id", user_id)
+    .select("org_id,user_id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[send_position] tracker_latest_update_error", {
+      org_id,
+      user_id,
+      message: error.message,
+    });
+    return { ok: false, reason: "update_error", error };
+  }
+
+  if (!data) {
+    console.warn("[send_position] tracker_latest_row_not_found_after_positions_insert", {
+      org_id,
+      user_id,
+    });
+    return { ok: false, reason: "row_not_found" };
   }
 
   return { ok: true };
@@ -92,89 +267,180 @@ serve(async (req) => {
   const origin = req.headers.get("origin");
   const CORS = buildCorsHeaders(origin);
 
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS });
+  }
 
   if (req.method !== "POST") {
-    return json({ ok: false, error: "Method not allowed" }, 405, CORS);
+    return json({ ok: false, error: "method_not_allowed", build_tag }, 405, CORS);
   }
 
   try {
     const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
 
     if (!SB_URL || !SB_SERVICE_ROLE) {
-      return json({ error: "Missing env" }, 500, CORS);
+      return json({ ok: false, error: "missing_env", build_tag }, 500, CORS);
     }
 
     const rawBody = await req.text();
-    const body = JSON.parse(rawBody);
-    const { recorded_at, created_at } = pickTimestamps(body);
+    const body = parseJsonSafely(rawBody);
+
+    if (!body || typeof body !== "object") {
+      return json({ ok: false, error: "invalid_json", build_tag }, 400, CORS);
+    }
 
     const admin = createClient(SB_URL, SB_SERVICE_ROLE);
 
-    // === PROXY MODE ===
     const ts = req.headers.get("x-proxy-ts");
     const signature = req.headers.get("x-proxy-signature");
 
+    // =========================================================
+    // PROXY MODE
+    // =========================================================
     if (ts && signature) {
-      const expected = await hmacHex(TRACKER_PROXY_SECRET, `send_position.${ts}.${rawBody}`);
-      if (expected !== signature) {
-        return json({ error: "Invalid signature" }, 401, CORS);
+      if (!TRACKER_PROXY_SECRET) {
+        return json({ ok: false, error: "missing_proxy_secret", build_tag }, 500, CORS);
       }
 
-      const { user_id, org_id, lat, lng } = body;
+      const expected = await hmacHex(TRACKER_PROXY_SECRET, `send_position.${ts}.${rawBody}`);
+      if (expected !== signature) {
+        return json({ ok: false, error: "invalid_signature", build_tag }, 401, CORS);
+      }
+
+      const user_id = String(body.user_id || "").trim();
+      const org_id = String(body.org_id || "").trim();
+      const lat = normalizeNumber(body.lat);
+      const lng = normalizeNumber(body.lng);
+      const accuracy = normalizeNumber(body.accuracy);
+      const event =
+        typeof body.event === "string" && body.event.trim() ? body.event.trim() : "position";
+
+      if (!user_id || !org_id || lat === null || lng === null) {
+        return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
+      }
 
       const check = await checkCanSend(admin, user_id, org_id, CORS);
       if (!check.ok) return check.response;
 
-      const { error } = await admin.from("positions").insert({
+      const { positionsPayload, trackerLatestPayload, created_at } = buildPayloads(
+        body as Record<string, unknown>,
+        "proxy_hmac",
+      );
+
+      const { error: positionError } = await admin.from("positions").insert({
         user_id,
         org_id,
         lat,
         lng,
-        source: "proxy_hmac",
-        recorded_at,
+        accuracy,
+        event,
         created_at,
+        ...positionsPayload,
       });
 
-      if (error) {
-        return json({ error: error.message }, 500, CORS);
+      if (positionError) {
+        console.error("[send_position] positions_insert_error_proxy", positionError);
+        return json({ ok: false, error: positionError.message, build_tag }, 500, CORS);
       }
 
-      return json({ ok: true }, 200, CORS);
+      const latestResult = await updateTrackerLatestOperationalState(admin, {
+        org_id,
+        user_id,
+        trackerLatestPayload,
+      });
+
+      return json(
+        {
+          ok: true,
+          build_tag,
+          tracker_latest_updated: latestResult.ok,
+          tracker_latest_reason: latestResult.ok ? null : latestResult.reason,
+        },
+        200,
+        CORS,
+      );
     }
 
-    // === WEB MODE ===
+    // =========================================================
+    // WEB / APP MODE
+    // =========================================================
     const jwt = pickBearer(req.headers.get("x-user-jwt") || req.headers.get("authorization"));
-    if (!jwt) return json({ error: "Missing JWT" }, 401, CORS);
+    if (!jwt) {
+      return json({ ok: false, error: "missing_jwt", build_tag }, 401, CORS);
+    }
 
     const userClient = createClient(SB_URL, SB_SERVICE_ROLE, {
       global: { headers: { Authorization: jwt } },
     });
 
-    const { data: userData } = await userClient.auth.getUser();
-    const user_id = userData?.user?.id;
+    const { data: userData, error: userError } = await userClient.auth.getUser();
+    if (userError || !userData?.user?.id) {
+      return json({ ok: false, error: "invalid_user", build_tag }, 401, CORS);
+    }
 
-    const { org_id, lat, lng } = body;
+    const user_id = userData.user.id;
+    const org_id = String(body.org_id || "").trim();
+    const lat = normalizeNumber(body.lat);
+    const lng = normalizeNumber(body.lng);
+    const accuracy = normalizeNumber(body.accuracy);
+    const event =
+      typeof body.event === "string" && body.event.trim() ? body.event.trim() : "position";
+
+    if (!org_id || lat === null || lng === null) {
+      return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
+    }
 
     const check = await checkCanSend(userClient, user_id, org_id, CORS);
     if (!check.ok) return check.response;
 
-    const { error } = await userClient.from("positions").insert({
+    const { positionsPayload, trackerLatestPayload, created_at } = buildPayloads(
+      body as Record<string, unknown>,
+      "tracker-native-android",
+    );
+
+    const { error: positionError } = await userClient.from("positions").insert({
       user_id,
       org_id,
       lat,
       lng,
-      source: "tracker-native-android",
-      recorded_at,
+      accuracy,
+      event,
       created_at,
+      ...positionsPayload,
     });
 
-    if (error) {
-      return json({ error: error.message }, 500, CORS);
+    if (positionError) {
+      console.error("[send_position] positions_insert_error_web", positionError);
+      return json({ ok: false, error: positionError.message, build_tag }, 500, CORS);
     }
 
-    return json({ ok: true }, 200, CORS);
+    const latestResult = await updateTrackerLatestOperationalState(admin, {
+      org_id,
+      user_id,
+      trackerLatestPayload,
+    });
+
+    return json(
+      {
+        ok: true,
+        build_tag,
+        tracker_latest_updated: latestResult.ok,
+        tracker_latest_reason: latestResult.ok ? null : latestResult.reason,
+      },
+      200,
+      CORS,
+    );
   } catch (e) {
-    return json({ error: String(e) }, 500, CORS);
+    console.error("[send_position] unhandled_error", e);
+    return json(
+      {
+        ok: false,
+        error: "internal_error",
+        message: e instanceof Error ? e.message : String(e),
+        build_tag,
+      },
+      500,
+      CORS,
+    );
   }
 });
