@@ -259,9 +259,42 @@ export default function TrackerGpsPage() {
   }, [syncPassiveState]);
 
   useEffect(() => {
-    if (window.AndroidBridge?.startTracking) {
-      window.AndroidBridge.startTracking();
-    }
+    const isAndroid = typeof window.Android !== "undefined";
+
+    if (!isAndroid) return;
+
+    if (document.getElementById("startTrackingBtn")) return;
+
+    const btn = document.createElement("button");
+    btn.id = "startTrackingBtn";
+    btn.innerText = "START TRACKING";
+
+    Object.assign(btn.style, {
+      position: "fixed",
+      bottom: "20px",
+      left: "20px",
+      zIndex: "999999",
+      padding: "14px",
+      background: "#d32f2f",
+      color: "white",
+      fontSize: "16px",
+      borderRadius: "10px",
+      border: "none",
+    });
+
+    btn.onclick = () => {
+      try {
+        if (window.Android?.startTracking) {
+          window.Android.startTracking();
+        } else {
+          alert("Android bridge not available");
+        }
+      } catch (e) {
+        alert("Error: " + e);
+      }
+    };
+
+    document.body.appendChild(btn);
   }, []);
 
   const visibleState = useMemo(
