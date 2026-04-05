@@ -153,25 +153,70 @@ export default function InvitarTracker() {
     return "es";
   }, [i18n]);
 
-  const activeAssignedUserIds = useMemo(() => {
+  const normalizeId = (value) => String(value || "").trim();
+
+  const pickAssignmentEntityId = (row) => {
+    return (
+      normalizeId(row?.person_id) ||
+      normalizeId(row?.personal_id) ||
+      normalizeId(row?.user_id) ||
+      normalizeId(row?.tracker_user_id)
+    );
+  };
+
+  const pickPersonEntityIds = (row) => {
+    return [normalizeId(row?.person_id), normalizeId(row?.id), normalizeId(row?.user_id)].filter(Boolean);
+  };
+
+  const activeAssignmentsRows = useMemo(() => {
+    return (Array.isArray(activeOrgAssignments) ? activeOrgAssignments : []).filter(
+      (row) => normalizeId(row?.org_id) === normalizeId(orgId) && row?.active === true
+    );
+  }, [activeOrgAssignments, orgId]);
+
+  const activeAssignmentPersonIds = useMemo(() => {
     return new Set(
-      (Array.isArray(activeOrgAssignments) ? activeOrgAssignments : [])
-        .map((row) => String(row?.tracker_user_id || "").trim())
+      activeAssignmentsRows
+        .map((row) => pickAssignmentEntityId(row))
         .filter(Boolean)
     );
-  }, [activeOrgAssignments]);
+  }, [activeAssignmentsRows]);
 
   const peopleWithActiveAssignments = useMemo(() => {
     const filtered = (Array.isArray(people) ? people : []).filter((row) => {
-      const userId = String(row?.user_id || "").trim();
-      return userId && activeAssignedUserIds.has(userId);
+      const personKeys = pickPersonEntityIds(row);
+      return personKeys.some((key) => activeAssignmentPersonIds.has(key));
     });
 
     filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
     return filtered;
-  }, [people, activeAssignedUserIds]);
+  }, [people, activeAssignmentPersonIds]);
 
-  const activeAssignmentsCount = activeOrgAssignments.length;
+  const activeAssignmentsCount = activeAssignmentsRows.length;
+
+  const inviteOptions = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+
+    for (const row of activeAssignmentsRows) {
+      const assignmentEntityId = pickAssignmentEntityId(row);
+      if (!assignmentEntityId || seen.has(assignmentEntityId)) continue;
+      seen.add(assignmentEntityId);
+
+      const person = peopleWithActiveAssignments.find(
+        (p) => pickPersonEntityIds(p).includes(assignmentEntityId)
+      );
+
+      out.push({
+        value: assignmentEntityId,
+        assignmentEntityId,
+        label: person ? pickPersonalLabel(person) : `Tracker ${assignmentEntityId.slice(0, 8)}`,
+      });
+    }
+
+    out.sort((a, b) => String(a.label).localeCompare(String(b.label)));
+    return out;
+  }, [activeAssignmentsRows, peopleWithActiveAssignments]);
 
   const allowedEmails = useMemo(() => {
     const set = new Set();
@@ -191,7 +236,11 @@ export default function InvitarTracker() {
 
   const selectedPerson = useMemo(() => {
     if (!selectedPersonId) return null;
-    return peopleWithActiveAssignments.find((p) => String(p.id) === String(selectedPersonId)) || null;
+    return (
+      peopleWithActiveAssignments.find(
+        (p) => pickPersonEntityIds(p).includes(String(selectedPersonId))
+      ) || null
+    );
   }, [peopleWithActiveAssignments, selectedPersonId]);
 
 
@@ -283,7 +332,7 @@ export default function InvitarTracker() {
         // 2) Fuente de verdad: tracker_assignments activos en la org actual
         const { data: trackerAssignments, error: taErr } = await supabase
           .from("tracker_assignments")
-          .select("tracker_user_id, active")
+          .select("org_id, tracker_user_id, active")
           .eq("org_id", orgId)
           .eq("active", true)
           .limit(1000);
@@ -310,7 +359,9 @@ export default function InvitarTracker() {
 
   useEffect(() => {
     if (!selectedPersonId) return;
-    const person = peopleWithActiveAssignments.find((p) => String(p.id) === String(selectedPersonId));
+    const person = peopleWithActiveAssignments.find(
+      (p) => pickPersonEntityIds(p).includes(String(selectedPersonId))
+    );
     setEmailInput(person?.email || "");
   }, [selectedPersonId, peopleWithActiveAssignments]);
 
@@ -584,7 +635,7 @@ export default function InvitarTracker() {
 
   const selectPlaceholder = loadingPeople
     ? t("common.actions.loading", { defaultValue: "Cargando…" })
-    : peopleWithActiveAssignments.length === 0
+    : inviteOptions.length === 0
       ? t("inviteTracker.empty.noActiveAssignments", { defaultValue: "Sin personal con asignación activa" })
       : t("common.select", { defaultValue: "— Selecciona —" });
 
@@ -770,17 +821,19 @@ export default function InvitarTracker() {
               onChange={(e) => {
                 const v = e.target.value;
                 setSelectedPersonId(v);
-                const person = peopleWithActiveAssignments.find((p) => String(p.id) === String(v));
+                const person = peopleWithActiveAssignments.find(
+                  (p) => pickPersonEntityIds(p).includes(String(v))
+                );
                 setEmailInput(person?.email || "");
                 setOkMsg(null);
                 setErrMsg(null);
               }}
-              disabled={loadingPeople || !hasActiveAssignmentsInOrg || peopleWithActiveAssignments.length === 0}
+              disabled={loadingPeople || !hasActiveAssignmentsInOrg || inviteOptions.length === 0}
             >
               <option value="">{selectPlaceholder}</option>
-              {peopleWithActiveAssignments.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {pickPersonalLabel(p)}
+              {inviteOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
                 </option>
               ))}
             </select>

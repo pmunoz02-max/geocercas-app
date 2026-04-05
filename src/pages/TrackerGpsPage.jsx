@@ -265,10 +265,27 @@ export default function TrackerGpsPage() {
 
   const backendState = useMemo(() => {
     if (assignmentState.loading) return "loading";
+    if (assignmentState.reason === "no_session") return "missing_session";
+    if (assignmentState.reason === "missing_org") return "missing_context";
+
+    const hasValidSessionAndContext =
+      assignmentState.reason !== "no_session" &&
+      assignmentState.reason !== "missing_org";
+
+    if (!hasValidSessionAndContext) return "missing_context";
+    if (assignmentState.error) return "assignment_error";
     if (!assignmentState.active) return "waiting for assignment";
+
     if (healthState.loading) return "loading";
     return healthState.row?.status || "offline";
-  }, [assignmentState.active, assignmentState.loading, healthState.loading, healthState.row]);
+  }, [
+    assignmentState.active,
+    assignmentState.error,
+    assignmentState.loading,
+    assignmentState.reason,
+    healthState.loading,
+    healthState.row,
+  ]);
 
   return (
     <div style={pageStyle}>
