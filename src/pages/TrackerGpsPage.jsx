@@ -8,13 +8,23 @@ function getAndroidBridge() {
 }
 
 export default function TrackerGpsPage() {
-  const [buildMarker] = useState("2026-04-04-E");
+  const [buildMarker] = useState("2026-04-05-passive-status");
   const [bridgeReady, setBridgeReady] = useState(false);
-  const [autoStartStatus, setAutoStartStatus] = useState("pending");
-  const [permissionStatus, setPermissionStatus] = useState("unknown");
-  const [attemptCount, setAttemptCount] = useState(0);
-  const [lastMessage, setLastMessage] = useState("Inicializando tracker...");
-  const [lastActionAt, setLastActionAt] = useState(null);
+  const [orgId, setOrgId] = useState(null);
+  const [assignmentState, setAssignmentState] = useState({
+    loading: true,
+    error: null,
+    active: false,
+    reason: "loading",
+    assignment: null,
+  });
+  const [healthState, setHealthState] = useState({
+    loading: true,
+    error: null,
+    row: null,
+  });
+  const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
+  const [lastSyncAt, setLastSyncAt] = useState(null);
 
   const pageStyle = useMemo(
     () => ({
@@ -69,33 +79,9 @@ export default function TrackerGpsPage() {
     []
   );
 
-  const buttonRowStyle = useMemo(
-    () => ({
-      display: "flex",
-      flexWrap: "wrap",
-      gap: "12px",
-      justifyContent: "center",
-      marginTop: "16px",
-    }),
-    []
-  );
-
-  const buttonStyle = useMemo(
-    () => ({
-      padding: "12px 16px",
-      borderRadius: "10px",
-      border: "1px solid #cbd5e1",
-      background: "#ffffff",
-      cursor: "pointer",
-      fontSize: "15px",
-      fontWeight: 600,
-    }),
-    []
-  );
-
-  const markAction = useCallback((message) => {
+  const markMessage = useCallback((message) => {
     setLastMessage(message);
-    setLastActionAt(new Date().toLocaleTimeString());
+    setLastSyncAt(new Date().toLocaleTimeString());
   }, []);
 
   const refreshBridgeState = useCallback(() => {
@@ -105,159 +91,184 @@ export default function TrackerGpsPage() {
     return bridge;
   }, []);
 
-  const checkPermissions = useCallback(() => {
-    try {
-      const bridge = refreshBridgeState();
+  const resolveOrgId = useCallback(async () => {
+    const localOrg = localStorage.getItem("org_id");
+    if (localOrg) return localOrg;
 
-      if (!bridge || typeof bridge.hasLocationPermissions !== "function") {
-        setPermissionStatus("bridge_unavailable");
-        markAction("Bridge Android no disponible para consultar permisos.");
-        return false;
-      }
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return null;
 
-      const result = bridge.hasLocationPermissions();
-      const normalized = result ? "granted" : "missing";
+    const { data: membership } = await supabase
+      .from("memberships")
+      .select("org_id, is_default, revoked_at")
+      .eq("user_id", userId)
+      .is("revoked_at", null)
+      .order("is_default", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-      console.log("[TRACKER_PERMISSIONS] hasLocationPermissions=", normalized);
-      setPermissionStatus(normalized);
-      markAction(
-        result
-          ? "Permisos de ubicación confirmados."
-          : "Faltan permisos de ubicación."
-      );
-
-      return result;
-    } catch (error) {
-      console.error("[TRACKER_PERMISSIONS] check failed", error);
-      setPermissionStatus("error");
-      markAction("Error al consultar permisos de ubicación.");
-      return false;
+    const resolvedOrgId = membership?.org_id || null;
+    if (resolvedOrgId) {
+      localStorage.setItem("org_id", resolvedOrgId);
     }
-  }, [markAction, refreshBridgeState]);
+    return resolvedOrgId;
+  }, []);
 
-  const startTracking = useCallback(async () => {
+  const mapHealthState = useCallback((status) => {
+    const v = String(status || "").toLowerCase();
+    if (v === "active") return "active";
+    if (v === "stale") return "stale";
+    if (v === "restricted") return "restricted";
+    if (v === "pending_permissions") return "pending_permissions";
+    return "offline";
+  }, []);
+
+  const syncPassiveState = useCallback(async () => {
     try {
-      const bridge = refreshBridgeState();
+      refreshBridgeState();
 
-      if (!bridge || typeof bridge.startTracking !== "function") {
-        setAutoStartStatus("bridge_missing");
-        markAction("Bridge Android no disponible para iniciar tracking.");
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token || null;
+      const trackerUserId = session?.user?.id || null;
+
+      if (!token || !trackerUserId) {
+        setAssignmentState({
+          loading: false,
+          error: "no_session",
+          active: false,
+          reason: "no_session",
+          assignment: null,
+        });
+        setHealthState({ loading: false, error: "no_session", row: null });
+        markMessage("No hay sesión activa para consultar estado del tracker.");
         return;
       }
 
-      markAction("Solicitando inicio de tracking a Android...");
-      const session = await supabase.auth.getSession();
-      const token = session.data.session?.access_token;
-      const orgId = localStorage.getItem("org_id");
-      bridge.startTracking(
-        JSON.stringify({
-          org_id: orgId,
-          token: token,
-        })
-      );
-      setAutoStartStatus("started");
-      console.log("[TRACKER_MANUAL] startTracking called");
-    } catch (error) {
-      console.error("[TRACKER_MANUAL] startTracking failed", error);
-      setAutoStartStatus("error");
-      markAction("Falló startTracking(). Revisa Logcat.");
-    }
-  }, [markAction, refreshBridgeState]);
+      const resolvedOrgId = await resolveOrgId();
+      setOrgId(resolvedOrgId);
 
-  const stopTracking = useCallback(() => {
-    try {
-      const bridge = refreshBridgeState();
-
-      if (!bridge || typeof bridge.stopTracking !== "function") {
-        markAction("Bridge Android no disponible para detener tracking.");
+      if (!resolvedOrgId) {
+        setAssignmentState({
+          loading: false,
+          error: "missing_org",
+          active: false,
+          reason: "missing_org",
+          assignment: null,
+        });
+        setHealthState({ loading: false, error: "missing_org", row: null });
+        markMessage("No se pudo resolver org_id para consultar asignación/health.");
         return;
       }
 
-      bridge.stopTracking();
-      setAutoStartStatus("stopped");
-      console.log("[TRACKER_MANUAL] stopTracking called");
-      markAction("Tracking detenido desde la página.");
-    } catch (error) {
-      console.error("[TRACKER_MANUAL] stopTracking failed", error);
-      markAction("Falló stopTracking(). Revisa Logcat.");
-    }
-  }, [markAction, refreshBridgeState]);
+      const assignmentRes = await fetch("/api/tracker-active-assignment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ org_id: resolvedOrgId }),
+      });
 
-  const runAutoStart = useCallback(() => {
-    let attempts = 0;
-    let cancelled = false;
-    let timerId = null;
-
-    const tryStart = async () => {
-      if (cancelled) return;
-
-      attempts += 1;
-      setAttemptCount(attempts);
-
-      const bridge = refreshBridgeState();
-      const hasStart =
-        !!bridge && typeof bridge.startTracking === "function";
-
-      console.log("[TRACKER_AUTOSTART] attempt=", attempts, "hasBridge=", hasStart);
-
-      if (hasStart) {
-        setAutoStartStatus("starting");
-        markAction("Bridge Android detectado. Intentando iniciar tracking...");
-
-        try {
-          checkPermissions();
-          const session = await supabase.auth.getSession();
-          const token = session.data.session?.access_token;
-          const orgId = localStorage.getItem("org_id");
-          bridge.startTracking(
-            JSON.stringify({
-              org_id: orgId,
-              token: token,
-            })
-          );
-          console.log("[TRACKER_AUTOSTART] AUTO START TRACKING OK");
-          setAutoStartStatus("started");
-          markAction("Tracking solicitado a Android correctamente.");
-        } catch (error) {
-          console.error("[TRACKER_AUTOSTART] startTracking failed", error);
-          setAutoStartStatus("error");
-          markAction("Falló auto-start. Revisa Logcat.");
-        }
-
-        return;
-      }
-
-      markAction(`Esperando bridge Android... intento ${attempts}/10`);
-
-      if (attempts < 10) {
-        timerId = window.setTimeout(() => {
-          void tryStart();
-        }, 500);
+      const assignmentJson = await assignmentRes.json().catch(() => ({}));
+      if (!assignmentRes.ok || !assignmentJson?.ok) {
+        setAssignmentState({
+          loading: false,
+          error: assignmentJson?.error || "assignment_error",
+          active: false,
+          reason: assignmentJson?.reason || "assignment_error",
+          assignment: null,
+        });
       } else {
-        console.log("[TRACKER_AUTOSTART] AUTO START TRACKING FAILED");
-        setAutoStartStatus("failed");
-        markAction("No se encontró window.Android después de 10 intentos.");
+        setAssignmentState({
+          loading: false,
+          error: null,
+          active: !!assignmentJson.active,
+          reason: assignmentJson.reason || (assignmentJson.active ? "active" : "inactive"),
+          assignment: assignmentJson.assignment || null,
+        });
       }
-    };
 
-    void tryStart();
+      await supabase.rpc("rpc_refresh_tracker_health", { p_org_id: resolvedOrgId });
+      const statusRes = await supabase.rpc("rpc_tracker_dashboard_status", {
+        p_org_id: resolvedOrgId,
+      });
 
-    return () => {
-      cancelled = true;
-      if (timerId) window.clearTimeout(timerId);
-    };
-  }, [checkPermissions, markAction, refreshBridgeState]);
+      if (statusRes.error) {
+        setHealthState({ loading: false, error: statusRes.error.message, row: null });
+      } else {
+        const rows = Array.isArray(statusRes.data) ? statusRes.data : [];
+        const ownRow =
+          rows.find(
+            (row) => String(row?.tracker_user_id || row?.user_id || "") === String(trackerUserId)
+          ) || null;
+
+        if (!ownRow) {
+          setHealthState({ loading: false, error: "health_row_not_found", row: null });
+        } else {
+          setHealthState({
+            loading: false,
+            error: null,
+            row: {
+              ...ownRow,
+              status: mapHealthState(ownRow?.status),
+            },
+          });
+        }
+      }
+
+      markMessage("Estado sincronizado desde assignment + tracker_health.");
+    } catch (error) {
+      console.error("[TRACKER_PASSIVE] sync failed", error);
+      setAssignmentState((prev) => ({
+        ...prev,
+        loading: false,
+        error: prev.error || "sync_failed",
+      }));
+      setHealthState((prev) => ({
+        ...prev,
+        loading: false,
+        error: prev.error || "sync_failed",
+      }));
+      markMessage("Error sincronizando estado pasivo del tracker.");
+    }
+  }, [mapHealthState, markMessage, refreshBridgeState, resolveOrgId]);
 
   useEffect(() => {
     console.log("[TRACKER_BUILD]", buildMarker);
-    markAction(`Build cargado: ${buildMarker}`);
+    markMessage(`Build cargado: ${buildMarker}`);
     refreshBridgeState();
-  }, [buildMarker, markAction, refreshBridgeState]);
+  }, [buildMarker, markMessage, refreshBridgeState]);
 
   useEffect(() => {
-    const cleanup = runAutoStart();
-    return cleanup;
-  }, [runAutoStart]);
+    let disposed = false;
+    let timerId = null;
+
+    const run = async () => {
+      if (disposed) return;
+      await syncPassiveState();
+      if (disposed) return;
+      timerId = window.setTimeout(run, 30_000);
+    };
+
+    void run();
+
+    return () => {
+      disposed = true;
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [syncPassiveState]);
+
+  const backendState = useMemo(() => {
+    if (assignmentState.loading) return "loading";
+    if (!assignmentState.active) return "waiting for assignment";
+    if (healthState.loading) return "loading";
+    return healthState.row?.status || "offline";
+  }, [assignmentState.active, assignmentState.loading, healthState.loading, healthState.row]);
 
   return (
     <div style={pageStyle}>
@@ -277,50 +288,48 @@ export default function TrackerGpsPage() {
 
           <div style={rowStyle}>
             <strong>Estado tracking</strong>
-            <span>{autoStartStatus}</span>
+            <span>{backendState}</span>
           </div>
 
           <div style={rowStyle}>
-            <strong>Permisos GPS</strong>
-            <span>{permissionStatus}</span>
+            <strong>Asignación activa</strong>
+            <span>{assignmentState.active ? "YES" : "NO"}</span>
           </div>
 
           <div style={rowStyle}>
-            <strong>Intentos auto-start</strong>
-            <span>{attemptCount}</span>
+            <strong>Reason asignación</strong>
+            <span>{assignmentState.reason || "-"}</span>
+          </div>
+
+          <div style={rowStyle}>
+            <strong>Org ID</strong>
+            <span>{orgId || "-"}</span>
+          </div>
+
+          <div style={rowStyle}>
+            <strong>tracker_health.status</strong>
+            <span>{healthState.row?.status || "-"}</span>
+          </div>
+
+          <div style={rowStyle}>
+            <strong>permissions_ok</strong>
+            <span>{String(healthState.row?.permissions_ok ?? "-")}</span>
+          </div>
+
+          <div style={rowStyle}>
+            <strong>background_allowed</strong>
+            <span>{String(healthState.row?.background_allowed ?? "-")}</span>
+          </div>
+
+          <div style={rowStyle}>
+            <strong>service_running</strong>
+            <span>{String(healthState.row?.service_running ?? "-")}</span>
           </div>
 
           <div style={{ ...rowStyle, borderBottom: "none" }}>
-            <strong>Última acción</strong>
-            <span>{lastActionAt || "-"}</span>
+            <strong>Última sincronización</strong>
+            <span>{lastSyncAt || "-"}</span>
           </div>
-        </div>
-
-        <div style={buttonRowStyle}>
-          <button type="button" style={buttonStyle} onClick={startTracking}>
-            Iniciar tracking
-          </button>
-
-          <button type="button" style={buttonStyle} onClick={stopTracking}>
-            Detener tracking
-          </button>
-
-          <button type="button" style={buttonStyle} onClick={checkPermissions}>
-            Revisar permisos
-          </button>
-
-          <button
-            type="button"
-            style={buttonStyle}
-            onClick={() => {
-              setAttemptCount(0);
-              setAutoStartStatus("pending");
-              markAction("Reintentando auto-start manualmente...");
-              runAutoStart();
-            }}
-          >
-            Reintentar auto-start
-          </button>
         </div>
       </div>
 
