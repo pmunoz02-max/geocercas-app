@@ -12,7 +12,14 @@ export default async function handler(req, res) {
 
     const authHeader = req.headers.authorization || "";
     if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ ok: false, error: "missing_bearer_token" });
+      console.log('[taa] step: missing bearer token');
+      return res.status(401).json({ 
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: "no_session",
+        debug: { message: "Missing or invalid Bearer token" }
+      });
     }
     const jwt = authHeader.slice("Bearer ".length).trim();
     console.log('[taa] step: got jwt');
@@ -30,7 +37,14 @@ export default async function handler(req, res) {
       }
     }
     if (!org_id) {
-      return res.status(400).json({ ok: false, error: 'bad_request', message: 'Missing org_id in body' });
+      console.log('[taa] step: missing org_id');
+      return res.status(200).json({ 
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: "missing_org",
+        debug: { message: "org_id not provided in request body" }
+      });
     }
     console.log('[taa] step: got org_id', org_id);
 
@@ -74,7 +88,15 @@ export default async function handler(req, res) {
     const payload = decodeJwtPayload(jwt);
     const trackerUserId = payload?.sub;
     if (!trackerUserId) {
-      return res.status(401).json({ ok: false, error: 'invalid_jwt', message: 'No sub in JWT' });
+      console.log('[taa] step: invalid jwt - no sub claim');
+      return res.status(200).json({ 
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: "no_session",
+        debug: { message: "Invalid JWT - no sub claim found" },
+        org_id
+      });
     }
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
@@ -141,7 +163,7 @@ export default async function handler(req, res) {
         ok: true,
         active: false,
         assignment: null,
-        reason: "no_assignment_linked",
+        reason: "no_active_assignment",
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
@@ -158,7 +180,7 @@ export default async function handler(req, res) {
         ok: true,
         active: false,
         assignment: null,
-        reason: "no_activity_id_in_assignments",
+        reason: "no_active_assignment",
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
