@@ -241,37 +241,40 @@ export default function InvitarTracker() {
       }
 
       try {
-        // 1. Cargar personas activas/vigentes (incluyendo user_id)
+        // 1) Cargar personal de la org (base de etiquetas/contacto)
         const { data, error } = await supabase
           .from("personal")
           .select("id, org_id, nombre, apellido, email, vigente, activo, activo_bool, is_deleted, user_id")
           .eq("org_id", orgId)
           .eq("is_deleted", false)
           .limit(500);
-  // Bloquear invitación si la persona ya tiene user_id asignado
-  const inviteBlockedByUserId = !!selectedPerson?.user_id;
 
         if (cancelled) return;
         if (error) throw error;
 
         const rows = Array.isArray(data) ? data : [];
-        // Solo excluir usuarios eliminados (ya filtrados por .eq("is_deleted", false) en la consulta)
-        const filtered = rows;
-
-        // 2. Consultar asignaciones activas y vigentes hoy
-        const nowIso = new Date().toISOString();
-        const { data: asigns, error: asignsErr } = await supabase
-          .from("asignaciones")
-          .select("personal_id")
+        // 2) Fuente de verdad: tracker_assignments activos en la org actual
+        const { data: trackerAssignments, error: taErr } = await supabase
+          .from("tracker_assignments")
+          .select("tracker_user_id, active")
           .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .or("status.eq.activa,estado.eq.activa")
-          .lte("start_time", nowIso)
-          .gte("end_time", nowIso);
-        if (asignsErr) throw asignsErr;
-        const validPersonalIds = new Set((asigns || []).map(a => a.personal_id));
+          .eq("active", true)
+          .limit(1000);
 
-        // 3. Usar la lista filtrada de personas (no requerir asignación existente)
+        if (taErr) throw taErr;
+
+        const activeTrackerUserIds = new Set(
+          (Array.isArray(trackerAssignments) ? trackerAssignments : [])
+            .map((row) => String(row?.tracker_user_id || "").trim())
+            .filter(Boolean)
+        );
+
+        // 3) Dropdown final: solo personal de esta org con user_id incluido en tracker_assignments activos
+        const filtered = rows.filter((row) => {
+          const userId = String(row?.user_id || "").trim();
+          return userId && activeTrackerUserIds.has(userId);
+        });
+
         filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
         setPeople(filtered);
       } catch (e) {
@@ -566,7 +569,7 @@ export default function InvitarTracker() {
   const selectPlaceholder = loadingPeople
     ? t("common.actions.loading", { defaultValue: "Cargando…" })
     : people.length === 0
-      ? t("inviteTracker.empty.noMembers", { defaultValue: "Sin personal disponible" })
+      ? t("inviteTracker.empty.noActiveAssignments", { defaultValue: "Sin personal con asignación activa" })
       : t("common.select", { defaultValue: "— Selecciona —" });
 
   const assignmentPlaceholder = loadingAssignments
@@ -767,10 +770,10 @@ export default function InvitarTracker() {
             </select>
 
             <p className="mt-2 text-xs text-slate-600">
-              {t("inviteTracker.onlyExistingNote", {
-                defaultValue: "Solo aparecen personas existentes en",
+              {t("inviteTracker.onlyActiveAssignmentsNote", {
+                defaultValue: "Solo aparecen personas de esta organización con asignación activa real.",
               })}{" "}
-              <b>{t("app.tabs.personal", { defaultValue: "Personal" })}</b>.
+              <b>{t("inviteTracker.assignment.activeSource", { defaultValue: "Fuente: tracker_assignments (active=true)" })}</b>.
             </p>
           </div>
 
