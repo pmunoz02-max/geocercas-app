@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabaseClient";
 
 function getAndroidBridge() {
   if (typeof window === "undefined") return null;
@@ -134,7 +135,7 @@ export default function TrackerGpsPage() {
     }
   }, [markAction, refreshBridgeState]);
 
-  const startTracking = useCallback(() => {
+  const startTracking = useCallback(async () => {
     try {
       const bridge = refreshBridgeState();
 
@@ -145,7 +146,15 @@ export default function TrackerGpsPage() {
       }
 
       markAction("Solicitando inicio de tracking a Android...");
-      bridge.startTracking();
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const orgId = localStorage.getItem("org_id");
+      bridge.startTracking(
+        JSON.stringify({
+          org_id: orgId,
+          token: token,
+        })
+      );
       setAutoStartStatus("started");
       console.log("[TRACKER_MANUAL] startTracking called");
     } catch (error) {
@@ -179,7 +188,7 @@ export default function TrackerGpsPage() {
     let cancelled = false;
     let timerId = null;
 
-    const tryStart = () => {
+    const tryStart = async () => {
       if (cancelled) return;
 
       attempts += 1;
@@ -197,7 +206,15 @@ export default function TrackerGpsPage() {
 
         try {
           checkPermissions();
-          bridge.startTracking();
+          const session = await supabase.auth.getSession();
+          const token = session.data.session?.access_token;
+          const orgId = localStorage.getItem("org_id");
+          bridge.startTracking(
+            JSON.stringify({
+              org_id: orgId,
+              token: token,
+            })
+          );
           console.log("[TRACKER_AUTOSTART] AUTO START TRACKING OK");
           setAutoStartStatus("started");
           markAction("Tracking solicitado a Android correctamente.");
@@ -213,7 +230,9 @@ export default function TrackerGpsPage() {
       markAction(`Esperando bridge Android... intento ${attempts}/10`);
 
       if (attempts < 10) {
-        timerId = window.setTimeout(tryStart, 500);
+        timerId = window.setTimeout(() => {
+          void tryStart();
+        }, 500);
       } else {
         console.log("[TRACKER_AUTOSTART] AUTO START TRACKING FAILED");
         setAutoStartStatus("failed");
@@ -221,7 +240,7 @@ export default function TrackerGpsPage() {
       }
     };
 
-    tryStart();
+    void tryStart();
 
     return () => {
       cancelled = true;
