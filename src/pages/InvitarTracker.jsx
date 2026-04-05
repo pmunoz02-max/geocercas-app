@@ -46,7 +46,7 @@ export default function InvitarTracker() {
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
-  const [activeOrgAssignments, setActiveOrgAssignments] = useState([]);
+  const [activeAssignaciones, setActiveAssignaciones] = useState([]);
 
   const [selectedPersonKey, setSelectedPersonKey] = useState("");
   const [emailInput, setEmailInput] = useState("");
@@ -82,33 +82,32 @@ export default function InvitarTracker() {
     return "es";
   }, [i18n]);
 
-  const hasActiveAssignmentsInOrg = activeOrgAssignments.length > 0;
+  const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
 
-  const activeAssignedKeys = useMemo(() => {
-    return new Set(
-      activeOrgAssignments
-        .map((a) => String(a?.tracker_user_id || a?.user_id || a?.personal_id || "").trim())
-        .filter(Boolean)
-    );
-  }, [activeOrgAssignments]);
+  const activeAssignmentByPersonId = useMemo(() => {
+    const map = new Map();
+    for (const assignment of activeAssignaciones) {
+      const personId = String(assignment?.personal_id || "").trim();
+      if (personId) {
+        map.set(personId, assignment);
+      }
+    }
+    return map;
+  }, [activeAssignaciones]);
 
   const peopleWithActiveAssignments = useMemo(() => {
     const filtered = people.filter((p) => {
-      const candidates = [
-        String(p?.user_id || "").trim(),
-        String(p?.id || "").trim(),
-      ].filter(Boolean);
-
-      return candidates.some((k) => activeAssignedKeys.has(k));
+      const personId = String(p?.id || "").trim();
+      return personId && activeAssignmentByPersonId.has(personId);
     });
 
     filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
     return filtered;
-  }, [people, activeAssignedKeys]);
+  }, [people, activeAssignmentByPersonId]);
 
   const inviteOptions = useMemo(() => {
     return peopleWithActiveAssignments.map((p) => {
-      const key = String(p?.user_id || p?.id || "").trim();
+      const key = String(p?.id || "").trim();
       return {
         key,
         person: p,
@@ -121,22 +120,17 @@ export default function InvitarTracker() {
     return inviteOptions.find((opt) => opt.key === selectedPersonKey) || null;
   }, [inviteOptions, selectedPersonKey]);
 
-  const selectedPerson = selectedOption?.person || null;
+  const selectedPerson = useMemo(() => {
+    if (!selectedPersonKey) return null;
+    return people.find((p) => String(p?.id || "").trim() === selectedPersonKey) || null;
+  }, [people, selectedPersonKey]);
 
   const selectedAssignment = useMemo(() => {
     if (!selectedPerson) return null;
 
-    const userId = String(selectedPerson?.user_id || "").trim();
     const personId = String(selectedPerson?.id || "").trim();
-
-    return (
-      activeOrgAssignments.find((a) => {
-        const aUserId = String(a?.tracker_user_id || a?.user_id || "").trim();
-        const aPersonId = String(a?.personal_id || a?.person_id || "").trim();
-        return (userId && aUserId && userId === aUserId) || (personId && aPersonId && personId === aPersonId);
-      }) || null
-    );
-  }, [activeOrgAssignments, selectedPerson]);
+    return personId ? activeAssignmentByPersonId.get(personId) || null : null;
+  }, [activeAssignmentByPersonId, selectedPerson]);
 
   const allowedEmails = useMemo(() => {
     const set = new Set();
@@ -171,7 +165,7 @@ export default function InvitarTracker() {
 
       if (!orgId) {
         setPeople([]);
-        setActiveOrgAssignments([]);
+        setActiveAssignaciones([]);
         setLoadingPeople(false);
         setErrMsg(
           t("inviteTracker.errors.noOrg", {
@@ -183,37 +177,58 @@ export default function InvitarTracker() {
 
       if (entitlementsLoading || isFree) {
         setPeople([]);
-        setActiveOrgAssignments([]);
+        setActiveAssignaciones([]);
         setLoadingPeople(false);
         return;
       }
 
       try {
-        const { data: peopleRows, error: peopleErr } = await supabase
-          .from("personal")
-          .select("id, org_id, nombre, apellido, email, user_id, is_deleted")
+        const now = new Date().toISOString();
+
+        const { data: assignacionesRows, error: assignacionesErr } = await supabase
+          .from("asignaciones")
+          .select("id, org_id, personal_id, user_id")
           .eq("org_id", orgId)
           .eq("is_deleted", false)
-          .limit(500);
-
-        if (peopleErr) throw peopleErr;
-
-        const { data: assignmentRows, error: assignmentErr } = await supabase
-          .from("tracker_assignments")
-          .select("id, org_id, tracker_user_id, user_id, personal_id, person_id, assignment_id, active")
-          .eq("org_id", orgId)
-          .eq("active", true)
+          .eq("estado", "activa")
+          .lte("start_time", now)
+          .gte("end_time", now)
           .limit(1000);
 
-        if (assignmentErr) throw assignmentErr;
+        if (assignacionesErr) throw assignacionesErr;
+
         if (cancelled) return;
 
-        setPeople(Array.isArray(peopleRows) ? peopleRows : []);
-        setActiveOrgAssignments(Array.isArray(assignmentRows) ? assignmentRows : []);
+        const activePersonIds = Array.from(
+          new Set(
+            (assignacionesRows || [])
+              .map((a) => String(a?.personal_id || "").trim())
+              .filter(Boolean)
+          )
+        );
+
+        let pRows = [];
+        if (activePersonIds.length > 0) {
+          const { data: peopleRows, error: pErr } = await supabase
+            .from("personal")
+            .select("id, org_id, nombre, apellido, email, user_id, is_deleted")
+            .eq("org_id", orgId)
+            .eq("is_deleted", false)
+            .in("id", activePersonIds)
+            .limit(500);
+
+          if (pErr) throw pErr;
+          pRows = peopleRows || [];
+        }
+
+        if (cancelled) return;
+
+        setPeople(Array.isArray(pRows) ? pRows : []);
+        setActiveAssignaciones(Array.isArray(assignacionesRows) ? assignacionesRows : []);
       } catch (e) {
         if (cancelled) return;
         setPeople([]);
-        setActiveOrgAssignments([]);
+        setActiveAssignaciones([]);
         setErrMsg(String(e?.message || e));
       } finally {
         if (!cancelled) setLoadingPeople(false);
@@ -268,10 +283,10 @@ export default function InvitarTracker() {
       return;
     }
 
-    if (!selectedAssignment?.assignment_id) {
+    if (!selectedAssignment?.id) {
       setErrMsg(
         t("inviteTracker.assignment.noActiveForInvite", {
-          defaultValue: "La persona seleccionada no tiene assignment_id activa para invitar como tracker.",
+          defaultValue: "La persona seleccionada no tiene asignación activa en esta organización.",
         })
       );
       return;
@@ -316,7 +331,7 @@ export default function InvitarTracker() {
         lang,
         name,
         caller_jwt,
-        assignment_id: selectedAssignment.assignment_id,
+        assignment_id: selectedAssignment.id,
       };
 
       const res = await fetch("/api/invite-tracker", {
@@ -493,7 +508,7 @@ export default function InvitarTracker() {
 
             <p className="mt-2 text-xs text-slate-600">
               {t("inviteTracker.onlyActiveAssignmentsNote", {
-                defaultValue: "Solo aparecen personas de esta organización con asignación activa real.",
+                defaultValue: "Solo aparecen personas con asignaciones vigentes (activas y dentro del período de tiempo).",
               })}
             </p>
           </div>
@@ -519,10 +534,10 @@ export default function InvitarTracker() {
 
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg || !selectedAssignment?.assignment_id}
+            disabled={busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg || !selectedAssignment?.id}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg || !selectedAssignment?.assignment_id
+              busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg || !selectedAssignment?.id
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}
