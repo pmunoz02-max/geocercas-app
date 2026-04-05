@@ -18,6 +18,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_session",
+        org_access: "none",
         debug: { message: "Missing or invalid Bearer token" }
       });
     }
@@ -43,6 +44,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "missing_org",
+        org_access: "none",
         debug: { message: "org_id not provided in request body" }
       });
     }
@@ -94,13 +96,153 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_session",
+        org_access: "none",
         debug: { message: "Invalid JWT - no sub claim found" },
         org_id
       });
     }
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
+    const jwtEmail = String(payload?.email || '').trim().toLowerCase() || null;
     let invitationState = null;
+    let orgAccess = 'none';
+    let orgAccessMeta = {
+      role: null,
+      email: null,
+      membership_id: null,
+    };
+    let invitedPersonalByUserId = null;
+    let invitedPersonalByEmail = null;
+
+    console.log('[taa] ORG ACCESS: resolving access before personal lookup', {
+      auth_user_id: trackerUserId,
+      org_id,
+    });
+
+    const { data: membership, error: membershipErr } = await supabase
+      .from("memberships")
+      .select("id, org_id, user_id, email, role, revoked_at")
+      .eq("org_id", org_id)
+      .eq("user_id", trackerUserId)
+      .is("revoked_at", null)
+      .maybeSingle();
+
+    if (membershipErr) {
+      console.log('[taa] ORG ACCESS: membership lookup error', membershipErr);
+    } else if (membership?.org_id) {
+      orgAccess = 'member';
+      orgAccessMeta = {
+        role: String(membership.role || 'member'),
+        email: String(membership.email || '').trim().toLowerCase() || null,
+        membership_id: membership.id || null,
+      };
+      console.log('[taa] ORG ACCESS: membership ok', {
+        auth_user_id: trackerUserId,
+        org_id,
+        role: orgAccessMeta.role,
+        membership_id: orgAccessMeta.membership_id,
+      });
+    }
+
+    if (orgAccess === 'none') {
+      const { data: ownerOrg, error: ownerOrgErr } = await supabase
+        .from("organizations")
+        .select("id, owner_id")
+        .eq("id", org_id)
+        .eq("owner_id", trackerUserId)
+        .maybeSingle();
+
+      if (ownerOrgErr) {
+        console.log('[taa] ORG ACCESS: owner lookup error', ownerOrgErr);
+      } else if (ownerOrg?.id) {
+        orgAccess = 'owner';
+        orgAccessMeta = {
+          role: 'owner',
+          email: jwtEmail,
+          membership_id: null,
+        };
+        console.log('[taa] ORG ACCESS: owner ok', {
+          auth_user_id: trackerUserId,
+          org_id,
+          role: orgAccessMeta.role,
+        });
+      }
+    }
+
+    if (orgAccess === 'none') {
+      const { data: invitedByUserId, error: invitedByUserIdErr } = await supabase
+        .from("personal")
+        .select("id, user_id, email, org_id")
+        .eq("org_id", org_id)
+        .eq("user_id", trackerUserId)
+        .eq("is_deleted", false)
+        .maybeSingle();
+
+      if (invitedByUserIdErr) {
+        console.log('[taa] ORG ACCESS: invited-by-user_id lookup error', invitedByUserIdErr);
+      } else if (invitedByUserId?.id) {
+        orgAccess = 'invited';
+        orgAccessMeta = {
+          role: 'invited',
+          email: String(invitedByUserId.email || '').trim().toLowerCase() || jwtEmail,
+          membership_id: null,
+        };
+        invitedPersonalByUserId = invitedByUserId;
+        console.log('[taa] ORG ACCESS: invited via personal.user_id', {
+          auth_user_id: trackerUserId,
+          org_id,
+          personal_id: invitedByUserId.id,
+        });
+      }
+    }
+
+    if (orgAccess === 'none' && jwtEmail) {
+      const { data: invitedByEmail, error: invitedByEmailErr } = await supabase
+        .from("personal")
+        .select("id, user_id, email, org_id")
+        .eq("org_id", org_id)
+        .eq("is_deleted", false)
+        .ilike("email", jwtEmail)
+        .maybeSingle();
+
+      if (invitedByEmailErr) {
+        console.log('[taa] ORG ACCESS: invited-by-email lookup error', invitedByEmailErr);
+      } else if (invitedByEmail?.id) {
+        orgAccess = 'invited';
+        orgAccessMeta = {
+          role: 'invited',
+          email: String(invitedByEmail.email || '').trim().toLowerCase() || jwtEmail,
+          membership_id: null,
+        };
+        invitedPersonalByEmail = invitedByEmail;
+        console.log('[taa] ORG ACCESS: invited via personal.email', {
+          auth_user_id: trackerUserId,
+          org_id,
+          personal_id: invitedByEmail.id,
+        });
+      }
+    }
+
+    if (orgAccess === 'none') {
+      console.log('[taa] ORG ACCESS: denied', {
+        auth_user_id: trackerUserId,
+        org_id,
+      });
+      return res.status(200).json({
+        ok: true,
+        active: false,
+        assignment: null,
+        reason: 'missing_org',
+        org_access: orgAccess,
+        debug: {
+          message: 'Authenticated user has no access to the requested org',
+          auth_user_id: trackerUserId,
+          org_id,
+        },
+      });
+    }
+
+    const hasExistingOrgAccess = orgAccess === 'owner' || orgAccess === 'member';
 
     // Bootstrap tracker assignment for authenticated user in current org.
     // Runs on every request — the RPC must be idempotent (no-op if already bootstrapped).
@@ -130,13 +272,19 @@ export default async function handler(req, res) {
 
     // Buscar personal vinculado a este tracker_user_id (auth user id) en la org actual
     console.log('[taa] PERSONAL LOOKUP by user_id', { auth_user_id: trackerUserId, org_id });
-    const { data: personal, error: personalErr } = await supabase
-      .from("personal")
-      .select("id, user_id, email, org_id")
-      .eq("user_id", trackerUserId)
-      .eq("org_id", org_id)
-      .eq("is_deleted", false)
-      .maybeSingle();
+    let personal = invitedPersonalByUserId;
+    let personalErr = null;
+    if (!personal) {
+      const personalResult = await supabase
+        .from("personal")
+        .select("id, user_id, email, org_id")
+        .eq("user_id", trackerUserId)
+        .eq("org_id", org_id)
+        .eq("is_deleted", false)
+        .maybeSingle();
+      personal = personalResult.data;
+      personalErr = personalResult.error;
+    }
 
     if (personalErr) {
       console.log("[taa] step: personal query error", personalErr);
@@ -155,20 +303,23 @@ export default async function handler(req, res) {
       console.log('[taa] PERSONAL NOT FOUND by user_id — running extended resolution', { auth_user_id: trackerUserId, org_id });
     }
     if (!personalRecord) {
-      const jwtEmail = String(payload?.email || "").trim().toLowerCase();
-
-      // Resolution pass 1: personal row with matching email.
-      // This supports both pending invitations and already-accepted invites
-      // where the auth user exists but personal.user_id has not been resolved yet.
-      if (jwtEmail) {
-        console.log('[taa] RESOLVE PASS 1: personal by email', { email: jwtEmail, org_id });
-        const { data: personalByEmail, error: emailLookupErr } = await supabase
-          .from("personal")
-          .select("id, user_id, email, org_id")
-          .eq("org_id", org_id)
-          .eq("is_deleted", false)
-          .ilike("email", jwtEmail)
-          .maybeSingle();
+      // Resolution pass 1: invitation bootstrap by email.
+      // Only applies when the user does not already have org access as owner/member.
+      if (!hasExistingOrgAccess && jwtEmail) {
+        console.log('[taa] RESOLVE PASS 1: invitation bootstrap by email', { email: jwtEmail, org_id, org_access: orgAccess });
+        let personalByEmail = invitedPersonalByEmail;
+        let emailLookupErr = null;
+        if (!personalByEmail) {
+          const emailLookupResult = await supabase
+            .from("personal")
+            .select("id, user_id, email, org_id")
+            .eq("org_id", org_id)
+            .eq("is_deleted", false)
+            .ilike("email", jwtEmail)
+            .maybeSingle();
+          personalByEmail = emailLookupResult.data;
+          emailLookupErr = emailLookupResult.error;
+        }
 
         if (emailLookupErr) {
           console.log('[taa] RESOLVE PASS 1: email lookup error', emailLookupErr);
@@ -193,7 +344,6 @@ export default async function handler(req, res) {
             console.log('[taa] RESOLVE PASS 1: linked personal via pending invitation', { personal_id: linked.id, user_id: linked.user_id });
             personalRecord = linked;
           } else {
-            // Race: another request already linked it — re-fetch
             console.log('[taa] RESOLVE PASS 1: race condition, re-fetching', { personal_id: personalByEmail.id });
             const { data: refetched } = await supabase
               .from("personal")
@@ -203,7 +353,6 @@ export default async function handler(req, res) {
             personalRecord = refetched || null;
           }
         } else if (personalByEmail && personalByEmail.user_id && personalByEmail.user_id !== trackerUserId) {
-          // Accepted by someone else — skip this row, do not overwrite
           console.log('[taa] RESOLVE PASS 1: personal email row already linked to different user (skipping)', {
             personal_id: personalByEmail.id,
             existing_user_id: personalByEmail.user_id,
@@ -217,30 +366,33 @@ export default async function handler(req, res) {
           });
           personalRecord = personalByEmail;
         }
+      } else if (hasExistingOrgAccess) {
+        console.log('[taa] RESOLVE PASS 1: skipped invitation bootstrap because user already has org access', {
+          auth_user_id: trackerUserId,
+          org_id,
+          org_access: orgAccess,
+        });
       }
 
-      // Resolution pass 2: org membership — accepted invitation or existing org membership
-      // can bootstrap a personal row idempotently even without a pending invite.
+      // Resolution pass 2: resolved org access — accepted invitation, org membership,
+      // or org ownership can bootstrap a personal row idempotently even without a pending invite.
       if (!personalRecord) {
-        console.log('[taa] RESOLVE PASS 2: personal by org membership', { auth_user_id: trackerUserId, org_id });
-        const { data: membership, error: membershipErr } = await supabase
-          .from("memberships")
-          .select("id, org_id, user_id, email, role")
-          .eq("org_id", org_id)
-          .eq("user_id", trackerUserId)
-          .maybeSingle();
-
-        if (membershipErr) {
-          console.log('[taa] RESOLVE PASS 2: membership lookup error', membershipErr);
-        } else if (membership) {
+        console.log('[taa] RESOLVE PASS 2: personal by resolved org access', {
+          auth_user_id: trackerUserId,
+          org_id,
+          access_kind: orgAccess,
+          access_role: orgAccessMeta.role,
+        });
+        if (orgAccess !== 'none') {
           if (!invitationState) {
             invitationState = 'invitation_accepted_not_bootstrapped';
           }
-          console.log('[taa] RESOLVE PASS 2: membership found, bootstrapping/syncing personal row', {
-            membership_id: membership.id,
+          console.log('[taa] RESOLVE PASS 2: org access resolved, bootstrapping/syncing personal row', {
+            access_kind: orgAccess,
+            membership_id: orgAccessMeta.membership_id,
             auth_user_id: trackerUserId,
           });
-          const memberEmail = String(membership.email || jwtEmail || "").trim().toLowerCase();
+          const memberEmail = String(orgAccessMeta.email || jwtEmail || "").trim().toLowerCase();
           const { data: created, error: createErr } = await supabase
             .from("personal")
             .insert([{
@@ -269,19 +421,19 @@ export default async function handler(req, res) {
             }
           } else if (created) {
             invitationState = 'personal_bootstrapped';
-            console.log('[taa] RESOLVE PASS 2: personal created from membership', { personal_id: created.id, email: created.email });
+            console.log('[taa] RESOLVE PASS 2: personal created from org access', { personal_id: created.id, email: created.email, org_access: orgAccess });
             personalRecord = created;
           }
         } else {
-          console.log('[taa] RESOLVE PASS 2: no membership found for user in org', { auth_user_id: trackerUserId, org_id });
+          console.log('[taa] RESOLVE PASS 2: no org access available for bootstrap', { auth_user_id: trackerUserId, org_id });
         }
       }
 
       if (!personalRecord) {
-        invitationState = 'no_invitation_found';
-        console.log('[taa] PERSONAL RESOLUTION FAILED — no personal, invitation, or membership found', {
+        console.log('[taa] PERSONAL RESOLUTION FAILED — org access exists but no personal profile was resolved', {
           auth_user_id: trackerUserId,
           org_id,
+          org_access: orgAccess,
           jwt_email: jwtEmail || null,
           invitation_state: invitationState,
         });
@@ -289,12 +441,14 @@ export default async function handler(req, res) {
           ok: true,
           active: false,
           assignment: null,
-          reason: "no_personal_found",
+          reason: "no_personal_profile",
+          org_access: orgAccess,
           invitation_state: invitationState,
           debug: {
-            message: "No personal record, pending invitation, or org membership found for this user",
+            message: "User has org access but no personal profile could be resolved for this org",
             auth_user_id: trackerUserId,
             org_id,
+            org_access: orgAccess,
             jwt_email: jwtEmail || null,
           }
         });
@@ -304,6 +458,7 @@ export default async function handler(req, res) {
     console.log('[taa] PERSONAL RESOLVED', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
     console.log('[taa] INVITATION STATE', {
       invitation_state: invitationState,
+      org_access: orgAccess,
       personal_id: personalRecord.id,
       auth_user_id: trackerUserId,
       org_id,
@@ -355,6 +510,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_active_assignment",
+        org_access: orgAccess,
         invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
@@ -373,6 +529,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_active_assignment",
+        org_access: orgAccess,
         invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
@@ -418,6 +575,7 @@ export default async function handler(req, res) {
         assignment: activeAsignacion,
         tracker_assignment: matchingTrackerAssignment || null,
         reason: "assignment_found",
+        org_access: orgAccess,
         invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
@@ -430,6 +588,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_active_assignment",
+        org_access: orgAccess,
         invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
