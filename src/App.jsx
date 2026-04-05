@@ -29,7 +29,6 @@ import Personal from "./pages/Personal.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
 import AsignacionesPage from "./pages/AsignacionesPage.jsx";
 import Reports from "./pages/Reports.jsx";
-import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
@@ -260,7 +259,7 @@ function MainAppRoutes() {
           path="/tracker"
           element={
             <RequireOrg>
-              <TrackerDashboard />
+              <TrackerGpsPage />
             </RequireOrg>
           }
         />
