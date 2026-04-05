@@ -100,6 +100,21 @@ export default async function handler(req, res) {
     }
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
+    // Bootstrap tracker assignment for current user (idempotent)
+    console.log('[taa] step: bootstrapping tracker assignment', { auth_user_id: trackerUserId, org_id });
+    const { data: bootstrapResult, error: bootstrapErr } = await supabase
+      .rpc('bootstrap_tracker_assignment_current_user', {
+        p_user_id: trackerUserId,
+        p_org_id: org_id
+      });
+
+    if (bootstrapErr) {
+      console.log("[taa] step: bootstrap error (non-fatal)", bootstrapErr);
+      // Continue anyway - bootstrap is best-effort
+    } else {
+      console.log('[taa] step: bootstrap result', bootstrapResult);
+    }
+
     // Buscar personal vinculado a este tracker_user_id (auth user id) en la org actual
     console.log('[taa] step: resolving personal record', { auth_user_id: trackerUserId, org_id });
     const { data: personal, error: personalErr } = await supabase
@@ -121,23 +136,110 @@ export default async function handler(req, res) {
     }
 
     // Only return no_personal_found if no matching personal record exists in this org for this auth user
-    if (!personal) {
-      console.log("[taa] step: no personal record found", { auth_user_id: trackerUserId, org_id });
-      return res.status(200).json({
-        ok: true,
-        active: false,
-        assignment: null,
-        reason: "no_personal_found",
-        debug: {
-          message: "No personal record exists for this user in this org",
-          auth_user_id: trackerUserId,
-          org_id
+    let personalRecord = personal;
+    if (!personalRecord) {
+      console.log("[taa] step: no personal record found, attempting to create from pending invitation", { auth_user_id: trackerUserId, org_id });
+      
+      // Try to find pending invitation for this user and org
+      const { data: pendingInvite, error: inviteErr } = await supabase
+        .from("asignaciones")
+        .select("id, personal_id, user_id, org_id, email, nombre, apellido")
+        .eq("user_id", trackerUserId)
+        .eq("org_id", org_id)
+        .is("personal_id", null)
+        .eq("is_deleted", false)
+        .maybeSingle();
+
+      if (inviteErr) {
+        console.log("[taa] step: pending invitation query error", inviteErr);
+        return res.status(200).json({
+          ok: true,
+          active: false,
+          assignment: null,
+          reason: "no_personal_found",
+          debug: {
+            message: "No personal record and failed to query pending invitations",
+            auth_user_id: trackerUserId,
+            org_id
+          }
+        });
+      }
+
+      if (pendingInvite) {
+        console.log("[taa] step: found pending invitation, creating personal record", { invite_id: pendingInvite.id });
+        
+        // Create personal record from invitation
+        const { data: createdPersonal, error: createErr } = await supabase
+          .from("personal")
+          .insert([{
+            user_id: trackerUserId,
+            org_id: org_id,
+            email: pendingInvite.email || "",
+            nombre: pendingInvite.nombre || "",
+            apellido: pendingInvite.apellido || "",
+            is_deleted: false
+          }])
+          .select("id, user_id, email, org_id")
+          .maybeSingle();
+
+        if (createErr) {
+          console.log("[taa] step: failed to create personal from invitation", createErr);
+          return res.status(200).json({
+            ok: true,
+            active: false,
+            assignment: null,
+            reason: "no_personal_found",
+            debug: {
+              message: "Pending invitation found but failed to create personal record",
+              auth_user_id: trackerUserId,
+              org_id,
+              error: createErr.message
+            }
+          });
         }
-      });
+
+        if (createdPersonal) {
+          console.log("[taa] step: successfully created personal from invitation", { personal_id: createdPersonal.id });
+          personalRecord = createdPersonal;
+        }
+      } else {
+        console.log("[taa] step: no pending invitation found either", { auth_user_id: trackerUserId, org_id });
+        return res.status(200).json({
+          ok: true,
+          active: false,
+          assignment: null,
+          reason: "no_personal_found",
+          debug: {
+            message: "No personal record or pending invitation exists for this user in this org",
+            auth_user_id: trackerUserId,
+            org_id
+          }
+        });
+      }
     }
 
-    console.log('[taa] step: resolved personal record', { personal_id: personal.id, user_id: personal.user_id, org_id: personal.org_id });
-    const personal_id = personal.id;
+    console.log('[taa] step: resolved personal record', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
+    
+    // Ensure personal.user_id is linked to auth user if not already
+    if (!personalRecord.user_id) {
+      console.log('[taa] step: linking personal.user_id to auth user', { personal_id: personalRecord.id, user_id: trackerUserId });
+      const { data: updated, error: linkErr } = await supabase
+        .from("personal")
+        .update({ user_id: trackerUserId })
+        .eq("id", personalRecord.id)
+        .eq("org_id", org_id)
+        .select("id, user_id, org_id")
+        .maybeSingle();
+
+      if (linkErr) {
+        console.log('[taa] step: failed to link personal.user_id (continuing)', linkErr);
+      } else if (updated) {
+        console.log('[taa] step: successfully linked personal.user_id', { personal_id: updated.id, user_id: updated.user_id });
+        personalRecord.user_id = updated.user_id;
+      }
+    }
+    
+    const personal_id = personalRecord.id;
 
     // Paso 1: Buscar tracker_assignments activos para este tracker_user_id y org_id
     console.log('[taa] step: tracker_assignments query start');

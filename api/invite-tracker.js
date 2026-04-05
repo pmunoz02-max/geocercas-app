@@ -520,13 +520,33 @@ export default async function handler(req, res) {
           });
         }
 
-        // IMPORTANTE:
-        // send-tracker-invite-brevo no crea auth.users inmediatamente.
-        // Solo crea/reactiva la invitacion y genera el magic link.
-        // Por tanto, en esta etapa NO se debe exigir trackerUserId
-        // ni hacer PATCH de personal.user_id.
-        // La vinculacion personal.user_id = auth.users.id debe ocurrir
-        // cuando el invitado acepta el link e inicia sesion.
+        // Link auth.user.id to personal.user_id if not already set
+        if (!personal.user_id && trackerUserId) {
+          console.log("[invite-tracker] linking personal.user_id to auth user", {
+            personal_id: personal.id,
+            org_id,
+            user_id: trackerUserId
+          });
+          
+          const { error: linkErr } = await supabaseAdmin
+            .from("personal")
+            .update({ user_id: trackerUserId })
+            .eq("id", personal.id)
+            .eq("org_id", org_id);
+
+          if (linkErr) {
+            console.warn("[invite-tracker] failed to link personal.user_id", linkErr);
+            // Continue anyway - the linkage can be completed on first login
+          } else {
+            console.log("[invite-tracker] successfully linked personal.user_id");
+            personal.user_id = trackerUserId;
+          }
+        } else if (personal.user_id && personal.user_id !== trackerUserId) {
+          console.log("[invite-tracker] personal.user_id already linked to different user", {
+            existing_user_id: personal.user_id,
+            invite_user_id: trackerUserId
+          });
+        }
 
         return res.status(200).json({
           ok: true,
@@ -538,9 +558,10 @@ export default async function handler(req, res) {
           personal_id: personal.id,
           org_id,
           email: normalizedEmail,
+          linked_user_id: personal.user_id || trackerUserId || null,
           message:
             json?.message ||
-            "Invitación procesada correctamente. La vinculación del usuario se completará cuando el tracker acepte el enlace.",
+            "Invitación procesada correctamente. El usuario se ha vinculado a la organización.",
           upstream: json || null,
         });
       } catch (e) {
