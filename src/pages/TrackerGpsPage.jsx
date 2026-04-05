@@ -1,10 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 function getAndroidBridge() {
   if (typeof window === "undefined") return null;
-  if (!window.Android) return null;
-  return window.Android;
+  return window.Android || null;
+}
+
+function resolveVisibleState(assignmentState, healthState) {
+  if (assignmentState.loading || healthState.loading) return "loading";
+
+  if (assignmentState.reason === "no_session" || assignmentState.reason === "missing_org") {
+    return "missing session/context";
+  }
+
+  if (assignmentState.error && !assignmentState.active) {
+    return "missing session/context";
+  }
+
+  if (!assignmentState.active) {
+    return "waiting for assignment";
+  }
+
+  return String(healthState.row?.status || "offline");
 }
 
 export default function TrackerGpsPage() {
@@ -26,59 +43,6 @@ export default function TrackerGpsPage() {
   const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
   const [lastSyncAt, setLastSyncAt] = useState(null);
 
-  const pageStyle = useMemo(
-    () => ({
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "16px",
-      padding: "24px",
-      background: "#ffffff",
-      color: "#111111",
-      fontFamily: "Arial, sans-serif",
-      textAlign: "center",
-      boxSizing: "border-box",
-    }),
-    []
-  );
-
-  const cardStyle = useMemo(
-    () => ({
-      width: "100%",
-      maxWidth: "760px",
-      border: "1px solid #d0d7de",
-      borderRadius: "12px",
-      padding: "20px",
-      background: "#f8f9fb",
-      boxSizing: "border-box",
-    }),
-    []
-  );
-
-  const titleStyle = useMemo(
-    () => ({
-      fontSize: "36px",
-      fontWeight: 700,
-      color: "red",
-      margin: 0,
-    }),
-    []
-  );
-
-  const rowStyle = useMemo(
-    () => ({
-      display: "flex",
-      justifyContent: "space-between",
-      gap: "16px",
-      padding: "10px 0",
-      borderBottom: "1px solid #e5e7eb",
-      fontSize: "16px",
-    }),
-    []
-  );
-
   const markMessage = useCallback((message) => {
     setLastMessage(message);
     setLastSyncAt(new Date().toLocaleTimeString());
@@ -88,20 +52,16 @@ export default function TrackerGpsPage() {
     const bridge = getAndroidBridge();
     const ready = !!bridge;
     setBridgeReady(ready);
-    return bridge;
+    return ready;
   }, []);
 
-  const resolveOrgId = useCallback(async () => {
-    const localOrg = localStorage.getItem("org_id");
+  const resolveOrgId = useCallback(async (userId) => {
+    const localOrg = String(localStorage.getItem("org_id") || "").trim();
     if (localOrg) return localOrg;
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
     if (!userId) return null;
 
-    const { data: membership } = await supabase
+    const { data: membership, error } = await supabase
       .from("memberships")
       .select("org_id, is_default, revoked_at")
       .eq("user_id", userId)
@@ -110,19 +70,21 @@ export default function TrackerGpsPage() {
       .limit(1)
       .maybeSingle();
 
-    const resolvedOrgId = membership?.org_id || null;
-    if (resolvedOrgId) {
-      localStorage.setItem("org_id", resolvedOrgId);
+    if (error) {
+      console.error("[TrackerGpsPage] memberships error", error);
+      return null;
     }
+
+    const resolvedOrgId = membership?.org_id || null;
+    if (resolvedOrgId) localStorage.setItem("org_id", resolvedOrgId);
     return resolvedOrgId;
   }, []);
 
   const mapHealthState = useCallback((status) => {
     const v = String(status || "").toLowerCase();
-    if (v === "active") return "active";
-    if (v === "stale") return "stale";
-    if (v === "restricted") return "restricted";
-    if (v === "pending_permissions") return "pending_permissions";
+    if (["active", "stale", "restricted", "pending_permissions", "offline"].includes(v)) {
+      return v;
+    }
     return "offline";
   }, []);
 
@@ -133,10 +95,12 @@ export default function TrackerGpsPage() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
       const token = session?.access_token || null;
       const trackerUserId = session?.user?.id || null;
 
       if (!token || !trackerUserId) {
+        setOrgId(null);
         setAssignmentState({
           loading: false,
           error: "no_session",
@@ -145,12 +109,12 @@ export default function TrackerGpsPage() {
           assignment: null,
         });
         setHealthState({ loading: false, error: "no_session", row: null });
-        markMessage("No hay sesión activa para consultar estado del tracker.");
+        markMessage("Falta sesión o contexto del tracker para consultar estado.");
         return;
       }
 
-      const resolvedOrgId = await resolveOrgId();
-      setOrgId(resolvedOrgId);
+      const resolvedOrgId = await resolveOrgId(trackerUserId);
+      setOrgId(resolvedOrgId || null);
 
       if (!resolvedOrgId) {
         setAssignmentState({
@@ -161,7 +125,7 @@ export default function TrackerGpsPage() {
           assignment: null,
         });
         setHealthState({ loading: false, error: "missing_org", row: null });
-        markMessage("No se pudo resolver org_id para consultar asignación/health.");
+        markMessage("No se pudo resolver la organización activa del tracker.");
         return;
       }
 
@@ -175,6 +139,7 @@ export default function TrackerGpsPage() {
       });
 
       const assignmentJson = await assignmentRes.json().catch(() => ({}));
+
       if (!assignmentRes.ok || !assignmentJson?.ok) {
         setAssignmentState({
           loading: false,
@@ -183,51 +148,65 @@ export default function TrackerGpsPage() {
           reason: assignmentJson?.reason || "assignment_error",
           assignment: null,
         });
-      } else {
-        setAssignmentState({
-          loading: false,
-          error: null,
-          active: !!assignmentJson.active,
-          reason: assignmentJson.reason || (assignmentJson.active ? "active" : "inactive"),
-          assignment: assignmentJson.assignment || null,
-        });
+        setHealthState({ loading: false, error: null, row: null });
+        markMessage("No se pudo confirmar una asignación activa desde backend.");
+        return;
       }
 
-      await supabase.rpc("rpc_refresh_tracker_health", { p_org_id: resolvedOrgId });
+      setAssignmentState({
+        loading: false,
+        error: null,
+        active: !!assignmentJson.active,
+        reason: assignmentJson.reason || (assignmentJson.active ? "active" : "waiting_for_assignment"),
+        assignment: assignmentJson.assignment || null,
+      });
+
+      if (!assignmentJson.active) {
+        setHealthState({ loading: false, error: null, row: null });
+        markMessage("Sesión válida, pero el tracker aún no tiene asignación activa.");
+        return;
+      }
+
       const statusRes = await supabase.rpc("rpc_tracker_dashboard_status", {
         p_org_id: resolvedOrgId,
       });
 
       if (statusRes.error) {
         setHealthState({ loading: false, error: statusRes.error.message, row: null });
-      } else {
-        const rows = Array.isArray(statusRes.data) ? statusRes.data : [];
-        const ownRow =
-          rows.find(
-            (row) => String(row?.tracker_user_id || row?.user_id || "") === String(trackerUserId)
-          ) || null;
-
-        if (!ownRow) {
-          setHealthState({ loading: false, error: "health_row_not_found", row: null });
-        } else {
-          setHealthState({
-            loading: false,
-            error: null,
-            row: {
-              ...ownRow,
-              status: mapHealthState(ownRow?.status),
-            },
-          });
-        }
+        markMessage("Asignación activa detectada, pero no se pudo leer tracker_health.");
+        return;
       }
 
-      markMessage("Estado sincronizado desde assignment + tracker_health.");
+      const rows = Array.isArray(statusRes.data) ? statusRes.data : [];
+      const ownRow = rows.find(
+        (row) => String(row?.tracker_user_id || row?.user_id || "") === String(trackerUserId)
+      );
+
+      if (!ownRow) {
+        setHealthState({ loading: false, error: "health_row_not_found", row: null });
+        markMessage("Asignación activa detectada, pero aún no hay fila propia en tracker_health.");
+        return;
+      }
+
+      setHealthState({
+        loading: false,
+        error: null,
+        row: {
+          ...ownRow,
+          status: mapHealthState(ownRow?.status),
+        },
+      });
+      markMessage("Estado sincronizado desde backend (assignment + tracker_health).");
     } catch (error) {
-      console.error("[TRACKER_PASSIVE] sync failed", error);
+      console.error("[TrackerGpsPage] sync failed", error);
       setAssignmentState((prev) => ({
         ...prev,
         loading: false,
         error: prev.error || "sync_failed",
+        reason:
+          prev.reason === "loading"
+            ? "sync_failed"
+            : prev.reason,
       }));
       setHealthState((prev) => ({
         ...prev,
@@ -239,7 +218,6 @@ export default function TrackerGpsPage() {
   }, [mapHealthState, markMessage, refreshBridgeState, resolveOrgId]);
 
   useEffect(() => {
-    console.log("[TRACKER_BUILD]", buildMarker);
     markMessage(`Build cargado: ${buildMarker}`);
     refreshBridgeState();
   }, [buildMarker, markMessage, refreshBridgeState]);
@@ -263,98 +241,96 @@ export default function TrackerGpsPage() {
     };
   }, [syncPassiveState]);
 
-  const backendState = useMemo(() => {
-    if (assignmentState.loading) return "loading";
-    if (assignmentState.reason === "no_session") return "missing_session";
-    if (assignmentState.reason === "missing_org") return "missing_context";
+  const visibleState = useMemo(
+    () => resolveVisibleState(assignmentState, healthState),
+    [assignmentState, healthState]
+  );
 
-    const hasValidSessionAndContext =
-      assignmentState.reason !== "no_session" &&
-      assignmentState.reason !== "missing_org";
-
-    if (!hasValidSessionAndContext) return "missing_context";
-    if (assignmentState.error) return "assignment_error";
-    if (!assignmentState.active) return "waiting for assignment";
-
-    if (healthState.loading) return "loading";
-    return healthState.row?.status || "offline";
-  }, [
-    assignmentState.active,
-    assignmentState.error,
-    assignmentState.loading,
-    assignmentState.reason,
-    healthState.loading,
-    healthState.row,
-  ]);
+  const assignmentWindow = useMemo(() => {
+    const start = assignmentState.assignment?.start_time || null;
+    const end = assignmentState.assignment?.end_time || null;
+    if (!start && !end) return "-";
+    return `${start || "-"} → ${end || "-"}`;
+  }, [assignmentState.assignment]);
 
   return (
-    <div style={pageStyle}>
-      <div style={cardStyle}>
-        <h1 style={titleStyle}>TRACKER OK 2026 FINAL</h1>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-start",
+        gap: 16,
+        padding: 24,
+        background: "#ffffff",
+        color: "#111111",
+        fontFamily: "Arial, sans-serif",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 760,
+          border: "1px solid #d0d7de",
+          borderRadius: 12,
+          padding: 20,
+          background: "#f8f9fb",
+          boxSizing: "border-box",
+        }}
+      >
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: "red", margin: 0 }}>
+          TRACKER OK 2026 FINAL
+        </h1>
 
-        <div style={{ marginTop: "20px" }}>
-          <div style={rowStyle}>
-            <strong>Build</strong>
-            <span>{buildMarker}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>Bridge Android</strong>
-            <span>{bridgeReady ? "READY" : "WAITING"}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>Estado tracking</strong>
-            <span>{backendState}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>Asignación activa</strong>
-            <span>{assignmentState.active ? "YES" : "NO"}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>Reason asignación</strong>
-            <span>{assignmentState.reason || "-"}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>Org ID</strong>
-            <span>{orgId || "-"}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>tracker_health.status</strong>
-            <span>{healthState.row?.status || "-"}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>permissions_ok</strong>
-            <span>{String(healthState.row?.permissions_ok ?? "-")}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>background_allowed</strong>
-            <span>{String(healthState.row?.background_allowed ?? "-")}</span>
-          </div>
-
-          <div style={rowStyle}>
-            <strong>service_running</strong>
-            <span>{String(healthState.row?.service_running ?? "-")}</span>
-          </div>
-
-          <div style={{ ...rowStyle, borderBottom: "none" }}>
-            <strong>Última sincronización</strong>
-            <span>{lastSyncAt || "-"}</span>
-          </div>
+        <div style={{ marginTop: 20 }}>
+          {[
+            ["Build", buildMarker],
+            ["Bridge Android", bridgeReady ? "READY" : "WAITING"],
+            ["Estado tracking", visibleState],
+            ["Asignación activa", assignmentState.active ? "YES" : "NO"],
+            ["Reason asignación", assignmentState.reason || "-"],
+            ["Org ID", orgId || "-"],
+            ["Assignment ID", assignmentState.assignment?.id || "-"],
+            ["Ventana asignación", assignmentWindow],
+            ["tracker_health.status", healthState.row?.status || "-"],
+            ["permissions_ok", String(healthState.row?.permissions_ok ?? "-")],
+            ["background_allowed", String(healthState.row?.background_allowed ?? "-")],
+            ["service_running", String(healthState.row?.service_running ?? "-")],
+            ["Última sincronización", lastSyncAt || "-"],
+          ].map(([label, value], idx, arr) => (
+            <div
+              key={label}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 16,
+                padding: "10px 0",
+                borderBottom: idx === arr.length - 1 ? "none" : "1px solid #e5e7eb",
+                fontSize: 16,
+              }}
+            >
+              <strong>{label}</strong>
+              <span style={{ textAlign: "right" }}>{value}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div style={cardStyle}>
-        <div style={{ fontSize: "18px", fontWeight: 600, marginBottom: "8px" }}>
-          Estado actual
-        </div>
-        <div style={{ fontSize: "16px", lineHeight: 1.5 }}>{lastMessage}</div>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 760,
+          border: "1px solid #d0d7de",
+          borderRadius: 12,
+          padding: 20,
+          background: "#f8f9fb",
+          boxSizing: "border-box",
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Estado actual</div>
+        <div style={{ fontSize: 16, lineHeight: 1.5 }}>{lastMessage}</div>
       </div>
     </div>
   );
