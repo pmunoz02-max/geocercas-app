@@ -13,6 +13,10 @@ function resolveVisibleState(assignmentState, healthState) {
     return "missing session/context";
   }
 
+   if (assignmentState.reason === "no_personal_profile") {
+    return "tracker personnel not configured";
+  }
+
   if (assignmentState.error && !assignmentState.active) {
     return "missing session/context";
   }
@@ -33,6 +37,7 @@ export default function TrackerGpsPage() {
     error: null,
     active: false,
     reason: "loading",
+    orgAccess: "none",
     assignment: null,
   });
   const [healthState, setHealthState] = useState({
@@ -106,6 +111,7 @@ export default function TrackerGpsPage() {
           error: "no_session",
           active: false,
           reason: "no_session",
+          orgAccess: "none",
           assignment: null,
         });
         setHealthState({ loading: false, error: "no_session", row: null });
@@ -122,6 +128,7 @@ export default function TrackerGpsPage() {
           error: "missing_org",
           active: false,
           reason: "missing_org",
+          orgAccess: "none",
           assignment: null,
         });
         setHealthState({ loading: false, error: "missing_org", row: null });
@@ -146,6 +153,7 @@ export default function TrackerGpsPage() {
           error: assignmentJson?.error || "assignment_error",
           active: false,
           reason: assignmentJson?.reason || "assignment_error",
+          orgAccess: assignmentJson?.org_access || "none",
           assignment: null,
         });
         setHealthState({ loading: false, error: null, row: null });
@@ -158,12 +166,21 @@ export default function TrackerGpsPage() {
         error: null,
         active: !!assignmentJson.active,
         reason: assignmentJson.reason || (assignmentJson.active ? "active" : "waiting_for_assignment"),
+        orgAccess: assignmentJson.org_access || "none",
         assignment: assignmentJson.assignment || null,
       });
 
       if (!assignmentJson.active) {
         setHealthState({ loading: false, error: null, row: null });
-        markMessage("Sesión válida, pero el tracker aún no tiene asignación activa.");
+        if (assignmentJson.reason === "no_personal_profile") {
+          if (assignmentJson.org_access === "owner") {
+            markMessage("You own this organization but are not configured as tracker personnel.");
+          } else {
+            markMessage("You have organization access but are not configured as tracker personnel.");
+          }
+        } else {
+          markMessage("Sesión válida, pero el tracker aún no tiene asignación activa.");
+        }
         return;
       }
 
@@ -291,6 +308,7 @@ export default function TrackerGpsPage() {
             ["Estado tracking", visibleState],
             ["Asignación activa", assignmentState.active ? "YES" : "NO"],
             ["Reason asignación", assignmentState.reason || "-"],
+            ["Org access", assignmentState.orgAccess || "-"],
             ["Org ID", orgId || "-"],
             ["Assignment ID", assignmentState.assignment?.id || "-"],
             ["Ventana asignación", assignmentWindow],
