@@ -100,6 +100,8 @@ export default async function handler(req, res) {
     }
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
+    let invitationState = null;
+
     // Bootstrap tracker assignment for authenticated user in current org.
     // Runs on every request — the RPC must be idempotent (no-op if already bootstrapped).
     console.log('[taa] step: bootstrap start', { auth_user_id: trackerUserId, org_id });
@@ -150,14 +152,16 @@ export default async function handler(req, res) {
     if (personalRecord) {
       console.log('[taa] PERSONAL FOUND by user_id', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
     } else {
-      console.log('[taa] PERSONAL NOT FOUND by user_id — attempting email-based invitation lookup', { auth_user_id: trackerUserId, org_id });
+      console.log('[taa] PERSONAL NOT FOUND by user_id — running extended resolution', { auth_user_id: trackerUserId, org_id });
     }
     if (!personalRecord) {
-
-      // Extract email from JWT payload to find a pending personal record (invited but not yet linked)
       const jwtEmail = String(payload?.email || "").trim().toLowerCase();
 
+      // Resolution pass 1: personal row with matching email.
+      // This supports both pending invitations and already-accepted invites
+      // where the auth user exists but personal.user_id has not been resolved yet.
       if (jwtEmail) {
+        console.log('[taa] RESOLVE PASS 1: personal by email', { email: jwtEmail, org_id });
         const { data: personalByEmail, error: emailLookupErr } = await supabase
           .from("personal")
           .select("id, user_id, email, org_id")
@@ -167,11 +171,13 @@ export default async function handler(req, res) {
           .maybeSingle();
 
         if (emailLookupErr) {
-          console.log('[taa] step: personal email lookup error', emailLookupErr);
-        } else if (personalByEmail) {
-          console.log('[taa] step: found personal by email, linking user_id', { personal_id: personalByEmail.id, user_id: trackerUserId });
-
-          // Link auth.user.id to this personal record
+          console.log('[taa] RESOLVE PASS 1: email lookup error', emailLookupErr);
+        } else if (personalByEmail && !personalByEmail.user_id) {
+          invitationState = 'invitation_pending';
+          console.log('[taa] RESOLVE PASS 1: found unlinked personal, syncing to auth user', {
+            personal_id: personalByEmail.id,
+            auth_user_id: trackerUserId,
+          });
           const { data: linked, error: linkErr } = await supabase
             .from("personal")
             .update({ user_id: trackerUserId })
@@ -182,15 +188,13 @@ export default async function handler(req, res) {
             .maybeSingle();
 
           if (linkErr) {
-            console.log('[taa] step: failed to link user_id to personal by email (non-fatal)', linkErr);
-            // Still use the unlinked row — linking will retry on next request
-            personalRecord = personalByEmail;
+            console.log('[taa] RESOLVE PASS 1: link error (non-fatal)', linkErr);
           } else if (linked) {
-            console.log('[taa] PERSONAL CREATED/LINKED via email', { personal_id: linked.id, user_id: linked.user_id, email: jwtEmail });
+            console.log('[taa] RESOLVE PASS 1: linked personal via pending invitation', { personal_id: linked.id, user_id: linked.user_id });
             personalRecord = linked;
           } else {
-            // Row had user_id already set (race condition) — re-fetch
-            console.log('[taa] PERSONAL already linked (race), re-fetching', { personal_id: personalByEmail.id });
+            // Race: another request already linked it — re-fetch
+            console.log('[taa] RESOLVE PASS 1: race condition, re-fetching', { personal_id: personalByEmail.id });
             const { data: refetched } = await supabase
               .from("personal")
               .select("id, user_id, email, org_id")
@@ -198,18 +202,97 @@ export default async function handler(req, res) {
               .maybeSingle();
             personalRecord = refetched || null;
           }
+        } else if (personalByEmail && personalByEmail.user_id && personalByEmail.user_id !== trackerUserId) {
+          // Accepted by someone else — skip this row, do not overwrite
+          console.log('[taa] RESOLVE PASS 1: personal email row already linked to different user (skipping)', {
+            personal_id: personalByEmail.id,
+            existing_user_id: personalByEmail.user_id,
+            auth_user_id: trackerUserId,
+          });
+        } else if (personalByEmail && personalByEmail.user_id === trackerUserId) {
+          invitationState = 'invitation_accepted_not_bootstrapped';
+          console.log('[taa] RESOLVE PASS 1: invitation already accepted for this user/org; using existing personal', {
+            personal_id: personalByEmail.id,
+            auth_user_id: trackerUserId,
+          });
+          personalRecord = personalByEmail;
+        }
+      }
+
+      // Resolution pass 2: org membership — accepted invitation or existing org membership
+      // can bootstrap a personal row idempotently even without a pending invite.
+      if (!personalRecord) {
+        console.log('[taa] RESOLVE PASS 2: personal by org membership', { auth_user_id: trackerUserId, org_id });
+        const { data: membership, error: membershipErr } = await supabase
+          .from("memberships")
+          .select("id, org_id, user_id, email, role")
+          .eq("org_id", org_id)
+          .eq("user_id", trackerUserId)
+          .maybeSingle();
+
+        if (membershipErr) {
+          console.log('[taa] RESOLVE PASS 2: membership lookup error', membershipErr);
+        } else if (membership) {
+          if (!invitationState) {
+            invitationState = 'invitation_accepted_not_bootstrapped';
+          }
+          console.log('[taa] RESOLVE PASS 2: membership found, bootstrapping/syncing personal row', {
+            membership_id: membership.id,
+            auth_user_id: trackerUserId,
+          });
+          const memberEmail = String(membership.email || jwtEmail || "").trim().toLowerCase();
+          const { data: created, error: createErr } = await supabase
+            .from("personal")
+            .insert([{
+              user_id: trackerUserId,
+              org_id,
+              email: memberEmail,
+              is_deleted: false,
+            }])
+            .select("id, user_id, email, org_id")
+            .maybeSingle();
+
+          if (createErr) {
+            // Could be duplicate — re-query by user_id in case bootstrap RPC already created it
+            console.log('[taa] RESOLVE PASS 2: insert error (may be duplicate), re-querying', createErr);
+            const { data: retried } = await supabase
+              .from("personal")
+              .select("id, user_id, email, org_id")
+              .eq("user_id", trackerUserId)
+              .eq("org_id", org_id)
+              .eq("is_deleted", false)
+              .maybeSingle();
+            personalRecord = retried || null;
+            if (personalRecord) {
+              invitationState = 'personal_bootstrapped';
+              console.log('[taa] RESOLVE PASS 2: found personal on retry after insert conflict', { personal_id: personalRecord.id });
+            }
+          } else if (created) {
+            invitationState = 'personal_bootstrapped';
+            console.log('[taa] RESOLVE PASS 2: personal created from membership', { personal_id: created.id, email: created.email });
+            personalRecord = created;
+          }
+        } else {
+          console.log('[taa] RESOLVE PASS 2: no membership found for user in org', { auth_user_id: trackerUserId, org_id });
         }
       }
 
       if (!personalRecord) {
-        console.log('[taa] step: no personal record or pending invitation found', { auth_user_id: trackerUserId, org_id, jwt_email: jwtEmail || null });
+        invitationState = 'no_invitation_found';
+        console.log('[taa] PERSONAL RESOLUTION FAILED — no personal, invitation, or membership found', {
+          auth_user_id: trackerUserId,
+          org_id,
+          jwt_email: jwtEmail || null,
+          invitation_state: invitationState,
+        });
         return res.status(200).json({
           ok: true,
           active: false,
           assignment: null,
           reason: "no_personal_found",
+          invitation_state: invitationState,
           debug: {
-            message: "No personal record exists for this user in this org, and no pending invitation found by email",
+            message: "No personal record, pending invitation, or org membership found for this user",
             auth_user_id: trackerUserId,
             org_id,
             jwt_email: jwtEmail || null,
@@ -219,6 +302,12 @@ export default async function handler(req, res) {
     }
 
     console.log('[taa] PERSONAL RESOLVED', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
+    console.log('[taa] INVITATION STATE', {
+      invitation_state: invitationState,
+      personal_id: personalRecord.id,
+      auth_user_id: trackerUserId,
+      org_id,
+    });
     
     // Ensure personal.user_id is linked to auth user if not already
     if (!personalRecord.user_id) {
@@ -266,6 +355,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_active_assignment",
+        invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
@@ -283,6 +373,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_active_assignment",
+        invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
@@ -327,6 +418,7 @@ export default async function handler(req, res) {
         assignment: activeAsignacion,
         tracker_assignment: matchingTrackerAssignment || null,
         reason: "assignment_found",
+        invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
@@ -338,6 +430,7 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: "no_active_assignment",
+        invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
         personal_id
