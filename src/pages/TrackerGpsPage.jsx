@@ -258,6 +258,12 @@ export default function TrackerGpsPage() {
     };
   }, [syncPassiveState]);
 
+  useEffect(() => {
+    if (window.AndroidBridge?.startTracking) {
+      window.AndroidBridge.startTracking();
+    }
+  }, []);
+
   const visibleState = useMemo(
     () => resolveVisibleState(assignmentState, healthState),
     [assignmentState, healthState]
