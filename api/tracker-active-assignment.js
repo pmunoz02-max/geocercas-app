@@ -100,23 +100,34 @@ export default async function handler(req, res) {
     }
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
-    // Bootstrap tracker assignment for current user (idempotent)
-    console.log('[taa] step: bootstrapping tracker assignment', { auth_user_id: trackerUserId, org_id });
+    // Bootstrap tracker assignment for authenticated user in current org.
+    // Runs on every request — the RPC must be idempotent (no-op if already bootstrapped).
+    console.log('[taa] step: bootstrap start', { auth_user_id: trackerUserId, org_id });
     const { data: bootstrapResult, error: bootstrapErr } = await supabase
       .rpc('bootstrap_tracker_assignment_current_user', {
         p_user_id: trackerUserId,
-        p_org_id: org_id
+        p_org_id: org_id,
       });
 
     if (bootstrapErr) {
-      console.log("[taa] step: bootstrap error (non-fatal)", bootstrapErr);
-      // Continue anyway - bootstrap is best-effort
+      // Non-fatal: log and continue. RPC should handle duplicate calls gracefully.
+      console.log('[taa] BOOTSTRAP ERROR (non-fatal, continuing)', {
+        code: bootstrapErr.code,
+        message: bootstrapErr.message,
+        hint: bootstrapErr.hint,
+        auth_user_id: trackerUserId,
+        org_id,
+      });
     } else {
-      console.log('[taa] step: bootstrap result', bootstrapResult);
+      console.log('[taa] BOOTSTRAP OK', {
+        auth_user_id: trackerUserId,
+        org_id,
+        result: bootstrapResult ?? '(no data returned)',
+      });
     }
 
     // Buscar personal vinculado a este tracker_user_id (auth user id) en la org actual
-    console.log('[taa] step: resolving personal record', { auth_user_id: trackerUserId, org_id });
+    console.log('[taa] PERSONAL LOOKUP by user_id', { auth_user_id: trackerUserId, org_id });
     const { data: personal, error: personalErr } = await supabase
       .from("personal")
       .select("id, user_id, email, org_id")
@@ -135,90 +146,79 @@ export default async function handler(req, res) {
       });
     }
 
-    // Only return no_personal_found if no matching personal record exists in this org for this auth user
     let personalRecord = personal;
+    if (personalRecord) {
+      console.log('[taa] PERSONAL FOUND by user_id', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
+    } else {
+      console.log('[taa] PERSONAL NOT FOUND by user_id — attempting email-based invitation lookup', { auth_user_id: trackerUserId, org_id });
+    }
     if (!personalRecord) {
-      console.log("[taa] step: no personal record found, attempting to create from pending invitation", { auth_user_id: trackerUserId, org_id });
-      
-      // Try to find pending invitation for this user and org
-      const { data: pendingInvite, error: inviteErr } = await supabase
-        .from("asignaciones")
-        .select("id, personal_id, user_id, org_id, email, nombre, apellido")
-        .eq("user_id", trackerUserId)
-        .eq("org_id", org_id)
-        .is("personal_id", null)
-        .eq("is_deleted", false)
-        .maybeSingle();
 
-      if (inviteErr) {
-        console.log("[taa] step: pending invitation query error", inviteErr);
-        return res.status(200).json({
-          ok: true,
-          active: false,
-          assignment: null,
-          reason: "no_personal_found",
-          debug: {
-            message: "No personal record and failed to query pending invitations",
-            auth_user_id: trackerUserId,
-            org_id
-          }
-        });
-      }
+      // Extract email from JWT payload to find a pending personal record (invited but not yet linked)
+      const jwtEmail = String(payload?.email || "").trim().toLowerCase();
 
-      if (pendingInvite) {
-        console.log("[taa] step: found pending invitation, creating personal record", { invite_id: pendingInvite.id });
-        
-        // Create personal record from invitation
-        const { data: createdPersonal, error: createErr } = await supabase
+      if (jwtEmail) {
+        const { data: personalByEmail, error: emailLookupErr } = await supabase
           .from("personal")
-          .insert([{
-            user_id: trackerUserId,
-            org_id: org_id,
-            email: pendingInvite.email || "",
-            nombre: pendingInvite.nombre || "",
-            apellido: pendingInvite.apellido || "",
-            is_deleted: false
-          }])
           .select("id, user_id, email, org_id")
+          .eq("org_id", org_id)
+          .eq("is_deleted", false)
+          .ilike("email", jwtEmail)
           .maybeSingle();
 
-        if (createErr) {
-          console.log("[taa] step: failed to create personal from invitation", createErr);
-          return res.status(200).json({
-            ok: true,
-            active: false,
-            assignment: null,
-            reason: "no_personal_found",
-            debug: {
-              message: "Pending invitation found but failed to create personal record",
-              auth_user_id: trackerUserId,
-              org_id,
-              error: createErr.message
-            }
-          });
-        }
+        if (emailLookupErr) {
+          console.log('[taa] step: personal email lookup error', emailLookupErr);
+        } else if (personalByEmail) {
+          console.log('[taa] step: found personal by email, linking user_id', { personal_id: personalByEmail.id, user_id: trackerUserId });
 
-        if (createdPersonal) {
-          console.log("[taa] step: successfully created personal from invitation", { personal_id: createdPersonal.id });
-          personalRecord = createdPersonal;
+          // Link auth.user.id to this personal record
+          const { data: linked, error: linkErr } = await supabase
+            .from("personal")
+            .update({ user_id: trackerUserId })
+            .eq("id", personalByEmail.id)
+            .eq("org_id", org_id)
+            .is("user_id", null)
+            .select("id, user_id, email, org_id")
+            .maybeSingle();
+
+          if (linkErr) {
+            console.log('[taa] step: failed to link user_id to personal by email (non-fatal)', linkErr);
+            // Still use the unlinked row — linking will retry on next request
+            personalRecord = personalByEmail;
+          } else if (linked) {
+            console.log('[taa] PERSONAL CREATED/LINKED via email', { personal_id: linked.id, user_id: linked.user_id, email: jwtEmail });
+            personalRecord = linked;
+          } else {
+            // Row had user_id already set (race condition) — re-fetch
+            console.log('[taa] PERSONAL already linked (race), re-fetching', { personal_id: personalByEmail.id });
+            const { data: refetched } = await supabase
+              .from("personal")
+              .select("id, user_id, email, org_id")
+              .eq("id", personalByEmail.id)
+              .maybeSingle();
+            personalRecord = refetched || null;
+          }
         }
-      } else {
-        console.log("[taa] step: no pending invitation found either", { auth_user_id: trackerUserId, org_id });
+      }
+
+      if (!personalRecord) {
+        console.log('[taa] step: no personal record or pending invitation found', { auth_user_id: trackerUserId, org_id, jwt_email: jwtEmail || null });
         return res.status(200).json({
           ok: true,
           active: false,
           assignment: null,
           reason: "no_personal_found",
           debug: {
-            message: "No personal record or pending invitation exists for this user in this org",
+            message: "No personal record exists for this user in this org, and no pending invitation found by email",
             auth_user_id: trackerUserId,
-            org_id
+            org_id,
+            jwt_email: jwtEmail || null,
           }
         });
       }
     }
 
-    console.log('[taa] step: resolved personal record', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
+    console.log('[taa] PERSONAL RESOLVED', { personal_id: personalRecord.id, user_id: personalRecord.user_id, org_id: personalRecord.org_id });
     
     // Ensure personal.user_id is linked to auth user if not already
     if (!personalRecord.user_id) {
