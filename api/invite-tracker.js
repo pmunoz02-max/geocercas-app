@@ -36,6 +36,7 @@ Este flujo garantiza que cada invitación de tracker esté asociada a un registr
 
 import crypto from "crypto";
 import fetch from "node-fetch";
+import { createClient } from "@supabase/supabase-js";
 
 // Helper: resolve user_id by email using Supabase admin API
 async function resolveUserIdByEmail({ email, serviceKey, supabaseUrl }) {
@@ -149,6 +150,13 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_KEY ||
       anonKey;
 
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+
     const caller_jwt = toStr(body.caller_jwt).trim();
     if (!caller_jwt) {
       return res.status(401).json({ ok: false, build: BUILD_TAG, error: "Missing caller_jwt" });
@@ -181,25 +189,26 @@ export default async function handler(req, res) {
     const nowIso = new Date().toISOString();
     if (assignment_id) {
       try {
-        const supabaseUrl = process.env.SUPABASE_URL;
-        // status o estado = activa
-        const url = `${supabaseUrl}/rest/v1/asignaciones?id=eq.${encodeURIComponent(assignment_id)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&or=(status.eq.activa,estado.eq.activa)&start_time=lte.${encodeURIComponent(nowIso)}&end_time=gte.${encodeURIComponent(nowIso)}&select=id,org_id,personal_id,status,estado,start_time,end_time`;
-        const resp = await fetch(url, {
-          headers: {
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
-          },
-        });
-        if (resp.ok) {
-          const rows = await resp.json();
+        const { data: rows, error: asignErr } = await supabaseAdmin
+          .from("asignaciones")
+          .select("id,org_id,personal_id,status,estado,start_time,end_time")
+          .eq("id", assignment_id)
+          .eq("org_id", org_id)
+          .eq("is_deleted", false)
+          .or("status.eq.activa,estado.eq.activa")
+          .lte("start_time", nowIso)
+          .gte("end_time", nowIso)
+          .limit(1);
+
+        if (!asignErr) {
           asignacion = rows && rows[0];
-          if (asignacion && asignacion.personal_id) {
+          if (asignacion?.personal_id) {
             personal_id = asignacion.personal_id;
           } else {
-            console.warn(`[invite-tracker] asignación inválida o sin personal_id`);
+            console.warn("[invite-tracker] asignación inválida o sin personal_id");
           }
         } else {
-          console.warn(`[invite-tracker] no se pudo consultar asignaciones`);
+          console.warn("[invite-tracker] no se pudo consultar asignaciones", asignErr);
         }
       } catch (e) {
         console.warn(`[invite-tracker] error consultando asignaciones`, e);
@@ -208,20 +217,21 @@ export default async function handler(req, res) {
     // If no assignment_id or no personal_id from assignment, try to get personal by email
     if (!personal_id) {
       try {
-        const supabaseUrl = process.env.SUPABASE_URL;
-        const url = `${supabaseUrl}/rest/v1/personal?org_id=eq.${encodeURIComponent(org_id)}&email=eq.${encodeURIComponent(email)}&is_deleted=eq.false&select=id,email`;
-        const resp = await fetch(url, {
-          headers: {
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
-          },
-        });
-        if (resp.ok) {
-          const rows = await resp.json();
+        const { data: rows, error: personalErr } = await supabaseAdmin
+          .from("personal")
+          .select("id,email")
+          .eq("org_id", org_id)
+          .eq("email", email)
+          .eq("is_deleted", false)
+          .limit(1);
+
+        if (!personalErr) {
           const personal = rows && rows[0];
-          if (personal && personal.id) {
+          if (personal?.id) {
             personal_id = personal.id;
           }
+        } else {
+          console.warn("[invite-tracker] no se pudo consultar personal por email", personalErr);
         }
       } catch (e) {
         console.warn(`[invite-tracker] error consultando personal`, e);
@@ -294,21 +304,21 @@ export default async function handler(req, res) {
       });
     }
 
-    const validateUrl =
-      `${supabaseUrl}/rest/v1/personal` +
-      `?id=eq.${encodeURIComponent(resolvedPersonalId)}` +
-      `&org_id=eq.${encodeURIComponent(org_id)}` +
-      `&select=id,email,user_id`;
+    const { data: validateRows, error: validateErr } = await supabaseAdmin
+      .from("personal")
+      .select("id,email,user_id")
+      .eq("id", resolvedPersonalId)
+      .eq("org_id", org_id)
+      .limit(1);
 
-    const validateResp = await fetch(validateUrl, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-        Accept: "application/json",
-      },
-    });
+    if (validateErr) {
+      return res.status(500).json({
+        ok: false,
+        error: "personal_validation_failed",
+        message: String(validateErr.message || validateErr),
+      });
+    }
 
-    const validateRows = await validateResp.json().catch(() => []);
     const personalRow = Array.isArray(validateRows) ? validateRows[0] : null;
 
     if (!personalRow) {
@@ -452,20 +462,16 @@ export default async function handler(req, res) {
           normalizedEmail,
         });
 
-        const candidateUrl =
-          `${supabaseUrl}/rest/v1/personal` +
-          `?id=eq.${encodeURIComponent(personal_id)}` +
-          `&select=id,email,user_id,org_id`;
+        const { data: candidateRows, error: candidateErr } = await supabaseAdmin
+          .from("personal")
+          .select("id,email,user_id,org_id")
+          .eq("id", personal_id)
+          .limit(1);
 
-        const candidateResp = await fetch(candidateUrl, {
-          headers: {
-            apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
-            Accept: "application/json",
-          },
-        });
+        if (candidateErr) {
+          throw new Error(`Failed candidate personal lookup: ${candidateErr.message || candidateErr}`);
+        }
 
-        const candidateRows = await candidateResp.json().catch(() => []);
         const candidate = Array.isArray(candidateRows) ? candidateRows[0] : null;
 
         console.log("[invite-tracker] candidateRows", {
@@ -478,31 +484,18 @@ export default async function handler(req, res) {
         if (candidate && String(candidate.org_id) === String(org_id)) {
           personal = candidate;
         } else {
-          const getUrl =
-            `${supabaseUrl}/rest/v1/personal` +
-            `?org_id=eq.${encodeURIComponent(org_id)}` +
-            `&email=eq.${encodeURIComponent(normalizedEmail)}` +
-            `&select=id,email,user_id,org_id`;
+          console.log("[invite-tracker] email fallback lookup", { normalizedEmail });
 
-          console.log("[invite-tracker] email fallback lookup", {
-            getUrl,
-            normalizedEmail,
-          });
+          const { data: rows, error: getErr } = await supabaseAdmin
+            .from("personal")
+            .select("id,email,user_id,org_id")
+            .eq("org_id", org_id)
+            .eq("email", normalizedEmail);
 
-          const getResp = await fetch(getUrl, {
-            headers: {
-              apikey: serviceKey,
-              Authorization: `Bearer ${serviceKey}`,
-              Accept: "application/json",
-            },
-          });
-
-          if (!getResp.ok) {
-            const txt = await getResp.text().catch(() => "");
-            throw new Error(`Failed to fetch personal for user_id check: ${getResp.status} ${txt}`);
+          if (getErr) {
+            throw new Error(`Failed to fetch personal for user_id check: ${getErr.message || getErr}`);
           }
 
-          const rows = await getResp.json().catch(() => []);
           console.log("[invite-tracker] email fallback rows", {
             count: Array.isArray(rows) ? rows.length : -1,
             rows: Array.isArray(rows) ? rows : [],
@@ -568,29 +561,35 @@ export default async function handler(req, res) {
     if (assignment_id && personal_id && json && json.ok !== false) {
       try {
         // Fetch assignment details to get geofence_id, start_date, end_date
-        const assignmentUrl = `${supabaseUrl}/rest/v1/asignaciones?id=eq.${encodeURIComponent(assignment_id)}&org_id=eq.${encodeURIComponent(org_id)}&select=geofence_id,start_time,end_time`;
-        const assignmentResp = await fetch(assignmentUrl, {
-          headers: { apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
-        });
-        if (assignmentResp.ok) {
-          const rows = await assignmentResp.json();
-          const assignment = rows && rows[0];
-          if (assignment && assignment.geofence_id) {
-            const trackerAssignmentsUrl = `${supabaseUrl}/rest/v1/tracker_assignments`;
-            const insertBody = [{
+        const { data: assignment, error: assignmentErr } = await supabaseAdmin
+          .from("asignaciones")
+          .select("geofence_id,start_time,end_time")
+          .eq("id", assignment_id)
+          .eq("org_id", org_id)
+          .limit(1)
+          .maybeSingle();
+
+        if (!assignmentErr && assignment?.geofence_id) {
+          const insertBody = [
+            {
               org_id,
               tracker_user_id: trackerUserId,
               geofence_id: assignment.geofence_id,
               start_date: assignment.start_time ? assignment.start_time.slice(0, 10) : null,
               end_date: assignment.end_time ? assignment.end_time.slice(0, 10) : null,
               active: true,
-            }];
-            await fetch(trackerAssignmentsUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", apikey: String(anonKey), Authorization: `Bearer ${anonKey}` },
-              body: JSON.stringify(insertBody),
-            });
+            },
+          ];
+
+          const { error: insertErr } = await supabaseAdmin
+            .from("tracker_assignments")
+            .insert(insertBody);
+
+          if (insertErr) {
+            console.warn("[invite-tracker] failed inserting tracker_assignments", insertErr);
           }
+        } else if (assignmentErr) {
+          console.warn("[invite-tracker] failed reading assignment details", assignmentErr);
         }
       } catch (e) {
         console.warn("[invite-tracker] failed to insert tracker_assignments", e);

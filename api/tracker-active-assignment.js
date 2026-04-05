@@ -1,6 +1,8 @@
 // api/tracker-active-assignment.js
 // Endpoint seguro para obtener la asignación activa del tracker
 
+import { createClient } from "@supabase/supabase-js";
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -35,7 +37,6 @@ export default async function handler(req, res) {
 
     console.log('[taa] step: reading env');
     const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     const serviceKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SECRET_KEY;
     console.log('[taa] step: env loaded', {
       hasSupabaseUrl: !!SUPABASE_URL,
@@ -49,6 +50,13 @@ export default async function handler(req, res) {
         message: 'Missing Supabase env vars',
       });
     }
+
+    const supabase = createClient(SUPABASE_URL, serviceKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
 
     console.log('[taa] step: building tracker_assignments query');
 
@@ -70,54 +78,64 @@ export default async function handler(req, res) {
     }
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
-    // Buscar personal vinculado a este tracker_user_id (auth user id) y org
-    const personalUrl = `${SUPABASE_URL}/rest/v1/personal?user_id=eq.${encodeURIComponent(trackerUserId)}&org_id=eq.${encodeURIComponent(org_id)}&is_deleted=eq.false&select=id,user_id,email`;
-    const personalResp = await fetch(personalUrl, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-      },
-    });
-    if (!personalResp.ok) {
-      console.log("[taa] step: personal fetch error", personalUrl, personalResp.status);
-      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando personal' });
+    // Buscar personal vinculado a este tracker_user_id (auth user id) en la org actual
+    console.log('[taa] step: resolving personal record', { auth_user_id: trackerUserId, org_id });
+    const { data: personal, error: personalErr } = await supabase
+      .from("personal")
+      .select("id, user_id, email, org_id")
+      .eq("user_id", trackerUserId)
+      .eq("org_id", org_id)
+      .eq("is_deleted", false)
+      .maybeSingle();
+
+    if (personalErr) {
+      console.log("[taa] step: personal query error", personalErr);
+      return res.status(500).json({ 
+        ok: false, 
+        error: 'personal_query_failed', 
+        message: 'Error querying personal table',
+        debug: personalErr
+      });
     }
-    let personalRows = await personalResp.json();
-    let personal = personalRows && personalRows[0];
-    console.log('[taa] step: fetched personal', { trackerUserId, org_id, found: !!personal });
-    if (!personal || !personal.id || personal.user_id !== trackerUserId) {
-      console.log("[taa] step: no personal found for tracker_user_id", { org_id, trackerUserId });
+
+    // Only return no_personal_found if no matching personal record exists in this org for this auth user
+    if (!personal) {
+      console.log("[taa] step: no personal record found", { auth_user_id: trackerUserId, org_id });
       return res.status(200).json({
         ok: true,
         active: false,
         assignment: null,
         reason: "no_personal_found",
-        org_id,
-        tracker_user_id: trackerUserId
+        debug: {
+          message: "No personal record exists for this user in this org",
+          auth_user_id: trackerUserId,
+          org_id
+        }
       });
     }
+
+    console.log('[taa] step: resolved personal record', { personal_id: personal.id, user_id: personal.user_id, org_id: personal.org_id });
     const personal_id = personal.id;
 
     // Paso 1: Buscar tracker_assignments activos para este tracker_user_id y org_id
-    const trackerAssignmentsUrl = `${SUPABASE_URL}/rest/v1/tracker_assignments?org_id=eq.${encodeURIComponent(org_id)}&tracker_user_id=eq.${encodeURIComponent(trackerUserId)}&active=eq.true&select=id,org_id,tracker_user_id,activity_id,geofence_id,active,start_date,end_date,period,period_tstz,frequency_minutes`;
-    console.log('[taa] step: tracker_assignments url', trackerAssignmentsUrl);
-    console.log('[taa] step: tracker_assignments fetch start');
-    const trackerAssignmentsResp = await fetch(trackerAssignmentsUrl, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-      },
-    });
-    console.log('[taa] step: tracker_assignments fetch status', trackerAssignmentsResp.status);
-    if (!trackerAssignmentsResp.ok) {
-      console.log("[taa] step: tracker_assignments fetch error", trackerAssignmentsUrl, trackerAssignmentsResp.status);
-      const errorText = await trackerAssignmentsResp.text();
-      console.log("[taa] step: tracker_assignments error body", errorText);
+    console.log('[taa] step: tracker_assignments query start');
+    const {
+      data: trackerAssignmentsRows,
+      error: trackerAssignmentsErr,
+    } = await supabase
+      .from("tracker_assignments")
+      .select("id,org_id,tracker_user_id,activity_id,geofence_id,active,start_date,end_date,period,period_tstz,frequency_minutes")
+      .eq("org_id", org_id)
+      .eq("tracker_user_id", trackerUserId)
+      .eq("active", true);
+
+    if (trackerAssignmentsErr) {
+      console.log("[taa] step: tracker_assignments query error", trackerAssignmentsErr);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
     }
-    const trackerAssignmentsRows = await trackerAssignmentsResp.json();
+
     console.log('[taa] step: got trackerAssignmentsRows', trackerAssignmentsRows);
-    if (!trackerAssignmentsRows.length) {
+    if (!trackerAssignmentsRows?.length) {
       console.log("[taa] step: no tracker_assignments linked");
       return res.status(200).json({
         ok: true,
@@ -148,24 +166,23 @@ export default async function handler(req, res) {
     }
 
     // Paso 3: Buscar en asignaciones usando org_id, user_id, activity_id y (opcional) geofence_id
-    const nowIso = new Date().toISOString();
-    let asignacionesUrl = `${SUPABASE_URL}/rest/v1/asignaciones?org_id=eq.${encodeURIComponent(org_id)}&user_id=eq.${encodeURIComponent(trackerUserId)}&activity_id=in.(${activityIds.map(id => encodeURIComponent(id)).join(',')})`;
+    let asignacionesQuery = supabase
+      .from("asignaciones")
+      .select("*")
+      .eq("org_id", org_id)
+      .eq("user_id", trackerUserId)
+      .in("activity_id", activityIds);
+
     if (geofenceIds.length) {
-      asignacionesUrl += `&geofence_id=in.(${geofenceIds.map(id => encodeURIComponent(id)).join(',')})`;
+      asignacionesQuery = asignacionesQuery.in("geofence_id", geofenceIds);
     }
-    asignacionesUrl += `&select=*`;
-    console.log('[taa] step: asignaciones url', asignacionesUrl);
-    const asignacionesResp = await fetch(asignacionesUrl, {
-      headers: {
-        apikey: serviceKey,
-        Authorization: `Bearer ${serviceKey}`,
-      },
-    });
-    if (!asignacionesResp.ok) {
-      console.log("[taa] step: asignaciones fetch error", asignacionesUrl, asignacionesResp.status);
+
+    const { data: asignacionesRows, error: asignacionesErr } = await asignacionesQuery;
+    if (asignacionesErr) {
+      console.log("[taa] step: asignaciones query error", asignacionesErr);
       return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando asignaciones' });
     }
-    const asignacionesRows = await asignacionesResp.json();
+
     // Paso 4: Validar ventana activa y status en asignaciones
     const now = new Date();
     const activeAsignacion = (asignacionesRows || []).find(row => {
