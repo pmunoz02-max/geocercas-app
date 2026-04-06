@@ -486,116 +486,68 @@ export default async function handler(req, res) {
     
     const personal_id = personalRecord.id;
 
-    // Paso 1: Buscar tracker_assignments activos para este tracker_user_id y org_id
-    console.log('[taa] step: tracker_assignments query start');
+    // Resolver asignación activa SOLO desde tracker_assignments:
+    // org_id = request org, tracker_user_id = auth.user.id,
+    // active = true, y fecha actual dentro de [start_date, end_date].
+    const currentDate = new Date().toISOString().slice(0, 10);
+    console.log('[taa] step: tracker_assignments active-window query start', {
+      org_id,
+      tracker_user_id: trackerUserId,
+      current_date: currentDate,
+    });
+
     const {
-      data: trackerAssignmentsRows,
-      error: trackerAssignmentsErr,
+      data: trackerAssignment,
+      error: trackerAssignmentErr,
     } = await supabase
       .from("tracker_assignments")
-      .select("id,org_id,tracker_user_id,activity_id,geofence_id,active,start_date,end_date,period,period_tstz,frequency_minutes")
-      .eq("org_id", org_id)
-      .eq("tracker_user_id", trackerUserId)
-      .eq("active", true);
-
-    if (trackerAssignmentsErr) {
-      console.log("[taa] step: tracker_assignments query error", trackerAssignmentsErr);
-      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando tracker_assignments' });
-    }
-
-    console.log('[taa] step: got trackerAssignmentsRows', trackerAssignmentsRows);
-    if (!trackerAssignmentsRows?.length) {
-      console.log("[taa] step: no tracker_assignments linked");
-      return res.status(200).json({
-        ok: true,
-        active: false,
-        assignment: null,
-        reason: "no_active_assignment",
-        org_access: orgAccess,
-        invitation_state: invitationState,
-        org_id,
-        tracker_user_id: trackerUserId,
-        personal_id
-      });
-    }
-
-    // Paso 2: Tomar activity_id y geofence_id
-    const activityIds = trackerAssignmentsRows.map(row => row.activity_id).filter(Boolean);
-    const geofenceIds = trackerAssignmentsRows.map(row => row.geofence_id).filter(Boolean);
-    console.log('[taa] step: got activityIds', activityIds, 'geofenceIds', geofenceIds);
-    if (!activityIds.length) {
-      console.log('[taa] step: no activity_id in tracker_assignments');
-      return res.status(200).json({
-        ok: true,
-        active: false,
-        assignment: null,
-        reason: "no_active_assignment",
-        org_access: orgAccess,
-        invitation_state: invitationState,
-        org_id,
-        tracker_user_id: trackerUserId,
-        personal_id
-      });
-    }
-
-    // Paso 3: Buscar en asignaciones usando org_id, user_id, activity_id y (opcional) geofence_id
-    let asignacionesQuery = supabase
-      .from("asignaciones")
       .select("*")
       .eq("org_id", org_id)
-      .eq("user_id", trackerUserId)
-      .in("activity_id", activityIds);
+      .eq("tracker_user_id", trackerUserId)
+      .eq("active", true)
+      .lte("start_date", currentDate)
+      .gte("end_date", currentDate)
+      .order("start_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (geofenceIds.length) {
-      asignacionesQuery = asignacionesQuery.in("geofence_id", geofenceIds);
-    }
-
-    const { data: asignacionesRows, error: asignacionesErr } = await asignacionesQuery;
-    if (asignacionesErr) {
-      console.log("[taa] step: asignaciones query error", asignacionesErr);
-      return res.status(500).json({ ok: false, error: 'backend_error', message: 'Error consultando asignaciones' });
-    }
-
-    // Paso 4: Validar ventana activa y status en asignaciones
-    const now = new Date();
-    const activeAsignacion = (asignacionesRows || []).find(row => {
-      // status = 'active' o estado = 'activa'/'active'
-      const statusOk = (row.status && row.status.toLowerCase() === 'active') || (row.estado && ['activa','active'].includes(row.estado.toLowerCase()));
-      // NOW() entre start_time y end_time
-      const start = row.start_time ? new Date(row.start_time) : null;
-      const end = row.end_time ? new Date(row.end_time) : null;
-      const windowOk = start && end && now >= start && now <= end;
-      return statusOk && windowOk;
-    });
-    if (activeAsignacion) {
-      // Buscar el tracker_assignment correspondiente
-      const matchingTrackerAssignment = trackerAssignmentsRows.find(row => row.activity_id === activeAsignacion.activity_id && (!activeAsignacion.geofence_id || row.geofence_id === activeAsignacion.geofence_id));
-      return res.status(200).json({
-        ok: true,
-        active: true,
-        assignment: activeAsignacion,
-        tracker_assignment: matchingTrackerAssignment || null,
-        reason: "assignment_found",
-        org_access: orgAccess,
-        invitation_state: invitationState,
-        org_id,
-        tracker_user_id: trackerUserId,
-        personal_id
+    if (trackerAssignmentErr) {
+      console.log("[taa] step: tracker_assignments active-window query error", trackerAssignmentErr);
+      return res.status(500).json({
+        ok: false,
+        error: 'backend_error',
+        message: 'Error consultando tracker_assignments',
       });
-    } else {
-      console.log("[taa] step: no active assignment in asignaciones");
+    }
+
+    if (!trackerAssignment) {
+      console.log("[taa] step: no active tracker_assignment for current date");
       return res.status(200).json({
         ok: true,
         active: false,
         assignment: null,
+        tracker_assignment: null,
         reason: "no_active_assignment",
         org_access: orgAccess,
         invitation_state: invitationState,
         org_id,
         tracker_user_id: trackerUserId,
-        personal_id
+        personal_id,
       });
     }
+
+    return res.status(200).json({
+      ok: true,
+      active: true,
+      assignment: trackerAssignment,
+      tracker_assignment: trackerAssignment,
+      reason: "assignment_found",
+      org_access: orgAccess,
+      invitation_state: invitationState,
+      org_id,
+      tracker_user_id: trackerUserId,
+      personal_id,
+    });
   } catch (err) {
     console.log('[taa] catch message', err?.message || String(err));
     console.log('[taa] catch stack', err?.stack || null);
