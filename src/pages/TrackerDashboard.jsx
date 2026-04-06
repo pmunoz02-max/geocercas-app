@@ -1319,18 +1319,6 @@ export default function TrackerDashboard() {
         setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: "tracker_health" }));
         setErrorMsg("");
 
-        const refreshRes = await supabase.rpc("rpc_refresh_tracker_health", {
-          p_org_id: safeOrgId,
-        });
-
-        if (refreshRes.error) {
-          console.error("[tracker-dashboard] rpc_refresh_tracker_health error:", refreshRes.error);
-          setErrorMsg("Error refreshing tracker health.");
-          setTrackerStatusRows([]);
-          setTrackerCounts(null);
-          return;
-        }
-
         const statusRes = await supabase.rpc("rpc_tracker_dashboard_status", {
           p_org_id: safeOrgId,
         });

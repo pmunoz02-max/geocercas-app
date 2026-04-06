@@ -57,6 +57,37 @@ export default function AcceptInvite() {
       return;
     }
 
+    // Persist session to Android SharedPreferences so ForegroundLocationService
+    // can auto-start background tracking without requiring a manual button tap.
+    try {
+      const orgId = data?.org_id || "";
+
+      let accessToken = "";
+      const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
+      if (trackerAuthRaw) {
+        try {
+          const parsed = JSON.parse(trackerAuthRaw);
+          accessToken =
+            parsed?.access_token ||
+            parsed?.session?.access_token ||
+            "";
+        } catch { /* ignore */ }
+      }
+      if (!accessToken) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        accessToken = sessionData?.session?.access_token || "";
+      }
+
+      if (window.Android?.saveSession && accessToken) {
+        window.Android.saveSession(accessToken, orgId);
+      }
+      if (window.Android?.startService) {
+        window.Android.startService();
+      }
+    } catch (bridgeErr) {
+      console.warn("[AcceptInvite] Android bridge call failed", bridgeErr);
+    }
+
     navigate("/tracker-gps", { replace: true });
   };
 
