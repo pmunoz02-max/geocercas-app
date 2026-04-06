@@ -236,8 +236,34 @@ export default function TrackerGpsPage() {
 
   useEffect(() => {
     markMessage(`Build cargado: ${buildMarker}`);
-    refreshBridgeState();
-  }, [buildMarker, markMessage, refreshBridgeState]);
+
+    let attempts = 0;
+    let timeoutId = null;
+    let cancelled = false;
+
+    const checkBridge = () => {
+      if (cancelled) return;
+
+      const bridge = typeof window !== "undefined" ? window.Android : null;
+      if (bridge) {
+        setBridgeReady(true);
+        return;
+      }
+
+      setBridgeReady(false);
+      if (attempts < 10) {
+        attempts += 1;
+        timeoutId = window.setTimeout(checkBridge, 500);
+      }
+    };
+
+    checkBridge();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [buildMarker, markMessage]);
 
   useEffect(() => {
     let disposed = false;
