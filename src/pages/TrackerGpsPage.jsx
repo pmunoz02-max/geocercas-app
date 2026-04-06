@@ -10,8 +10,12 @@ function getAndroidBridge() {
 function resolveVisibleState(assignmentState, healthState) {
   if (assignmentState.loading || healthState.loading) return "loading";
 
-  if (assignmentState.reason === "no_session" || assignmentState.reason === "missing_org") {
-    return "missing session/context";
+  if (assignmentState.reason === "no_session") {
+    return "no web session yet";
+  }
+
+  if (assignmentState.reason === "missing_org") {
+    return "missing org context";
   }
 
    if (assignmentState.reason === "no_personal_profile") {
@@ -117,6 +121,17 @@ export default function TrackerGpsPage() {
     try {
       refreshBridgeState();
 
+      // Preserve org context from URL before requiring web session.
+      const queryOrgId = (() => {
+        if (typeof window === "undefined") return null;
+        const value = new URLSearchParams(window.location.search).get("org_id");
+        return String(value || "").trim() || null;
+      })();
+      if (queryOrgId) {
+        localStorage.setItem("org_id", queryOrgId);
+        setOrgId(queryOrgId);
+      }
+
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -125,7 +140,8 @@ export default function TrackerGpsPage() {
       const trackerUserId = session?.user?.id || null;
 
       if (!token || !trackerUserId) {
-        setOrgId(null);
+        const persistedOrgId = String(localStorage.getItem("org_id") || "").trim() || null;
+        setOrgId(persistedOrgId);
         setAssignmentState({
           loading: false,
           error: "no_session",
@@ -135,7 +151,11 @@ export default function TrackerGpsPage() {
           assignment: null,
         });
         setHealthState({ loading: false, error: "no_session", row: null });
-        markMessage("Falta sesión o contexto del tracker para consultar estado.");
+        markMessage(
+          persistedOrgId
+            ? "No web session yet. Organization context preserved from URL/localStorage."
+            : "No web session yet. Open tracker URL with org_id to preserve org context."
+        );
         return;
       }
 
