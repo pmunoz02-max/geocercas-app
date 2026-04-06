@@ -36,6 +36,11 @@ function resolveVisibleState(assignmentState, healthState) {
 export default function TrackerGpsPage() {
   const [buildMarker] = useState("2026-04-05-passive-status");
   const [bridgeReady, setBridgeReady] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState({
+    permissionsOk: null,
+    backgroundAllowed: null,
+    serviceRunning: null,
+  });
   const [requestedOrgId, setRequestedOrgId] = useState(null);
   const [assignmentState, setAssignmentState] = useState({
     loading: true,
@@ -64,6 +69,34 @@ export default function TrackerGpsPage() {
   const refreshBridgeState = useCallback(() => {
     let attempts = 0;
 
+    const readBridgeStatus = (bridge) => {
+      if (!bridge) {
+        setBridgeStatus({ permissionsOk: null, backgroundAllowed: null, serviceRunning: null });
+        return;
+      }
+
+      try {
+        const permissionsOk =
+          typeof bridge.isPermissionsOk === "function"
+            ? !!bridge.isPermissionsOk()
+            : typeof bridge.hasPermissions === "function"
+              ? !!bridge.hasPermissions()
+              : null;
+        const backgroundAllowed =
+          typeof bridge.isBackgroundAllowed === "function"
+            ? !!bridge.isBackgroundAllowed()
+            : null;
+        const serviceRunning =
+          typeof bridge.isServiceRunning === "function"
+            ? !!bridge.isServiceRunning()
+            : null;
+
+        setBridgeStatus({ permissionsOk, backgroundAllowed, serviceRunning });
+      } catch (e) {
+        console.error("[TrackerGpsPage] readBridgeStatus error", e);
+      }
+    };
+
     const check = () => {
       const bridge = getAndroidBridge();
       if (typeof window !== "undefined") {
@@ -73,6 +106,7 @@ export default function TrackerGpsPage() {
       if (bridge) {
         console.log("[BRIDGE] detected");
         setBridgeReady(true);
+        readBridgeStatus(bridge);
         return true;
       }
 
@@ -259,6 +293,29 @@ export default function TrackerGpsPage() {
         assignment: assignmentJson.assignment || null,
       });
 
+      const bridge = getAndroidBridge();
+      const shouldAutoStartService =
+        !!assignmentJson.active &&
+        String(assignmentJson.org_access || "").toLowerCase() === "tracker" &&
+        !!bearerToken &&
+        !!bridge;
+
+      if (shouldAutoStartService) {
+        try {
+          if (typeof bridge.startService === "function") {
+            bridge.startService();
+            console.log("[TrackerGpsPage] Android.startService() called");
+          } else if (typeof bridge.startTracking === "function") {
+            bridge.startTracking();
+            console.log("[TrackerGpsPage] Android.startTracking() called");
+          }
+        } catch (e) {
+          console.error("[TrackerGpsPage] auto start service failed", e);
+        }
+      }
+
+      refreshBridgeState();
+
       if (!assignmentJson.active) {
         setHealthState({ loading: false, error: null, row: null });
         if (assignmentJson.reason === "no_personal_profile") {
@@ -336,10 +393,30 @@ export default function TrackerGpsPage() {
       const bridge = typeof window !== "undefined" ? window.Android : null;
       if (bridge) {
         setBridgeReady(true);
+        try {
+          const permissionsOk =
+            typeof bridge.isPermissionsOk === "function"
+              ? !!bridge.isPermissionsOk()
+              : typeof bridge.hasPermissions === "function"
+                ? !!bridge.hasPermissions()
+                : null;
+          const backgroundAllowed =
+            typeof bridge.isBackgroundAllowed === "function"
+              ? !!bridge.isBackgroundAllowed()
+              : null;
+          const serviceRunning =
+            typeof bridge.isServiceRunning === "function"
+              ? !!bridge.isServiceRunning()
+              : null;
+          setBridgeStatus({ permissionsOk, backgroundAllowed, serviceRunning });
+        } catch (e) {
+          console.error("[TrackerGpsPage] initial bridge status read failed", e);
+        }
         return;
       }
 
       setBridgeReady(false);
+      setBridgeStatus({ permissionsOk: null, backgroundAllowed: null, serviceRunning: null });
       if (attempts < 10) {
         attempts += 1;
         timeoutId = window.setTimeout(checkBridge, 500);
@@ -474,9 +551,9 @@ export default function TrackerGpsPage() {
             ["Assignment ID", assignmentState.assignment?.id || "-"],
             ["Ventana asignación", assignmentWindow],
             ["tracker_health.status", healthState.row?.status || "-"],
-            ["permissions_ok", String(healthState.row?.permissions_ok ?? "-")],
-            ["background_allowed", String(healthState.row?.background_allowed ?? "-")],
-            ["service_running", String(healthState.row?.service_running ?? "-")],
+            ["permissions_ok", String(bridgeStatus.permissionsOk ?? healthState.row?.permissions_ok ?? "-")],
+            ["background_allowed", String(bridgeStatus.backgroundAllowed ?? healthState.row?.background_allowed ?? "-")],
+            ["service_running", String(bridgeStatus.serviceRunning ?? healthState.row?.service_running ?? "-")],
             ["Última sincronización", lastSyncAt || "-"],
           ].map(([label, value], idx, arr) => (
             <div
