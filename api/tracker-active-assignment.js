@@ -25,30 +25,19 @@ export default async function handler(req, res) {
     const jwt = authHeader.slice("Bearer ".length).trim();
     console.log('[taa] step: got jwt');
 
-    let org_id;
+    let requested_org_id;
     // No romper si req.body ya es objeto
     if (typeof req.body === 'object' && req.body !== null) {
-      org_id = req.body.org_id;
+      requested_org_id = req.body.requested_org_id || req.body.org_id;
     } else {
       try {
         const parsed = JSON.parse(req.body || '{}');
-        org_id = parsed.org_id;
+        requested_org_id = parsed.requested_org_id || parsed.org_id;
       } catch {
-        org_id = undefined;
+        requested_org_id = undefined;
       }
     }
-    if (!org_id) {
-      console.log('[taa] step: missing org_id');
-      return res.status(200).json({ 
-        ok: true,
-        active: false,
-        assignment: null,
-        reason: "missing_org",
-        org_access: "none",
-        debug: { message: "org_id not provided in request body" }
-      });
-    }
-    console.log('[taa] step: got org_id', org_id);
+    console.log('[taa] step: got requested_org_id', requested_org_id || null);
 
 
     console.log('[taa] step: reading env');
@@ -104,6 +93,164 @@ export default async function handler(req, res) {
     console.log('[taa] step: resolved tracker_user_id', trackerUserId);
 
     const jwtEmail = String(payload?.email || '').trim().toLowerCase() || null;
+
+    async function resolveOrgRoleForOrg(targetOrgId) {
+      if (!targetOrgId) return 'none';
+
+      const { data: membershipRole, error: membershipRoleErr } = await supabase
+        .from("memberships")
+        .select("role, org_id")
+        .eq("org_id", targetOrgId)
+        .eq("user_id", trackerUserId)
+        .is("revoked_at", null)
+        .maybeSingle();
+
+      if (membershipRoleErr) {
+        console.log('[taa] effective org role: membership lookup error', {
+          org_id: targetOrgId,
+          error: membershipRoleErr,
+        });
+      } else if (membershipRole?.org_id) {
+        return String(membershipRole.role || 'member');
+      }
+
+      const { data: ownerRole, error: ownerRoleErr } = await supabase
+        .from("organizations")
+        .select("id")
+        .eq("id", targetOrgId)
+        .eq("owner_id", trackerUserId)
+        .maybeSingle();
+
+      if (ownerRoleErr) {
+        console.log('[taa] effective org role: owner lookup error', {
+          org_id: targetOrgId,
+          error: ownerRoleErr,
+        });
+      } else if (ownerRole?.id) {
+        return 'owner';
+      }
+
+      const { data: invitedByUserIdRole, error: invitedByUserIdRoleErr } = await supabase
+        .from("personal")
+        .select("id")
+        .eq("org_id", targetOrgId)
+        .eq("user_id", trackerUserId)
+        .eq("is_deleted", false)
+        .maybeSingle();
+
+      if (invitedByUserIdRoleErr) {
+        console.log('[taa] effective org role: invited-by-user_id lookup error', {
+          org_id: targetOrgId,
+          error: invitedByUserIdRoleErr,
+        });
+      } else if (invitedByUserIdRole?.id) {
+        return 'invited';
+      }
+
+      if (jwtEmail) {
+        const { data: invitedByEmailRole, error: invitedByEmailRoleErr } = await supabase
+          .from("personal")
+          .select("id")
+          .eq("org_id", targetOrgId)
+          .eq("is_deleted", false)
+          .ilike("email", jwtEmail)
+          .maybeSingle();
+
+        if (invitedByEmailRoleErr) {
+          console.log('[taa] effective org role: invited-by-email lookup error', {
+            org_id: targetOrgId,
+            error: invitedByEmailRoleErr,
+          });
+        } else if (invitedByEmailRole?.id) {
+          return 'invited';
+        }
+      }
+
+      return 'none';
+    }
+
+    const currentDate = new Date().toISOString().slice(0, 10);
+    console.log('[taa] step: global active assignment query start', {
+      requested_org_id: requested_org_id || null,
+      tracker_user_id: trackerUserId,
+      current_date: currentDate,
+    });
+
+    const {
+      data: activeTrackerAssignment,
+      error: activeTrackerAssignmentErr,
+    } = await supabase
+      .from("tracker_assignments")
+      .select("*")
+      .eq("tracker_user_id", trackerUserId)
+      .eq("active", true)
+      .lte("start_date", currentDate)
+      .gte("end_date", currentDate)
+      .order("start_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (activeTrackerAssignmentErr) {
+      console.log('[taa] step: global active assignment query error', activeTrackerAssignmentErr);
+      return res.status(500).json({
+        ok: false,
+        error: 'backend_error',
+        message: 'Error consultando tracker_assignments',
+      });
+    }
+
+    if (activeTrackerAssignment) {
+      const effective_org_id = activeTrackerAssignment.org_id || null;
+      const requested_org_access = requested_org_id
+        ? await resolveOrgRoleForOrg(requested_org_id)
+        : 'none';
+      const effective_org_access = await resolveOrgRoleForOrg(effective_org_id);
+
+      console.log('[taa] step: global active assignment found', {
+        assignment_id: activeTrackerAssignment.id,
+        requested_org_id: requested_org_id || null,
+        effective_org_id,
+        requested_org_access,
+        effective_org_access,
+      });
+
+      return res.status(200).json({
+        ok: true,
+        active: true,
+        assignment: activeTrackerAssignment,
+        tracker_assignment: activeTrackerAssignment,
+        reason: "assignment_found",
+        requested_org_id: requested_org_id || null,
+        effective_org_id,
+        requested_org_access,
+        effective_org_access,
+        org_access: effective_org_access,
+        org_id: effective_org_id,
+        tracker_user_id: trackerUserId,
+        personal_id: null,
+        invitation_state: null,
+      });
+    }
+
+    const org_id = requested_org_id;
+    if (!org_id) {
+      console.log('[taa] step: missing requested_org_id and no active assignment found');
+      return res.status(200).json({
+        ok: true,
+        active: false,
+        assignment: null,
+        tracker_assignment: null,
+        reason: "missing_org",
+        requested_org_id: null,
+        effective_org_id: null,
+        requested_org_access: "none",
+        effective_org_access: "none",
+        org_access: "none",
+        debug: { message: "requested_org_id not provided in request body and no active assignment found" }
+      });
+    }
+    console.log('[taa] step: no active assignment found, falling back to requested org context', org_id);
+
     let invitationState = null;
     let orgAccess = 'none';
     let orgAccessMeta = {
@@ -234,7 +381,11 @@ export default async function handler(req, res) {
         active: false,
         assignment: null,
         reason: 'missing_org',
-        org_access: orgAccess,
+        org_access: orgAccessMeta.role || orgAccess,
+        requested_org_id: org_id,
+        effective_org_id: org_id,
+        requested_org_access: orgAccessMeta.role || orgAccess,
+        effective_org_access: orgAccessMeta.role || orgAccess,
         debug: {
           message: 'Authenticated user has no access to the requested org',
           auth_user_id: trackerUserId,
@@ -443,7 +594,11 @@ export default async function handler(req, res) {
           active: false,
           assignment: null,
           reason: "no_personal_profile",
-          org_access: orgAccess,
+          org_access: orgAccessMeta.role || orgAccess,
+          requested_org_id: org_id,
+          effective_org_id: org_id,
+          requested_org_access: orgAccessMeta.role || orgAccess,
+          effective_org_access: orgAccessMeta.role || orgAccess,
           invitation_state: invitationState,
           debug: {
             message: "User has org access but no personal profile could be resolved for this org",
@@ -486,64 +641,19 @@ export default async function handler(req, res) {
     
     const personal_id = personalRecord.id;
 
-    // Resolver asignación activa SOLO desde tracker_assignments:
-    // org_id = request org, tracker_user_id = auth.user.id,
-    // active = true, y fecha actual dentro de [start_date, end_date].
-    const currentDate = new Date().toISOString().slice(0, 10);
-    console.log('[taa] step: tracker_assignments active-window query start', {
-      org_id,
-      tracker_user_id: trackerUserId,
-      current_date: currentDate,
-    });
-
-    const {
-      data: trackerAssignment,
-      error: trackerAssignmentErr,
-    } = await supabase
-      .from("tracker_assignments")
-      .select("*")
-      .eq("org_id", org_id)
-      .eq("tracker_user_id", trackerUserId)
-      .eq("active", true)
-      .lte("start_date", currentDate)
-      .gte("end_date", currentDate)
-      .order("start_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (trackerAssignmentErr) {
-      console.log("[taa] step: tracker_assignments active-window query error", trackerAssignmentErr);
-      return res.status(500).json({
-        ok: false,
-        error: 'backend_error',
-        message: 'Error consultando tracker_assignments',
-      });
-    }
-
-    if (!trackerAssignment) {
-      console.log("[taa] step: no active tracker_assignment for current date");
-      return res.status(200).json({
-        ok: true,
-        active: false,
-        assignment: null,
-        tracker_assignment: null,
-        reason: "no_active_assignment",
-        org_access: orgAccess,
-        invitation_state: invitationState,
-        org_id,
-        tracker_user_id: trackerUserId,
-        personal_id,
-      });
-    }
-
+    console.log("[taa] step: no active tracker_assignment for current date");
     return res.status(200).json({
       ok: true,
-      active: true,
-      assignment: trackerAssignment,
-      tracker_assignment: trackerAssignment,
-      reason: "assignment_found",
-      org_access: orgAccess,
+      active: false,
+      assignment: null,
+      tracker_assignment: null,
+      reason: "no_active_assignment",
+      org_access: orgAccessMeta.role || orgAccess,
+      requested_org_access: orgAccessMeta.role || orgAccess,
+      effective_org_access: orgAccessMeta.role || orgAccess,
       invitation_state: invitationState,
+      requested_org_id: org_id,
+      effective_org_id: org_id,
       org_id,
       tracker_user_id: trackerUserId,
       personal_id,

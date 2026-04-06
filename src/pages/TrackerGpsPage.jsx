@@ -36,13 +36,16 @@ function resolveVisibleState(assignmentState, healthState) {
 export default function TrackerGpsPage() {
   const [buildMarker] = useState("2026-04-05-passive-status");
   const [bridgeReady, setBridgeReady] = useState(false);
-  const [orgId, setOrgId] = useState(null);
+  const [requestedOrgId, setRequestedOrgId] = useState(null);
   const [assignmentState, setAssignmentState] = useState({
     loading: true,
     error: null,
     active: false,
     reason: "loading",
     orgAccess: "none",
+    orgAccessSource: "backend:/api/tracker-active-assignment",
+    requestedOrgId: null,
+    effectiveOrgId: null,
     assignment: null,
   });
   const [healthState, setHealthState] = useState({
@@ -129,7 +132,7 @@ export default function TrackerGpsPage() {
       })();
       if (queryOrgId) {
         localStorage.setItem("org_id", queryOrgId);
-        setOrgId(queryOrgId);
+        setRequestedOrgId(queryOrgId);
       }
 
       const {
@@ -141,13 +144,16 @@ export default function TrackerGpsPage() {
 
       if (!token || !trackerUserId) {
         const persistedOrgId = String(localStorage.getItem("org_id") || "").trim() || null;
-        setOrgId(persistedOrgId);
+        setRequestedOrgId(persistedOrgId);
         setAssignmentState({
           loading: false,
           error: "no_session",
           active: false,
           reason: "no_session",
           orgAccess: "none",
+          orgAccessSource: "backend:/api/tracker-active-assignment",
+          requestedOrgId: persistedOrgId,
+          effectiveOrgId: persistedOrgId,
           assignment: null,
         });
         setHealthState({ loading: false, error: "no_session", row: null });
@@ -160,7 +166,7 @@ export default function TrackerGpsPage() {
       }
 
       const resolvedOrgId = await resolveOrgId(trackerUserId);
-      setOrgId(resolvedOrgId || null);
+      setRequestedOrgId(resolvedOrgId || null);
 
       if (!resolvedOrgId) {
         setAssignmentState({
@@ -169,6 +175,9 @@ export default function TrackerGpsPage() {
           active: false,
           reason: "missing_org",
           orgAccess: "none",
+          orgAccessSource: "backend:/api/tracker-active-assignment",
+          requestedOrgId: null,
+          effectiveOrgId: null,
           assignment: null,
         });
         setHealthState({ loading: false, error: "missing_org", row: null });
@@ -182,7 +191,7 @@ export default function TrackerGpsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ org_id: resolvedOrgId }),
+        body: JSON.stringify({ requested_org_id: resolvedOrgId }),
       });
 
       const assignmentJson = await assignmentRes.json().catch(() => ({}));
@@ -194,11 +203,26 @@ export default function TrackerGpsPage() {
           active: false,
           reason: assignmentJson?.reason || "assignment_error",
           orgAccess: assignmentJson?.org_access || "none",
+          orgAccessSource: "backend:/api/tracker-active-assignment",
+          requestedOrgId: resolvedOrgId,
+          effectiveOrgId: assignmentJson?.assignment?.org_id || assignmentJson?.org_id || resolvedOrgId,
           assignment: null,
         });
         setHealthState({ loading: false, error: null, row: null });
         markMessage("No se pudo confirmar una asignación activa desde backend.");
         return;
+      }
+
+      const effectiveOrgId =
+        assignmentJson?.assignment?.org_id ||
+        assignmentJson?.tracker_assignment?.org_id ||
+        assignmentJson?.org_id ||
+        resolvedOrgId;
+
+      setRequestedOrgId(resolvedOrgId);
+      if (effectiveOrgId) {
+        setRequestedOrgId(resolvedOrgId);
+        localStorage.setItem("org_id", effectiveOrgId);
       }
 
       setAssignmentState({
@@ -207,6 +231,9 @@ export default function TrackerGpsPage() {
         active: !!assignmentJson.active,
         reason: assignmentJson.reason || (assignmentJson.active ? "active" : "waiting_for_assignment"),
         orgAccess: assignmentJson.org_access || "none",
+        orgAccessSource: "backend:/api/tracker-active-assignment",
+        requestedOrgId: resolvedOrgId,
+        effectiveOrgId,
         assignment: assignmentJson.assignment || null,
       });
 
@@ -225,7 +252,7 @@ export default function TrackerGpsPage() {
       }
 
       const statusRes = await supabase.rpc("rpc_tracker_dashboard_status", {
-        p_org_id: resolvedOrgId,
+        p_org_id: effectiveOrgId,
       });
 
       if (statusRes.error) {
@@ -368,6 +395,11 @@ export default function TrackerGpsPage() {
     [assignmentState, healthState]
   );
 
+  const effectiveOrgId = useMemo(
+    () => assignmentState.effectiveOrgId || assignmentState.assignment?.org_id || requestedOrgId || null,
+    [assignmentState.assignment, assignmentState.effectiveOrgId, requestedOrgId]
+  );
+
   const assignmentWindow = useMemo(() => {
     const start = assignmentState.assignment?.start_time || null;
     const end = assignmentState.assignment?.end_time || null;
@@ -414,7 +446,9 @@ export default function TrackerGpsPage() {
             ["Asignación activa", assignmentState.active ? "YES" : "NO"],
             ["Reason asignación", assignmentState.reason || "-"],
             ["Org access", assignmentState.orgAccess || "-"],
-            ["Org ID", orgId || "-"],
+            ["Org access source", assignmentState.orgAccessSource || "-"],
+            ["Org ID solicitado", assignmentState.requestedOrgId || requestedOrgId || "-"],
+            ["Org ID efectivo", effectiveOrgId || "-"],
             ["Assignment ID", assignmentState.assignment?.id || "-"],
             ["Ventana asignación", assignmentWindow],
             ["tracker_health.status", healthState.row?.status || "-"],
