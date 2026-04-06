@@ -204,14 +204,17 @@ export default async function handler(req, res) {
       const requested_org_access = requested_org_id
         ? await resolveOrgRoleForOrg(requested_org_id)
         : 'none';
-      const effective_org_access = await resolveOrgRoleForOrg(effective_org_id);
+      const membership_org_access = await resolveOrgRoleForOrg(effective_org_id);
+      const operational_access = 'tracker';
 
       console.log('[taa] step: global active assignment found', {
         assignment_id: activeTrackerAssignment.id,
         requested_org_id: requested_org_id || null,
         effective_org_id,
         requested_org_access,
-        effective_org_access,
+        effective_org_access: membership_org_access,
+        membership_org_access,
+        operational_access,
       });
 
       return res.status(200).json({
@@ -223,8 +226,10 @@ export default async function handler(req, res) {
         requested_org_id: requested_org_id || null,
         effective_org_id,
         requested_org_access,
-        effective_org_access,
-        org_access: effective_org_access,
+        membership_org_access,
+        effective_org_access: membership_org_access,
+        operational_access,
+        org_access: operational_access,
         org_id: effective_org_id,
         tracker_user_id: trackerUserId,
         personal_id: null,
