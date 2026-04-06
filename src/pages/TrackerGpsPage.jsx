@@ -54,10 +54,29 @@ export default function TrackerGpsPage() {
   }, []);
 
   const refreshBridgeState = useCallback(() => {
-    const bridge = getAndroidBridge();
-    const ready = !!bridge;
-    setBridgeReady(ready);
-    return ready;
+    let attempts = 0;
+
+    const check = () => {
+      const bridge = getAndroidBridge();
+      if (typeof window !== "undefined") {
+        console.log("window.Android:", window.Android);
+      }
+
+      if (bridge) {
+        console.log("[BRIDGE] detected");
+        setBridgeReady(true);
+        return true;
+      }
+
+      if (attempts < 20) {
+        attempts++;
+        setTimeout(check, 300);
+      }
+
+      return false;
+    };
+
+    check();
   }, []);
 
   const resolveOrgId = useCallback(async (userId) => {
