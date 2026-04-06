@@ -60,6 +60,8 @@ export default function TrackerGpsPage() {
   });
   const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
   const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [permissionRequestSent, setPermissionRequestSent] = useState(false);
+
   const markMessage = useCallback((message) => {
     setLastMessage(message);
     setLastSyncAt(new Date().toLocaleTimeString());
@@ -472,6 +474,25 @@ export default function TrackerGpsPage() {
       if (timerId) window.clearTimeout(timerId);
     };
   }, [syncPassiveState]);
+
+  useEffect(() => {
+    if (!bridgeReady) return;
+    if (permissionRequestSent) return;
+    if (bridgeStatus.permissionsOk === true && bridgeStatus.backgroundAllowed === true) return;
+    if (bridgeStatus.permissionsOk === null && bridgeStatus.backgroundAllowed === null) return;
+
+    const bridge = getAndroidBridge();
+    if (!bridge) return;
+    if (typeof bridge.requestLocationPermissions !== "function") return;
+
+    setPermissionRequestSent(true);
+    try {
+      bridge.requestLocationPermissions();
+      markMessage("Solicitando permisos nativos de ubicación...");
+    } catch (e) {
+      console.error("[TrackerGpsPage] requestLocationPermissions failed", e);
+    }
+  }, [bridgeReady, bridgeStatus.backgroundAllowed, bridgeStatus.permissionsOk, markMessage, permissionRequestSent]);
 
   const effectiveOrgId = useMemo(
     () => assignmentState.effectiveOrgId || assignmentState.assignment?.org_id || requestedOrgId || null,
