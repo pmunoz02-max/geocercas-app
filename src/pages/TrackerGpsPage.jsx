@@ -476,6 +476,11 @@ export default function TrackerGpsPage() {
   }, [syncPassiveState]);
 
   useEffect(() => {
+    const isTrackerGpsRoute =
+      typeof window !== "undefined" && /^\/tracker-gps\/?$/.test(window.location.pathname || "");
+    if (!isTrackerGpsRoute) return;
+    if (typeof window === "undefined" || !window.Android) return;
+
     if (!bridgeReady) return;
     if (permissionRequestSent) return;
     if (bridgeStatus.permissionsOk === true && bridgeStatus.backgroundAllowed === true) return;
