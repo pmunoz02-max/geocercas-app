@@ -18,7 +18,7 @@ function resolveVisibleState(assignmentState, healthState) {
     return "missing org context";
   }
 
-   if (assignmentState.reason === "no_personal_profile") {
+  if (assignmentState.reason === "no_personal_profile") {
     return "tracker personnel not configured";
   }
 
@@ -60,7 +60,6 @@ export default function TrackerGpsPage() {
   });
   const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
   const [lastSyncAt, setLastSyncAt] = useState(null);
-
   const markMessage = useCallback((message) => {
     setLastMessage(message);
     setLastSyncAt(new Date().toLocaleTimeString());
@@ -71,7 +70,11 @@ export default function TrackerGpsPage() {
 
     const readBridgeStatus = (bridge) => {
       if (!bridge) {
-        setBridgeStatus({ permissionsOk: null, backgroundAllowed: null, serviceRunning: null });
+        setBridgeStatus({
+          permissionsOk: null,
+          backgroundAllowed: null,
+          serviceRunning: null,
+        });
         return;
       }
 
@@ -82,10 +85,12 @@ export default function TrackerGpsPage() {
             : typeof bridge.hasPermissions === "function"
               ? !!bridge.hasPermissions()
               : null;
+
         const backgroundAllowed =
           typeof bridge.isBackgroundAllowed === "function"
             ? !!bridge.isBackgroundAllowed()
             : null;
+
         const serviceRunning =
           typeof bridge.isServiceRunning === "function"
             ? !!bridge.isServiceRunning()
@@ -99,6 +104,7 @@ export default function TrackerGpsPage() {
 
     const check = () => {
       const bridge = getAndroidBridge();
+
       if (typeof window !== "undefined") {
         console.log("window.Android:", window.Android);
       }
@@ -110,8 +116,15 @@ export default function TrackerGpsPage() {
         return true;
       }
 
+      setBridgeReady(false);
+      setBridgeStatus({
+        permissionsOk: null,
+        backgroundAllowed: null,
+        serviceRunning: null,
+      });
+
       if (attempts < 20) {
-        attempts++;
+        attempts += 1;
         setTimeout(check, 300);
       }
 
@@ -122,6 +135,16 @@ export default function TrackerGpsPage() {
   }, []);
 
   const resolveOrgId = useCallback(async (userId) => {
+    const queryOrg =
+      typeof window !== "undefined"
+        ? String(new URLSearchParams(window.location.search).get("org_id") || "").trim()
+        : "";
+
+    if (queryOrg) {
+      localStorage.setItem("org_id", queryOrg);
+      return queryOrg;
+    }
+
     const localOrg = String(localStorage.getItem("org_id") || "").trim();
     if (localOrg) return localOrg;
 
@@ -158,12 +181,11 @@ export default function TrackerGpsPage() {
     try {
       refreshBridgeState();
 
-      // Preserve org context from URL before requiring web session.
-      const queryOrgId = (() => {
-        if (typeof window === "undefined") return null;
-        const value = new URLSearchParams(window.location.search).get("org_id");
-        return String(value || "").trim() || null;
-      })();
+      const queryOrgId =
+        typeof window !== "undefined"
+          ? String(new URLSearchParams(window.location.search).get("org_id") || "").trim() || null
+          : null;
+
       if (queryOrgId) {
         localStorage.setItem("org_id", queryOrgId);
         setRequestedOrgId(queryOrgId);
@@ -171,6 +193,7 @@ export default function TrackerGpsPage() {
 
       const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
       let trackerAuth = null;
+
       try {
         trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
       } catch {
@@ -191,6 +214,7 @@ export default function TrackerGpsPage() {
       };
 
       const bearerPayload = bearerToken ? decodeJwtPayload(bearerToken) : null;
+
       console.log("[TRACKER_FETCH_TOKEN]", {
         sub: bearerPayload?.sub,
         email: bearerPayload?.email,
@@ -200,6 +224,7 @@ export default function TrackerGpsPage() {
 
       if (!bearerToken || !trackerUserId) {
         const persistedOrgId = String(localStorage.getItem("org_id") || "").trim() || null;
+
         setRequestedOrgId(persistedOrgId);
         setAssignmentState({
           loading: false,
@@ -213,6 +238,7 @@ export default function TrackerGpsPage() {
           assignment: null,
         });
         setHealthState({ loading: false, error: "no_session", row: null });
+
         markMessage(
           persistedOrgId
             ? "No web session yet. Organization context preserved from URL/localStorage."
@@ -261,7 +287,10 @@ export default function TrackerGpsPage() {
           orgAccess: assignmentJson?.org_access || "none",
           orgAccessSource: "backend:/api/tracker-active-assignment",
           requestedOrgId: resolvedOrgId,
-          effectiveOrgId: assignmentJson?.assignment?.org_id || assignmentJson?.org_id || resolvedOrgId,
+          effectiveOrgId:
+            assignmentJson?.assignment?.org_id ||
+            assignmentJson?.org_id ||
+            resolvedOrgId,
           assignment: null,
         });
         setHealthState({ loading: false, error: null, row: null });
@@ -275,11 +304,7 @@ export default function TrackerGpsPage() {
         assignmentJson?.org_id ||
         resolvedOrgId;
 
-      setRequestedOrgId(resolvedOrgId);
-      if (effectiveOrgId) {
-        setRequestedOrgId(resolvedOrgId);
-        localStorage.setItem("org_id", effectiveOrgId);
-      }
+      localStorage.setItem("org_id", effectiveOrgId);
 
       setAssignmentState({
         loading: false,
@@ -293,31 +318,9 @@ export default function TrackerGpsPage() {
         assignment: assignmentJson.assignment || null,
       });
 
-      const bridge = getAndroidBridge();
-      const shouldAutoStartService =
-        !!assignmentJson.active &&
-        String(assignmentJson.org_access || "").toLowerCase() === "tracker" &&
-        !!bearerToken &&
-        !!bridge;
-
-      if (shouldAutoStartService) {
-        try {
-          if (typeof bridge.startService === "function") {
-            bridge.startService();
-            console.log("[TrackerGpsPage] Android.startService() called");
-          } else if (typeof bridge.startTracking === "function") {
-            bridge.startTracking();
-            console.log("[TrackerGpsPage] Android.startTracking() called");
-          }
-        } catch (e) {
-          console.error("[TrackerGpsPage] auto start service failed", e);
-        }
-      }
-
-      refreshBridgeState();
-
       if (!assignmentJson.active) {
         setHealthState({ loading: false, error: null, row: null });
+
         if (assignmentJson.reason === "no_personal_profile") {
           if (assignmentJson.org_access === "owner") {
             markMessage("You own this organization but are not configured as tracker personnel.");
@@ -335,7 +338,11 @@ export default function TrackerGpsPage() {
       });
 
       if (statusRes.error) {
-        setHealthState({ loading: false, error: statusRes.error.message, row: null });
+        setHealthState({
+          loading: false,
+          error: statusRes.error.message,
+          row: null,
+        });
         markMessage("Asignación activa detectada, pero no se pudo leer tracker_health.");
         return;
       }
@@ -346,7 +353,11 @@ export default function TrackerGpsPage() {
       );
 
       if (!ownRow) {
-        setHealthState({ loading: false, error: "health_row_not_found", row: null });
+        setHealthState({
+          loading: false,
+          error: "health_row_not_found",
+          row: null,
+        });
         markMessage("Asignación activa detectada, pero aún no hay fila propia en tracker_health.");
         return;
       }
@@ -359,23 +370,24 @@ export default function TrackerGpsPage() {
           status: mapHealthState(ownRow?.status),
         },
       });
+
       markMessage("Estado sincronizado desde backend (assignment + tracker_health).");
     } catch (error) {
       console.error("[TrackerGpsPage] sync failed", error);
+
       setAssignmentState((prev) => ({
         ...prev,
         loading: false,
         error: prev.error || "sync_failed",
-        reason:
-          prev.reason === "loading"
-            ? "sync_failed"
-            : prev.reason,
+        reason: prev.reason === "loading" ? "sync_failed" : prev.reason,
       }));
+
       setHealthState((prev) => ({
         ...prev,
         loading: false,
         error: prev.error || "sync_failed",
       }));
+
       markMessage("Error sincronizando estado pasivo del tracker.");
     }
   }, [mapHealthState, markMessage, refreshBridgeState, resolveOrgId]);
@@ -391,8 +403,10 @@ export default function TrackerGpsPage() {
       if (cancelled) return;
 
       const bridge = typeof window !== "undefined" ? window.Android : null;
+
       if (bridge) {
         setBridgeReady(true);
+
         try {
           const permissionsOk =
             typeof bridge.isPermissionsOk === "function"
@@ -400,23 +414,32 @@ export default function TrackerGpsPage() {
               : typeof bridge.hasPermissions === "function"
                 ? !!bridge.hasPermissions()
                 : null;
+
           const backgroundAllowed =
             typeof bridge.isBackgroundAllowed === "function"
               ? !!bridge.isBackgroundAllowed()
               : null;
+
           const serviceRunning =
             typeof bridge.isServiceRunning === "function"
               ? !!bridge.isServiceRunning()
               : null;
+
           setBridgeStatus({ permissionsOk, backgroundAllowed, serviceRunning });
         } catch (e) {
           console.error("[TrackerGpsPage] initial bridge status read failed", e);
         }
+
         return;
       }
 
       setBridgeReady(false);
-      setBridgeStatus({ permissionsOk: null, backgroundAllowed: null, serviceRunning: null });
+      setBridgeStatus({
+        permissionsOk: null,
+        backgroundAllowed: null,
+        serviceRunning: null,
+      });
+
       if (attempts < 10) {
         attempts += 1;
         timeoutId = window.setTimeout(checkBridge, 500);
@@ -450,95 +473,30 @@ export default function TrackerGpsPage() {
     };
   }, [syncPassiveState]);
 
-  useEffect(() => {
-    const isAndroid = typeof window.Android !== "undefined";
-
-    if (!isAndroid) return;
-
-    let btn = document.getElementById("startTrackingBtn");
-    if (!btn) {
-      btn = document.createElement("button");
-      btn.id = "startTrackingBtn";
-      btn.innerText = "START TRACKING";
-
-      Object.assign(btn.style, {
-        position: "fixed",
-        bottom: "20px",
-        left: "20px",
-        zIndex: "999999",
-        padding: "14px",
-        background: "#d32f2f",
-        color: "white",
-        fontSize: "16px",
-        borderRadius: "10px",
-        border: "none",
-      });
-
-      document.body.appendChild(btn);
-    }
-
-    btn.onclick = () => {
-      try {
-        const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
-        let trackerAuth = null;
-        try {
-          trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
-        } catch {
-          trackerAuth = null;
-        }
-
-        const token =
-          trackerAuth?.access_token ||
-          trackerAuth?.session?.access_token ||
-          null;
-
-        const effectiveOrgIdForBridge = String(
-          localStorage.getItem("org_id") || assignmentState.effectiveOrgId || requestedOrgId || ""
-        ).trim();
-
-        if (!token) {
-          alert("Missing tracker token in geocercas-tracker-auth");
-          return;
-        }
-
-        if (!effectiveOrgIdForBridge) {
-          alert("Missing effective org context");
-          return;
-        }
-
-        if (window.Android?.saveSession) {
-          window.Android.saveSession(token, effectiveOrgIdForBridge);
-        }
-
-        if (window.Android?.startTracking) {
-          window.Android.startTracking();
-        } else if (window.Android?.startService) {
-          window.Android.startService();
-        } else {
-          alert("Android bridge not available");
-        }
-      } catch (e) {
-        alert("Error: " + e);
-      }
-    };
-  }, [assignmentState.effectiveOrgId, requestedOrgId]);
-
-  const visibleState = useMemo(
-    () => resolveVisibleState(assignmentState, healthState),
-    [assignmentState, healthState]
-  );
-
   const effectiveOrgId = useMemo(
     () => assignmentState.effectiveOrgId || assignmentState.assignment?.org_id || requestedOrgId || null,
     [assignmentState.assignment, assignmentState.effectiveOrgId, requestedOrgId]
   );
 
   const assignmentWindow = useMemo(() => {
-    const start = assignmentState.assignment?.start_time || null;
-    const end = assignmentState.assignment?.end_time || null;
+    const start =
+      assignmentState.assignment?.start_time ||
+      assignmentState.assignment?.start_date ||
+      null;
+
+    const end =
+      assignmentState.assignment?.end_time ||
+      assignmentState.assignment?.end_date ||
+      null;
+
     if (!start && !end) return "-";
     return `${start || "-"} → ${end || "-"}`;
   }, [assignmentState.assignment]);
+
+  const visibleState = useMemo(
+    () => resolveVisibleState(assignmentState, healthState),
+    [assignmentState, healthState]
+  );
 
   return (
     <div
@@ -606,6 +564,8 @@ export default function TrackerGpsPage() {
             </div>
           ))}
         </div>
+
+
       </div>
 
       <div
