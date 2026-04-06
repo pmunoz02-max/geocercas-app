@@ -455,29 +455,65 @@ export default function TrackerGpsPage() {
 
     if (!isAndroid) return;
 
-    if (document.getElementById("startTrackingBtn")) return;
+    let btn = document.getElementById("startTrackingBtn");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.id = "startTrackingBtn";
+      btn.innerText = "START TRACKING";
 
-    const btn = document.createElement("button");
-    btn.id = "startTrackingBtn";
-    btn.innerText = "START TRACKING";
+      Object.assign(btn.style, {
+        position: "fixed",
+        bottom: "20px",
+        left: "20px",
+        zIndex: "999999",
+        padding: "14px",
+        background: "#d32f2f",
+        color: "white",
+        fontSize: "16px",
+        borderRadius: "10px",
+        border: "none",
+      });
 
-    Object.assign(btn.style, {
-      position: "fixed",
-      bottom: "20px",
-      left: "20px",
-      zIndex: "999999",
-      padding: "14px",
-      background: "#d32f2f",
-      color: "white",
-      fontSize: "16px",
-      borderRadius: "10px",
-      border: "none",
-    });
+      document.body.appendChild(btn);
+    }
 
     btn.onclick = () => {
       try {
+        const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
+        let trackerAuth = null;
+        try {
+          trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
+        } catch {
+          trackerAuth = null;
+        }
+
+        const token =
+          trackerAuth?.access_token ||
+          trackerAuth?.session?.access_token ||
+          null;
+
+        const effectiveOrgIdForBridge = String(
+          localStorage.getItem("org_id") || assignmentState.effectiveOrgId || requestedOrgId || ""
+        ).trim();
+
+        if (!token) {
+          alert("Missing tracker token in geocercas-tracker-auth");
+          return;
+        }
+
+        if (!effectiveOrgIdForBridge) {
+          alert("Missing effective org context");
+          return;
+        }
+
+        if (window.Android?.saveSession) {
+          window.Android.saveSession(token, effectiveOrgIdForBridge);
+        }
+
         if (window.Android?.startTracking) {
           window.Android.startTracking();
+        } else if (window.Android?.startService) {
+          window.Android.startService();
         } else {
           alert("Android bridge not available");
         }
@@ -485,9 +521,7 @@ export default function TrackerGpsPage() {
         alert("Error: " + e);
       }
     };
-
-    document.body.appendChild(btn);
-  }, []);
+  }, [assignmentState.effectiveOrgId, requestedOrgId]);
 
   const visibleState = useMemo(
     () => resolveVisibleState(assignmentState, healthState),
