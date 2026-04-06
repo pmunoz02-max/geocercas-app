@@ -11,6 +11,7 @@ import { supabase, getMemoryAccessToken } from "../lib/supabaseClient";
 // ✅ Tabla canónica única
 const POSITIONS_TABLE = "tracker_positions";
 const TRACKER_ACTIVE_PING_WINDOW_MS = 5 * 60 * 1000;
+const SEND_POSITION_PROXY_URL = "/api/send-position";
 
 // EDGE_URL puede venir como:
 // - URL completa a la function (recomendado): https://...supabase.co/functions/v1/send_position
@@ -32,6 +33,10 @@ function buildEdgeUrl(raw) {
 }
 
 const EDGE_URL = buildEdgeUrl(RAW_EDGE_URL);
+
+function isDirectSupabaseUrl(url) {
+  return /https?:\/\/[^/]*supabase\.co\//i.test(String(url || ""));
+}
 
 function getTrackerActivePingKey(orgId, userId) {
   return `tracker_ping_${orgId}_${userId}`;
@@ -113,10 +118,9 @@ async function getSessionAccessToken() {
  *  - at (Date | string | null) – timestamp de la posición
  */
 export async function upsertPositionCompat(payload) {
-  if (!EDGE_URL) {
-    throw new Error(
-      "EDGE_URL no configurado (VITE_EDGE_SEND_POSITION o VITE_SUPABASE_FUNCTIONS_URL). Revisa tu .env.local"
-    );
+  const targetUrl = SEND_POSITION_PROXY_URL || EDGE_URL;
+  if (!targetUrl) {
+    throw new Error("send-position target URL no configurado");
   }
 
   const {
@@ -151,12 +155,18 @@ export async function upsertPositionCompat(payload) {
     at: at instanceof Date ? at.toISOString() : at || new Date().toISOString(),
   };
 
-  const res = await fetch(EDGE_URL, {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  if (isDirectSupabaseUrl(targetUrl)) {
+    headers.apikey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+  }
+
+  const res = await fetch(targetUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers,
     body: JSON.stringify(body),
   });
 
