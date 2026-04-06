@@ -135,14 +135,36 @@ export default function TrackerGpsPage() {
         setRequestedOrgId(queryOrgId);
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+      const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
+      let trackerAuth = null;
+      try {
+        trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
+      } catch {
+        trackerAuth = null;
+      }
 
-      const token = session?.access_token || null;
-      const trackerUserId = session?.user?.id || null;
+      const bearerToken =
+        trackerAuth?.access_token ||
+        trackerAuth?.session?.access_token ||
+        null;
 
-      if (!token || !trackerUserId) {
+      const decodeJwtPayload = (token) => {
+        try {
+          return JSON.parse(atob(token.split(".")[1]));
+        } catch {
+          return null;
+        }
+      };
+
+      const bearerPayload = bearerToken ? decodeJwtPayload(bearerToken) : null;
+      console.log("[TRACKER_FETCH_TOKEN]", {
+        sub: bearerPayload?.sub,
+        email: bearerPayload?.email,
+      });
+
+      const trackerUserId = bearerPayload?.sub || null;
+
+      if (!bearerToken || !trackerUserId) {
         const persistedOrgId = String(localStorage.getItem("org_id") || "").trim() || null;
         setRequestedOrgId(persistedOrgId);
         setAssignmentState({
@@ -189,7 +211,7 @@ export default function TrackerGpsPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({ requested_org_id: resolvedOrgId }),
       });
