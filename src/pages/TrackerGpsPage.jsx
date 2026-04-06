@@ -3,7 +3,8 @@ import { supabase } from "../lib/supabaseClient";
 
 function getAndroidBridge() {
   if (typeof window === "undefined") return null;
-  return window.Android || null;
+  console.log("ANDROID BRIDGE:", window["Android"]);
+  return window["Android"] || null;
 }
 
 function resolveVisibleState(assignmentState, healthState) {
