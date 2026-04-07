@@ -57,25 +57,26 @@ export default function AcceptInvite() {
       return;
     }
 
-    // Persist session to Android SharedPreferences so ForegroundLocationService
-    // can auto-start background tracking without requiring a manual button tap.
+    // Persist tracker session/org locally so tracker-gps can boot immediately
+    // without re-resolving from email flow.
     try {
-      const orgId = data?.org_id || "";
+      const orgId = String(data?.org_id || "").trim();
 
-      let accessToken = "";
-      const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
-      if (trackerAuthRaw) {
-        try {
-          const parsed = JSON.parse(trackerAuthRaw);
-          accessToken =
-            parsed?.access_token ||
-            parsed?.session?.access_token ||
-            "";
-        } catch { /* ignore */ }
-      }
-      if (!accessToken) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        accessToken = sessionData?.session?.access_token || "";
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentSession = sessionData?.session || null;
+
+      const accessToken = String(currentSession?.access_token || "").trim();
+      const refreshToken = String(currentSession?.refresh_token || "").trim();
+
+      const trackerAuthPayload = {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        session: currentSession,
+      };
+
+      localStorage.setItem("geocercas-tracker-auth", JSON.stringify(trackerAuthPayload));
+      if (orgId) {
+        localStorage.setItem("org_id", orgId);
       }
 
       if (window.Android?.saveSession && accessToken) {
@@ -88,7 +89,12 @@ export default function AcceptInvite() {
       console.warn("[AcceptInvite] Android bridge call failed", bridgeErr);
     }
 
-    navigate("/tracker-gps", { replace: true });
+    const resolvedOrgId = String(data?.org_id || localStorage.getItem("org_id") || "").trim();
+    const target = resolvedOrgId
+      ? `/tracker-gps?org_id=${encodeURIComponent(resolvedOrgId)}`
+      : "/tracker-gps";
+
+    navigate(target, { replace: true });
   };
 
   return (
