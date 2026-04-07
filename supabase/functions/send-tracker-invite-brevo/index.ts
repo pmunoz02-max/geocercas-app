@@ -155,9 +155,22 @@ function defaultEmailCopy(lang: string): EmailCopy {
   };
 }
 
-function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string) {
+function buildTrackerNextPath(orgId: string, lang: string, accessToken?: string) {
+  const qs = new URLSearchParams({
+    org_id: String(orgId || ""),
+    lang: String(lang || "es"),
+  });
+
+  if (accessToken && String(accessToken).trim()) {
+    qs.set("access_token", String(accessToken).trim());
+  }
+
+  return `/tracker-gps?${qs.toString()}`;
+}
+
+function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string, accessToken?: string) {
   const base = appPreviewUrl.replace(/\/$/, "");
-  const next = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang)}`;
+  const next = buildTrackerNextPath(orgId, lang, accessToken);
   return `${base}/auth/callback?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(next)}`;
 }
 
@@ -661,7 +674,7 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
-    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang);
+    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang, userJwt);
 
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
@@ -754,12 +767,14 @@ serve(async (req) => {
       });
     }
 
+    const trackerNext = buildTrackerNextPath(org_id, lang, userJwt);
+
     const actionLink =
       `${APP_PREVIEW_URL}/auth/callback` +
       `?token_hash=${encodeURIComponent(tokenHash)}` +
       `&type=magiclink` +
       `&lang=${encodeURIComponent(lang)}` +
-      `&next=${encodeURIComponent(`/tracker-gps?org_id=${org_id}&lang=${lang}`)}`;
+      `&next=${encodeURIComponent(trackerNext)}`;
 
     try {
       console.error("[metrics] invite_sent reached", {
