@@ -84,6 +84,38 @@ function isUuid(v) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
+function hasForbiddenMagicMarkers(url) {
+  const s = toStr(url).toLowerCase();
+  if (!s) return false;
+  return (
+    s.includes("/auth/callback") ||
+    s.includes("token_hash") ||
+    s.includes("magiclink") ||
+    s.includes("type=magiclink")
+  );
+}
+
+function isDirectTrackerInviteUrl(url) {
+  const s = toStr(url).trim();
+  if (!s) return false;
+
+  try {
+    const u = new URL(s);
+    return u.pathname === "/tracker-accept" && u.searchParams.has("org_id") && u.searchParams.has("access_token");
+  } catch {
+    return false;
+  }
+}
+
+function pickInviteUrlFromUpstream(json) {
+  const candidates = [json?.inviteUrl, json?.action_link, json?.redirect_to];
+  for (const c of candidates) {
+    const s = toStr(c).trim();
+    if (s) return s;
+  }
+  return "";
+}
+
 export default async function handler(req, res) {
   try {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -434,6 +466,40 @@ export default async function handler(req, res) {
       json = { raw: text };
     }
 
+    const upstreamInviteUrl = pickInviteUrlFromUpstream(json);
+
+    if (upstream.ok) {
+      if (!upstreamInviteUrl) {
+        return res.status(502).json({
+          ok: false,
+          build: BUILD_TAG,
+          error: "missing_invite_url_from_upstream",
+          message: "Upstream invite flow did not return inviteUrl/action_link/redirect_to",
+          edge_status: upstream.status,
+        });
+      }
+
+      if (hasForbiddenMagicMarkers(upstreamInviteUrl)) {
+        return res.status(502).json({
+          ok: false,
+          build: BUILD_TAG,
+          error: "forbidden_magiclink_pattern_in_upstream_invite_url",
+          message: "Tracker invite URL must not contain auth/callback, token_hash, or magiclink markers",
+          invite_url_preview: upstreamInviteUrl.slice(0, 220),
+        });
+      }
+
+      if (!isDirectTrackerInviteUrl(upstreamInviteUrl)) {
+        return res.status(502).json({
+          ok: false,
+          build: BUILD_TAG,
+          error: "invalid_tracker_invite_url_shape",
+          message: "Tracker invite URL must be direct /tracker-accept with org_id and access_token",
+          invite_url_preview: upstreamInviteUrl.slice(0, 220),
+        });
+      }
+    }
+
     // After creating tracker, always resolve tracker_user_id (from invite or existing user)
     if (personal_id && json && json.ok !== false) {
       let trackerUserId = json.user_id || json.tracker_user_id || null;
@@ -559,6 +625,9 @@ export default async function handler(req, res) {
           org_id,
           email: normalizedEmail,
           linked_user_id: personal.user_id || trackerUserId || null,
+          invite_url: upstreamInviteUrl || null,
+          action_link: upstreamInviteUrl || null,
+          redirect_to: upstreamInviteUrl || null,
           message:
             json?.message ||
             "Invitación procesada correctamente. El usuario se ha vinculado a la organización.",
@@ -620,6 +689,9 @@ export default async function handler(req, res) {
 
     return res.status(upstream.status).json({
       ...(json || {}),
+      invite_url: upstreamInviteUrl || null,
+      action_link: upstreamInviteUrl || null,
+      redirect_to: upstreamInviteUrl || null,
       _proxy: {
         ok: upstream.ok,
         build: BUILD_TAG,
