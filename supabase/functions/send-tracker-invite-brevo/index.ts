@@ -1,13 +1,15 @@
-// NOTE (2026-03-28): Assignment query is now optional and no longer blocks the invite flow.
-// If the assignment lookup fails or returns empty, the invite is still sent and a warning is logged.
+// NOTE (2026-04-07):
+// Tracker invite flow must NEVER use Supabase magic links.
+// This function builds a direct tracker URL with access_token and sends it only through Brevo.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 console.log("🔥 send-tracker-invite-brevo loaded");
 
-const BUILD_TAG = "send-tracker-invite-brevo-v31_HANDLER_CLEAN_20260329";
+const BUILD_TAG = "send-tracker-invite-brevo-v32_DIRECT_URL_ONLY_20260407";
 const SEND_COOLDOWN_SECONDS = 180;
+const TRACKER_INVITE_LOG_MARKER = "TRACKER_INVITE_EDGE_2026_04_07";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -118,7 +120,7 @@ function defaultEmailCopy(lang: string): EmailCopy {
       intro2: "Ce lien ouvrira le Tracker dans la bonne organisation.",
       acceptPrompt:
         "Pour accepter cette invitation, cliquez sur le bouton ci-dessous et connectez-vous avec cet e-mail.",
-      expires: "Ce lien expire dans 7 jours.",
+      expires: "Ce lien expire en 7 jours.",
       cta: "Ouvrir le GPS Tracker",
       copyLink: "Si vous ne pouvez pas cliquer, copiez et collez ce lien :",
       footer1:
@@ -179,6 +181,49 @@ function extractBrevoMessageId(raw: string): string {
   return m?.[1] ? String(m[1]) : "";
 }
 
+function buildDirectTrackerInviteUrl(params: {
+  siteUrl: string;
+  orgId: string;
+  lang: string;
+  accessToken: string;
+}) {
+  const siteUrl = params.siteUrl.replace(/\/$/, "");
+  const url =
+    `${siteUrl}/tracker-accept` +
+    `?org_id=${encodeURIComponent(params.orgId)}` +
+    `&lang=${encodeURIComponent(params.lang || "es")}` +
+    `&access_token=${encodeURIComponent(params.accessToken)}`;
+
+  return url;
+}
+
+function assertDirectTrackerInviteUrl(inviteUrl: string) {
+  const url = String(inviteUrl || "").trim();
+
+  if (!url) {
+    throw new Error("missing_invite_url");
+  }
+
+  if (
+    url.includes("auth/callback") ||
+    url.includes("token_hash") ||
+    url.includes("magiclink") ||
+    url.includes("type=magiclink")
+  ) {
+    throw new Error("forbidden_magiclink_pattern_in_upstream_invite_url");
+  }
+
+  if (!url.includes("/tracker-accept")) {
+    throw new Error("invalid_tracker_invite_path");
+  }
+
+  if (!url.includes("access_token=")) {
+    throw new Error("missing_access_token_in_tracker_invite_url");
+  }
+
+  return url;
+}
+
 async function brevoSendEmail(opts: {
   apiKey: string;
   senderEmail: string;
@@ -198,6 +243,9 @@ async function brevoSendEmail(opts: {
     subject: opts.subject,
     htmlContent: opts.html,
     textContent: opts.text || undefined,
+    tracking: {
+      click: false,
+    },
   };
 
   if (opts.params && typeof opts.params === "object") {
@@ -656,28 +704,19 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
-    const siteUrl = APP_PREVIEW_URL.replace(/\/$/, "");
     const caller_jwt = userJwt;
-    const access_token = caller_jwt;
-    if (!access_token) {
+    if (!caller_jwt) {
       throw new Error("missing_caller_jwt");
     }
-    const inviteUrl =
-      `${siteUrl}/tracker-accept` +
-      `?org_id=${encodeURIComponent(org_id)}` +
-      `&lang=${encodeURIComponent(lang || "es")}` +
-      `&access_token=${encodeURIComponent(access_token)}`;
 
-    if (
-      inviteUrl.includes("auth/callback") ||
-      inviteUrl.includes("token_hash") ||
-      inviteUrl.includes("magiclink") ||
-      inviteUrl.includes("type=magiclink") ||
-      !inviteUrl.includes("/tracker-accept") ||
-      !inviteUrl.includes("access_token=")
-    ) {
-      throw new Error("forbidden_magiclink_pattern_in_upstream_invite_url");
-    }
+    const inviteUrl = assertDirectTrackerInviteUrl(
+      buildDirectTrackerInviteUrl({
+        siteUrl: APP_PREVIEW_URL,
+        orgId: org_id,
+        lang,
+        accessToken: caller_jwt,
+      }),
+    );
 
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
@@ -748,7 +787,7 @@ serve(async (req) => {
     const sentSecondsAgo = secondsSince(openInvite?.brevo_sent_at);
     const cooldownRemaining = Math.max(0, Math.ceil(SEND_COOLDOWN_SECONDS - sentSecondsAgo));
     const withinCooldown = false;
-    // SaaS best practice: log warning if within cooldown, but always send email
+
     if (Number.isFinite(sentSecondsAgo) && sentSecondsAgo < SEND_COOLDOWN_SECONDS) {
       console.log("[invite] cooldown ignored for resend");
     }
@@ -797,7 +836,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
-        inviteUrl: inviteUrl,
+        inviteUrl,
         redirect_to: inviteUrl,
         action_link: actionLink,
         delivery_hint:
@@ -832,7 +871,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
-        inviteUrl: inviteUrl,
+        inviteUrl,
         redirect_to: inviteUrl,
         action_link: actionLink,
         warning: "BREVO_DISABLED_MISSING_ENV",
@@ -904,10 +943,14 @@ serve(async (req) => {
         redirect_to: inviteUrl,
       };
 
-      console.log("[send-tracker-invite-brevo] brevo_template_params_url", {
-        build_tag: BUILD_TAG,
-        org_id,
-        invite_url: inviteUrl,
+      console.log(TRACKER_INVITE_LOG_MARKER);
+      console.log(`inviteUrl=${inviteUrl}`);
+      console.log("[send-tracker-invite-brevo] final_brevo_template_params", {
+        marker: TRACKER_INVITE_LOG_MARKER,
+        inviteUrl,
+        invite_url: brevoTemplateParams.invite_url,
+        action_link: brevoTemplateParams.action_link,
+        redirect_to: brevoTemplateParams.redirect_to,
       });
 
       brevoResp = await brevoSendEmail({
@@ -977,7 +1020,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
-        inviteUrl: inviteUrl,
+        inviteUrl,
         redirect_to: inviteUrl,
         action_link: actionLink,
         assignment_details: assignmentDetails,
@@ -995,7 +1038,7 @@ serve(async (req) => {
       email,
       assignment_id: assignment_id || null,
       tracker_invite_id: trackerInviteId,
-      inviteUrl: inviteUrl,
+      inviteUrl,
       redirect_to: inviteUrl,
       action_link: actionLink,
       delivery_hint: "Email delivery may take a few minutes depending on the provider.",

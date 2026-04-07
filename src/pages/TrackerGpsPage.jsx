@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 function getAndroidBridge() {
@@ -35,6 +35,8 @@ function resolveVisibleState(assignmentState, healthState) {
 
 export default function TrackerGpsPage() {
   const [buildMarker] = useState("2026-04-05-passive-status");
+  const autoStartTrackingOnceRef = useRef(false);
+  const [serviceBootstrapRequested, setServiceBootstrapRequested] = useState(false);
   const [bridgeReady, setBridgeReady] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState({
     permissionsOk: null,
@@ -178,6 +180,67 @@ export default function TrackerGpsPage() {
     return "offline";
   }, []);
 
+  const requestServiceBootstrapOnce = useCallback(
+    ({ backendAssignmentFound, allowNoSessionFallback, effectiveOrgId }) => {
+      if (autoStartTrackingOnceRef.current) return false;
+
+      const bridge = getAndroidBridge();
+      if (!bridge || typeof bridge.startTracking !== "function") return false;
+
+      const bridgePermissionsOk =
+        typeof bridge.isPermissionsOk === "function"
+          ? !!bridge.isPermissionsOk()
+          : typeof bridge.hasPermissions === "function"
+            ? !!bridge.hasPermissions()
+            : bridgeStatus.permissionsOk === true;
+
+      if (!bridgePermissionsOk) return false;
+
+      const bridgeServiceRunning =
+        typeof bridge.isServiceRunning === "function"
+          ? !!bridge.isServiceRunning()
+          : bridgeStatus.serviceRunning === true;
+
+      if (bridgeServiceRunning) return false;
+
+      if (!backendAssignmentFound && !allowNoSessionFallback) return false;
+
+      const fallbackOrgId =
+        typeof window !== "undefined"
+          ? String(new URLSearchParams(window.location.search).get("org_id") || "").trim() ||
+            String(localStorage.getItem("org_id") || "").trim() ||
+            null
+          : null;
+
+      const orgIdForTracking = effectiveOrgId || fallbackOrgId;
+      if (!orgIdForTracking) return false;
+
+      try {
+        localStorage.setItem("org_id", orgIdForTracking);
+        bridge.startTracking();
+        autoStartTrackingOnceRef.current = true;
+        setServiceBootstrapRequested(true);
+        setBridgeStatus((prev) => ({
+          ...prev,
+          permissionsOk: bridgePermissionsOk,
+          serviceRunning: true,
+        }));
+
+        markMessage(
+          backendAssignmentFound
+            ? "Bridge READY + assignment backend activo: Android.startTracking() ejecutado."
+            : "Bridge READY sin web session: Android.startTracking() ejecutado con org_id local; backend nativo valida assignment."
+        );
+
+        return true;
+      } catch (e) {
+        console.error("[TrackerGpsPage] service bootstrap request failed", e);
+        return false;
+      }
+    },
+    [bridgeStatus.permissionsOk, bridgeStatus.serviceRunning, markMessage]
+  );
+
   const syncPassiveState = useCallback(async () => {
     try {
       refreshBridgeState();
@@ -245,6 +308,12 @@ export default function TrackerGpsPage() {
             ? "No web session yet. Organization context preserved from URL/localStorage."
             : "No web session yet. Open tracker URL with org_id to preserve org context."
         );
+
+        requestServiceBootstrapOnce({
+          backendAssignmentFound: false,
+          allowNoSessionFallback: true,
+          effectiveOrgId: persistedOrgId,
+        });
         return;
       }
 
@@ -319,6 +388,12 @@ export default function TrackerGpsPage() {
         assignment: assignmentJson.assignment || null,
       });
 
+      requestServiceBootstrapOnce({
+        backendAssignmentFound: !!assignmentJson.active,
+        allowNoSessionFallback: false,
+        effectiveOrgId,
+      });
+
       if (!assignmentJson.active) {
         setHealthState({ loading: false, error: null, row: null });
 
@@ -391,7 +466,13 @@ export default function TrackerGpsPage() {
 
       markMessage("Error sincronizando estado pasivo del tracker.");
     }
-  }, [mapHealthState, markMessage, refreshBridgeState, resolveOrgId]);
+  }, [
+    mapHealthState,
+    markMessage,
+    refreshBridgeState,
+    requestServiceBootstrapOnce,
+    resolveOrgId,
+  ]);
 
   useEffect(() => {
     markMessage(`Build cargado: ${buildMarker}`);
@@ -479,6 +560,22 @@ export default function TrackerGpsPage() {
     [assignmentState.assignment, assignmentState.effectiveOrgId, requestedOrgId]
   );
 
+  useEffect(() => {
+    if (!bridgeReady) return;
+
+    requestServiceBootstrapOnce({
+      backendAssignmentFound: assignmentState.active === true,
+      allowNoSessionFallback: assignmentState.reason === "no_session",
+      effectiveOrgId,
+    });
+  }, [
+    assignmentState.active,
+    assignmentState.reason,
+    bridgeReady,
+    effectiveOrgId,
+    requestServiceBootstrapOnce,
+  ]);
+
   const assignmentWindow = useMemo(() => {
     const start =
       assignmentState.assignment?.start_time ||
@@ -547,6 +644,7 @@ export default function TrackerGpsPage() {
             ["permissions_ok", String(bridgeStatus.permissionsOk ?? healthState.row?.permissions_ok ?? "-")],
             ["background_allowed", String(bridgeStatus.backgroundAllowed ?? healthState.row?.background_allowed ?? "-")],
             ["service_running", String(bridgeStatus.serviceRunning ?? healthState.row?.service_running ?? "-")],
+            ["service_bootstrap_requested", serviceBootstrapRequested ? "YES" : "NO"],
             ["Última sincronización", lastSyncAt || "-"],
           ].map(([label, value], idx, arr) => (
             <div
