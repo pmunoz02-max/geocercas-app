@@ -1,12 +1,13 @@
 
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Navigate } from "react-router-dom";
+import { useNavigate, useParams, Navigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 
 export default function AcceptInvite() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useTranslation();
 
   const [checked, setChecked] = useState(false);
@@ -90,9 +91,31 @@ export default function AcceptInvite() {
     }
 
     const resolvedOrgId = String(data?.org_id || localStorage.getItem("org_id") || "").trim();
-    const target = resolvedOrgId
-      ? `/tracker-gps?org_id=${encodeURIComponent(resolvedOrgId)}`
-      : "/tracker-gps";
+    const deepLinkParams = new URLSearchParams(location.search || "");
+    if (resolvedOrgId) {
+      deepLinkParams.set("org_id", resolvedOrgId);
+    }
+
+    const hasInviteContext =
+      deepLinkParams.has("token") ||
+      deepLinkParams.has("invite_token") ||
+      deepLinkParams.has("invite_id");
+
+    if (!hasInviteContext && token) {
+      deepLinkParams.set("invite_token", token);
+    }
+
+    const targetQuery = deepLinkParams.toString();
+    const target = targetQuery ? `/tracker-gps?${targetQuery}` : "/tracker-gps";
+
+    const ua = typeof navigator !== "undefined" ? String(navigator.userAgent || "") : "";
+    const isAndroidMobile = /Android/i.test(ua);
+    if (isAndroidMobile) {
+      // Use app link URL so Android can open the tracker app directly.
+      const appLinkUrl = `https://preview.tugeocercas.com${target}`;
+      window.location.replace(appLinkUrl);
+      return;
+    }
 
     navigate(target, { replace: true });
   };
