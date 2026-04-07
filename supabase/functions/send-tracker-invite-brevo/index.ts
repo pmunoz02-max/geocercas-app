@@ -155,7 +155,8 @@ function defaultEmailCopy(lang: string): EmailCopy {
   };
 }
 
-function buildTrackerNextPath(orgId: string, lang: string, accessToken?: string) {
+function buildTrackerInviteUrl(appPreviewUrl: string, orgId: string, lang: string, accessToken?: string) {
+  const base = appPreviewUrl.replace(/\/$/, "");
   const qs = new URLSearchParams({
     org_id: String(orgId || ""),
     lang: String(lang || "es"),
@@ -165,13 +166,7 @@ function buildTrackerNextPath(orgId: string, lang: string, accessToken?: string)
     qs.set("access_token", String(accessToken).trim());
   }
 
-  return `/tracker-gps?${qs.toString()}`;
-}
-
-function buildRedirectTo(appPreviewUrl: string, orgId: string, lang: string, accessToken?: string) {
-  const base = appPreviewUrl.replace(/\/$/, "");
-  const next = buildTrackerNextPath(orgId, lang, accessToken);
-  return `${base}/auth/callback?lang=${encodeURIComponent(lang)}&next=${encodeURIComponent(next)}`;
+  return `${base}/tracker-accept?${qs.toString()}`;
 }
 
 function escHtml(s: string) {
@@ -674,7 +669,9 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
-    const redirectTo = buildRedirectTo(APP_PREVIEW_URL, org_id, lang, userJwt);
+    const caller_jwt = userJwt;
+    const access_token = caller_jwt;
+    const inviteUrl = buildTrackerInviteUrl(APP_PREVIEW_URL, org_id, lang, access_token);
 
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
@@ -750,31 +747,7 @@ serve(async (req) => {
       console.log("[invite] cooldown ignored for resend");
     }
 
-    const { data: linkData, error: linkErr } = await sbAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email,
-      options: { redirectTo },
-    });
-
-
-    const tokenHash = String(linkData.properties.hashed_token || "");
-    if (!tokenHash) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "generateLink failed",
-        detail: "Missing token_hash from Supabase generateLink",
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    const trackerNext = buildTrackerNextPath(org_id, lang, userJwt);
-
-    const actionLink =
-      `${APP_PREVIEW_URL}/auth/callback` +
-      `?token_hash=${encodeURIComponent(tokenHash)}` +
-      `&type=magiclink` +
-      `&lang=${encodeURIComponent(lang)}` +
-      `&next=${encodeURIComponent(trackerNext)}`;
+    const actionLink = inviteUrl;
 
     try {
       console.error("[metrics] invite_sent reached", {
@@ -818,7 +791,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
-        redirect_to: redirectTo,
+        redirect_to: inviteUrl,
         action_link: actionLink,
         delivery_hint:
           "Email delivery may take a few minutes depending on the provider. Recent invite was already sent.",
@@ -852,7 +825,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
-        redirect_to: redirectTo,
+        redirect_to: inviteUrl,
         action_link: actionLink,
         warning: "BREVO_DISABLED_MISSING_ENV",
         assignment_details: assignmentDetails,
@@ -983,7 +956,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
-        redirect_to: redirectTo,
+        redirect_to: inviteUrl,
         action_link: actionLink,
         assignment_details: assignmentDetails,
         warning: "BREVO_SEND_FAILED_RETURNING_MANUAL_LINK",
@@ -1000,7 +973,7 @@ serve(async (req) => {
       email,
       assignment_id: assignment_id || null,
       tracker_invite_id: trackerInviteId,
-      redirect_to: redirectTo,
+      redirect_to: inviteUrl,
       action_link: actionLink,
       delivery_hint: "Email delivery may take a few minutes depending on the provider.",
       assignment_details: assignmentDetails,
