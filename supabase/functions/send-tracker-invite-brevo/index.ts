@@ -488,11 +488,7 @@ serve(async (req) => {
 
     const userJwt = (req.headers.get("x-user-jwt") || "").trim();
     if (!userJwt) {
-      return jsonResponse(401, {
-        ok: false,
-        error: "Missing x-user-jwt",
-        build_tag: BUILD_TAG,
-      });
+      throw new Error("missing_caller_jwt");
     }
 
     if (!looksLikeJwt(userJwt)) {
@@ -658,6 +654,9 @@ serve(async (req) => {
     const siteUrl = APP_PREVIEW_URL.replace(/\/$/, "");
     const caller_jwt = userJwt;
     const access_token = caller_jwt;
+    if (!access_token) {
+      throw new Error("missing_caller_jwt");
+    }
     const inviteUrl =
       `${siteUrl}/tracker-accept` +
       `?org_id=${encodeURIComponent(org_id)}` +
@@ -782,6 +781,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
+        inviteUrl: inviteUrl,
         redirect_to: inviteUrl,
         action_link: actionLink,
         delivery_hint:
@@ -816,6 +816,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
+        inviteUrl: inviteUrl,
         redirect_to: inviteUrl,
         action_link: actionLink,
         warning: "BREVO_DISABLED_MISSING_ENV",
@@ -947,6 +948,7 @@ serve(async (req) => {
         email,
         assignment_id: assignment_id || null,
         tracker_invite_id: trackerInviteId,
+        inviteUrl: inviteUrl,
         redirect_to: inviteUrl,
         action_link: actionLink,
         assignment_details: assignmentDetails,
@@ -964,6 +966,7 @@ serve(async (req) => {
       email,
       assignment_id: assignment_id || null,
       tracker_invite_id: trackerInviteId,
+      inviteUrl: inviteUrl,
       redirect_to: inviteUrl,
       action_link: actionLink,
       delivery_hint: "Email delivery may take a few minutes depending on the provider.",
