@@ -1,9 +1,6 @@
 {
   "version": 2,
   "routes": [
-    { "src": "/tracker-accept", "dest": "/tracker-gps" },
-    { "src": "/tracker-accept/(.*)", "dest": "/tracker-gps" },
-
     { "src": "/api/auth/(.*)", "dest": "/api/auth?route=$1" },
     { "src": "/api/(.*)", "dest": "/api/$1" },
 

@@ -17,6 +17,7 @@ import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import UpdatePassword from "./pages/UpdatePassword.jsx";
+import TrackerInviteStart from "./pages/TrackerInviteStart.jsx";
 
 // ✅ Tracker GPS public page
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
@@ -81,27 +82,6 @@ function RootEntry() {
   return <Navigate to="/login" replace />;
 }
 
-/**
- * ✅ RUTA PUBLICA /tracker-accept
- * Recibe: /tracker-accept?invite_id=...&org_id=...&lang=en
- * Redirige a: /tracker-gps?org_id=...&lang=en&invite_id=...
- */
-function TrackerAcceptRedirect() {
-  const location = useLocation();
-  const sp = new URLSearchParams(location.search || "");
-
-  const orgId = sp.get("org_id") || sp.get("org") || sp.get("orgId") || "";
-  const lang = sp.get("lang") || "es";
-  const inviteId = sp.get("invite_id") || "";
-
-  const out = new URLSearchParams();
-  if (orgId) out.set("org_id", orgId);
-  if (lang) out.set("lang", lang);
-  if (inviteId) out.set("invite_id", inviteId);
-
-  return <Navigate to={`/tracker-gps?${out.toString()}`} replace />;
-}
-
 function AdminRoute({ children }) {
   const auth = useAuthSafe();
   const location = useLocation();
@@ -146,7 +126,7 @@ function MainAppRoutes() {
       <Route path="/auth/callback" element={<AuthCallback />} />
 
       {/* ✅ Tracker Accept (PUBLIC) */}
-      <Route path="/tracker-accept" element={<TrackerAcceptRedirect />} />
+      <Route path="/tracker-accept" element={<TrackerInviteStart />} />
 
       {/* 🔐 Password flows */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
