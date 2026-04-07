@@ -155,20 +155,6 @@ function defaultEmailCopy(lang: string): EmailCopy {
   };
 }
 
-function buildTrackerInviteUrl(appPreviewUrl: string, orgId: string, lang: string, accessToken?: string) {
-  const base = appPreviewUrl.replace(/\/$/, "");
-  const qs = new URLSearchParams({
-    org_id: String(orgId || ""),
-    lang: String(lang || "es"),
-  });
-
-  if (accessToken && String(accessToken).trim()) {
-    qs.set("access_token", String(accessToken).trim());
-  }
-
-  return `${base}/tracker-accept?${qs.toString()}`;
-}
-
 function escHtml(s: string) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -669,9 +655,14 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
+    const siteUrl = APP_PREVIEW_URL.replace(/\/$/, "");
     const caller_jwt = userJwt;
     const access_token = caller_jwt;
-    const inviteUrl = buildTrackerInviteUrl(APP_PREVIEW_URL, org_id, lang, access_token);
+    const inviteUrl =
+      `${siteUrl}/tracker-accept` +
+      `?org_id=${encodeURIComponent(org_id)}` +
+      `&lang=${encodeURIComponent(lang || "es")}` +
+      `&access_token=${encodeURIComponent(access_token)}`;
 
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
