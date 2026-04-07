@@ -190,6 +190,7 @@ async function brevoSendEmail(opts: {
   text?: string;
   replyToEmail?: string;
   replyToName?: string;
+  params?: Record<string, unknown>;
 }) {
   const payload: any = {
     sender: { email: opts.senderEmail, name: opts.senderName },
@@ -198,6 +199,10 @@ async function brevoSendEmail(opts: {
     htmlContent: opts.html,
     textContent: opts.text || undefined,
   };
+
+  if (opts.params && typeof opts.params === "object") {
+    payload.params = opts.params;
+  }
 
   if (opts.replyToEmail) {
     payload.replyTo = {
@@ -663,6 +668,17 @@ serve(async (req) => {
       `&lang=${encodeURIComponent(lang || "es")}` +
       `&access_token=${encodeURIComponent(access_token)}`;
 
+    if (
+      inviteUrl.includes("auth/callback") ||
+      inviteUrl.includes("token_hash") ||
+      inviteUrl.includes("magiclink") ||
+      inviteUrl.includes("type=magiclink") ||
+      !inviteUrl.includes("/tracker-accept") ||
+      !inviteUrl.includes("access_token=")
+    ) {
+      throw new Error("forbidden_magiclink_pattern_in_upstream_invite_url");
+    }
+
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
     let openInvite: any | null = null;
@@ -882,6 +898,18 @@ serve(async (req) => {
     let brevoMessageId = "";
 
     try {
+      const brevoTemplateParams = {
+        invite_url: inviteUrl,
+        action_link: inviteUrl,
+        redirect_to: inviteUrl,
+      };
+
+      console.log("[send-tracker-invite-brevo] brevo_template_params_url", {
+        build_tag: BUILD_TAG,
+        org_id,
+        invite_url: inviteUrl,
+      });
+
       brevoResp = await brevoSendEmail({
         apiKey: BREVO_API_KEY,
         senderEmail: BREVO_SENDER_EMAIL,
@@ -893,6 +921,7 @@ serve(async (req) => {
         text,
         replyToEmail: BREVO_REPLYTO_EMAIL || BREVO_SENDER_EMAIL,
         replyToName: BREVO_SENDER_NAME,
+        params: brevoTemplateParams,
       });
 
       brevoMessageId = extractBrevoMessageId(brevoResp);
