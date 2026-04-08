@@ -305,12 +305,31 @@ serve(async (req) => {
       });
     }
 
+    // --- Generar sesión Supabase para el tracker usando magiclink admin ---
+    const { data: linkData, error: linkError } =
+      await sbAdmin.auth.admin.generateLink({
+        type: "magiclink",
+        email: inviteEmail,
+      });
+
+    if (linkError) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "generate_link_failed",
+        detail: linkError.message,
+      });
+    }
+
+    const access_token = linkData?.properties?.access_token ?? null;
+    const refresh_token = linkData?.properties?.refresh_token ?? null;
+
     console.log("[accept-tracker-invite] success", {
       build_tag: BUILD_TAG,
       invite_id: inviteRow.id,
       org_id: orgId,
       tracker_user_id: trackerUserId,
       email: inviteEmail,
+      session: !!access_token,
     });
 
     return jsonResponse(200, {
@@ -318,6 +337,11 @@ serve(async (req) => {
       tracker_user_id: trackerUserId,
       org_id: orgId,
       email: inviteEmail,
+      session: {
+        access_token,
+        refresh_token,
+        token_type: "bearer",
+      },
     });
   } catch (err: any) {
     console.error("[accept-tracker-invite] unhandled", {
