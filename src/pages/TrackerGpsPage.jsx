@@ -751,7 +751,17 @@ export default function TrackerGpsPage() {
       setInviteBootstrap(prev => ({ ...prev, loading: false, done: true, inviteAccepted: false, trackerUserId: null, orgId, email: null, error: "Faltan inviteToken u org_id", debug: { ...prev.debug, fail: true } }));
       return;
     }
-    // Llamar a accept-tracker-invite usando supabaseTrackerClient.functions.invoke
+    // --- DEBUG: Log inviteToken, t, length, and equality ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const inviteTokenFromUrl = urlParams.get("inviteToken") || urlParams.get("invite_token") || urlParams.get("token") || urlParams.get("t") || null;
+    const tFromUrl = urlParams.get("t") || null;
+    console.log('[TRACKER_PAGE] DEBUG inviteToken', {
+      inviteToken: inviteTokenFromUrl,
+      t: tFromUrl,
+      inviteToken_length: inviteTokenFromUrl ? inviteTokenFromUrl.length : null,
+      t_length: tFromUrl ? tFromUrl.length : null,
+      inviteToken_eq_t: inviteTokenFromUrl === tFromUrl,
+    });
     (async () => {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;

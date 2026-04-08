@@ -73,3 +73,6 @@ El endpoint `accept-tracker-invite` ahora emite un `access_token` JWT personaliz
 
 Este JWT no incluye `refresh_token`.  
 La renovación debe manejarse re-ejecutando el bootstrap si expira.
+## Token tracing debug
+
+For tracker invite debugging, log invite_id, invite token hash, final invite URL, and compare frontend inviteToken vs t before accept-tracker-invite.

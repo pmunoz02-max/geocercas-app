@@ -815,6 +815,13 @@ serve(async (req) => {
     }
 
     const actionLink = inviteUrl;
+    // --- DEBUG LOGS: invite_id, token length, hash, URL ---
+    console.log('[send-tracker-invite] DEBUG', {
+      invite_id: trackerInviteId,
+      invite_token_length: inviteTokenPlain.length,
+      invite_token_hash: inviteTokenHash,
+      invite_url: inviteUrl,
+    });
     // Log temporal para verificar que inviteUrl es https
     console.log('[send-tracker-invite] inviteUrl=', inviteUrl);
 
