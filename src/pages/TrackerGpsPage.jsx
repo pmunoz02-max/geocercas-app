@@ -15,16 +15,29 @@ function mapHealthState(status) {
 }
 
 export default function TrackerGpsPage() {
-  // Persist inviteToken from query params to sessionStorage on mount
+  // --- LOG Y EXTRACCIÓN DE PARAMS AL MONTAR ---
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const urlToken = new URLSearchParams(window.location.search).get('invite_token');
-    if (urlToken) {
+    const href = window.location.href;
+    const search = window.location.search;
+    const params = Object.fromEntries(new URLSearchParams(search).entries());
+    // Extraer inviteToken de forma flexible: inviteToken > token > t
+    let inviteTokenRaw = params.inviteToken || params.invite_token || params.token || params.t || null;
+    if (inviteTokenRaw) {
       try {
-        sessionStorage.setItem('trackerInviteToken', urlToken);
-        console.log('[TRACKER_PAGE] inviteToken persisted to sessionStorage');
+        sessionStorage.setItem('trackerInviteToken', inviteTokenRaw);
+        console.log('[TRACKER_PAGE] inviteToken persisted to sessionStorage:', inviteTokenRaw);
+      } catch {}
+    } else {
+      // Si no viene en query, intenta recuperar de sessionStorage
+      try {
+        inviteTokenRaw = sessionStorage.getItem('trackerInviteToken') || null;
       } catch {}
     }
+    console.log('[TRACKER_PAGE] href=', href);
+    console.log('[TRACKER_PAGE] search=', search);
+    console.log('[TRACKER_PAGE] params=', params);
+    console.log('[TRACKER_PAGE] inviteToken=', inviteTokenRaw);
   }, []);
   // Log mount
   useEffect(() => {
@@ -703,13 +716,24 @@ export default function TrackerGpsPage() {
     trackerAuth = null;
   }
   const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
-  // inviteToken: primero query param, luego sessionStorage
+  // inviteToken: primero query param (inviteToken > token > t), luego sessionStorage
   let inviteToken = null;
+  let inviteTokenSource = "";
+  let allParams = {};
   if (typeof window !== "undefined") {
-    inviteToken = new URLSearchParams(window.location.search).get("invite_token");
-    if (!inviteToken) {
+    const params = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+    allParams = params;
+    inviteToken = params.inviteToken || params.invite_token || params.token || params.t || null;
+    if (inviteToken) {
+      // Siempre persistir como inviteToken en sessionStorage
+      try {
+        sessionStorage.setItem('trackerInviteToken', inviteToken);
+      } catch {}
+      inviteTokenSource = "query";
+    } else {
       try {
         inviteToken = sessionStorage.getItem('trackerInviteToken') || null;
+        if (inviteToken) inviteTokenSource = "sessionStorage";
       } catch {
         inviteToken = null;
       }
@@ -731,7 +755,9 @@ export default function TrackerGpsPage() {
 
   // Log render principal
   console.log('[TRACKER_PAGE] rendering main content', {
-    inviteToken: !!inviteToken,
+    inviteToken,
+    inviteTokenSource,
+    allParams,
     trackerSession: !!trackingSessionReady,
     androidBridge: !!bridgeReady,
     batteryPromptDismissed,
@@ -761,6 +787,9 @@ export default function TrackerGpsPage() {
       </div>
       <div style={{ fontSize: 15, textAlign: "left", margin: "0 auto", maxWidth: 320 }}>
         <div>inviteToken: <b>{inviteToken ? 'sí' : 'no'}</b></div>
+        <div>inviteToken valor: <b>{inviteToken || '-'}</b></div>
+        <div>inviteToken source: <b>{inviteTokenSource || '-'}</b></div>
+        <div>params: <b>{JSON.stringify(allParams)}</b></div>
         <div>trackerSession: <b>{trackingSessionReady ? 'sí' : 'no'}</b></div>
         <div>androidBridge: <b>{bridgeReady ? 'sí' : 'no'}</b></div>
         <div>batteryPromptDismissed: <b>{batteryPromptDismissed ? 'sí' : 'no'}</b></div>
