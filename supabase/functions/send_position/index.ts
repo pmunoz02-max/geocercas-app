@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const build_tag = "send_position-v20_user_id_uuid_preview_20260407";
+const build_tag = "send_position-v26_uuid_and_auth_preview_20260407";
 
 function buildCorsHeaders(origin: string | null) {
   return {
@@ -60,6 +60,7 @@ function getEnv() {
   return {
     SB_URL: Deno.env.get("SUPABASE_URL") || "",
     SB_SERVICE_ROLE: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+    SB_ANON_KEY: Deno.env.get("SUPABASE_ANON_KEY") || "",
     TRACKER_PROXY_SECRET: Deno.env.get("TRACKER_PROXY_SECRET") || "",
   };
 }
@@ -220,21 +221,84 @@ function buildPayloads(body: Record<string, unknown>, fallbackSource: string) {
   };
 }
 
-async function checkCanSend(client: any, user_id: string, org_id: string, cors: Record<string, string>) {
-  const { data, error } = await client.rpc("rpc_tracker_can_send", {
-    p_user_id: user_id,
+async function checkCanSend(
+  client: any,
+  params: {
+    user_id: string;
+    org_id: string;
+    body: Record<string, unknown>;
+  },
+  cors: Record<string, string>,
+) {
+  const { user_id, org_id, body } = params;
+
+  console.log("[send_position][enforcement][before-rpc]", {
+    build_tag,
+    requested_org_id: org_id,
+    resolved_org_id: org_id,
+    resolved_user_id: user_id,
+    role: null,
+    tracker_id: null,
+    assignment_active: null,
+    payload_org_id: body?.org_id ?? null,
+    enforcement_inputs: {
+      rpc: "rpc_tracker_can_send",
+      args: {},
+      resolved_user_id: user_id,
+      resolved_org_id: org_id,
+    },
+  });
+
+  const { data, error } = await client.rpc("rpc_tracker_can_send");
+
+  console.log("[send_position][enforcement][after-rpc]", {
+    build_tag,
+    requested_org_id: org_id,
+    resolved_org_id: org_id,
+    resolved_user_id: user_id,
+    payload_org_id: body?.org_id ?? null,
+    rpc_result: data,
+    rpc_error_message: error?.message ?? null,
+    rpc_error_details: error?.details ?? null,
+    rpc_error_hint: error?.hint ?? null,
+    rpc_error_code: error?.code ?? null,
   });
 
   if (error) {
     console.error("[send_position] rpc_tracker_can_send error", error);
-    return { ok: false, response: json({ error: "enforcement_check_failed" }, 500, cors) };
+    return {
+      ok: false,
+      response: json(
+        {
+          ok: false,
+          error: "enforcement_check_failed",
+          detail: error.message,
+          code: error.code ?? null,
+          build_tag,
+        },
+        500,
+        cors,
+      ),
+    };
   }
 
   if (data !== true) {
-    console.warn("[send_position] tracker_blocked_by_plan", { user_id, org_id });
+    console.warn("[send_position] tracker_blocked_by_plan_or_enforcement", {
+      user_id,
+      org_id,
+      rpc_result: data,
+    });
     return {
       ok: false,
-      response: json({ error: "tracker_limit_reached" }, 403, cors),
+      response: json(
+        {
+          ok: false,
+          error: "tracker_limit_reached",
+          build_tag,
+        },
+        403,
+        cors,
+      ),
     };
   }
 
@@ -298,9 +362,9 @@ serve(async (req) => {
   }
 
   try {
-    const { SB_URL, SB_SERVICE_ROLE, TRACKER_PROXY_SECRET } = getEnv();
+    const { SB_URL, SB_SERVICE_ROLE, SB_ANON_KEY, TRACKER_PROXY_SECRET } = getEnv();
 
-    if (!SB_URL || !SB_SERVICE_ROLE) {
+    if (!SB_URL || !SB_SERVICE_ROLE || !SB_ANON_KEY) {
       return json({ ok: false, error: "missing_env", build_tag }, 500, CORS);
     }
 
@@ -330,18 +394,20 @@ serve(async (req) => {
       }
 
       const user_id = resolveRequiredUuid(body.user_id, "user_id");
-      const org_id = String(body.org_id || "").trim();
+      const org_id = resolveRequiredUuid(body.org_id, "org_id");
       const lat = normalizeNumber(body.lat);
       const lng = normalizeNumber(body.lng);
       const accuracy = normalizeNumber(body.accuracy);
-      const event =
-        typeof body.event === "string" && body.event.trim() ? body.event.trim() : "position";
 
       if (!org_id || lat === null || lng === null) {
         return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
       }
 
-      const check = await checkCanSend(admin, user_id, org_id, CORS);
+      const check = await checkCanSend(admin, {
+        user_id,
+        org_id,
+        body: body as Record<string, unknown>,
+      }, CORS);
       if (!check.ok) return check.response;
 
       const { positionsPayload, trackerLatestPayload, created_at } = buildPayloads(
@@ -355,14 +421,17 @@ serve(async (req) => {
         lat,
         lng,
         accuracy,
-        event,
         created_at,
         ...positionsPayload,
       });
 
       if (positionError) {
         console.error("[send_position] positions_insert_error_proxy", positionError);
-        return json({ ok: false, error: positionError.message, build_tag }, 500, CORS);
+        return json(
+          { ok: false, error: positionError.message, build_tag },
+          500,
+          CORS,
+        );
       }
 
       const latestResult = await updateTrackerLatestOperationalState(admin, {
@@ -391,28 +460,39 @@ serve(async (req) => {
       return json({ ok: false, error: "missing_jwt", build_tag }, 401, CORS);
     }
 
-    const userClient = createClient(SB_URL, SB_SERVICE_ROLE, {
+    const authClient = createClient(SB_URL, SB_ANON_KEY, {
       global: { headers: { Authorization: jwt } },
     });
 
-    const { data: userData, error: userError } = await userClient.auth.getUser();
+    const { data: userData, error: userError } = await authClient.auth.getUser();
     if (userError || !userData?.user?.id) {
+      console.log("[send_position][auth]", {
+        build_tag,
+        has_jwt: Boolean(jwt),
+        jwt_length: jwt?.length ?? 0,
+        user_error_message: userError?.message ?? null,
+        user_error_status: userError?.status ?? null,
+        user_error_name: userError?.name ?? null,
+        user_id: userData?.user?.id ?? null,
+      });
       return json({ ok: false, error: "invalid_user", build_tag }, 401, CORS);
     }
 
     const user_id = resolveRequiredUuid(userData.user.id, "user_id");
-    const org_id = String(body.org_id || "").trim();
+    const org_id = resolveRequiredUuid(body.org_id, "org_id");
     const lat = normalizeNumber(body.lat);
     const lng = normalizeNumber(body.lng);
     const accuracy = normalizeNumber(body.accuracy);
-    const event =
-      typeof body.event === "string" && body.event.trim() ? body.event.trim() : "position";
 
     if (!org_id || lat === null || lng === null) {
       return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
     }
 
-    const check = await checkCanSend(userClient, user_id, org_id, CORS);
+    const check = await checkCanSend(authClient, {
+      user_id,
+      org_id,
+      body: body as Record<string, unknown>,
+    }, CORS);
     if (!check.ok) return check.response;
 
     const { positionsPayload, trackerLatestPayload, created_at } = buildPayloads(
@@ -420,20 +500,23 @@ serve(async (req) => {
       "tracker-native-android",
     );
 
-    const { error: positionError } = await userClient.from("positions").insert({
+    const { error: positionError } = await admin.from("positions").insert({
       user_id,
       org_id,
       lat,
       lng,
       accuracy,
-      event,
       created_at,
       ...positionsPayload,
     });
 
     if (positionError) {
       console.error("[send_position] positions_insert_error_web", positionError);
-      return json({ ok: false, error: positionError.message, build_tag }, 500, CORS);
+      return json(
+        { ok: false, error: positionError.message, build_tag },
+        500,
+        CORS,
+      );
     }
 
     const latestResult = await updateTrackerLatestOperationalState(admin, {

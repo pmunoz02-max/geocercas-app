@@ -596,6 +596,87 @@ export default function TrackerGpsPage() {
     [assignmentState, healthState]
   );
 
+  // --- Battery Optimization UI (Android) ---
+  const [batteryOptStatus, setBatteryOptStatus] = useState({ supported: null, ignoring: null, raw: null });
+  const [batteryOptLoading, setBatteryOptLoading] = useState(false);
+
+  // Consulta el estado actual
+  const refreshBatteryOptStatus = useCallback(() => {
+    if (typeof window === "undefined" || !window.AndroidBridge || typeof window.AndroidBridge.getBatteryOptimizationStatus !== "function") {
+      setBatteryOptStatus({ supported: null, ignoring: null, raw: null });
+      return;
+    }
+    try {
+      const raw = window.AndroidBridge.getBatteryOptimizationStatus();
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch { parsed = null; }
+      setBatteryOptStatus({
+        supported: parsed?.supported ?? null,
+        ignoring: parsed?.ignoring ?? null,
+        raw,
+      });
+    } catch (e) {
+      setBatteryOptStatus({ supported: null, ignoring: null, raw: null });
+    }
+  }, []);
+
+  // Llama a la acción de settings/request
+  const handleBatteryOptAction = useCallback(() => {
+    if (typeof window === "undefined" || !window.AndroidBridge) return;
+    setBatteryOptLoading(true);
+    try {
+      if (typeof window.AndroidBridge.requestIgnoreBatteryOptimizations === "function") {
+        window.AndroidBridge.requestIgnoreBatteryOptimizations();
+      } else if (typeof window.AndroidBridge.openBatteryOptimizationSettings === "function") {
+        window.AndroidBridge.openBatteryOptimizationSettings();
+      }
+    } catch {}
+    setTimeout(() => {
+      refreshBatteryOptStatus();
+      setBatteryOptLoading(false);
+    }, 1200);
+  }, [refreshBatteryOptStatus]);
+
+  // Refresca al cargar y al volver a la app
+  useEffect(() => {
+    refreshBatteryOptStatus();
+    const onVisibility = () => setTimeout(refreshBatteryOptStatus, 300);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [refreshBatteryOptStatus]);
+
+  // Renderiza el bloque UI
+  const renderBatteryOptBlock = () => {
+    if (batteryOptStatus.supported === null) return null;
+    return (
+      <div style={{ marginTop: 24, padding: 16, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fffbe6" }}>
+        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 8 }}>
+          Optimización de batería (Android)
+        </div>
+        <div style={{ marginBottom: 8, color: batteryOptStatus.ignoring ? "#228B22" : "#b91c1c", fontWeight: 500 }}>
+          Estado: {batteryOptStatus.ignoring === true ? "Protegido (sin restricciones)" : batteryOptStatus.ignoring === false ? "No protegido (puede ser restringido)" : "Desconocido"}
+        </div>
+        <button
+          onClick={handleBatteryOptAction}
+          disabled={batteryOptLoading || batteryOptStatus.ignoring === true}
+          style={{
+            padding: "8px 18px",
+            fontSize: 15,
+            borderRadius: 6,
+            border: "1px solid #d0d7de",
+            background: batteryOptStatus.ignoring === true ? "#e5e7eb" : "#facc15",
+            color: "#222",
+            fontWeight: 600,
+            cursor: batteryOptStatus.ignoring === true ? "not-allowed" : "pointer",
+            marginTop: 4,
+          }}
+        >
+          {batteryOptStatus.ignoring === true ? "Ya protegido" : batteryOptLoading ? "Abriendo..." : "Abrir ajustes de batería"}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div
       style={{
@@ -681,6 +762,8 @@ export default function TrackerGpsPage() {
         <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Estado actual</div>
         <div style={{ fontSize: 16, lineHeight: 1.5 }}>{lastMessage}</div>
       </div>
+
+      {renderBatteryOptBlock()}
     </div>
   );
 }
