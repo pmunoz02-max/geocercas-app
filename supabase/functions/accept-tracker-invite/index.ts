@@ -1,559 +1,336 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-function getCorsHeaders(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
+const BUILD_TAG = "accept-tracker-invite-v1_preview_20260408";
 
-  const allowlist = [
-    "https://app.tugeocercas.com",
-    "https://preview.tugeocercas.com",
-    "http://localhost:5173",
-    "http://localhost:3000",
-  ];
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
+};
 
-  const isVercelPreview =
-    origin.endsWith(".vercel.app") || origin.includes("vercel.app");
-
-  const isAllowed = allowlist.includes(origin) || isVercelPreview;
-
-  const allowOrigin = origin && isAllowed ? origin : (origin ? "" : "*");
-
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers":
-      "authorization, apikey, content-type, x-proxy-ts, x-proxy-signature",
-    "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
-  };
-
-  if (allowOrigin) headers["Access-Control-Allow-Origin"] = allowOrigin;
-
-  return headers;
-}
-
-function json(req: Request, status: number, obj: unknown) {
-  const cors = getCorsHeaders(req);
-  return new Response(JSON.stringify(obj), {
+function jsonResponse(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
     status,
     headers: {
-      ...cors,
-      "Content-Type": "application/json; charset=utf-8",
+      ...corsHeaders,
+      "Content-Type": "application/json",
     },
   });
 }
 
-async function hmacHex(secret: string, msg: string) {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(msg));
-  return Array.from(new Uint8Array(sig))
+function isUuid(v: unknown) {
+  const s = String(v ?? "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+async function sha256Hex(input: string) {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
 
-type MembershipRole = "owner" | "admin" | "tracker";
-
-const ROLE_PRIORITY: Record<MembershipRole, number> = {
-  owner: 3,
-  admin: 2,
-  tracker: 1,
-};
-
-function normRole(role: unknown): MembershipRole {
-  const raw = String(role ?? "").trim().toLowerCase();
-  if (raw === "owner" || raw === "admin" || raw === "tracker") return raw;
-  return "tracker";
-}
-
-async function safeUpsertMembership(
-  admin: SupabaseClient,
-  params: { org_id: string; user_id: string; new_role: unknown },
-) {
-  const newRole = normRole(params.new_role);
-
-  // First, try to find an active (non-revoked) membership
-  const { data: existing, error: existingErr } = await admin
-    .from("memberships")
-    .select("org_id, user_id, role, revoked_at")
-    .eq("org_id", params.org_id)
-    .eq("user_id", params.user_id)
-    .is("revoked_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  if (existingErr) {
-    return {
-      ok: false as const,
-      action: "select_failed" as const,
-      error: existingErr,
-    };
-  }
-
-  if (!existing) {
-    // No active membership found. Check if a revoked membership exists
-    const { data: revoked, error: revokedErr } = await admin
-      .from("memberships")
-      .select("org_id, user_id, role, revoked_at")
-      .eq("org_id", params.org_id)
-      .eq("user_id", params.user_id)
-      .not("revoked_at", "is", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (revokedErr) {
-      return {
-        ok: false as const,
-        action: "select_failed" as const,
-        error: revokedErr,
-      };
-    }
-
-    if (revoked) {
-      // A revoked membership exists. Reactivate and upgrade if needed.
-      const revokedRole = normRole(revoked.role);
-      const shouldUpgrade = ROLE_PRIORITY[newRole] > ROLE_PRIORITY[revokedRole];
-
-      const roleToApply = shouldUpgrade ? newRole : revokedRole;
-
-      const { error: updateErr } = await admin
-        .from("memberships")
-        .update({
-          role: roleToApply,
-          is_default: true,
-          revoked_at: null,
-        })
-        .eq("org_id", params.org_id)
-        .eq("user_id", params.user_id)
-        .not("revoked_at", "is", null);
-
-      if (updateErr) {
-        return {
-          ok: false as const,
-          action: "reactivate_failed" as const,
-          error: updateErr,
-        };
-      }
-
-      return {
-        ok: true as const,
-        action: shouldUpgrade ? "upgraded" : "kept",
-        role_applied: roleToApply,
-        role_existing: revokedRole,
-      };
-    }
-
-    // No membership at all - insert a new one
-    const { error: insertErr } = await admin
-      .from("memberships")
-      .insert({
-        org_id: params.org_id,
-        user_id: params.user_id,
-        role: newRole,
-        is_default: true,
-        revoked_at: null,
-      });
-
-    if (insertErr) {
-      return {
-        ok: false as const,
-        action: "insert_failed" as const,
-        error: insertErr,
-      };
-    }
-
-    return {
-      ok: true as const,
-      action: "inserted" as const,
-      role_applied: newRole,
-      role_existing: null,
-    };
-  }
-
-  // Active membership exists - check upgrade logic
-  const currentRole = normRole(existing.role);
-  const shouldUpgrade = ROLE_PRIORITY[newRole] > ROLE_PRIORITY[currentRole];
-
-  if (!shouldUpgrade) {
-    return {
-      ok: true as const,
-      action: "kept" as const,
-      role_applied: currentRole,
-      role_existing: currentRole,
-    };
-  }
-
-  const { error: updateErr } = await admin
-    .from("memberships")
-    .update({
-      role: newRole,
-      is_default: true,
-      revoked_at: null,
-    })
-    .eq("org_id", params.org_id)
-    .eq("user_id", params.user_id)
-    .is("revoked_at", null);
-
-  if (updateErr) {
-    return {
-      ok: false as const,
-      action: "update_failed" as const,
-      error: updateErr,
-    };
-  }
-
-  return {
-    ok: true as const,
-    action: "upgraded" as const,
-    role_applied: newRole,
-    role_existing: currentRole,
-  };
-}
-
 serve(async (req) => {
-  const build_tag = "accept-tracker-invite-v11_role_integrity_20260318";
-
   try {
     if (req.method === "OPTIONS") {
-      return json(req, 200, { ok: true, build_tag });
+      return new Response("ok", { headers: corsHeaders });
     }
 
     if (req.method !== "POST") {
-      return json(req, 405, {
+      return jsonResponse(405, {
         ok: false,
-        build_tag,
-        error: "METHOD_NOT_ALLOWED",
+        error: "method_not_allowed",
+        build_tag: BUILD_TAG,
       });
     }
 
-    const SB_URL = Deno.env.get("SB_URL");
-    const SB_SERVICE_ROLE = Deno.env.get("SB_SERVICE_ROLE");
-    const TRACKER_PROXY_SECRET = Deno.env.get("TRACKER_PROXY_SECRET");
+    const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
 
-    if (!SB_URL || !SB_SERVICE_ROLE || !TRACKER_PROXY_SECRET) {
-      return json(req, 500, {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return jsonResponse(500, {
         ok: false,
-        build_tag,
-        error: "Missing env",
-        diag: {
-          hasSbUrl: !!SB_URL,
-          hasSbServiceRole: !!SB_SERVICE_ROLE,
-          hasTrackerProxySecret: !!TRACKER_PROXY_SECRET,
-        },
+        error: "missing_supabase_env",
+        build_tag: BUILD_TAG,
       });
     }
 
-    const ts = req.headers.get("X-Proxy-Ts") || "";
-    const signature = req.headers.get("X-Proxy-Signature") || "";
-
-    const rawBody = await req.text();
-    const fn = "accept-tracker-invite";
-    const expected = await hmacHex(
-      TRACKER_PROXY_SECRET,
-      `${fn}.${ts}.${rawBody}`,
-    );
-
-    if (!ts || !signature || expected !== signature) {
-      return json(req, 401, {
-        ok: false,
-        build_tag,
-        error: "Invalid proxy signature",
-      });
-    }
-
-    let body: any = {};
-    try {
-      body = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      body = {};
-    }
-
-    const org_id = body?.org_id;
-    const user_id = body?.user_id;
-    const email = body?.email;
-  const invite_id = body?.invite_id;
-    const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
-
-    if (!org_id) {
-      return json(req, 400, {
-        ok: false,
-        build_tag,
-        error: "Missing org_id",
-      });
-    }
-
-    const supabaseAdmin = createClient(SB_URL, SB_SERVICE_ROLE);
-
-    let resolvedUserId = user_id ?? null;
-
-    // Fallback por email si no vino user_id
-    if (!resolvedUserId && email) {
-      const { data, error } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("email", email)
-        .maybeSingle();
-
-      if (error) {
-        return json(req, 500, {
-          ok: false,
-          build_tag,
-          error: "Resolve user by email failed",
-          detail: error.message,
-        });
-      }
-
-      resolvedUserId = data?.id ?? null;
-    }
-
-    if (!resolvedUserId) {
-      return json(req, 400, {
-        ok: false,
-        build_tag,
-        error: "Missing user_id (or email not found)",
-      });
-    }
-
-    const acceptedUserId = resolvedUserId;
-
-    // 1) CANÓNICO: memberships (sin degradar rol dentro del mismo org)
-    const membershipWrite = await safeUpsertMembership(supabaseAdmin, {
-      org_id,
-      user_id: acceptedUserId,
-      new_role: "tracker",
+    const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    if (!membershipWrite.ok) {
-      return json(req, 500, {
+
+    // Leer inviteToken y org_id del body (no requiere JWT ni Authorization)
+    const body = await req.json().catch(() => ({} as Record<string, unknown>));
+    const inviteToken = String(body?.inviteToken ?? body?.t ?? "").trim();
+    const orgId = String(body?.org_id ?? "").trim();
+
+    console.log("[accept-tracker-invite] request", {
+      build_tag: BUILD_TAG,
+      has_invite_token: !!inviteToken,
+      org_id: orgId || null,
+    });
+
+    if (!inviteToken) {
+      return jsonResponse(400, {
         ok: false,
-        build_tag,
-        error: "Write memberships failed",
-        detail: membershipWrite.error?.message,
-        membership_action: membershipWrite.action,
+        error: "missing_invite_token",
+        build_tag: BUILD_TAG,
       });
     }
 
-    // Success actions from safeUpsertMembership are constrained to:
-    // inserted | upgraded | kept.
-    const membership_action = membershipWrite.action;
-
-    // 1.1) TRACKER ORG LINK (canónico para trackers)
-    let trackerOrgUserOk = false;
-    let trackerOrgUserError: string | null = null;
-
-    try {
-      const nowIso = new Date().toISOString();
-
-      const { error } = await supabaseAdmin
-        .from("tracker_org_users")
-        .upsert(
-          {
-            org_id,
-            tracker_user_id: acceptedUserId,
-            created_at: nowIso,
-            updated_at: nowIso,
-          },
-          { onConflict: "org_id,tracker_user_id" },
-        );
-
-      if (error) {
-        trackerOrgUserError = error.message;
-      } else {
-        trackerOrgUserOk = true;
-      }
-    } catch (e: any) {
-      trackerOrgUserError = e?.message ?? String(e);
-    }
-
-    if (!trackerOrgUserOk) {
-      return json(req, 500, {
+    if (!isUuid(orgId)) {
+      return jsonResponse(400, {
         ok: false,
-        build_tag,
-        error: "Upsert tracker_org_users failed",
-        detail: trackerOrgUserError,
+        error: "invalid_org_id",
+        build_tag: BUILD_TAG,
       });
     }
 
-    // 1.2) PREVIEW: enlazar personal.user_id por org_id + email (fatal)
-    let personalLinkOk = false;
-    let personalLinkCount = 0;
-    let personalLinkSkipped = false;
-    let personalLinkError: string | null = null;
+    const inviteTokenHash = await sha256Hex(inviteToken);
 
-    if (!normalizedEmail) {
-      personalLinkSkipped = true;
-      personalLinkOk = true;
-    } else {
-      try {
-        const { data: personalRows, error: personalSelectErr } = await supabaseAdmin
-          .from("personal")
-          .select("id,user_id,is_deleted,email")
-          .eq("org_id", org_id)
-          .ilike("email", normalizedEmail);
-
-        if (personalSelectErr) {
-          personalLinkError = personalSelectErr.message;
-          return json(req, 500, {
-            ok: false,
-            build_tag,
-            error: "Select personal failed",
-            detail: personalSelectErr.message,
-            tracker_org_user_ok: trackerOrgUserOk,
-            tracker_org_user_error: trackerOrgUserError,
-            personal_link_ok: personalLinkOk,
-            personal_link_count: personalLinkCount,
-            personal_link_skipped: personalLinkSkipped,
-            personal_link_error: personalLinkError,
-          });
-        }
-
-        const updatablePersonalIds = (personalRows ?? [])
-          .filter((row: any) => {
-            const isDeleted = row?.is_deleted ?? false;
-            const currentUserId = row?.user_id ?? null;
-            return !isDeleted && (currentUserId === null || currentUserId === resolvedUserId);
-          })
-          .map((row: any) => row?.id)
-          .filter((id: unknown): id is string => typeof id === "string" && id.length > 0);
-
-        if (updatablePersonalIds.length > 0) {
-          const personalUpdateTs = new Date().toISOString();
-          const { error: personalUpdateErr } = await supabaseAdmin
-            .from("personal")
-            .update({
-              user_id: acceptedUserId,
-              updated_at: personalUpdateTs,
-            })
-            .in("id", updatablePersonalIds);
-
-          if (personalUpdateErr) {
-            personalLinkError = personalUpdateErr.message;
-            return json(req, 500, {
-              ok: false,
-              build_tag,
-              error: "Update personal failed",
-              detail: personalUpdateErr.message,
-              tracker_org_user_ok: trackerOrgUserOk,
-              tracker_org_user_error: trackerOrgUserError,
-              personal_link_ok: personalLinkOk,
-              personal_link_count: personalLinkCount,
-              personal_link_skipped: personalLinkSkipped,
-              personal_link_error: personalLinkError,
-            });
-          }
-
-          personalLinkCount = updatablePersonalIds.length;
-        }
-
-        personalLinkOk = true;
-      } catch (e: any) {
-        personalLinkError = e?.message ?? String(e);
-        return json(req, 500, {
-          ok: false,
-          build_tag,
-          error: "Personal link failed",
-          detail: personalLinkError,
-          tracker_org_user_ok: trackerOrgUserOk,
-          tracker_org_user_error: trackerOrgUserError,
-          personal_link_ok: personalLinkOk,
-          personal_link_count: personalLinkCount,
-          personal_link_skipped: personalLinkSkipped,
-          personal_link_error: personalLinkError,
-        });
-      }
-    }
-
-    // 2) ORG ACTIVA persistente (best-effort, no fatal)
-    let setOrgOk = false;
-    let setOrgError: string | null = null;
-
-    try {
-      let error = null;
-      try {
-        ({ error } = await supabaseAdmin.rpc("set_current_org", { p_org_id: org_id }));
-      } catch {}
-      if (error) {
-        try {
-          ({ error } = await supabaseAdmin.rpc("rpc_set_current_org", { p_org_id: org_id }));
-        } catch {}
-      }
-      if (error) {
-        setOrgError = error.message;
-      } else {
-        setOrgOk = true;
-      }
-    } catch {}
-
-    // 3) LEGACY COMPAT: user_organizations (best-effort, no fatal)
-    // Conflict path MUST never downgrade role: keep existing row as-is.
-    let legacyOk = false;
-    let legacyError: string | null = null;
-
-    try {
-      const { error } = await supabaseAdmin
-        .from("user_organizations")
-        .upsert(
-          {
-            user_id: acceptedUserId,
-            org_id,
-            role: "tracker",
-          },
-          { onConflict: "org_id,user_id", ignoreDuplicates: true },
-        );
-
-      if (error) {
-        legacyError = error.message;
-      } else {
-        legacyOk = true;
-      }
-    } catch (e: any) {
-      legacyError = e?.message ?? String(e);
-    }
-
-    try {
-      await supabaseAdmin.from('org_metrics_events').insert({
+    const { data: inviteRow, error: inviteErr } = await sbAdmin
+      .from("tracker_invites")
+      .select(`
+        id,
         org_id,
-        user_id: acceptedUserId,
-        event_type: 'invite_accepted',
-        meta: {
-          ...(normalizedEmail ? { email: normalizedEmail } : {}),
-          ...(invite_id ? { invite_id } : {}),
-        },
+        email,
+        email_norm,
+        created_at,
+        expires_at,
+        used_at,
+        accepted_at,
+        is_active,
+        invite_token_hash
+      `)
+      .eq("org_id", orgId)
+      .eq("invite_token_hash", inviteTokenHash)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (inviteErr) {
+      console.error("[accept-tracker-invite] invite lookup error", {
+        build_tag: BUILD_TAG,
+        message: inviteErr.message,
+        code: (inviteErr as any)?.code ?? null,
+        details: (inviteErr as any)?.details ?? null,
       });
-    } catch (_) {
-      // ignore metrics errors
+
+      return jsonResponse(500, {
+        ok: false,
+        error: "invite_lookup_failed",
+        detail: inviteErr.message,
+        build_tag: BUILD_TAG,
+      });
     }
 
-    return json(req, 200, {
-      ok: true,
-      build_tag,
-      user_id: acceptedUserId,
-      org_id,
-      canonical_membership: true,
-      membership_action,
-      membership_role_applied: membershipWrite.role_applied,
-      membership_role_existing: membershipWrite.role_existing,
-      tracker_org_user_ok: trackerOrgUserOk,
-      tracker_org_user_error: trackerOrgUserError,
-      personal_link_ok: personalLinkOk,
-      personal_link_count: personalLinkCount,
-      personal_link_skipped: personalLinkSkipped,
-      personal_link_error: personalLinkError,
-      current_org_persisted: setOrgOk,
-      current_org_error: setOrgError,
-      legacy_user_organizations_ok: legacyOk,
-      legacy_user_organizations_error: legacyError,
+    if (!inviteRow) {
+      return jsonResponse(404, {
+        ok: false,
+        error: "invite_not_found",
+        build_tag: BUILD_TAG,
+      });
+    }
+
+    const nowMs = Date.now();
+    const expiresMs = Date.parse(String(inviteRow.expires_at ?? ""));
+
+    if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) {
+      return jsonResponse(410, {
+        ok: false,
+        error: "invite_expired",
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+      });
+    }
+
+    if (!inviteRow.is_active) {
+      return jsonResponse(409, {
+        ok: false,
+        error: "invite_inactive",
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+      });
+    }
+
+    const inviteEmail = String(inviteRow.email || inviteRow.email_norm || "").trim().toLowerCase();
+
+    if (!inviteEmail || !inviteEmail.includes("@")) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "invite_missing_email",
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+      });
+    }
+
+    const { data: claimData, error: claimErr } = await sbAdmin.rpc("get_tracker_invite_claim", {
+      p_invite_id: inviteRow.id,
     });
-  } catch (e: any) {
-    return json(req, 500, {
+
+    if (claimErr) {
+      console.error("[accept-tracker-invite] get_tracker_invite_claim error", {
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+        message: claimErr.message,
+        code: (claimErr as any)?.code ?? null,
+      });
+
+      return jsonResponse(500, {
+        ok: false,
+        error: "get_tracker_invite_claim_failed",
+        detail: claimErr.message,
+        build_tag: BUILD_TAG,
+      });
+    }
+
+    let trackerUserId: string | null = null;
+
+    const claimTrackerUserId = String(
+      claimData?.tracker_user_id ??
+        claimData?.user_id ??
+        claimData?.resolved_user_id ??
+        "",
+    ).trim();
+
+    if (isUuid(claimTrackerUserId)) {
+      trackerUserId = claimTrackerUserId;
+    }
+
+    if (!trackerUserId) {
+      const { data: ensureData, error: ensureErr } = await sbAdmin.rpc("ensure_tracker_membership", {
+        p_email: inviteEmail,
+        p_org_id: orgId,
+        p_role: "tracker",
+      });
+
+      if (ensureErr) {
+        console.error("[accept-tracker-invite] ensure_tracker_membership error", {
+          build_tag: BUILD_TAG,
+          invite_id: inviteRow.id,
+          email: inviteEmail,
+          message: ensureErr.message,
+          code: (ensureErr as any)?.code ?? null,
+        });
+
+        return jsonResponse(500, {
+          ok: false,
+          error: "ensure_tracker_membership_failed",
+          detail: ensureErr.message,
+          build_tag: BUILD_TAG,
+        });
+      }
+
+      const ensuredUserId = String(ensureData ?? "").trim();
+      if (isUuid(ensuredUserId)) {
+        trackerUserId = ensuredUserId;
+      }
+    }
+
+    if (!trackerUserId) {
+      const { data: resolvedUserId, error: resolveErr } = await sbAdmin.rpc("resolve_tracker_user_id", {
+        p_org_id: orgId,
+      });
+
+      if (resolveErr) {
+        console.error("[accept-tracker-invite] resolve_tracker_user_id error", {
+          build_tag: BUILD_TAG,
+          invite_id: inviteRow.id,
+          message: resolveErr.message,
+          code: (resolveErr as any)?.code ?? null,
+        });
+
+        return jsonResponse(500, {
+          ok: false,
+          error: "resolve_tracker_user_id_failed",
+          detail: resolveErr.message,
+          build_tag: BUILD_TAG,
+        });
+      }
+
+      const resolved = String(resolvedUserId ?? "").trim();
+      if (isUuid(resolved)) {
+        trackerUserId = resolved;
+      }
+    }
+
+
+    if (!trackerUserId) {
+      console.log("[accept-tracker-invite] resolution_debug", {
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+        invite_email: inviteEmail,
+        claimData,
+        claimTrackerUserId,
+        ensureData: typeof ensureData === "undefined" ? null : ensureData,
+        resolvedUserId: typeof resolvedUserId === "undefined" ? null : resolvedUserId,
+      });
+      return jsonResponse(500, {
+        ok: false,
+        error: "tracker_user_id_not_resolved",
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+      });
+    }
+
+    const patch: Record<string, unknown> = {
+      accepted_at: inviteRow.accepted_at ?? new Date().toISOString(),
+      used_at: new Date().toISOString(),
+      used_by_user_id: trackerUserId,
+      is_active: true,
+    };
+
+    const { error: updateErr } = await sbAdmin
+      .from("tracker_invites")
+      .update(patch)
+      .eq("id", inviteRow.id);
+
+    if (updateErr) {
+      console.error("[accept-tracker-invite] invite update error", {
+        build_tag: BUILD_TAG,
+        invite_id: inviteRow.id,
+        message: updateErr.message,
+        code: (updateErr as any)?.code ?? null,
+      });
+
+      return jsonResponse(500, {
+        ok: false,
+        error: "invite_update_failed",
+        detail: updateErr.message,
+        build_tag: BUILD_TAG,
+      });
+    }
+
+    console.log("[accept-tracker-invite] success", {
+      build_tag: BUILD_TAG,
+      invite_id: inviteRow.id,
+      org_id: orgId,
+      tracker_user_id: trackerUserId,
+      email: inviteEmail,
+    });
+
+    return jsonResponse(200, {
+      ok: true,
+      tracker_user_id: trackerUserId,
+      org_id: orgId,
+      email: inviteEmail,
+    });
+  } catch (err: any) {
+    console.error("[accept-tracker-invite] unhandled", {
+      build_tag: BUILD_TAG,
+      message: String(err?.message || err),
+      stack: String(err?.stack || ""),
+    });
+
+    return jsonResponse(500, {
       ok: false,
-      build_tag,
-      error: e?.message ?? String(e),
+      error: "unhandled_exception",
+      message: String(err?.message || err),
+      build_tag: BUILD_TAG,
     });
   }
 });

@@ -708,17 +708,31 @@ serve(async (req) => {
     const nowIso = new Date().toISOString();
     const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
 
-    const caller_jwt = userJwt;
-    if (!caller_jwt) {
-      throw new Error("missing_caller_jwt");
+
+    // --- Generar token opaco seguro (32 bytes base64url) ---
+    function randomBase64Url(bytes = 32) {
+      const arr = new Uint8Array(bytes);
+      crypto.getRandomValues(arr);
+      return btoa(String.fromCharCode(...arr))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
     }
 
+    async function sha256Hex(str) {
+      const data = new TextEncoder().encode(str);
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    const inviteTokenPlain = randomBase64Url(32);
+    const inviteTokenHash = await sha256Hex(inviteTokenPlain);
 
     const rawInviteUrl = buildDirectTrackerInviteUrl({
       siteUrl: APP_PREVIEW_URL,
       orgId: org_id,
       lang,
-      accessToken: caller_jwt,
+      accessToken: inviteTokenPlain,
     });
     console.log('[TRACKER_INVITE] inviteUrl generated:', rawInviteUrl);
     const inviteUrl = assertDirectTrackerInviteUrl(rawInviteUrl);
@@ -732,6 +746,7 @@ serve(async (req) => {
         const open = await findOpenInvite(sbAdmin, org_id, email);
         openInvite = open;
 
+
         if (open?.id) {
           const { error: updErr } = await sbAdmin
             .from("tracker_invites")
@@ -740,6 +755,7 @@ serve(async (req) => {
               email_norm: email,
               is_active: true,
               expires_at: expiresAt,
+              invite_token_hash: inviteTokenHash,
             } as any)
             .eq("id", open.id);
 
@@ -763,6 +779,7 @@ serve(async (req) => {
               used_by_user_id: null,
               accepted_at: null,
               is_active: true,
+              invite_token_hash: inviteTokenHash,
             } as any)
             .select("id")
             .single();
