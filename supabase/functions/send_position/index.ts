@@ -101,6 +101,28 @@ function normalizeBoolean(value: unknown): boolean | null {
   return null;
 }
 
+function isValidUuid(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const normalized = value.trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized);
+}
+
+function normalizeUuid(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  return isValidUuid(normalized) ? normalized : null;
+}
+
+function resolveRequiredUuid(value: unknown, fieldName: string): string {
+  const valueText = value === null || value === undefined ? "" : String(value);
+  const resolvedUuid = normalizeUuid(valueText);
+  if (!resolvedUuid) {
+    throw new Error(`send_position: resolved ${fieldName} is null`);
+  }
+  return resolvedUuid;
+}
+
 function buildPayloads(body: Record<string, unknown>, fallbackSource: string) {
   const nowIso = new Date().toISOString();
 
@@ -307,7 +329,7 @@ serve(async (req) => {
         return json({ ok: false, error: "invalid_signature", build_tag }, 401, CORS);
       }
 
-      const user_id = String(body.user_id || "").trim();
+      const user_id = resolveRequiredUuid(body.user_id, "user_id");
       const org_id = String(body.org_id || "").trim();
       const lat = normalizeNumber(body.lat);
       const lng = normalizeNumber(body.lng);
@@ -315,7 +337,7 @@ serve(async (req) => {
       const event =
         typeof body.event === "string" && body.event.trim() ? body.event.trim() : "position";
 
-      if (!user_id || !org_id || lat === null || lng === null) {
+      if (!org_id || lat === null || lng === null) {
         return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
       }
 
@@ -378,7 +400,7 @@ serve(async (req) => {
       return json({ ok: false, error: "invalid_user", build_tag }, 401, CORS);
     }
 
-    const user_id = userData.user.id;
+    const user_id = resolveRequiredUuid(userData.user.id, "user_id");
     const org_id = String(body.org_id || "").trim();
     const lat = normalizeNumber(body.lat);
     const lng = normalizeNumber(body.lng);
