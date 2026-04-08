@@ -753,7 +753,6 @@ export default function TrackerGpsPage() {
     // Llamar a accept-tracker-invite usando supabaseTrackerClient.functions.invoke
     (async () => {
       try {
-        // Usa el cliente adecuado para funciones edge (ajusta si tu cliente se llama diferente)
         const supabaseTrackerClient = supabase;
         const { data, error } = await supabaseTrackerClient.functions.invoke(
           "accept-tracker-invite",
@@ -761,17 +760,29 @@ export default function TrackerGpsPage() {
             body: { inviteToken, org_id: orgId },
           }
         );
-        const result = data || {};
+        const result = data ?? null;
         if (error || !result?.ok) {
           setInviteBootstrap(prev => ({
             ...prev,
             loading: false,
             done: true,
             inviteAccepted: false,
+            trackerUserId: null,
+            orgId: result?.org_id ?? orgId ?? null,
+            email: result?.email ?? null,
             error: error?.message || result?.error || "accept_failed",
             debug: {
               ...prev.debug,
+              params,
+              inviteToken,
+              orgId,
+              invokeReturned: true,
+              data,
               result,
+              errorMessage: error?.message ?? null,
+              errorName: error?.name ?? null,
+              errorContext: error?.context ?? null,
+              errorObject: error ? String(error) : null,
             },
           }));
           return;
@@ -781,12 +792,19 @@ export default function TrackerGpsPage() {
           loading: false,
           done: true,
           inviteAccepted: true,
-          trackerUserId: result.tracker_user_id,
-          orgId: result.org_id,
-          email: result.email,
+          trackerUserId: result.tracker_user_id ?? null,
+          orgId: result.org_id ?? orgId ?? null,
+          email: result.email ?? null,
+          error: null,
           debug: {
             ...prev.debug,
+            params,
+            inviteToken,
+            orgId,
+            invokeReturned: true,
+            data,
             result,
+            errorMessage: null,
           },
         }));
       } catch (err) {
@@ -795,8 +813,21 @@ export default function TrackerGpsPage() {
           loading: false,
           done: true,
           inviteAccepted: false,
+          trackerUserId: null,
+          orgId,
+          email: null,
           error: err?.message || "Excepción desconocida",
-          debug: { ...prev.debug, exception: true, err },
+          debug: {
+            ...prev.debug,
+            params,
+            inviteToken,
+            orgId,
+            invokeReturned: false,
+            errorMessage: err?.message ?? null,
+            errorName: err?.name ?? null,
+            errorContext: err?.context ?? null,
+            errorObject: err ? String(err) : null,
+          },
         }));
       }
     })();
