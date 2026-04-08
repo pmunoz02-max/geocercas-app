@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-const ANDROID_PACKAGE_ID = "com.fenice.geocercas";
-const PLAY_STORE_WEB_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE_ID}`;
-const PLAY_STORE_MARKET_URL = `market://details?id=${ANDROID_PACKAGE_ID}`;
-const APP_LINK_ORIGIN = "https://preview.tugeocercas.com";
+
 
 function getTrackerTarget(search) {
   const incoming = new URLSearchParams(search || "");
@@ -26,13 +23,7 @@ function getTrackerTarget(search) {
   return qs ? `/tracker-gps?${qs}` : "/tracker-gps";
 }
 
-function buildIntentUrl(targetPath) {
-  const normalized = String(targetPath || "/tracker-gps");
-  const cleanPath = normalized.startsWith("/") ? normalized : `/${normalized}`;
-  const fallback = encodeURIComponent(PLAY_STORE_WEB_URL);
 
-  return `intent://preview.tugeocercas.com${cleanPath}#Intent;scheme=https;package=${ANDROID_PACKAGE_ID};S.browser_fallback_url=${fallback};end`;
-}
 
 export default function TrackerInviteStart() {
   const location = useLocation();
@@ -50,41 +41,13 @@ export default function TrackerInviteStart() {
     [location.search]
   );
 
-  const appLinkUrl = `${APP_LINK_ORIGIN}${targetPath}`;
-  const intentUrl = useMemo(() => buildIntentUrl(targetPath), [targetPath]);
 
-  useEffect(() => {
-    if (!isAndroid) {
-      setStatus("non-android");
-      return;
-    }
 
-    const timer = window.setTimeout(() => {
-      setStatus("opening");
-      window.location.href = intentUrl;
-    }, 150);
 
-    return () => window.clearTimeout(timer);
-  }, [intentUrl, isAndroid]);
+
 
   function openApp() {
-    if (isAndroid) {
-      window.location.href = intentUrl;
-      return;
-    }
-    window.location.href = appLinkUrl;
-  }
-
-  function installApp() {
-    window.location.href = PLAY_STORE_WEB_URL;
-  }
-
-  function openPlayStoreApp() {
-    if (isAndroid) {
-      window.location.href = PLAY_STORE_MARKET_URL;
-      return;
-    }
-    window.location.href = PLAY_STORE_WEB_URL;
+    navigate(targetPath, { replace: true });
   }
 
   function openInBrowser() {

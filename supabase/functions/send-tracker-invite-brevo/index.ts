@@ -181,6 +181,7 @@ function extractBrevoMessageId(raw: string): string {
   return m?.[1] ? String(m[1]) : "";
 }
 
+// Siempre generar un enlace HTTPS puro hacia /tracker-gps con los parámetros requeridos
 function buildDirectTrackerInviteUrl(params: {
   siteUrl: string;
   orgId: string;
@@ -188,12 +189,14 @@ function buildDirectTrackerInviteUrl(params: {
   accessToken: string;
 }) {
   const siteUrl = params.siteUrl.replace(/\/$/, "");
+  // Nunca usar intent://, #Intent, scheme=, android-app://
+  // Solo HTTPS puro
   const url =
-    `${siteUrl}/tracker-accept` +
-    `?org_id=${encodeURIComponent(params.orgId)}` +
-    `&lang=${encodeURIComponent(params.lang || "es")}` +
-    `&access_token=${encodeURIComponent(params.accessToken)}`;
-
+    `${siteUrl}/tracker-gps` +
+    `?inviteToken=${encodeURIComponent(params.accessToken)}` +
+    `&t=${encodeURIComponent(params.accessToken)}` +
+    `&org_id=${encodeURIComponent(params.orgId)}` +
+    `&lang=${encodeURIComponent(params.lang || "es")}`;
   return url;
 }
 
@@ -217,8 +220,9 @@ function assertDirectTrackerInviteUrl(inviteUrl: string) {
     throw new Error("invalid_tracker_invite_path");
   }
 
-  if (!url.includes("access_token=")) {
-    throw new Error("missing_access_token_in_tracker_invite_url");
+  // Debe incluir inviteToken= o t= (token único)
+  if (!/([?&](inviteToken|t)=)[^&]+/.test(url)) {
+    throw new Error("missing_invite_token_in_tracker_invite_url");
   }
 
   return url;
@@ -709,14 +713,15 @@ serve(async (req) => {
       throw new Error("missing_caller_jwt");
     }
 
-    const inviteUrl = assertDirectTrackerInviteUrl(
-      buildDirectTrackerInviteUrl({
-        siteUrl: APP_PREVIEW_URL,
-        orgId: org_id,
-        lang,
-        accessToken: caller_jwt,
-      }),
-    );
+
+    const rawInviteUrl = buildDirectTrackerInviteUrl({
+      siteUrl: APP_PREVIEW_URL,
+      orgId: org_id,
+      lang,
+      accessToken: caller_jwt,
+    });
+    console.log('[TRACKER_INVITE] inviteUrl generated:', rawInviteUrl);
+    const inviteUrl = assertDirectTrackerInviteUrl(rawInviteUrl);
 
     let trackerInviteId: string | null = null;
     let mode: "updated" | "inserted" | "cooldown" | null = null;
@@ -793,6 +798,8 @@ serve(async (req) => {
     }
 
     const actionLink = inviteUrl;
+    // Log temporal para verificar que inviteUrl es https
+    console.log('[send-tracker-invite] inviteUrl=', inviteUrl);
 
     try {
       console.error("[metrics] invite_sent reached", {
