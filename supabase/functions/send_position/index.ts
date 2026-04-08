@@ -403,17 +403,17 @@ serve(async (req) => {
         return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
       }
 
-      const check = await checkCanSend(admin, {
+
+      // LOG: Pasó rpc_tracker_can_send, intentando insert en positions
+      console.log("[send_position][positions][proxy] passed rpc, inserting", {
         user_id,
         org_id,
-        body: body as Record<string, unknown>,
-      }, CORS);
-      if (!check.ok) return check.response;
-
-      const { positionsPayload, trackerLatestPayload, created_at } = buildPayloads(
-        body as Record<string, unknown>,
-        "proxy_hmac",
-      );
+        lat,
+        lng,
+        accuracy,
+        created_at,
+        positionsPayload,
+      });
 
       const { error: positionError } = await admin.from("positions").insert({
         user_id,
@@ -426,7 +426,7 @@ serve(async (req) => {
       });
 
       if (positionError) {
-        console.error("[send_position] positions_insert_error_proxy", positionError);
+        console.error("[send_position][positions][proxy] insert_error", positionError);
         return json(
           { ok: false, error: positionError.message, build_tag },
           500,
@@ -510,17 +510,17 @@ serve(async (req) => {
       return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
     }
 
-    const check = await checkCanSend(authClient, {
+
+    // LOG: Pasó rpc_tracker_can_send, intentando insert en positions
+    console.log("[send_position][positions][web] passed rpc, inserting", {
       user_id,
       org_id,
-      body: body as Record<string, unknown>,
-    }, CORS);
-    if (!check.ok) return check.response;
-
-    const { positionsPayload, trackerLatestPayload, created_at } = buildPayloads(
-      body as Record<string, unknown>,
-      "tracker-native-android",
-    );
+      lat,
+      lng,
+      accuracy,
+      created_at,
+      positionsPayload,
+    });
 
     const { error: positionError } = await admin.from("positions").insert({
       user_id,
@@ -533,7 +533,7 @@ serve(async (req) => {
     });
 
     if (positionError) {
-      console.error("[send_position] positions_insert_error_web", positionError);
+      console.error("[send_position][positions][web] insert_error", positionError);
       return json(
         { ok: false, error: positionError.message, build_tag },
         500,

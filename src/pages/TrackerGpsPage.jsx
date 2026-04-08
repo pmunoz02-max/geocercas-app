@@ -578,6 +578,21 @@ export default function TrackerGpsPage() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [refreshBatteryOptStatus]);
 
+  const [batteryPromptDismissed, setBatteryPromptDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("batteryPromptDismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const handleContinueAnyway = () => {
+    setBatteryPromptDismissed(true);
+    try {
+      localStorage.setItem("batteryPromptDismissed", "true");
+    } catch {}
+  };
+
   const renderBatteryOptBlock = () => {
     if (!bridgeReady) return null;
 
@@ -589,7 +604,8 @@ export default function TrackerGpsPage() {
 
     const backgroundAllowed = bridgeStatus?.backgroundAllowed ?? false;
 
-    if (batteryOptimizationDisabled && backgroundAllowed) return null;
+    // Si ya está desactivada la optimización, o el usuario ya la descartó, no mostrar el bloque
+    if ((batteryOptimizationDisabled && backgroundAllowed) || batteryPromptDismissed) return null;
 
     return (
       <div
@@ -612,22 +628,40 @@ export default function TrackerGpsPage() {
           de batería para esta app.
         </div>
 
-        <button
-          type="button"
-          onClick={openBatteryOptimizationSettings}
-          disabled={batteryOptLoading}
-          style={{
-            border: "none",
-            borderRadius: 10,
-            padding: "12px 16px",
-            fontSize: 15,
-            fontWeight: 600,
-            cursor: batteryOptLoading ? "default" : "pointer",
-            opacity: batteryOptLoading ? 0.7 : 1,
-          }}
-        >
-          {batteryOptLoading ? "Abriendo ajustes..." : "Abrir ajustes"}
-        </button>
+        <div style={{ display: "flex", gap: 16 }}>
+          <button
+            type="button"
+            onClick={openBatteryOptimizationSettings}
+            disabled={batteryOptLoading}
+            style={{
+              border: "none",
+              borderRadius: 10,
+              padding: "12px 16px",
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: batteryOptLoading ? "default" : "pointer",
+              opacity: batteryOptLoading ? 0.7 : 1,
+            }}
+          >
+            {batteryOptLoading ? "Abriendo ajustes..." : "Abrir ajustes"}
+          </button>
+          <button
+            type="button"
+            onClick={handleContinueAnyway}
+            style={{
+              border: "1px solid #d0d7de",
+              borderRadius: 10,
+              padding: "12px 16px",
+              fontSize: 15,
+              fontWeight: 600,
+              background: "#fff",
+              color: "#222",
+              cursor: "pointer",
+            }}
+          >
+            Continuar de todos modos
+          </button>
+        </div>
       </div>
     );
   };
