@@ -716,30 +716,77 @@ export default function TrackerGpsPage() {
     trackerAuth = null;
   }
   const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
+
   // inviteToken: primero query param (inviteToken > token > t), luego sessionStorage
-  let inviteToken = null;
-  let inviteTokenSource = "";
-  let allParams = {};
-  if (typeof window !== "undefined") {
+  const [inviteTokenState, setInviteTokenState] = useState(() => {
+    if (typeof window === "undefined") return { inviteToken: null, source: "", allParams: {} };
     const params = Object.fromEntries(new URLSearchParams(window.location.search).entries());
-    allParams = params;
-    inviteToken = params.inviteToken || params.invite_token || params.token || params.t || null;
+    let inviteToken = params.inviteToken || params.invite_token || params.token || params.t || null;
+    let source = "";
     if (inviteToken) {
-      // Siempre persistir como inviteToken en sessionStorage
       try {
         sessionStorage.setItem('trackerInviteToken', inviteToken);
       } catch {}
-      inviteTokenSource = "query";
+      source = "query";
     } else {
       try {
         inviteToken = sessionStorage.getItem('trackerInviteToken') || null;
-        if (inviteToken) inviteTokenSource = "sessionStorage";
+        if (inviteToken) source = "sessionStorage";
       } catch {
         inviteToken = null;
       }
     }
-  }
-  const trackingSessionReady = assignmentState.active === true && healthState.row;
+    return { inviteToken, source, allParams: params };
+  });
+
+  const { inviteToken, source: inviteTokenSource, allParams } = inviteTokenState;
+
+  // --- CRITICAL: Inicializar sesión Supabase con inviteToken si existe ---
+
+  const [trackerSession, setTrackerSession] = useState(false);
+  const [trackerSessionError, setTrackerSessionError] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    async function setSessionIfInviteToken() {
+      if (inviteToken) {
+        try {
+          // Intenta inicializar sesión Supabase con inviteToken
+          const { data, error } = await supabase.auth.setSession({
+            access_token: inviteToken,
+            refresh_token: inviteToken,
+          });
+          if (error) {
+            console.error('[TRACKER_PAGE] supabase.auth.setSession error', error);
+            setTrackerSession(false);
+            setTrackerSessionError('Error al inicializar sesión Supabase: ' + (error.message || error.error_description || 'Error desconocido'));
+            return;
+          }
+          // Validar usuario
+          const { data: userData, error: userError } = await supabase.auth.getUser();
+          if (userError || !userData || !userData.user) {
+            setTrackerSession(false);
+            setTrackerSessionError('No se pudo obtener usuario válido tras setSession.');
+            console.error('[TRACKER_PAGE] supabase.auth.getUser error', userError);
+            return;
+          }
+          setTrackerSession(true);
+          setTrackerSessionError("");
+          console.log('[TRACKER_PAGE] Supabase session initialized with inviteToken, user:', userData.user);
+        } catch (err) {
+          console.error('[TRACKER_PAGE] setSession exception', err);
+          setTrackerSession(false);
+          setTrackerSessionError('Excepción al inicializar sesión Supabase: ' + (err.message || 'Error desconocido'));
+        }
+      } else {
+        setTrackerSession(false);
+        setTrackerSessionError("");
+      }
+    }
+    setSessionIfInviteToken();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inviteToken]);
+
+  const trackingSessionReady = trackerSession && assignmentState.active === true && healthState.row;
   const missingToken = !trackerToken;
   const missingInviteParams = !inviteToken;
   const missingBridge = !bridgeReady;
@@ -785,6 +832,11 @@ export default function TrackerGpsPage() {
       <div style={{ fontSize: 16, marginBottom: 16 }}>
         Faltan datos críticos para iniciar el seguimiento.
       </div>
+      {trackerSessionError && (
+        <div style={{ color: '#b71c1c', fontWeight: 600, marginBottom: 12, fontSize: 15 }}>
+          Error de sesión: {trackerSessionError}
+        </div>
+      )}
       <div style={{ fontSize: 15, textAlign: "left", margin: "0 auto", maxWidth: 320 }}>
         <div>inviteToken: <b>{inviteToken ? 'sí' : 'no'}</b></div>
         <div>inviteToken valor: <b>{inviteToken || '-'}</b></div>

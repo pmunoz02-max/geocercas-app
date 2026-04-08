@@ -216,7 +216,7 @@ function assertDirectTrackerInviteUrl(inviteUrl: string) {
     throw new Error("forbidden_magiclink_pattern_in_upstream_invite_url");
   }
 
-  if (!url.includes("/tracker-accept")) {
+  if (!(url.includes("/tracker-gps") || url.includes("/tracker") || url.includes("/tracker-accept"))) {
     throw new Error("invalid_tracker_invite_path");
   }
 
