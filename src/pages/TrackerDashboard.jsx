@@ -885,7 +885,7 @@ export default function TrackerDashboard() {
     setSelectedTrackerId("all");
     setTrackerSearch("");
     setStatusFilter("all");
-    setInfoMsg("");
+    // setInfoMsg removed (diagnostic only)
     setErrorMsg("");
     setDiag((d) => ({
       ...d,
@@ -931,7 +931,7 @@ export default function TrackerDashboard() {
       if (!safeOrgId) return;
 
     setErrorMsg("");
-    setInfoMsg("");
+    // setInfoMsg removed (diagnostic only)
     setDiag((d) => ({ ...d, lastAssignmentsError: null }));
 
     const orVigencia =
@@ -1027,14 +1027,7 @@ export default function TrackerDashboard() {
       assignedGeofenceIds: uniqGeof.length,
     }));
 
-    if (rows.length === 0) {
-      setInfoMsg(
-        tOr(
-          "trackerDashboard.messages.noActiveAssignments",
-          "There are no active assignments (tracker_assignments). Showing all active geofences (the default one remains preselected)."
-        )
-      );
-    }
+    // No active assignments: previously setInfoMsg for diagnostics (removed)
   }, [todayStrUtc, tOr]);
 
   const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
@@ -1315,30 +1308,7 @@ export default function TrackerDashboard() {
         let finalRows = latestRes?.rows || [];
         let source = "tracker_latest";
 
-        if (finalRows.length === 0) {
-          const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-          const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
-          finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
-          source = "positions";
-        }
-
-        finalRows = (finalRows || []).filter((p) => {
-          const lat = Number(p?.lat);
-          const lng = Number(p?.lng);
-          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
-        });
-
-        setPositions(finalRows);
-        setDiag((d) => ({
-          ...d,
-          positionsFound: finalRows.length,
-          positionsSource: source,
-        }));
-      } finally {
-        if (showSpinner) setLoading(false);
-      }
-    },
-    [timeWindowId]
+        // No active geofences: previously setInfoMsg for diagnostics (removed)
   );
 
 
