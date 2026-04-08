@@ -717,103 +717,109 @@ export default function TrackerGpsPage() {
   }
   const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
 
-  // inviteToken: primero query param (inviteToken > token > t), luego sessionStorage
-  const [inviteTokenState, setInviteTokenState] = useState(() => {
-    if (typeof window === "undefined") return { inviteToken: null, source: "", allParams: {} };
-    const params = Object.fromEntries(new URLSearchParams(window.location.search).entries());
-    let inviteToken = params.inviteToken || params.invite_token || params.token || params.t || null;
-    let source = "";
-    if (inviteToken) {
-      try {
-        sessionStorage.setItem('trackerInviteToken', inviteToken);
-      } catch {}
-      source = "query";
-    } else {
-      try {
-        inviteToken = sessionStorage.getItem('trackerInviteToken') || null;
-        if (inviteToken) source = "sessionStorage";
-      } catch {
-        inviteToken = null;
-      }
-    }
-    return { inviteToken, source, allParams: params };
+
+  // Bootstrap de invitación: lectura única y estado persistente
+  const [inviteBootstrap, setInviteBootstrap] = useState({
+    loading: true,
+    done: false,
+    inviteAccepted: false,
+    trackerUserId: null,
+    orgId: null,
+    email: null,
+    error: null,
+    debug: {},
   });
 
-  const { inviteToken, source: inviteTokenSource, allParams } = inviteTokenState;
-
-
-  // --- Bootstrap robusto: si hay inviteToken, llama a accept-tracker-invite y guarda resultado ---
-  const [inviteAccepted, setInviteAccepted] = useState(false);
-  const [trackerUserId, setTrackerUserId] = useState(null);
-  const [trackerSessionError, setTrackerSessionError] = useState("");
   useEffect(() => {
-    async function init() {
-      const token = inviteToken;
-      setInviteTokenState((prev) => ({ ...prev, inviteToken: token }));
-      let orgId = null;
-      if (typeof window !== "undefined") {
-        orgId = new URLSearchParams(window.location.search).get("org_id") || localStorage.getItem("org_id") || null;
-      }
-      if (!token) {
-        setInviteAccepted(false);
-        setTrackerUserId(null);
-        setTrackerSessionError("No se recibió inviteToken");
-        return;
-      }
-      if (!orgId) {
-        setInviteAccepted(false);
-        setTrackerUserId(null);
-        setTrackerSessionError("No se recibió org_id");
-        return;
-      }
-      try {
-        const resp = await fetch("/api/accept-tracker-invite", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ inviteToken: token, org_id: orgId }),
-        });
+    // Solo leer una vez al montar
+    if (typeof window === "undefined") return;
+    const params = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+    let inviteToken = params.inviteToken || params.invite_token || params.token || params.t || null;
+    let orgId = params.org_id || localStorage.getItem("org_id") || null;
+    if (!inviteToken) {
+      try { inviteToken = sessionStorage.getItem('trackerInviteToken') || null; } catch {}
+    } else {
+      try { sessionStorage.setItem('trackerInviteToken', inviteToken); } catch {}
+    }
+    // Guardar orgId en localStorage para persistencia posterior
+    if (orgId) {
+      try { localStorage.setItem("org_id", orgId); } catch {}
+    }
+    setInviteBootstrap(prev => ({ ...prev, loading: true, done: false, error: null, debug: { params, inviteToken, orgId } }));
+    if (!inviteToken || !orgId) {
+      setInviteBootstrap(prev => ({ ...prev, loading: false, done: true, inviteAccepted: false, trackerUserId: null, orgId, email: null, error: "Faltan inviteToken u org_id", debug: { ...prev.debug, fail: true } }));
+      return;
+    }
+    // Llamar a accept-tracker-invite
+    fetch("/api/accept-tracker-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inviteToken, org_id: orgId }),
+    })
+      .then(async resp => {
         const result = await resp.json().catch(() => ({}));
         if (!resp.ok || !result?.ok) {
-          setInviteAccepted(false);
-          setTrackerUserId(null);
-          setTrackerSessionError(result?.error || "Error en validación de invitación");
+          setInviteBootstrap(prev => ({
+            ...prev,
+            loading: false,
+            done: true,
+            inviteAccepted: false,
+            trackerUserId: null,
+            orgId,
+            email: null,
+            error: result?.error || "Error en validación de invitación",
+            debug: { ...prev.debug, result, status: resp.status },
+          }));
         } else {
-          setInviteAccepted(true);
-          setTrackerUserId(result.tracker_user_id || result.user_id || null);
-          setTrackerSessionError("");
+          setInviteBootstrap(prev => ({
+            ...prev,
+            loading: false,
+            done: true,
+            inviteAccepted: true,
+            trackerUserId: result.tracker_user_id || result.user_id || null,
+            orgId: result.org_id || orgId,
+            email: result.email || null,
+            error: null,
+            debug: { ...prev.debug, result, status: resp.status },
+          }));
         }
-      } catch (err) {
-        setInviteAccepted(false);
-        setTrackerUserId(null);
-        setTrackerSessionError(err?.message || "Excepción desconocida");
-      }
-    }
-    init();
+      })
+      .catch(err => {
+        setInviteBootstrap(prev => ({
+          ...prev,
+          loading: false,
+          done: true,
+          inviteAccepted: false,
+          trackerUserId: null,
+          orgId,
+          email: null,
+          error: err?.message || "Excepción desconocida",
+          debug: { ...prev.debug, exception: true, err },
+        }));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Ahora trackingSessionReady depende de inviteAccepted y trackerUserId
-  const trackingSessionReady = inviteAccepted && !!trackerUserId && assignmentState.active === true && healthState.row;
+
+
+  // trackingSessionReady depende de bootstrap exitoso
+  const trackingSessionReady = inviteBootstrap.inviteAccepted && !!inviteBootstrap.trackerUserId && assignmentState.active === true && healthState.row;
   const missingToken = !trackerToken;
-  const missingInviteParams = !inviteToken;
+  const missingInviteParams = !inviteBootstrap.done || !inviteBootstrap.inviteAccepted;
   const missingBridge = !bridgeReady;
   const missingSession = !trackingSessionReady;
   const missingCritical = missingToken || missingInviteParams || missingBridge || missingSession;
 
   // LOGS por cada estado crítico
   if (missingToken) console.log('[TRACKER_PAGE] missing token');
-  if (missingInviteParams) console.log('[TRACKER_PAGE] missing invite params');
+  if (missingInviteParams) console.log('[TRACKER_PAGE] missing invite bootstrap');
   if (missingBridge) console.log('[TRACKER_PAGE] androidBridge not available');
   if (missingSession) console.log('[TRACKER_PAGE] missing tracker session');
   if (missingCritical) console.log('[TRACKER_PAGE] unexpected blank-state fallback');
 
   // Log render principal
   console.log('[TRACKER_PAGE] rendering main content', {
-    inviteToken,
-    inviteTokenSource,
-    allParams,
-    inviteAccepted,
-    trackerUserId,
+    inviteBootstrap,
     trackerSessionReady: !!trackingSessionReady,
     androidBridge: !!bridgeReady,
     batteryPromptDismissed,
@@ -841,21 +847,20 @@ export default function TrackerGpsPage() {
       <div style={{ fontSize: 16, marginBottom: 16 }}>
         Faltan datos críticos para iniciar el seguimiento.
       </div>
-      {trackerSessionError && (
+      {inviteBootstrap.error && (
         <div style={{ color: '#b71c1c', fontWeight: 600, marginBottom: 12, fontSize: 15 }}>
-          Error de sesión: {trackerSessionError}
+          Error de invitación: {inviteBootstrap.error}
         </div>
       )}
       <div style={{ fontSize: 15, textAlign: "left", margin: "0 auto", maxWidth: 320 }}>
-        <div>inviteToken: <b>{inviteToken ? 'sí' : 'no'}</b></div>
-        <div>inviteToken valor: <b>{inviteToken || '-'}</b></div>
-        <div>inviteToken source: <b>{inviteTokenSource || '-'}</b></div>
-        <div>params: <b>{JSON.stringify(allParams)}</b></div>
-        <div>inviteAccepted: <b>{inviteAccepted ? 'sí' : 'no'}</b></div>
-        <div>trackerUserId: <b>{trackerUserId || '-'}</b></div>
+        <div>inviteAccepted: <b>{inviteBootstrap.inviteAccepted ? 'sí' : 'no'}</b></div>
+        <div>trackerUserId: <b>{inviteBootstrap.trackerUserId || '-'}</b></div>
+        <div>orgId: <b>{inviteBootstrap.orgId || '-'}</b></div>
+        <div>email: <b>{inviteBootstrap.email || '-'}</b></div>
         <div>trackerSessionReady: <b>{trackingSessionReady ? 'sí' : 'no'}</b></div>
         <div>androidBridge: <b>{bridgeReady ? 'sí' : 'no'}</b></div>
         <div>batteryPromptDismissed: <b>{batteryPromptDismissed ? 'sí' : 'no'}</b></div>
+        <div>debug: <pre style={{ fontSize: 12, color: '#333', background: '#f5f5f5', padding: 6, borderRadius: 6, overflowX: 'auto' }}>{JSON.stringify(inviteBootstrap.debug, null, 2)}</pre></div>
       </div>
       <div style={{ marginTop: 16, fontSize: 13, color: "#333" }}>
         Este panel es obligatorio y solo aparece si falta algún dato esencial después de continuar.
