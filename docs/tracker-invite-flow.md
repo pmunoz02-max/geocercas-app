@@ -44,3 +44,32 @@ if (result.session?.access_token && result.session?.refresh_token) {
 ```
 
 After this, the tracker can send positions and access protected resources as a real user, and the session will persist across app restarts.
+## 🔥 Custom JWT Tracker Session (Nuevo)
+
+El endpoint `accept-tracker-invite` ahora emite un `access_token` JWT personalizado firmado con `SUPABASE_JWT_SECRET`.
+
+### Flujo
+
+1. Frontend llama `accept-tracker-invite`
+2. Backend:
+   - valida invite token
+   - resuelve `tracker_user_id`
+   - genera JWT:
+     - `sub = tracker_user_id`
+     - `role = authenticated`
+   - devuelve `session.access_token`
+3. Frontend:
+   - ejecuta `supabase.auth.setSession({ access_token })`
+   - establece `trackerSessionReady = true`
+
+### Características
+
+- No usa email ni OTP
+- No requiere interacción del usuario
+- Permite tracking autónomo en Android
+- Diseñado para servicios tipo Uber
+
+### Nota
+
+Este JWT no incluye `refresh_token`.  
+La renovación debe manejarse re-ejecutando el bootstrap si expira.

@@ -1,5 +1,6 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { create, getNumericDate } from "https://deno.land/x/djwt/mod.ts";
 
 const BUILD_TAG = "accept-tracker-invite-v1_preview_20260408";
 
@@ -305,36 +306,38 @@ serve(async (req) => {
       });
     }
 
-    // --- Crear sesión real vía GoTrue admin ---
-    const { data: userData, error: userError } = await sbAdmin.auth.admin.getUserById(trackerUserId);
-    if (userError || !userData?.user?.email) {
+    // --- Generar JWT custom para tracker ---
+    const JWT_SECRET = Deno.env.get("SUPABASE_JWT_SECRET");
+    if (!JWT_SECRET) {
       return jsonResponse(500, {
         ok: false,
-        error: "get_user_failed",
-        detail: userError?.message || "No user found",
+        error: "missing_jwt_secret",
+        build_tag: BUILD_TAG,
       });
     }
-    const { data: sessionData, error: sessionError } = await sbAdmin.auth.admin.generateLink({
-      type: "magiclink",
-      email: userData.user.email,
-    });
-    if (sessionError || !sessionData?.properties?.action_link) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "generate_link_failed",
-        detail: sessionError?.message || "No action_link",
-      });
-    }
-    // Extraer tokens del action_link
+    const payload = {
+      sub: trackerUserId,
+      email: inviteEmail,
+      role: "authenticated",
+      exp: getNumericDate(60 * 60 * 24), // 24h
+    };
     let access_token = null;
-    let refresh_token = null;
     try {
-      const url = new URL(sessionData.properties.action_link);
-      access_token = url.searchParams.get("access_token");
-      refresh_token = url.searchParams.get("refresh_token");
-    } catch {}
+      access_token = await create(
+        { alg: "HS256", typ: "JWT" },
+        payload,
+        JWT_SECRET,
+      );
+    } catch (jwtErr) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "jwt_create_failed",
+        detail: jwtErr?.message || String(jwtErr),
+        build_tag: BUILD_TAG,
+      });
+    }
 
-    console.log("[accept-tracker-invite] success", {
+    console.log("[accept-tracker-invite] custom_jwt", {
       build_tag: BUILD_TAG,
       invite_id: inviteRow.id,
       org_id: orgId,
@@ -350,8 +353,7 @@ serve(async (req) => {
       email: inviteEmail,
       session: {
         access_token,
-        refresh_token,
-        token_type: "bearer",
+        refresh_token: null,
       },
     });
   } catch (err: any) {

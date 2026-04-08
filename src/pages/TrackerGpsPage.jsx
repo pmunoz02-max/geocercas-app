@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import supabaseTracker from "../lib/supabaseTrackerClient";
 
 function getAndroidBridge() { 
   if (typeof window === "undefined") return null;
@@ -790,18 +791,31 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        // Si hay sesión, setearla y marcar trackerSessionReady, guardar error si ocurre
+
+        // --- OTP FLOW: signInWithOtp + verifyOtp if token_hash present ---
         let sessionSet = false;
         let sessionErrorMessage = null;
-        if (result?.session?.access_token && result?.session?.refresh_token) {
-          const { error: setSessionError } = await supabase.auth.setSession({
-            access_token: result.session.access_token,
-            refresh_token: result.session.refresh_token,
-          });
-          if (setSessionError) {
-            sessionErrorMessage = setSessionError.message || "set_session_failed";
-          } else {
-            sessionSet = true;
+        if (result?.otp_required && result?.email) {
+          try {
+            // 1. Enviar OTP al email
+            await supabaseTracker.auth.signInWithOtp({ email: result.email });
+            // 2. Si hay token_hash en la URL, intentar verificar inmediatamente
+            const urlParams = new URLSearchParams(window.location.search);
+            const tokenHash = urlParams.get("token_hash") || urlParams.get("token") || null;
+            if (tokenHash) {
+              const { data: verifyData, error: verifyError } = await supabaseTracker.auth.verifyOtp({
+                email: result.email,
+                token: tokenHash,
+                type: "magiclink",
+              });
+              if (verifyError) {
+                sessionErrorMessage = verifyError.message || "verify_otp_failed";
+              } else if (verifyData?.session?.access_token) {
+                sessionSet = true;
+              }
+            }
+          } catch (otpErr) {
+            sessionErrorMessage = otpErr?.message || "otp_flow_failed";
           }
         }
 
