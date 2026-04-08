@@ -158,6 +158,22 @@ function resolveTrackerAuthIdFromPersonal(row) {
 }
 
 
+function isProbablyZeroZeroBounds(bounds) {
+  try {
+    if (!bounds?.isValid?.()) return false;
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+    const vals = [sw?.lat, sw?.lng, ne?.lat, ne?.lng].map(Number);
+    return vals.every((v) => Number.isFinite(v) && Math.abs(v) < 0.000001);
+  } catch {
+    return false;
+  }
+}
+
+function logLiveMetric() {
+  // no-op in production UI
+}
+
 // Removed preview/debug helpers
 
 
@@ -843,6 +859,28 @@ export default function TrackerDashboard() {
   const [loading, setLoading] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
+  const [infoMsg, setInfoMsg] = useState("");
+  const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
+  const [intersectsText, setIntersectsText] = useState("—");
+  const [diag, setDiag] = useState({
+    mapCreated: false,
+    w: null,
+    h: null,
+    zoom: null,
+    assignmentsRows: 0,
+    trackersFound: 0,
+    geofencesFound: 0,
+    geofencePolys: 0,
+    geofenceCircles: 0,
+    positionsFound: 0,
+    positionsSource: null,
+    lastAssignmentsError: null,
+    lastGeofencesError: null,
+    lastPositionsError: null,
+    assignedGeofenceIds: 0,
+    skippedZeroZero: 0,
+    selectedGeofences: 0,
+  });
 
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [isHistoryRequested, setIsHistoryRequested] = useState(false);
@@ -1270,7 +1308,7 @@ export default function TrackerDashboard() {
 
       try {
         if (showSpinner) setLoading(true);
-        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: "tracker_health" }));
+        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
         setErrorMsg("");
 
         const statusRes = await supabase.rpc("rpc_tracker_dashboard_status", {
@@ -1282,7 +1320,8 @@ export default function TrackerDashboard() {
           setErrorMsg("Error loading tracker dashboard status.");
           setTrackerStatusRows([]);
           setTrackerCounts(null);
-          return;
+        } else {
+          setTrackerStatusRows(Array.isArray(statusRes.data) ? statusRes.data : []);
         }
 
         const countsRes = await supabase.rpc("rpc_tracker_dashboard_counts", {
@@ -1291,26 +1330,42 @@ export default function TrackerDashboard() {
 
         if (countsRes.error) {
           console.error("[tracker-dashboard] rpc_tracker_dashboard_counts error:", countsRes.error);
-          setErrorMsg("Error loading tracker dashboard counts.");
-          setTrackerStatusRows(Array.isArray(statusRes.data) ? statusRes.data : []);
           setTrackerCounts(null);
         } else {
-          const countsRow = Array.isArray(countsRes.data) && countsRes.data.length > 0
-            ? countsRes.data[0]
-            : null;
+          const countsRow =
+            Array.isArray(countsRes.data) && countsRes.data.length > 0
+              ? countsRes.data[0]
+              : null;
           setTrackerCounts(countsRow);
         }
 
-        const statusRows = Array.isArray(statusRes.data) ? statusRes.data : [];
-        setTrackerStatusRows(statusRows);
+        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
+        const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
         const latestRes = await loadLatestPositions(safeOrgId);
-        let finalRows = latestRes?.rows || [];
+        const latestRows = latestRes?.rows || [];
         let source = "tracker_latest";
+        let finalRows = latestRows;
 
-        // No active geofences: previously setInfoMsg for diagnostics (removed)
+        if (latestRows.length === 0) {
+          finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
+          source = "positions";
+        }
+
+        finalRows = (finalRows || []).filter((p) => {
+          const lat = Number(p?.lat);
+          const lng = Number(p?.lng);
+          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
+        });
+
+        setPositions(finalRows);
+        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
+      } finally {
+        if (showSpinner) setLoading(false);
+      }
+    },
+    [timeWindowId]
   );
-
 
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
@@ -2356,6 +2411,14 @@ export default function TrackerDashboard() {
                   whenCreated={(map) => {
                     mapRef.current = map;
                     try {
+                      const size = map?.getSize?.();
+                      setDiag((d) => ({
+                        ...d,
+                        mapCreated: true,
+                        w: size?.x ?? null,
+                        h: size?.y ?? null,
+                        zoom: map?.getZoom?.() ?? null,
+                      }));
                       map.invalidateSize();
                     } catch {}
                   }}
