@@ -741,29 +741,59 @@ export default function TrackerGpsPage() {
 
   const { inviteToken, source: inviteTokenSource, allParams } = inviteTokenState;
 
-  // --- CRITICAL: Inicializar sesión Supabase con inviteToken si existe ---
 
-  const [trackerSession, setTrackerSession] = useState(false);
+  // --- Bootstrap robusto: si hay inviteToken, llama a accept-tracker-invite y guarda resultado ---
+  const [inviteAccepted, setInviteAccepted] = useState(false);
+  const [trackerUserId, setTrackerUserId] = useState(null);
   const [trackerSessionError, setTrackerSessionError] = useState("");
-  
   useEffect(() => {
     async function init() {
-      const token = getInviteToken();
+      const token = inviteToken;
       setInviteTokenState((prev) => ({ ...prev, inviteToken: token }));
+      let orgId = null;
+      if (typeof window !== "undefined") {
+        orgId = new URLSearchParams(window.location.search).get("org_id") || localStorage.getItem("org_id") || null;
+      }
       if (!token) {
-        setTrackerSession(false);
+        setInviteAccepted(false);
+        setTrackerUserId(null);
         setTrackerSessionError("No se recibió inviteToken");
         return;
       }
-      const result = await bootstrapTrackerSession(token);
-      setTrackerSession(!!result.ok);
-      setTrackerSessionError(result.ok ? "" : result.error || "Error desconocido");
+      if (!orgId) {
+        setInviteAccepted(false);
+        setTrackerUserId(null);
+        setTrackerSessionError("No se recibió org_id");
+        return;
+      }
+      try {
+        const resp = await fetch("/api/accept-tracker-invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inviteToken: token, org_id: orgId }),
+        });
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok || !result?.ok) {
+          setInviteAccepted(false);
+          setTrackerUserId(null);
+          setTrackerSessionError(result?.error || "Error en validación de invitación");
+        } else {
+          setInviteAccepted(true);
+          setTrackerUserId(result.tracker_user_id || result.user_id || null);
+          setTrackerSessionError("");
+        }
+      } catch (err) {
+        setInviteAccepted(false);
+        setTrackerUserId(null);
+        setTrackerSessionError(err?.message || "Excepción desconocida");
+      }
     }
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const trackingSessionReady = trackerSession && assignmentState.active === true && healthState.row;
+  // Ahora trackingSessionReady depende de inviteAccepted y trackerUserId
+  const trackingSessionReady = inviteAccepted && !!trackerUserId && assignmentState.active === true && healthState.row;
   const missingToken = !trackerToken;
   const missingInviteParams = !inviteToken;
   const missingBridge = !bridgeReady;
@@ -782,7 +812,9 @@ export default function TrackerGpsPage() {
     inviteToken,
     inviteTokenSource,
     allParams,
-    trackerSession: !!trackingSessionReady,
+    inviteAccepted,
+    trackerUserId,
+    trackerSessionReady: !!trackingSessionReady,
     androidBridge: !!bridgeReady,
     batteryPromptDismissed,
   });
@@ -819,7 +851,9 @@ export default function TrackerGpsPage() {
         <div>inviteToken valor: <b>{inviteToken || '-'}</b></div>
         <div>inviteToken source: <b>{inviteTokenSource || '-'}</b></div>
         <div>params: <b>{JSON.stringify(allParams)}</b></div>
-        <div>trackerSession: <b>{trackingSessionReady ? 'sí' : 'no'}</b></div>
+        <div>inviteAccepted: <b>{inviteAccepted ? 'sí' : 'no'}</b></div>
+        <div>trackerUserId: <b>{trackerUserId || '-'}</b></div>
+        <div>trackerSessionReady: <b>{trackingSessionReady ? 'sí' : 'no'}</b></div>
         <div>androidBridge: <b>{bridgeReady ? 'sí' : 'no'}</b></div>
         <div>batteryPromptDismissed: <b>{batteryPromptDismissed ? 'sí' : 'no'}</b></div>
       </div>
