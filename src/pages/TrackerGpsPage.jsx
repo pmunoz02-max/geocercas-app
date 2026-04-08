@@ -15,6 +15,17 @@ function mapHealthState(status) {
 }
 
 export default function TrackerGpsPage() {
+  // Persist inviteToken from query params to sessionStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const urlToken = new URLSearchParams(window.location.search).get('invite_token');
+    if (urlToken) {
+      try {
+        sessionStorage.setItem('trackerInviteToken', urlToken);
+        console.log('[TRACKER_PAGE] inviteToken persisted to sessionStorage');
+      } catch {}
+    }
+  }, []);
   // Log mount
   useEffect(() => {
     console.log('[TRACKER_PAGE] mounted');
@@ -582,25 +593,29 @@ export default function TrackerGpsPage() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [refreshBatteryOptStatus]);
 
-  const [batteryPromptDismissed, setBatteryPromptDismissed] = useState(() => {
-    const dismissed = (() => {
-      try {
-        return localStorage.getItem("batteryPromptDismissed") === "true";
-      } catch {
-        return false;
-      }
-    })();
-    if (dismissed) {
-      console.log('[TRACKER_PAGE] battery gate dismissed');
+  // batteryPromptDismissed: siempre leer de localStorage en cada render
+  const [batteryPromptDismissedState, setBatteryPromptDismissedState] = useState(() => {
+    try {
+      return localStorage.getItem("batteryPromptDismissed") === "true";
+    } catch {
+      return false;
     }
-    return dismissed;
   });
 
+  // Siempre reflejar el valor actual de localStorage en cada render
+  const batteryPromptDismissed = (() => {
+    try {
+      return localStorage.getItem("batteryPromptDismissed") === "true";
+    } catch {
+      return batteryPromptDismissedState;
+    }
+  })();
+
   const handleContinueAnyway = () => {
-    setBatteryPromptDismissed(true);
     try {
       localStorage.setItem("batteryPromptDismissed", "true");
     } catch {}
+    setBatteryPromptDismissedState(true); // fuerza rerender inmediato
     // No limpiar search params, no redirigir, no reiniciar nada
     // Solo cerrar el battery gate y continuar el flujo actual
     console.log('[TRACKER_PAGE] battery gate dismissed (continuar de todos modos)');
@@ -688,7 +703,18 @@ export default function TrackerGpsPage() {
     trackerAuth = null;
   }
   const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
-  const inviteToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("invite_token") : null;
+  // inviteToken: primero query param, luego sessionStorage
+  let inviteToken = null;
+  if (typeof window !== "undefined") {
+    inviteToken = new URLSearchParams(window.location.search).get("invite_token");
+    if (!inviteToken) {
+      try {
+        inviteToken = sessionStorage.getItem('trackerInviteToken') || null;
+      } catch {
+        inviteToken = null;
+      }
+    }
+  }
   const trackingSessionReady = assignmentState.active === true && healthState.row;
   const missingToken = !trackerToken;
   const missingInviteParams = !inviteToken;
