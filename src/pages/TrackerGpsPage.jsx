@@ -790,26 +790,19 @@ export default function TrackerGpsPage() {
           return;
         }
 
-        // Si hay sesión, setearla y marcar trackerSessionReady
+        // Si hay sesión, setearla y marcar trackerSessionReady, guardar error si ocurre
         let sessionSet = false;
-        try {
-          if (result.session?.access_token && result.session?.refresh_token) {
-            const supabaseTrackerClient = supabase;
-            await supabaseTrackerClient.auth.setSession({
-              access_token: result.session.access_token,
-              refresh_token: result.session.refresh_token,
-            });
+        let sessionErrorMessage = null;
+        if (result?.session?.access_token && result?.session?.refresh_token) {
+          const { error: setSessionError } = await supabase.auth.setSession({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token,
+          });
+          if (setSessionError) {
+            sessionErrorMessage = setSessionError.message || "set_session_failed";
+          } else {
             sessionSet = true;
           }
-        } catch (err) {
-          // Si falla el setSession, igual seguimos pero lo logueamos en debug
-          setInviteBootstrap(prev => ({
-            ...prev,
-            debug: {
-              ...prev.debug,
-              setSessionError: err?.message || String(err),
-            },
-          }));
         }
 
         setInviteBootstrap(prev => ({
@@ -821,7 +814,7 @@ export default function TrackerGpsPage() {
           orgId: result.org_id ?? orgId ?? null,
           email: result.email ?? null,
           trackerSessionReady: sessionSet,
-          error: null,
+          error: sessionSet ? null : (sessionErrorMessage || prev.error || null),
           debug: {
             ...prev.debug,
             params,
@@ -830,6 +823,7 @@ export default function TrackerGpsPage() {
             status: resp.status,
             result,
             sessionSet,
+            sessionErrorMessage,
           },
         }));
       } catch (err) {

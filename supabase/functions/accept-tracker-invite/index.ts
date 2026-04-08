@@ -305,23 +305,34 @@ serve(async (req) => {
       });
     }
 
-    // --- Generar sesión Supabase para el tracker usando magiclink admin ---
-    const { data: linkData, error: linkError } =
-      await sbAdmin.auth.admin.generateLink({
-        type: "magiclink",
-        email: inviteEmail,
+    // --- Crear sesión real vía GoTrue admin ---
+    const { data: userData, error: userError } = await sbAdmin.auth.admin.getUserById(trackerUserId);
+    if (userError || !userData?.user?.email) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "get_user_failed",
+        detail: userError?.message || "No user found",
       });
-
-    if (linkError) {
+    }
+    const { data: sessionData, error: sessionError } = await sbAdmin.auth.admin.generateLink({
+      type: "magiclink",
+      email: userData.user.email,
+    });
+    if (sessionError || !sessionData?.properties?.action_link) {
       return jsonResponse(500, {
         ok: false,
         error: "generate_link_failed",
-        detail: linkError.message,
+        detail: sessionError?.message || "No action_link",
       });
     }
-
-    const access_token = linkData?.properties?.access_token ?? null;
-    const refresh_token = linkData?.properties?.refresh_token ?? null;
+    // Extraer tokens del action_link
+    let access_token = null;
+    let refresh_token = null;
+    try {
+      const url = new URL(sessionData.properties.action_link);
+      access_token = url.searchParams.get("access_token");
+      refresh_token = url.searchParams.get("refresh_token");
+    } catch {}
 
     console.log("[accept-tracker-invite] success", {
       build_tag: BUILD_TAG,

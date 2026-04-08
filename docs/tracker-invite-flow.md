@@ -12,9 +12,9 @@
 
 Este flujo elimina riesgos de seguridad y asegura que solo el destinatario pueda activar la sesión tracker.
 
-## Tracker Session Bootstrap
+## Tracker Session Bootstrap (Updated)
 
-The `accept-tracker-invite` endpoint now returns a real Supabase session object containing `access_token` and `refresh_token` for the resolved tracker user. The frontend must call `supabase.auth.setSession` with these tokens immediately after a successful invite acceptance. This enables the tracker to operate with a real authenticated session, allowing autonomous position reporting, persistent authentication across restarts, and full RLS enforcement on the backend. This step is required for secure, production-grade tracking flows.
+The `accept-tracker-invite` endpoint now returns a `session` object containing `access_token` and `refresh_token` for the resolved tracker user. The `TrackerGpsPage` must call `supabase.auth.setSession` (or `supabaseTrackerClient.auth.setSession`) immediately after a successful invite acceptance, using these tokens. This step is required to enable authenticated, autonomous tracking and to ensure all backend RLS and security policies are enforced for the tracker user.
 
 **Example response:**
 
@@ -35,10 +35,12 @@ The `accept-tracker-invite` endpoint now returns a real Supabase session object 
 **Frontend integration:**
 
 ```
-await supabase.auth.setSession({
-  access_token: result.session.access_token,
-  refresh_token: result.session.refresh_token,
-});
+if (result.session?.access_token && result.session?.refresh_token) {
+  await supabase.auth.setSession({
+    access_token: result.session.access_token,
+    refresh_token: result.session.refresh_token,
+  });
+}
 ```
 
-After this, the tracker can send positions and access protected resources as a real user.
+After this, the tracker can send positions and access protected resources as a real user, and the session will persist across app restarts.
