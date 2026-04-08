@@ -750,53 +750,56 @@ export default function TrackerGpsPage() {
       setInviteBootstrap(prev => ({ ...prev, loading: false, done: true, inviteAccepted: false, trackerUserId: null, orgId, email: null, error: "Faltan inviteToken u org_id", debug: { ...prev.debug, fail: true } }));
       return;
     }
-    // Llamar a accept-tracker-invite
-    fetch("/api/accept-tracker-invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ inviteToken, org_id: orgId }),
-    })
-      .then(async resp => {
-        const result = await resp.json().catch(() => ({}));
-        if (!resp.ok || !result?.ok) {
+    // Llamar a accept-tracker-invite usando supabaseTrackerClient.functions.invoke
+    (async () => {
+      try {
+        // Usa el cliente adecuado para funciones edge (ajusta si tu cliente se llama diferente)
+        const supabaseTrackerClient = supabase;
+        const { data, error } = await supabaseTrackerClient.functions.invoke(
+          "accept-tracker-invite",
+          {
+            body: { inviteToken, org_id: orgId },
+          }
+        );
+        const result = data || {};
+        if (error || !result?.ok) {
           setInviteBootstrap(prev => ({
             ...prev,
             loading: false,
             done: true,
             inviteAccepted: false,
-            trackerUserId: null,
-            orgId,
-            email: null,
-            error: result?.error || "Error en validación de invitación",
-            debug: { ...prev.debug, result, status: resp.status },
+            error: error?.message || result?.error || "accept_failed",
+            debug: {
+              ...prev.debug,
+              result,
+            },
           }));
-        } else {
-          setInviteBootstrap(prev => ({
-            ...prev,
-            loading: false,
-            done: true,
-            inviteAccepted: true,
-            trackerUserId: result.tracker_user_id || result.user_id || null,
-            orgId: result.org_id || orgId,
-            email: result.email || null,
-            error: null,
-            debug: { ...prev.debug, result, status: resp.status },
-          }));
+          return;
         }
-      })
-      .catch(err => {
+        setInviteBootstrap(prev => ({
+          ...prev,
+          loading: false,
+          done: true,
+          inviteAccepted: true,
+          trackerUserId: result.tracker_user_id,
+          orgId: result.org_id,
+          email: result.email,
+          debug: {
+            ...prev.debug,
+            result,
+          },
+        }));
+      } catch (err) {
         setInviteBootstrap(prev => ({
           ...prev,
           loading: false,
           done: true,
           inviteAccepted: false,
-          trackerUserId: null,
-          orgId,
-          email: null,
           error: err?.message || "Excepción desconocida",
           debug: { ...prev.debug, exception: true, err },
         }));
-      });
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
