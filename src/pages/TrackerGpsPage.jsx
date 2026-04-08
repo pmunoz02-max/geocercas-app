@@ -753,15 +753,22 @@ export default function TrackerGpsPage() {
     // Llamar a accept-tracker-invite usando supabaseTrackerClient.functions.invoke
     (async () => {
       try {
-        const supabaseTrackerClient = supabase;
-        const { data, error } = await supabaseTrackerClient.functions.invoke(
-          "accept-tracker-invite",
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+        const resp = await fetch(
+          `${supabaseUrl}/functions/v1/accept-tracker-invite`,
           {
-            body: { inviteToken, org_id: orgId },
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: supabaseAnonKey,
+              Authorization: `Bearer ${supabaseAnonKey}`,
+            },
+            body: JSON.stringify({ inviteToken, org_id: orgId }),
           }
         );
-        const result = data ?? null;
-        if (error || !result?.ok) {
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok || !result?.ok) {
           setInviteBootstrap(prev => ({
             ...prev,
             loading: false,
@@ -770,19 +777,14 @@ export default function TrackerGpsPage() {
             trackerUserId: null,
             orgId: result?.org_id ?? orgId ?? null,
             email: result?.email ?? null,
-            error: error?.message || result?.error || "accept_failed",
+            error: result?.error || `http_${resp.status}`,
             debug: {
               ...prev.debug,
               params,
               inviteToken,
               orgId,
-              invokeReturned: true,
-              data,
+              status: resp.status,
               result,
-              errorMessage: error?.message ?? null,
-              errorName: error?.name ?? null,
-              errorContext: error?.context ?? null,
-              errorObject: error ? String(error) : null,
             },
           }));
           return;
@@ -801,10 +803,8 @@ export default function TrackerGpsPage() {
             params,
             inviteToken,
             orgId,
-            invokeReturned: true,
-            data,
+            status: resp.status,
             result,
-            errorMessage: null,
           },
         }));
       } catch (err) {
@@ -822,7 +822,7 @@ export default function TrackerGpsPage() {
             params,
             inviteToken,
             orgId,
-            invokeReturned: false,
+            fetchException: true,
             errorMessage: err?.message ?? null,
             errorName: err?.name ?? null,
             errorContext: err?.context ?? null,
