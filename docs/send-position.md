@@ -39,3 +39,22 @@ user_id == auth.users.id == personal.user_id
 ## Objetivo
 
 Asegurar trazabilidad completa del pipeline de tracking
+# send_position – v20 user_id uuid
+
+## Cambio
+Se actualiza `send_position` para asegurar que `positions.user_id` se inserte como `uuid` real y no como `text`.
+
+## Motivo
+El endpoint devolvía error 500:
+`column "user_id" is of type uuid but expression is of type text`
+
+## Impacto
+- Corrige inserción en `positions`
+- Desbloquea tracking Android hacia backend
+- Mantiene integridad de tipos en base de datos
+
+## Build tag
+`send_position-v20_user_id_uuid_preview_20260407`
+
+## Entorno
+Solo branch `preview`.

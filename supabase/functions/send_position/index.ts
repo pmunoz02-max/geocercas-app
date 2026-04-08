@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const build_tag = "send_position-v21-operational-flags";
+const build_tag = "send_position-v20_user_id_uuid_preview_20260407";
 
 function buildCorsHeaders(origin: string | null) {
   return {
