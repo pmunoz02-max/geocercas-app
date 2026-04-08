@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-function getAndroidBridge() {
+function getAndroidBridge() { 
   if (typeof window === "undefined") return null;
   return window.Android || window.AndroidBridge || null;
 }
@@ -745,46 +745,23 @@ export default function TrackerGpsPage() {
 
   const [trackerSession, setTrackerSession] = useState(false);
   const [trackerSessionError, setTrackerSessionError] = useState("");
+  
   useEffect(() => {
-    let cancelled = false;
-    async function setSessionIfInviteToken() {
-      if (inviteToken) {
-        try {
-          // Intenta inicializar sesión Supabase con inviteToken
-          const { data, error } = await supabase.auth.setSession({
-            access_token: inviteToken,
-            refresh_token: inviteToken,
-          });
-          if (error) {
-            console.error('[TRACKER_PAGE] supabase.auth.setSession error', error);
-            setTrackerSession(false);
-            setTrackerSessionError('Error al inicializar sesión Supabase: ' + (error.message || error.error_description || 'Error desconocido'));
-            return;
-          }
-          // Validar usuario
-          const { data: userData, error: userError } = await supabase.auth.getUser();
-          if (userError || !userData || !userData.user) {
-            setTrackerSession(false);
-            setTrackerSessionError('No se pudo obtener usuario válido tras setSession.');
-            console.error('[TRACKER_PAGE] supabase.auth.getUser error', userError);
-            return;
-          }
-          setTrackerSession(true);
-          setTrackerSessionError("");
-          console.log('[TRACKER_PAGE] Supabase session initialized with inviteToken, user:', userData.user);
-        } catch (err) {
-          console.error('[TRACKER_PAGE] setSession exception', err);
-          setTrackerSession(false);
-          setTrackerSessionError('Excepción al inicializar sesión Supabase: ' + (err.message || 'Error desconocido'));
-        }
-      } else {
+    async function init() {
+      const token = getInviteToken();
+      setInviteTokenState((prev) => ({ ...prev, inviteToken: token }));
+      if (!token) {
         setTrackerSession(false);
-        setTrackerSessionError("");
+        setTrackerSessionError("No se recibió inviteToken");
+        return;
       }
+      const result = await bootstrapTrackerSession(token);
+      setTrackerSession(!!result.ok);
+      setTrackerSessionError(result.ok ? "" : result.error || "Error desconocido");
     }
-    setSessionIfInviteToken();
+    init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inviteToken]);
+  }, []);
 
   const trackingSessionReady = trackerSession && assignmentState.active === true && healthState.row;
   const missingToken = !trackerToken;
