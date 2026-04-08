@@ -158,19 +158,7 @@ function resolveTrackerAuthIdFromPersonal(row) {
 }
 
 
-function isPreviewLikeHost() {
-  if (typeof window === "undefined") return false;
-  const host = String(window.location.hostname || "").toLowerCase();
-  return host.includes("preview") || host === "localhost" || host === "127.0.0.1";
-}
-
-function logLiveMetric(label, payload = {}) {
-  if (!isPreviewLikeHost()) return;
-  console.log(`[tracker-live] ${label}`, {
-    at: new Date().toISOString(),
-    ...payload,
-  });
-}
+// Removed preview/debug helpers
 
 
 function FitIfOutOfView({ layerItems, markerPoints, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
@@ -1596,69 +1584,7 @@ export default function TrackerDashboard() {
     };
   }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, fetchDashboardData]);
 
-  useEffect(() => {
-    if (!previewUiEnabled) return;
-    if (!resolvedOrgId || entitlementsLoading || isFree) return;
-    if (isHistoryRequested) return;
-
-    const channel = supabase
-      .channel(`tracker-dashboard-live-${resolvedOrgId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "tracker_latest",
-          filter: `org_id=eq.${resolvedOrgId}`,
-        },
-        (payload) => {
-          if (!payload || (payload.eventType !== "INSERT" && payload.eventType !== "UPDATE")) return;
-
-          const eventType = payload.eventType;
-          const row = payload.new;
-          const mappedRow = mapTrackerLatestRow(row);
-          if (!mappedRow) return;
-
-          logLiveMetric("realtime_event", {
-            eventType,
-            orgId: resolvedOrgId,
-            userId: String(row.user_id),
-            ts: row.ts,
-            source: "tracker_latest",
-          });
-
-          const prevRows = Array.isArray(positionsRef.current) ? positionsRef.current : [];
-          const source = "tracker_latest";
-          const nextRows = replacePositionByUserId(prevRows, mappedRow);
-
-          logLiveMetric("state_merge", {
-            source,
-            rowsBefore: prevRows.length,
-            rowsAfter: nextRows.length,
-            userId: String(row.user_id),
-          });
-
-          positionsRef.current = nextRows;
-          setPositions(nextRows);
-          setDiag((d) => ({
-            ...d,
-            positionsFound: nextRows.length,
-            positionsSource: "tracker_latest",
-          }));
-        }
-      )
-      .subscribe();
-
-    logLiveMetric("subscription_created", { orgId: resolvedOrgId });
-
-    return () => {
-      try {
-        logLiveMetric("subscription_removed", { orgId: resolvedOrgId });
-        if (typeof supabase.removeChannel === "function") supabase.removeChannel(channel);
-        else if (typeof channel.unsubscribe === "function") channel.unsubscribe();
-      } catch {}
-    };
-  }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, previewUiEnabled]);
+  // Removed preview/debug live subscription effect
 
   useEffect(() => {
     if (!resolvedOrgId || entitlementsLoading || isFree) return;
