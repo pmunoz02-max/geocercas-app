@@ -15,6 +15,10 @@ function mapHealthState(status) {
 }
 
 export default function TrackerGpsPage() {
+  // Log mount
+  useEffect(() => {
+    console.log('[TRACKER_PAGE] mounted');
+  }, []);
   const buildMarker =
     import.meta.env.VITE_BUILD_MARKER ||
     import.meta.env.VITE_VERCEL_GIT_COMMIT_SHA ||
@@ -579,11 +583,17 @@ export default function TrackerGpsPage() {
   }, [refreshBatteryOptStatus]);
 
   const [batteryPromptDismissed, setBatteryPromptDismissed] = useState(() => {
-    try {
-      return localStorage.getItem("batteryPromptDismissed") === "true";
-    } catch {
-      return false;
+    const dismissed = (() => {
+      try {
+        return localStorage.getItem("batteryPromptDismissed") === "true";
+      } catch {
+        return false;
+      }
+    })();
+    if (dismissed) {
+      console.log('[TRACKER_PAGE] battery gate dismissed');
     }
+    return dismissed;
   });
 
   const handleContinueAnyway = () => {
@@ -591,6 +601,9 @@ export default function TrackerGpsPage() {
     try {
       localStorage.setItem("batteryPromptDismissed", "true");
     } catch {}
+    // No limpiar search params, no redirigir, no reiniciar nada
+    // Solo cerrar el battery gate y continuar el flujo actual
+    console.log('[TRACKER_PAGE] battery gate dismissed (continuar de todos modos)');
   };
 
   const renderBatteryOptBlock = () => {
@@ -666,6 +679,73 @@ export default function TrackerGpsPage() {
     );
   };
 
+  // --- CRITICAL CHECKS & LOGS ---
+  const trackerAuthRaw = typeof window !== "undefined" ? localStorage.getItem("geocercas-tracker-auth") : null;
+  let trackerAuth = null;
+  try {
+    trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
+  } catch {
+    trackerAuth = null;
+  }
+  const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
+  const inviteToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("invite_token") : null;
+  const trackingSessionReady = assignmentState.active === true && healthState.row;
+  const missingToken = !trackerToken;
+  const missingInviteParams = !inviteToken;
+  const missingBridge = !bridgeReady;
+  const missingSession = !trackingSessionReady;
+  const missingCritical = missingToken || missingInviteParams || missingBridge || missingSession;
+
+  // LOGS por cada estado crítico
+  if (missingToken) console.log('[TRACKER_PAGE] missing token');
+  if (missingInviteParams) console.log('[TRACKER_PAGE] missing invite params');
+  if (missingBridge) console.log('[TRACKER_PAGE] androidBridge not available');
+  if (missingSession) console.log('[TRACKER_PAGE] missing tracker session');
+  if (missingCritical) console.log('[TRACKER_PAGE] unexpected blank-state fallback');
+
+  // Log render principal
+  console.log('[TRACKER_PAGE] rendering main content', {
+    inviteToken: !!inviteToken,
+    trackerSession: !!trackingSessionReady,
+    androidBridge: !!bridgeReady,
+    batteryPromptDismissed,
+  });
+
+  // Fallback visual obligatorio
+  const renderFallbackPanel = () => (
+    <div
+      style={{
+        width: "100%",
+        maxWidth: 480,
+        border: "2px solid #e57373",
+        borderRadius: 12,
+        padding: 24,
+        background: "#fff3f3",
+        color: "#b71c1c",
+        marginTop: 32,
+        fontFamily: "monospace",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 12 }}>
+        No se pudo iniciar el tracking
+      </div>
+      <div style={{ fontSize: 16, marginBottom: 16 }}>
+        Faltan datos críticos para iniciar el seguimiento.
+      </div>
+      <div style={{ fontSize: 15, textAlign: "left", margin: "0 auto", maxWidth: 320 }}>
+        <div>inviteToken: <b>{inviteToken ? 'sí' : 'no'}</b></div>
+        <div>trackerSession: <b>{trackingSessionReady ? 'sí' : 'no'}</b></div>
+        <div>androidBridge: <b>{bridgeReady ? 'sí' : 'no'}</b></div>
+        <div>batteryPromptDismissed: <b>{batteryPromptDismissed ? 'sí' : 'no'}</b></div>
+      </div>
+      <div style={{ marginTop: 16, fontSize: 13, color: "#333" }}>
+        Este panel es obligatorio y solo aparece si falta algún dato esencial después de continuar.
+      </div>
+    </div>
+  );
+
+  // Render principal: nunca return null ni pantalla vacía
   return (
     <div
       style={{
@@ -683,6 +763,33 @@ export default function TrackerGpsPage() {
       }}
     >
       {renderBatteryOptBlock()}
+      {missingCritical && renderFallbackPanel()}
+      {/* Si todo está ok, mostrar mensaje de tracking activo */}
+      {!missingCritical && (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 760,
+            border: "1px solid #d0d7de",
+            borderRadius: 12,
+            padding: 20,
+            background: "#f8f9fb",
+            marginTop: 24,
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+            Tracker activo
+          </div>
+          <div style={{ fontSize: 15, marginBottom: 8 }}>
+            El tracking está funcionando correctamente.<br />
+            Último estado: <b>{lastMessage}</b>
+          </div>
+          <div style={{ fontSize: 13, color: "#555" }}>
+            OrgId: <b>{String(effectiveOrgId)}</b>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
