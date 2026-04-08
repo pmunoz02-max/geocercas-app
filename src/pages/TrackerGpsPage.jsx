@@ -1,39 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 function getAndroidBridge() {
   if (typeof window === "undefined") return null;
-  console.log("ANDROID BRIDGE:", window["Android"]);
-  return window["Android"] || null;
+  return window.Android || window.AndroidBridge || null;
 }
 
-function resolveVisibleState(assignmentState, healthState) {
-  if (assignmentState.loading || healthState.loading) return "loading";
-
-  if (assignmentState.reason === "no_session") {
-    return "no web session yet";
-  }
-
-  if (assignmentState.reason === "missing_org") {
-    return "missing org context";
-  }
-
-  if (assignmentState.reason === "no_personal_profile") {
-    return "tracker personnel not configured";
-  }
-
-  if (assignmentState.error && !assignmentState.active) {
-    return "missing session/context";
-  }
-
-  if (!assignmentState.active) {
-    return "waiting for assignment";
-  }
-
-  return String(healthState.row?.status || "offline");
+function mapHealthState(status) {
+  const normalized = String(status || "offline").toLowerCase();
+  if (["online", "active", "ok", "healthy"].includes(normalized)) return "online";
+  if (["idle", "waiting"].includes(normalized)) return "idle";
+  if (["offline", "inactive", "disconnected"].includes(normalized)) return "offline";
+  return normalized;
 }
 
 export default function TrackerGpsPage() {
+  const buildMarker =
+    import.meta.env.VITE_BUILD_MARKER ||
+    import.meta.env.VITE_VERCEL_GIT_COMMIT_SHA ||
+    "tracker-gps";
+
   const autoStartTrackingOnceRef = useRef(false);
   const [serviceBootstrapRequested, setServiceBootstrapRequested] = useState(false);
   const [bridgeReady, setBridgeReady] = useState(false);
@@ -41,6 +27,7 @@ export default function TrackerGpsPage() {
     permissionsOk: null,
     backgroundAllowed: null,
     serviceRunning: null,
+    batteryOptimizationDisabled: null,
   });
   const [requestedOrgId, setRequestedOrgId] = useState(null);
   const [assignmentState, setAssignmentState] = useState({
@@ -61,10 +48,31 @@ export default function TrackerGpsPage() {
   });
   const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
   const [lastSyncAt, setLastSyncAt] = useState(null);
+  const [batteryOptStatus, setBatteryOptStatus] = useState({
+    supported: null,
+    ignoring: null,
+    raw: null,
+  });
+  const [batteryOptLoading, setBatteryOptLoading] = useState(false);
 
   const markMessage = useCallback((message) => {
     setLastMessage(message);
     setLastSyncAt(new Date().toLocaleTimeString());
+  }, []);
+
+  const resolveOrgId = useCallback(async () => {
+    if (typeof window === "undefined") return null;
+
+    const fromQuery = String(new URLSearchParams(window.location.search).get("org_id") || "").trim();
+    if (fromQuery) {
+      localStorage.setItem("org_id", fromQuery);
+      return fromQuery;
+    }
+
+    const fromStorage = String(localStorage.getItem("org_id") || "").trim();
+    if (fromStorage) return fromStorage;
+
+    return null;
   }, []);
 
   const refreshBridgeState = useCallback(() => {
@@ -76,6 +84,7 @@ export default function TrackerGpsPage() {
           permissionsOk: null,
           backgroundAllowed: null,
           serviceRunning: null,
+          batteryOptimizationDisabled: null,
         });
         return;
       }
@@ -91,25 +100,59 @@ export default function TrackerGpsPage() {
         const backgroundAllowed =
           typeof bridge.isBackgroundAllowed === "function"
             ? !!bridge.isBackgroundAllowed()
-            return (
-              <div
-                style={{
-                  minHeight: "100vh",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "flex-start",
-                  gap: 16,
-                  padding: 24,
-                  background: "#ffffff",
-                  color: "#111111",
-                  fontFamily: "Arial, sans-serif",
-                  boxSizing: "border-box",
-                }}
-              >
-                {renderBatteryOptBlock()}
-              </div>
-            );
+            : null;
+
+        const serviceRunning =
+          typeof bridge.isServiceRunning === "function"
+            ? !!bridge.isServiceRunning()
+            : null;
+
+        const batteryOptimizationDisabled =
+          typeof bridge.isIgnoringBatteryOptimizations === "function"
+            ? !!bridge.isIgnoringBatteryOptimizations()
+            : typeof bridge.getBatteryOptimizationStatus === "function"
+              ? (() => {
+                  try {
+                    const raw = bridge.getBatteryOptimizationStatus();
+                    if (typeof raw === "string") {
+                      const parsed = JSON.parse(raw);
+                      return !!(parsed?.ignoring ?? parsed?.disabled ?? false);
+                    }
+                    if (raw && typeof raw === "object") {
+                      return !!(raw.ignoring ?? raw.disabled ?? false);
+                    }
+                  } catch {
+                    return null;
+                  }
+                  return null;
+                })()
+              : null;
+
+        setBridgeStatus({
+          permissionsOk,
+          backgroundAllowed,
+          serviceRunning,
+          batteryOptimizationDisabled,
+        });
+      } catch (error) {
+        console.error("[TrackerGpsPage] bridge status read failed", error);
+      }
+    };
+
+    const tick = () => {
+      const bridge = getAndroidBridge();
+      readBridgeStatus(bridge);
+
+      if (!bridge && attempts < 10 && typeof window !== "undefined") {
+        attempts += 1;
+        window.setTimeout(tick, 500);
+      }
+    };
+
+    tick();
+  }, []);
+
+  const requestServiceBootstrapOnce = useCallback(
     ({ backendAssignmentFound, allowNoSessionFallback, effectiveOrgId }) => {
       if (autoStartTrackingOnceRef.current) return false;
 
@@ -131,7 +174,6 @@ export default function TrackerGpsPage() {
           : bridgeStatus.serviceRunning === true;
 
       if (bridgeServiceRunning) return false;
-
       if (!backendAssignmentFound && !allowNoSessionFallback) return false;
 
       const fallbackOrgId =
@@ -157,13 +199,13 @@ export default function TrackerGpsPage() {
 
         markMessage(
           backendAssignmentFound
-            ? "Bridge READY + assignment backend activo: Android.startTracking() ejecutado."
-            : "Bridge READY sin web session: Android.startTracking() ejecutado con org_id local; backend nativo valida assignment."
+            ? "Seguimiento iniciado en Android."
+            : "Seguimiento iniciado con el contexto local de la organización."
         );
 
         return true;
-      } catch (e) {
-        console.error("[TrackerGpsPage] service bootstrap request failed", e);
+      } catch (error) {
+        console.error("[TrackerGpsPage] service bootstrap request failed", error);
         return false;
       }
     },
@@ -193,10 +235,7 @@ export default function TrackerGpsPage() {
         trackerAuth = null;
       }
 
-      const bearerToken =
-        trackerAuth?.access_token ||
-        trackerAuth?.session?.access_token ||
-        null;
+      const bearerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
 
       const decodeJwtPayload = (token) => {
         try {
@@ -207,12 +246,6 @@ export default function TrackerGpsPage() {
       };
 
       const bearerPayload = bearerToken ? decodeJwtPayload(bearerToken) : null;
-
-      console.log("[TRACKER_FETCH_TOKEN]", {
-        sub: bearerPayload?.sub,
-        email: bearerPayload?.email,
-      });
-
       const trackerUserId = bearerPayload?.sub || null;
 
       if (!bearerToken || !trackerUserId) {
@@ -234,8 +267,8 @@ export default function TrackerGpsPage() {
 
         markMessage(
           persistedOrgId
-            ? "No web session yet. Organization context preserved from URL/localStorage."
-            : "No web session yet. Open tracker URL with org_id to preserve org context."
+            ? "Sin sesión web activa. Se mantiene el contexto de organización."
+            : "Sin sesión web activa. Abre la URL del tracker con org_id."
         );
 
         requestServiceBootstrapOnce({
@@ -246,7 +279,7 @@ export default function TrackerGpsPage() {
         return;
       }
 
-      const resolvedOrgId = await resolveOrgId(trackerUserId);
+      const resolvedOrgId = await resolveOrgId();
       setRequestedOrgId(resolvedOrgId || null);
 
       if (!resolvedOrgId) {
@@ -287,9 +320,7 @@ export default function TrackerGpsPage() {
           orgAccessSource: "backend:/api/tracker-active-assignment",
           requestedOrgId: resolvedOrgId,
           effectiveOrgId:
-            assignmentJson?.assignment?.org_id ||
-            assignmentJson?.org_id ||
-            resolvedOrgId,
+            assignmentJson?.assignment?.org_id || assignmentJson?.org_id || resolvedOrgId,
           assignment: null,
         });
         setHealthState({ loading: false, error: null, row: null });
@@ -327,11 +358,7 @@ export default function TrackerGpsPage() {
         setHealthState({ loading: false, error: null, row: null });
 
         if (assignmentJson.reason === "no_personal_profile") {
-          if (assignmentJson.org_access === "owner") {
-            markMessage("You own this organization but are not configured as tracker personnel.");
-          } else {
-            markMessage("You have organization access but are not configured as tracker personnel.");
-          }
+          markMessage("La cuenta no está configurada como personal tracker.");
         } else {
           markMessage("Sesión válida, pero el tracker aún no tiene asignación activa.");
         }
@@ -376,7 +403,7 @@ export default function TrackerGpsPage() {
         },
       });
 
-      markMessage("Estado sincronizado desde backend (assignment + tracker_health).");
+      markMessage("Estado sincronizado desde backend.");
     } catch (error) {
       console.error("[TrackerGpsPage] sync failed", error);
 
@@ -393,15 +420,9 @@ export default function TrackerGpsPage() {
         error: prev.error || "sync_failed",
       }));
 
-      markMessage("Error sincronizando estado pasivo del tracker.");
+      markMessage("Error sincronizando estado del tracker.");
     }
-  }, [
-    mapHealthState,
-    markMessage,
-    refreshBridgeState,
-    requestServiceBootstrapOnce,
-    resolveOrgId,
-  ]);
+  }, [markMessage, refreshBridgeState, requestServiceBootstrapOnce, resolveOrgId]);
 
   useEffect(() => {
     markMessage(`Build cargado: ${buildMarker}`);
@@ -413,34 +434,11 @@ export default function TrackerGpsPage() {
     const checkBridge = () => {
       if (cancelled) return;
 
-      const bridge = typeof window !== "undefined" ? window.Android : null;
+      const bridge = getAndroidBridge();
 
       if (bridge) {
         setBridgeReady(true);
-
-        try {
-          const permissionsOk =
-            typeof bridge.isPermissionsOk === "function"
-              ? !!bridge.isPermissionsOk()
-              : typeof bridge.hasPermissions === "function"
-                ? !!bridge.hasPermissions()
-                : null;
-
-          const backgroundAllowed =
-            typeof bridge.isBackgroundAllowed === "function"
-              ? !!bridge.isBackgroundAllowed()
-              : null;
-
-          const serviceRunning =
-            typeof bridge.isServiceRunning === "function"
-              ? !!bridge.isServiceRunning()
-              : null;
-
-          setBridgeStatus({ permissionsOk, backgroundAllowed, serviceRunning });
-        } catch (e) {
-          console.error("[TrackerGpsPage] initial bridge status read failed", e);
-        }
-
+        refreshBridgeState();
         return;
       }
 
@@ -449,9 +447,10 @@ export default function TrackerGpsPage() {
         permissionsOk: null,
         backgroundAllowed: null,
         serviceRunning: null,
+        batteryOptimizationDisabled: null,
       });
 
-      if (attempts < 10) {
+      if (attempts < 10 && typeof window !== "undefined") {
         attempts += 1;
         timeoutId = window.setTimeout(checkBridge, 500);
       }
@@ -463,7 +462,7 @@ export default function TrackerGpsPage() {
       cancelled = true;
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [buildMarker, markMessage]);
+  }, [buildMarker, markMessage, refreshBridgeState]);
 
   useEffect(() => {
     let disposed = false;
@@ -505,84 +504,129 @@ export default function TrackerGpsPage() {
     requestServiceBootstrapOnce,
   ]);
 
-  // ...existing code...
-
-  // --- Battery Optimization UI (Android) ---
-  const [batteryOptStatus, setBatteryOptStatus] = useState({ supported: null, ignoring: null, raw: null });
-  const [batteryOptLoading, setBatteryOptLoading] = useState(false);
-
-  // Consulta el estado actual
   const refreshBatteryOptStatus = useCallback(() => {
-    if (typeof window === "undefined" || !window.AndroidBridge || typeof window.AndroidBridge.getBatteryOptimizationStatus !== "function") {
+    const bridge = getAndroidBridge();
+    if (!bridge) {
       setBatteryOptStatus({ supported: null, ignoring: null, raw: null });
-      return (
-        <div
-          style={{
-            minHeight: "100vh",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "flex-start",
-            gap: 16,
-            padding: 24,
-            background: "#ffffff",
-            color: "#111111",
-            fontFamily: "Arial, sans-serif",
-            boxSizing: "border-box",
-          }}
-        >
-          {renderBatteryOptBlock()}
-        </div>
-      );
+      return;
+    }
+
+    try {
+      if (typeof bridge.getBatteryOptimizationStatus === "function") {
+        const raw = bridge.getBatteryOptimizationStatus();
+        let parsed = raw;
+        if (typeof raw === "string") {
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            parsed = { raw };
+          }
+        }
+
+        const ignoring = !!(parsed?.ignoring ?? parsed?.disabled ?? false);
+        setBatteryOptStatus({ supported: true, ignoring, raw: parsed });
+        setBridgeStatus((prev) => ({
+          ...prev,
+          batteryOptimizationDisabled: ignoring,
+        }));
+        return;
+      }
+
+      if (typeof bridge.isIgnoringBatteryOptimizations === "function") {
+        const ignoring = !!bridge.isIgnoringBatteryOptimizations();
+        setBatteryOptStatus({ supported: true, ignoring, raw: { ignoring } });
+        setBridgeStatus((prev) => ({
+          ...prev,
+          batteryOptimizationDisabled: ignoring,
+        }));
+        return;
+      }
+    } catch (error) {
+      console.error("[TrackerGpsPage] battery optimization status failed", error);
+    }
+
+    setBatteryOptStatus({ supported: false, ignoring: null, raw: null });
+  }, []);
+
+  const openBatteryOptimizationSettings = useCallback(async () => {
+    const bridge = getAndroidBridge();
+    if (!bridge) return;
+
     setBatteryOptLoading(true);
     try {
-      if (typeof window.AndroidBridge.requestIgnoreBatteryOptimizations === "function") {
-        window.AndroidBridge.requestIgnoreBatteryOptimizations();
-      } else if (typeof window.AndroidBridge.openBatteryOptimizationSettings === "function") {
-        window.AndroidBridge.openBatteryOptimizationSettings();
+      if (typeof bridge.requestIgnoreBatteryOptimizations === "function") {
+        await bridge.requestIgnoreBatteryOptimizations();
+      } else if (typeof bridge.requestDisableBatteryOptimization === "function") {
+        await bridge.requestDisableBatteryOptimization();
+      } else if (typeof bridge.openBatteryOptimizationSettings === "function") {
+        await bridge.openBatteryOptimizationSettings();
       }
-    } catch {}
-    setTimeout(() => {
-      refreshBatteryOptStatus();
-      setBatteryOptLoading(false);
-    }, 1200);
+    } catch (error) {
+      console.error("[TrackerGpsPage] battery optimization request failed", error);
+    } finally {
+      window.setTimeout(() => {
+        refreshBatteryOptStatus();
+        setBatteryOptLoading(false);
+      }, 1200);
+    }
   }, [refreshBatteryOptStatus]);
 
-  // Refresca al cargar y al volver a la app
   useEffect(() => {
     refreshBatteryOptStatus();
-    const onVisibility = () => setTimeout(refreshBatteryOptStatus, 300);
+    const onVisibility = () => window.setTimeout(refreshBatteryOptStatus, 300);
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [refreshBatteryOptStatus]);
 
-  // Renderiza el bloque UI
   const renderBatteryOptBlock = () => {
-    if (batteryOptStatus.supported === null) return null;
+    if (!bridgeReady) return null;
+
+    const batteryOptimizationDisabled =
+      batteryOptStatus.ignoring ??
+      bridgeStatus.batteryOptimizationDisabled ??
+      bridgeStatus.isIgnoringBatteryOptimizations ??
+      false;
+
+    const backgroundAllowed = bridgeStatus?.backgroundAllowed ?? false;
+
+    if (batteryOptimizationDisabled && backgroundAllowed) return null;
+
     return (
-      <div style={{ marginTop: 24, padding: 16, border: "1px solid #e5e7eb", borderRadius: 8, background: "#fffbe6" }}>
-        <div style={{ fontWeight: 600, fontSize: 17, marginBottom: 8 }}>
-          Optimización de batería (Android)
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 760,
+          border: "1px solid #d0d7de",
+          borderRadius: 12,
+          padding: 20,
+          background: "#f8f9fb",
+          boxSizing: "border-box",
+        }}
+      >
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+          Optimización de batería
         </div>
-        <div style={{ marginBottom: 8, color: batteryOptStatus.ignoring ? "#228B22" : "#b91c1c", fontWeight: 500 }}>
-          Estado: {batteryOptStatus.ignoring === true ? "Protegido (sin restricciones)" : batteryOptStatus.ignoring === false ? "No protegido (puede ser restringido)" : "Desconocido"}
+
+        <div style={{ fontSize: 15, lineHeight: 1.5, marginBottom: 16 }}>
+          Para mejorar el envío continuo de ubicación en Android, desactiva las restricciones
+          de batería para esta app.
         </div>
+
         <button
-          onClick={handleBatteryOptAction}
-          disabled={batteryOptLoading || batteryOptStatus.ignoring === true}
+          type="button"
+          onClick={openBatteryOptimizationSettings}
+          disabled={batteryOptLoading}
           style={{
-            padding: "8px 18px",
+            border: "none",
+            borderRadius: 10,
+            padding: "12px 16px",
             fontSize: 15,
-            borderRadius: 6,
-            border: "1px solid #d0d7de",
-            background: batteryOptStatus.ignoring === true ? "#e5e7eb" : "#facc15",
-            color: "#222",
             fontWeight: 600,
-            cursor: batteryOptStatus.ignoring === true ? "not-allowed" : "pointer",
-            marginTop: 4,
+            cursor: batteryOptLoading ? "default" : "pointer",
+            opacity: batteryOptLoading ? 0.7 : 1,
           }}
         >
-          {batteryOptStatus.ignoring === true ? "Ya protegido" : batteryOptLoading ? "Abriendo..." : "Abrir ajustes de batería"}
+          {batteryOptLoading ? "Abriendo ajustes..." : "Abrir ajustes"}
         </button>
       </div>
     );
@@ -604,76 +648,6 @@ export default function TrackerGpsPage() {
         boxSizing: "border-box",
       }}
     >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 760,
-          border: "1px solid #d0d7de",
-          borderRadius: 12,
-          padding: 20,
-          background: "#f8f9fb",
-          boxSizing: "border-box",
-        }}
-      >
-        <h1 style={{ fontSize: 36, fontWeight: 700, color: "red", margin: 0 }}>
-          TRACKER OK 2026 FINAL
-        </h1>
-
-        <div style={{ marginTop: 20 }}>
-          {[
-            ["Build", buildMarker],
-            ["Bridge Android", bridgeReady ? "READY" : "WAITING"],
-            ["Estado tracking", visibleState],
-            ["Asignación activa", assignmentState.active ? "YES" : "NO"],
-            ["Reason asignación", assignmentState.reason || "-"],
-            ["Org access", assignmentState.orgAccess || "-"],
-            ["Org access source", assignmentState.orgAccessSource || "-"],
-            ["Org ID solicitado", assignmentState.requestedOrgId || requestedOrgId || "-"],
-            ["Org ID efectivo", effectiveOrgId || "-"],
-            ["Assignment ID", assignmentState.assignment?.id || "-"],
-            ["Ventana asignación", assignmentWindow],
-            ["tracker_health.status", healthState.row?.status || "-"],
-            ["permissions_ok", String(bridgeStatus.permissionsOk ?? healthState.row?.permissions_ok ?? "-")],
-            ["background_allowed", String(bridgeStatus.backgroundAllowed ?? healthState.row?.background_allowed ?? "-")],
-            ["service_running", String(bridgeStatus.serviceRunning ?? healthState.row?.service_running ?? "-")],
-            ["service_bootstrap_requested", serviceBootstrapRequested ? "YES" : "NO"],
-            ["Última sincronización", lastSyncAt || "-"],
-          ].map(([label, value], idx, arr) => (
-            <div
-              key={label}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 16,
-                padding: "10px 0",
-                borderBottom: idx === arr.length - 1 ? "none" : "1px solid #e5e7eb",
-                fontSize: 16,
-              }}
-            >
-              <strong>{label}</strong>
-              <span style={{ textAlign: "right" }}>{value}</span>
-            </div>
-          ))}
-        </div>
-
-
-      </div>
-
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 760,
-          border: "1px solid #d0d7de",
-          borderRadius: 12,
-          padding: 20,
-          background: "#f8f9fb",
-          boxSizing: "border-box",
-        }}
-      >
-        <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Estado actual</div>
-        <div style={{ fontSize: 16, lineHeight: 1.5 }}>{lastMessage}</div>
-      </div>
-
       {renderBatteryOptBlock()}
     </div>
   );
