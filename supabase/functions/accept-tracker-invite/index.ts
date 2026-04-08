@@ -1,8 +1,8 @@
 ﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { create, getNumericDate } from "https://deno.land/x/djwt/mod.ts";
+import { SignJWT } from "https://esm.sh/jose@5.9.6";
 
-const BUILD_TAG = "accept-tracker-invite-v1_preview_20260408";
+const BUILD_TAG = "accept-tracker-invite-v2_preview_20260408";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -35,6 +35,27 @@ async function sha256Hex(input: string) {
     .join("");
 }
 
+async function createTrackerAccessToken(params: {
+  jwtSecret: string;
+  trackerUserId: string;
+  inviteEmail: string;
+  orgId: string;
+}) {
+  const secret = new TextEncoder().encode(params.jwtSecret);
+
+  return await new SignJWT({
+    email: params.inviteEmail,
+    role: "authenticated",
+    aud: "authenticated",
+    org_id: params.orgId,
+  })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(params.trackerUserId)
+    .setIssuedAt()
+    .setExpirationTime("24h")
+    .sign(secret);
+}
+
 serve(async (req) => {
   try {
     if (req.method === "OPTIONS") {
@@ -64,8 +85,6 @@ serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-
-    // Leer inviteToken y org_id del body (no requiere JWT ni Authorization)
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const inviteToken = String(body?.inviteToken ?? body?.t ?? "").trim();
     const orgId = String(body?.org_id ?? "").trim();
@@ -73,6 +92,7 @@ serve(async (req) => {
     console.log("[accept-tracker-invite] request", {
       build_tag: BUILD_TAG,
       has_invite_token: !!inviteToken,
+      invite_token_length: inviteToken.length,
       org_id: orgId || null,
     });
 
@@ -190,11 +210,13 @@ serve(async (req) => {
     }
 
     let trackerUserId: string | null = null;
+    let ensureData: unknown = null;
+    let resolvedUserId: unknown = null;
 
     const claimTrackerUserId = String(
-      claimData?.tracker_user_id ??
-        claimData?.user_id ??
-        claimData?.resolved_user_id ??
+      (claimData as Record<string, unknown> | null)?.tracker_user_id ??
+        (claimData as Record<string, unknown> | null)?.user_id ??
+        (claimData as Record<string, unknown> | null)?.resolved_user_id ??
         "",
     ).trim();
 
@@ -203,62 +225,65 @@ serve(async (req) => {
     }
 
     if (!trackerUserId) {
-      const { data: ensureData, error: ensureErr } = await sbAdmin.rpc("ensure_tracker_membership", {
+      const ensureResp = await sbAdmin.rpc("ensure_tracker_membership", {
         p_email: inviteEmail,
         p_org_id: orgId,
         p_role: "tracker",
       });
 
-      if (ensureErr) {
+      ensureData = ensureResp.data;
+
+      if (ensureResp.error) {
         console.error("[accept-tracker-invite] ensure_tracker_membership error", {
           build_tag: BUILD_TAG,
           invite_id: inviteRow.id,
           email: inviteEmail,
-          message: ensureErr.message,
-          code: (ensureErr as any)?.code ?? null,
+          message: ensureResp.error.message,
+          code: (ensureResp.error as any)?.code ?? null,
         });
 
         return jsonResponse(500, {
           ok: false,
           error: "ensure_tracker_membership_failed",
-          detail: ensureErr.message,
+          detail: ensureResp.error.message,
           build_tag: BUILD_TAG,
         });
       }
 
-      const ensuredUserId = String(ensureData ?? "").trim();
+      const ensuredUserId = String(ensureResp.data ?? "").trim();
       if (isUuid(ensuredUserId)) {
         trackerUserId = ensuredUserId;
       }
     }
 
     if (!trackerUserId) {
-      const { data: resolvedUserId, error: resolveErr } = await sbAdmin.rpc("resolve_tracker_user_id", {
+      const resolveResp = await sbAdmin.rpc("resolve_tracker_user_id", {
         p_org_id: orgId,
       });
 
-      if (resolveErr) {
+      resolvedUserId = resolveResp.data;
+
+      if (resolveResp.error) {
         console.error("[accept-tracker-invite] resolve_tracker_user_id error", {
           build_tag: BUILD_TAG,
           invite_id: inviteRow.id,
-          message: resolveErr.message,
-          code: (resolveErr as any)?.code ?? null,
+          message: resolveResp.error.message,
+          code: (resolveResp.error as any)?.code ?? null,
         });
 
         return jsonResponse(500, {
           ok: false,
           error: "resolve_tracker_user_id_failed",
-          detail: resolveErr.message,
+          detail: resolveResp.error.message,
           build_tag: BUILD_TAG,
         });
       }
 
-      const resolved = String(resolvedUserId ?? "").trim();
+      const resolved = String(resolveResp.data ?? "").trim();
       if (isUuid(resolved)) {
         trackerUserId = resolved;
       }
     }
-
 
     if (!trackerUserId) {
       console.log("[accept-tracker-invite] resolution_debug", {
@@ -267,9 +292,10 @@ serve(async (req) => {
         invite_email: inviteEmail,
         claimData,
         claimTrackerUserId,
-        ensureData: typeof ensureData === "undefined" ? null : ensureData,
-        resolvedUserId: typeof resolvedUserId === "undefined" ? null : resolvedUserId,
+        ensureData,
+        resolvedUserId,
       });
+
       return jsonResponse(500, {
         ok: false,
         error: "tracker_user_id_not_resolved",
@@ -306,8 +332,8 @@ serve(async (req) => {
       });
     }
 
-    // --- Generar JWT custom para tracker ---
-    const JWT_SECRET = Deno.env.get("SUPABASE_JWT_SECRET");
+    const JWT_SECRET = (Deno.env.get("JWT_SECRET") || "").trim();
+
     if (!JWT_SECRET) {
       return jsonResponse(500, {
         ok: false,
@@ -315,47 +341,52 @@ serve(async (req) => {
         build_tag: BUILD_TAG,
       });
     }
-    const payload = {
-      sub: trackerUserId,
+
+    console.log("[accept-tracker-invite] jwt_debug", {
+      build_tag: BUILD_TAG,
+      tracker_user_id: trackerUserId,
       email: inviteEmail,
-      role: "authenticated",
-      exp: getNumericDate(60 * 60 * 24), // 24h
-    };
-    let access_token = null;
+      org_id: orgId,
+      jwt_secret_length: JWT_SECRET.length,
+    });
+
     try {
-      access_token = await create(
-        { alg: "HS256", typ: "JWT" },
-        payload,
-        JWT_SECRET,
-      );
-    } catch (jwtErr) {
+      const access_token = await createTrackerAccessToken({
+        jwtSecret: JWT_SECRET,
+        trackerUserId,
+        inviteEmail,
+        orgId,
+      });
+
+      return jsonResponse(200, {
+        ok: true,
+        tracker_user_id: trackerUserId,
+        org_id: orgId,
+        email: inviteEmail,
+        session: {
+          access_token,
+          refresh_token: null,
+          token_type: "bearer",
+        },
+        build_tag: BUILD_TAG,
+      });
+    } catch (err: any) {
+      console.error("[accept-tracker-invite] jwt_create_failed", {
+        build_tag: BUILD_TAG,
+        message: String(err?.message || err),
+        stack: String(err?.stack || ""),
+        tracker_user_id: trackerUserId,
+        email: inviteEmail,
+        org_id: orgId,
+      });
+
       return jsonResponse(500, {
         ok: false,
         error: "jwt_create_failed",
-        detail: jwtErr?.message || String(jwtErr),
+        detail: String(err?.message || err),
         build_tag: BUILD_TAG,
       });
     }
-
-    console.log("[accept-tracker-invite] custom_jwt", {
-      build_tag: BUILD_TAG,
-      invite_id: inviteRow.id,
-      org_id: orgId,
-      tracker_user_id: trackerUserId,
-      email: inviteEmail,
-      session: !!access_token,
-    });
-
-    return jsonResponse(200, {
-      ok: true,
-      tracker_user_id: trackerUserId,
-      org_id: orgId,
-      email: inviteEmail,
-      session: {
-        access_token,
-        refresh_token: null,
-      },
-    });
   } catch (err: any) {
     console.error("[accept-tracker-invite] unhandled", {
       build_tag: BUILD_TAG,
