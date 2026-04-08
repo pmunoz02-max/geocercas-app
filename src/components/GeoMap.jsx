@@ -315,6 +315,7 @@ export default function GeoMap({
     const onCreate = async (e) => {
       const gate = requireWritableContext();
       if (!gate.ok) {
+        // Solo mensaje claro de acción, sin detalles técnicos
         alert(gate.msg);
         e.layer?.remove?.();
         return;
@@ -351,7 +352,7 @@ export default function GeoMap({
 
         fg.addLayer(layer);
       } catch (err) {
-        console.error("[GeoMap] onCreateFeature error:", err);
+        // Error de guardado, mensaje simple
         alert("No se pudo guardar la geocerca.");
         layer?.remove?.();
       }
@@ -386,7 +387,7 @@ export default function GeoMap({
             });
           }
         } catch (err) {
-          console.error("[GeoMap] onEditFeature error:", err);
+          // Error de actualización, mensaje simple
           alert("No se pudo actualizar la geocerca.");
         }
       });
@@ -406,7 +407,7 @@ export default function GeoMap({
             await onDeleteFeature({ orgId, id, layer });
           }
         } catch (err) {
-          console.error("[GeoMap] onDeleteFeature error:", err);
+          // Error de borrado, mensaje simple
           alert("No se pudo eliminar la geocerca.");
         }
       });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 function getAndroidBridge() {
@@ -34,7 +34,6 @@ function resolveVisibleState(assignmentState, healthState) {
 }
 
 export default function TrackerGpsPage() {
-  const [buildMarker] = useState("2026-04-05-passive-status");
   const autoStartTrackingOnceRef = useRef(false);
   const [serviceBootstrapRequested, setServiceBootstrapRequested] = useState(false);
   const [bridgeReady, setBridgeReady] = useState(false);
@@ -92,95 +91,25 @@ export default function TrackerGpsPage() {
         const backgroundAllowed =
           typeof bridge.isBackgroundAllowed === "function"
             ? !!bridge.isBackgroundAllowed()
-            : null;
-
-        const serviceRunning =
-          typeof bridge.isServiceRunning === "function"
-            ? !!bridge.isServiceRunning()
-            : null;
-
-        setBridgeStatus({ permissionsOk, backgroundAllowed, serviceRunning });
-      } catch (e) {
-        console.error("[TrackerGpsPage] readBridgeStatus error", e);
-      }
-    };
-
-    const check = () => {
-      const bridge = getAndroidBridge();
-
-      if (typeof window !== "undefined") {
-        console.log("window.Android:", window.Android);
-      }
-
-      if (bridge) {
-        console.log("[BRIDGE] detected");
-        setBridgeReady(true);
-        readBridgeStatus(bridge);
-        return true;
-      }
-
-      setBridgeReady(false);
-      setBridgeStatus({
-        permissionsOk: null,
-        backgroundAllowed: null,
-        serviceRunning: null,
-      });
-
-      if (attempts < 20) {
-        attempts += 1;
-        setTimeout(check, 300);
-      }
-
-      return false;
-    };
-
-    check();
-  }, []);
-
-  const resolveOrgId = useCallback(async (userId) => {
-    const queryOrg =
-      typeof window !== "undefined"
-        ? String(new URLSearchParams(window.location.search).get("org_id") || "").trim()
-        : "";
-
-    if (queryOrg) {
-      localStorage.setItem("org_id", queryOrg);
-      return queryOrg;
-    }
-
-    const localOrg = String(localStorage.getItem("org_id") || "").trim();
-    if (localOrg) return localOrg;
-
-    if (!userId) return null;
-
-    const { data: membership, error } = await supabase
-      .from("memberships")
-      .select("org_id, is_default, revoked_at")
-      .eq("user_id", userId)
-      .is("revoked_at", null)
-      .order("is_default", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error) {
-      console.error("[TrackerGpsPage] memberships error", error);
-      return null;
-    }
-
-    const resolvedOrgId = membership?.org_id || null;
-    if (resolvedOrgId) localStorage.setItem("org_id", resolvedOrgId);
-    return resolvedOrgId;
-  }, []);
-
-  const mapHealthState = useCallback((status) => {
-    const v = String(status || "").toLowerCase();
-    if (["active", "stale", "restricted", "pending_permissions", "offline"].includes(v)) {
-      return v;
-    }
-    return "offline";
-  }, []);
-
-  const requestServiceBootstrapOnce = useCallback(
+            return (
+              <div
+                style={{
+                  minHeight: "100vh",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "flex-start",
+                  gap: 16,
+                  padding: 24,
+                  background: "#ffffff",
+                  color: "#111111",
+                  fontFamily: "Arial, sans-serif",
+                  boxSizing: "border-box",
+                }}
+              >
+                {renderBatteryOptBlock()}
+              </div>
+            );
     ({ backendAssignmentFound, allowNoSessionFallback, effectiveOrgId }) => {
       if (autoStartTrackingOnceRef.current) return false;
 
@@ -576,25 +505,7 @@ export default function TrackerGpsPage() {
     requestServiceBootstrapOnce,
   ]);
 
-  const assignmentWindow = useMemo(() => {
-    const start =
-      assignmentState.assignment?.start_time ||
-      assignmentState.assignment?.start_date ||
-      null;
-
-    const end =
-      assignmentState.assignment?.end_time ||
-      assignmentState.assignment?.end_date ||
-      null;
-
-    if (!start && !end) return "-";
-    return `${start || "-"} → ${end || "-"}`;
-  }, [assignmentState.assignment]);
-
-  const visibleState = useMemo(
-    () => resolveVisibleState(assignmentState, healthState),
-    [assignmentState, healthState]
-  );
+  // ...existing code...
 
   // --- Battery Optimization UI (Android) ---
   const [batteryOptStatus, setBatteryOptStatus] = useState({ supported: null, ignoring: null, raw: null });
@@ -604,25 +515,25 @@ export default function TrackerGpsPage() {
   const refreshBatteryOptStatus = useCallback(() => {
     if (typeof window === "undefined" || !window.AndroidBridge || typeof window.AndroidBridge.getBatteryOptimizationStatus !== "function") {
       setBatteryOptStatus({ supported: null, ignoring: null, raw: null });
-      return;
-    }
-    try {
-      const raw = window.AndroidBridge.getBatteryOptimizationStatus();
-      let parsed = null;
-      try { parsed = JSON.parse(raw); } catch { parsed = null; }
-      setBatteryOptStatus({
-        supported: parsed?.supported ?? null,
-        ignoring: parsed?.ignoring ?? null,
-        raw,
-      });
-    } catch (e) {
-      setBatteryOptStatus({ supported: null, ignoring: null, raw: null });
-    }
-  }, []);
-
-  // Llama a la acción de settings/request
-  const handleBatteryOptAction = useCallback(() => {
-    if (typeof window === "undefined" || !window.AndroidBridge) return;
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            gap: 16,
+            padding: 24,
+            background: "#ffffff",
+            color: "#111111",
+            fontFamily: "Arial, sans-serif",
+            boxSizing: "border-box",
+          }}
+        >
+          {renderBatteryOptBlock()}
+        </div>
+      );
     setBatteryOptLoading(true);
     try {
       if (typeof window.AndroidBridge.requestIgnoreBatteryOptimizations === "function") {

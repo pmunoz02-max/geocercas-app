@@ -42,9 +42,10 @@ function handleSave() {
 try {
 const parsed = parseInput();
 onSubmit?.(parsed.nombre || "Geocerca manual", parsed.geojson);
-} catch (e) {
-alert(e.message);
-}
+	} catch (e) {
+		// Mensaje simple, sin detalles técnicos
+		alert("El formato de coordenadas o GeoJSON no es válido. Corrige el texto e intenta de nuevo.");
+	}
 }
 
 

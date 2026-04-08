@@ -1,12 +1,10 @@
 // src/components/CrearGeocercaForm.jsx
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+// import { useTranslation } from "react-i18next";
 import { crearGeocerca } from "../services/geocercas";
 
 export default function CrearGeocercaForm({ geom }) {
-  const { t } = useTranslation();
-  const tr = (key, fallback, options = {}) =>
-    t(key, { defaultValue: fallback, ...options });
+
 
   const [nombre, setNombre] = useState("");
   const [activa, setActiva] = useState(true);
@@ -25,20 +23,11 @@ export default function CrearGeocercaForm({ geom }) {
     setLoading(false);
 
     if (error) {
-      setErrorMsg(
-        error.message ||
-          tr("createGeofence.errors.create", "Error creating geofence")
-      );
+      setErrorMsg("No se pudo crear la geocerca. Intenta nuevamente.");
       return;
     }
 
-    setMensaje(
-      tr(
-        "createGeofence.messages.success",
-        'Geofence "{{name}}" created successfully',
-        { name: data.nombre }
-      )
-    );
+    setMensaje("Geocerca creada correctamente.");
     setNombre("");
     setActiva(true);
   };
@@ -47,7 +36,7 @@ export default function CrearGeocercaForm({ geom }) {
     <form onSubmit={onSubmit} className="space-y-2 sm:space-y-3">
       <div>
         <label className="block !text-xs sm:!text-sm font-medium">
-          {tr("createGeofence.fields.name", "Geofence name")}
+          Nombre de la geocerca
         </label>
 
         <input
@@ -58,7 +47,7 @@ export default function CrearGeocercaForm({ geom }) {
             sm:!px-3 sm:!py-2 sm:!text-sm
             lg:!px-4 lg:!py-2.5 lg:!text-sm
           "
-          placeholder={tr("createGeofence.fields.namePlaceholder", "E.g. North Zone")}
+          placeholder="Ej. Zona Norte"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           required
@@ -73,7 +62,7 @@ export default function CrearGeocercaForm({ geom }) {
           onChange={(e) => setActiva(e.target.checked)}
         />
         <label htmlFor="activa" className="!text-xs sm:!text-sm">
-          {tr("createGeofence.fields.active", "Active")}
+          Activa
         </label>
       </div>
 
@@ -87,9 +76,7 @@ export default function CrearGeocercaForm({ geom }) {
         "
         disabled={loading}
       >
-        {loading
-          ? tr("createGeofence.actions.creating", "Creating...")
-          : tr("createGeofence.actions.submit", "Create geofence")}
+        {loading ? "Creando..." : "Crear geocerca"}
       </button>
 
       {mensaje && <p className="text-green-700 !text-xs sm:!text-sm">{mensaje}</p>}

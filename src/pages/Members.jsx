@@ -50,11 +50,7 @@ export default function Members() {
       setMembers(normalized);
     } catch (err) {
       console.error(err);
-      alert(
-        tt("members.messages.loadError", "Error loading members: {{message}}", {
-          message: err?.message || String(err),
-        })
-      );
+      alert(tt("members.messages.loadError", "No se pudieron cargar los miembros."));
     } finally {
       setLoading(false);
     }
@@ -71,11 +67,7 @@ export default function Members() {
       await load();
     } catch (err) {
       console.error(err);
-      alert(
-        tt("members.messages.updateRoleError", "Could not change role: {{message}}", {
-          message: err?.message || String(err),
-        })
-      );
+      alert(tt("members.messages.updateRoleError", "No se pudo cambiar el rol."));
     } finally {
       setChanging(null);
     }

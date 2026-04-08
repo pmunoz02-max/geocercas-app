@@ -67,11 +67,7 @@ export default function AdminPersonal() {
     });
 
     if (error) {
-      alert(
-        tt("adminPersonal.messages.assignFenceError", "Error assigning geofence: {{message}}", {
-          message: error.message,
-        })
-      );
+      alert(tt("adminPersonal.messages.assignFenceError", "No se pudo asignar la geocerca."));
       return;
     }
 
@@ -85,11 +81,7 @@ export default function AdminPersonal() {
     });
 
     if (error) {
-      alert(
-        tt("adminPersonal.messages.savePhoneError", "Error saving phone: {{message}}", {
-          message: error.message,
-        })
-      );
+      alert(tt("adminPersonal.messages.savePhoneError", "No se pudo guardar el teléfono."));
       return;
     }
 

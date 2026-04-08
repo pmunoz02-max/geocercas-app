@@ -517,7 +517,7 @@ const CostosDashboardPage = () => {
 
   const handleExportDataCSV = () => {
     if (!aggregatedData.length) {
-      window.alert(t("dashboardCostos.exportNoData") || "No data to export.");
+      window.alert(t("dashboardCostos.exportNoData") || "No hay datos para exportar.");
       return;
     }
 
@@ -548,10 +548,7 @@ const CostosDashboardPage = () => {
 
   const handleExportChartPNG = async () => {
     if (!chartRef.current) {
-      window.alert(
-        t("dashboardCostos.exportChartError") ||
-          "Chart container was not found."
-      );
+      window.alert(t("dashboardCostos.exportChartError") || "No se pudo exportar el gráfico.");
       return;
     }
 
@@ -570,11 +567,7 @@ const CostosDashboardPage = () => {
       link.click();
       document.body.removeChild(link);
     } catch (e) {
-      console.error("[CostosDashboard] exportChart error:", e);
-      window.alert(
-        t("dashboardCostos.exportChartError") ||
-          "Could not export the chart."
-      );
+      window.alert(t("dashboardCostos.exportChartError") || "No se pudo exportar el gráfico.");
     }
   };
 

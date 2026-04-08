@@ -76,7 +76,7 @@ export default function GeofenceForm() {
       setSelectedVertices([]);
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      window.alert(`${tt("geofenceForm.messages.errorPrefix", "Error")}: ${err.message}`);
+      window.alert(tt("geofenceForm.messages.errorPrefix", "Could not save geofence. Please try again."));
       console.error(err);
     } finally {
       setGuardando(false);
@@ -247,7 +247,7 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
         onVerticesChange?.(latlngs);
         window.alert(tt("geofenceForm.messages.created", "Geofence created successfully."));
       } catch (err) {
-        window.alert(`${tt("geofenceForm.messages.createError", "Error creating geofence")}: ${err.message}`);
+        window.alert(tt("geofenceForm.messages.createError", "Could not create geofence. Please try again."));
         try {
           map.removeLayer(layer);
         } catch {}
@@ -272,7 +272,7 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
         }
         window.alert(tt("geofenceForm.messages.updated", "Geofence(s) updated successfully."));
       } catch (err) {
-        window.alert(`${tt("geofenceForm.messages.updateError", "Error updating geofence")}: ${err.message}`);
+        window.alert(tt("geofenceForm.messages.updateError", "Could not update geofence. Please try again."));
         console.error(err);
       }
     };
@@ -289,7 +289,7 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
         if (error) throw error;
         window.alert(tt("geofenceForm.messages.deleted", "Geofence(s) deleted successfully."));
       } catch (err) {
-        window.alert(`${tt("geofenceForm.messages.deleteError", "Error deleting geofence")}: ${err.message}`);
+        window.alert(tt("geofenceForm.messages.deleteError", "Could not delete geofence. Please try again."));
         console.error(err);
       }
     };

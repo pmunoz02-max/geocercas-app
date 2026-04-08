@@ -457,6 +457,11 @@ serve(async (req) => {
     // =========================================================
     const jwt = pickBearer(req.headers.get("x-user-jwt") || req.headers.get("authorization"));
     if (!jwt) {
+      console.warn("[send_position][auth][missing_token]", {
+        build_tag,
+        has_jwt: false,
+        reason: "No JWT provided in x-user-jwt or authorization header"
+      });
       return json({ ok: false, error: "missing_jwt", build_tag }, 401, CORS);
     }
 
@@ -466,7 +471,22 @@ serve(async (req) => {
 
     const { data: userData, error: userError } = await authClient.auth.getUser();
     if (userError || !userData?.user?.id) {
-      console.log("[send_position][auth]", {
+      let authReason = "invalid_token";
+      let authDetail = "";
+      if (userError?.message?.toLowerCase().includes("expired")) {
+        authReason = "expired_token";
+        authDetail = userError.message;
+      } else if (userError?.message?.toLowerCase().includes("invalid")) {
+        authReason = "invalid_token";
+        authDetail = userError.message;
+      } else if (!jwt) {
+        authReason = "missing_token";
+        authDetail = "No JWT provided";
+      } else {
+        authReason = "unknown_auth_error";
+        authDetail = userError?.message || "Unknown error";
+      }
+      console.warn("[send_position][auth][fail]", {
         build_tag,
         has_jwt: Boolean(jwt),
         jwt_length: jwt?.length ?? 0,
@@ -474,6 +494,8 @@ serve(async (req) => {
         user_error_status: userError?.status ?? null,
         user_error_name: userError?.name ?? null,
         user_id: userData?.user?.id ?? null,
+        auth_reason: authReason,
+        auth_detail: authDetail,
       });
       return json({ ok: false, error: "invalid_user", build_tag }, 401, CORS);
     }

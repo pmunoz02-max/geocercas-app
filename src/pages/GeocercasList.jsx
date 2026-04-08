@@ -29,7 +29,7 @@ export default function GeocercasList() {
       .eq("owner", user?.id ?? "")
       .order("created_at", { ascending: false });
     setLoading(false);
-    if (error) return alert(t("geocercas.list.loadError", { defaultValue: "Error cargando geocercas" }));
+    if (error) return alert(t("geocercas.list.loadError", { defaultValue: "No se pudieron cargar las geocercas." }));
     setItems(data || []);
   }, [user?.id, t]);
 
@@ -41,7 +41,7 @@ export default function GeocercasList() {
     if (!confirm(t("geocercas.list.confirmDelete", { defaultValue: "¿Eliminar esta geocerca?" }))) return;
     const { error } = await supabase.from("geofences").delete().eq("id", id);
     if (error) {
-      alert(t("geocercas.list.deleteError", { defaultValue: "Error eliminando geocerca" }));
+      alert(t("geocercas.list.deleteError", { defaultValue: "No se pudo eliminar la geocerca." }));
     } else {
       setItems((prev) => prev.filter((x) => x.id !== id));
     }

@@ -36,9 +36,10 @@ export default function DeleteAllGeocercasButton() {
       );
     } catch (e) {
       window.alert(
-        tr("deleteAllGeofences.errors.delete", "Could not delete: {{message}}", {
-          message: e?.message || String(e),
-        })
+        tr(
+          "deleteAllGeofences.errors.delete",
+          "Could not delete the geofences. Please try again."
+        )
       );
     }
   };

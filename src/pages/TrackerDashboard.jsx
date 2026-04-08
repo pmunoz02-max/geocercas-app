@@ -6,11 +6,9 @@ import { supabase } from "../lib/supabaseClient";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import {
-  boundsFromPolys,
   buildGeofenceLayerItems,
   getPositionTs,
   getTrackerKey,
-  isProbablyZeroZeroBounds,
   isValidLatLng,
   mapTrackerLatestRow,
   shouldFitToBounds,
@@ -857,7 +855,6 @@ export default function TrackerDashboard() {
   const [loading, setLoading] = useState(false);
 
   const [errorMsg, setErrorMsg] = useState("");
-  const [infoMsg, setInfoMsg] = useState("");
 
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [isHistoryRequested, setIsHistoryRequested] = useState(false);
@@ -876,35 +873,11 @@ export default function TrackerDashboard() {
   const [geofenceRows, setGeofenceRows] = useState([]);
   const [selectedGeofenceIds, setSelectedGeofenceIds] = useState([]);
 
-  const [diag, setDiag] = useState({
-    mapCreated: false,
-    w: 0,
-    h: 0,
-    zoom: null,
-    assignmentsRows: 0,
-    trackersFound: 0,
-    geofencesFound: 0,
-    geofencePolys: 0,
-    geofenceCircles: 0,
-    positionsFound: 0,
-    positionsSource: null,
-    lastAssignmentsError: null,
-    lastGeofencesError: null,
-    lastPositionsError: null,
-    assignedGeofenceIds: 0,
-    skippedZeroZero: 0,
-    selectedGeofences: 0,
-  });
-
-  const [geofenceBoundsText, setGeofenceBoundsText] = useState("—");
-  const [intersectsText, setIntersectsText] = useState("—");
   const [cursorCoords, setCursorCoords] = useState({ lat: null, lng: null, zoom: null });
   const [scaleLabel, setScaleLabel] = useState("—");
   const [fitSignal, setFitSignal] = useState(0);
 
   const resolvedOrgId = normalizeUuid(orgId);
-
-  const previewUiEnabled = useMemo(() => isPreviewLikeHost(), []);
 
   useEffect(() => {
     positionsRef.current = Array.isArray(positions) ? positions : [];
@@ -1947,21 +1920,10 @@ export default function TrackerDashboard() {
   }, [geofenceRows, selectedGeofenceIds]);
 
   useEffect(() => {
-    setDiag((d) => ({ ...d, selectedGeofences: filteredGeofenceRows.length }));
-  }, [filteredGeofenceRows]);
-
-  useEffect(() => {
     if (selectedTrackerId === "all") return;
     const exists = trackersUi.some((x) => x.tracker_key === selectedTrackerId);
     if (!exists) setSelectedTrackerId("all");
   }, [selectedTrackerId, trackersUi]);
-
-  useEffect(() => {
-    setDiag((d) => ({
-      ...d,
-      trackersFound: trackersUi.length,
-    }));
-  }, [trackersUi]);
 
   const { items: layerItems } = useMemo(() => buildGeofenceLayerItems(filteredGeofenceRows), [filteredGeofenceRows]);
 
@@ -2182,6 +2144,7 @@ export default function TrackerDashboard() {
     return [-0.22985, -78.52495];
   }, [allTrackerMarkers, visiblePositions, positions, layerItems]);
 
+  // Badge component kept for non-diagnostic use
   const Badge = ({ children }) => (
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
   );
@@ -2276,26 +2239,9 @@ export default function TrackerDashboard() {
             <h1 className="text-2xl font-semibold text-gray-900">
               {tOr("trackerDashboard.title", "Tracker Dashboard")}
             </h1>
-
-            <div className="mt-1 flex flex-wrap gap-2 text-sm text-gray-600">
-              <span>
-                {tOr("trackerDashboard.labels.activeOrgDebug", "Org (Active)")}{" "}
-                <span className="font-mono text-gray-800">{effectiveOrgText}</span>{" "}
-                <span className="text-xs text-gray-500">[{orgIdSource}]</span>
-              </span>
-
-              <Badge>{tOr("trackerDashboard.badges.assignments", "assignments")}: {diag.assignmentsRows}</Badge>
-              <Badge>{tOr("trackerDashboard.badges.geofences", "geofences")}: {diag.geofencesFound}</Badge>
-              <Badge>{tOr("trackerDashboard.badges.polys", "polys")}: {diag.geofencePolys}</Badge>
-              <Badge>{tOr("trackerDashboard.badges.circles", "circles")}: {diag.geofenceCircles}</Badge>
-              <Badge>{tOr("trackerDashboard.badges.positions", "positions")}: {diag.positionsFound}</Badge>
-              {diag.positionsSource && <Badge>{tOr("trackerDashboard.badges.source", "src")}: {diag.positionsSource}</Badge>}
-              {previewUiEnabled && <Badge>preview-demo-ui</Badge>}
-            </div>
-
             {orgResolveError && (
               <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-                {tOr("trackerDashboard.messages.orgResolveError", "Error resolving org")}{" "}
+                {tOr("trackerDashboard.messages.orgResolveError", "Error resolving org")} {" "}
                 <span className="font-mono">{orgResolveError}</span>
               </div>
             )}
@@ -2345,17 +2291,7 @@ export default function TrackerDashboard() {
           </div>
         )}
 
-        {infoMsg && !errorMsg && (
-          <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
-            {infoMsg}
-          </div>
-        )}
-
-        {!orgId && !orgResolveError && (
-          <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
-            {tOr("trackerDashboard.states.resolvingActiveOrg", "Resolving active organization…")}
-          </div>
-        )}
+        {/* Remove blue info banner for resolving org (technical/diagnostic) */}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <aside className="lg:col-span-4 xl:col-span-3">
@@ -2454,33 +2390,6 @@ export default function TrackerDashboard() {
                       )}
                     </div>
                   )}
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">
-                  {tOr("trackerDashboard.sections.diagnostics", "Diagnostics")}
-                </h3>
-                <div className="grid grid-cols-2 gap-2 text-xs text-gray-700">
-                  <div><b>{tOr("trackerDashboard.badges.assignments", "assignments")}</b>: {diag.assignmentsRows}</div>
-                  <div><b>{tOr("trackerDashboard.badges.trackers", "trackers")}</b>: {diag.trackersFound}</div>
-                  <div><b>{tOr("trackerDashboard.badges.positions", "positions")}</b>: {diag.positionsFound}</div>
-                  <div><b>{tOr("trackerDashboard.badges.geofences", "geofences")}</b>: {diag.geofencesFound}</div>
-                  <div><b>{tOr("trackerDashboard.badges.polys", "polys")}</b>: {diag.geofencePolys}</div>
-                  <div><b>{tOr("trackerDashboard.badges.circles", "circles")}</b>: {diag.geofenceCircles}</div>
-                  <div><b>{tOr("trackerDashboard.badges.assignedIds", "assignedIds")}</b>: {diag.assignedGeofenceIds}</div>
-                  <div><b>{tOr("trackerDashboard.badges.selected", "selected")}</b>: {diag.selectedGeofences}</div>
-                </div>
-
-                <div className="mt-2 text-[11px] text-gray-600 space-y-1">
-                  <div>
-                    <b>{tOr("trackerDashboard.badges.bounds", "bounds")}</b>{" "}
-                    <span className="font-mono">{geofenceBoundsText}</span>
-                  </div>
-                  <div>
-                    <b>{tOr("trackerDashboard.badges.intersects", "intersects")}</b>{" "}
-                    <span className="font-mono">{intersectsText}</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -2640,88 +2549,7 @@ export default function TrackerDashboard() {
             </div>
           </section>
 
-          {previewUiEnabled && isDemoOrg && geofenceEvents.length > 0 && (
-            <section className="lg:col-span-8 xl:col-span-9">
-              <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b border-gray-200">
-                  <div className="text-sm font-semibold text-gray-900">
-                    {tOr("trackerDashboard.sections.recentEvents", "Recent Geofence Events")}
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">
-                          {tOr("trackerDashboard.events.time", "Time")}
-                        </th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">
-                          {tOr("trackerDashboard.events.tracker", "Tracker")}
-                        </th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">
-                          {tOr("trackerDashboard.events.geofence", "Geofence")}
-                        </th>
-                        <th className="px-4 py-2 text-left font-medium text-gray-700">
-                          {tOr("trackerDashboard.events.type", "Event")}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {geofenceEvents.slice(0, 20).map((evt) => {
-                        const person = evt.personal_id ? personalById.get(String(evt.personal_id)) : null;
-                        const byUser = evt.user_id ? personalByUserId.get(String(evt.user_id)) : null;
-                        const trackerKeyFromAssignment = assignmentMap.get(String(evt.user_id));
-
-                        const trackerFromUi = (trackersUi || []).find((t) =>
-                          String(t.tracker_key) === String(trackerKeyFromAssignment)
-                        );
-
-                        console.log("DEBUG TOOLTIP EVT:", evt);
-                        console.log("DEBUG tracker_label:", evt?.tracker_label);
-                        console.log("DEBUG tracker_name:", evt?.tracker_name);
-                        console.log("DEBUG name:", evt?.name);
-                        console.log("DEBUG user_id:", evt?.user_id);
-                        const trackerLabel =
-                          trackerFromUi?.label ??
-                          trackerFromUi?.baseLabel ??
-                          evt?.tracker_label ??
-                          evt?.tracker_name ??
-                          evt?.name ??
-                          person?.nombre ??
-                          person?.email ??
-                          byUser?.nombre ??
-                          byUser?.email ??
-                          String(evt.user_id ?? "—");
-
-                        const eventColor = evt.event_type === 'ENTER' ? 'text-green-700' : 'text-red-700';
-                        const eventBg = evt.event_type === 'ENTER' ? 'bg-green-50' : 'bg-red-50';
-
-                        return (
-                          <tr key={evt.id} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-4 py-2 text-gray-600">
-                              {evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : '—'}
-                            </td>
-                            <td className="px-4 py-2 text-gray-900">
-                              <span className="truncate">{trackerLabel}</span>
-                            </td>
-                            <td className="px-4 py-2 text-gray-900">
-                              <span className="truncate">{evt.geocerca_nombre}</span>
-                            </td>
-                            <td className="px-4 py-2">
-                              <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${eventBg} ${eventColor}`}>
-                                {evt.event_type}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </section>
-          )}
+          {/* Removed preview-only geofence events panel (diagnostic/technical UI) */}
         </div>
       </div>
     </div>

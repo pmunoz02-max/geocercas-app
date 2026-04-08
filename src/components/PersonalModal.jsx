@@ -72,6 +72,7 @@ export default function PersonalModal({ initial, onCancel, onSubmit }) {
     e.preventDefault();
     const err = validate();
     if (err) {
+      // Mensaje claro, validación de formulario
       window.alert(err);
       return;
     }

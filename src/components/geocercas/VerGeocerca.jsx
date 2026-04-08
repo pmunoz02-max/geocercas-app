@@ -22,10 +22,8 @@ export default function VerGeocerca() {
         // Aquí podrías dibujar la capa en Leaflet si corresponde
         // p.ej.: map.fitBounds(L.geoJSON(data.geom).getBounds())
       } catch (err) {
-        // Mostrar el error real para depurar
-        console.error("[VerGeocerca] Error al cargar geocerca:", err);
-        const extra = err?.cause?.message ? `\n(${err.cause.message})` : "";
-        alert(`Error al cargar geocerca.\n${err.message || ""}${extra}`);
+        // Mensaje simple, sin detalles técnicos
+        alert("No se pudo cargar la geocerca. Intenta de nuevo más tarde.");
       } finally {
         if (mounted) setLoading(false);
       }
