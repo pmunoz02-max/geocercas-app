@@ -813,6 +813,25 @@ export default function TrackerGpsPage() {
             // Clear any legacy tracker runtime auth tokens
             try { localStorage.removeItem('geocercas-tracker-auth'); } catch {}
             try { localStorage.removeItem('tracker_legacy_token'); } catch {}
+
+            // --- Push new access token to Android native bridge if available ---
+            const androidBridge = getAndroidBridge && getAndroidBridge();
+            if (accessToken && androidBridge && typeof androidBridge.updateTrackerToken === 'function') {
+              try {
+                androidBridge.updateTrackerToken(accessToken);
+              } catch (e) {
+                // Fallback: try window.Android directly if not a function on bridge
+                try {
+                  if (window.Android && typeof window.Android.updateTrackerToken === 'function') {
+                    window.Android.updateTrackerToken(accessToken);
+                  }
+                } catch (err2) {
+                  // Log both errors
+                  console.error('[tracker] android token push failed', e, err2);
+                }
+              }
+            }
+
             setInviteBootstrap(prev => ({
               ...prev,
               inviteAccepted: true,
@@ -827,6 +846,7 @@ export default function TrackerGpsPage() {
                 status: resp.status,
                 result,
                 accessTokenStored: true,
+                androidTokenPush: true,
               },
             }));
           } catch (e) {
