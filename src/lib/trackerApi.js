@@ -91,11 +91,19 @@ export async function getSessionUser() {
 }
 
 async function getSessionAccessToken() {
-  // ✅ Arquitectura final: primero token en memoria (AuthCallback lo setea)
+  // 1. Custom tracker token from localStorage (set by TrackerGpsPage)
+  if (typeof window !== "undefined") {
+    try {
+      const trackerToken = localStorage.getItem("tracker_access_token");
+      if (trackerToken && trackerToken.length > 10) return trackerToken;
+    } catch {}
+  }
+
+  // 2. In-memory token (AuthCallback)
   const mem = getMemoryAccessToken?.();
   if (mem) return mem;
 
-  // fallback (por si en algún flujo hay sesión interna)
+  // 3. Fallback: Supabase session (should not be used for tracker flows)
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     console.error("[trackerApi] getSessionAccessToken error:", error);

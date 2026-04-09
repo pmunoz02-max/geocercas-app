@@ -802,54 +802,32 @@ export default function TrackerGpsPage() {
         }
 
 
-        // --- OTP FLOW: signInWithOtp + verifyOtp if token_hash present ---
-        let sessionSet = false;
-        let sessionErrorMessage = null;
-        if (result?.otp_required && result?.email) {
+        // --- Custom tracker auth: store access_token and IDs, set sessionSet/trackerSessionReady ---
+        const accessToken = result?.session?.access_token || null;
+        if (result?.ok && result?.tracker_user_id && result?.org_id && accessToken) {
           try {
-            // 1. Enviar OTP al email
-            await supabaseTracker.auth.signInWithOtp({ email: result.email });
-            // 2. Si hay token_hash en la URL, intentar verificar inmediatamente
-            const urlParams = new URLSearchParams(window.location.search);
-            const tokenHash = urlParams.get("token_hash") || urlParams.get("token") || null;
-            if (tokenHash) {
-              const { data: verifyData, error: verifyError } = await supabaseTracker.auth.verifyOtp({
-                email: result.email,
-                token: tokenHash,
-                type: "magiclink",
-              });
-              if (verifyError) {
-                sessionErrorMessage = verifyError.message || "verify_otp_failed";
-              } else if (verifyData?.session?.access_token) {
-                sessionSet = true;
-              }
-            }
-          } catch (otpErr) {
-            sessionErrorMessage = otpErr?.message || "otp_flow_failed";
+            localStorage.setItem('tracker_access_token', accessToken);
+            localStorage.setItem('tracker_user_id', result.tracker_user_id);
+            localStorage.setItem('tracker_org_id', result.org_id);
+            setInviteBootstrap(prev => ({
+              ...prev,
+              inviteAccepted: true,
+              trackerUserId: result.tracker_user_id,
+              orgId: result.org_id,
+              email: result.email ?? null,
+              sessionSet: true,
+              trackerSessionReady: true,
+              sessionErrorMessage: null,
+            }));
+          } catch (e) {
+            setInviteBootstrap(prev => ({
+              ...prev,
+              sessionSet: false,
+              trackerSessionReady: false,
+              sessionErrorMessage: e?.message || 'tracker_token_store_failed',
+            }));
           }
         }
-
-        setInviteBootstrap(prev => ({
-          ...prev,
-          loading: false,
-          done: true,
-          inviteAccepted: true,
-          trackerUserId: result.tracker_user_id ?? null,
-          orgId: result.org_id ?? orgId ?? null,
-          email: result.email ?? null,
-          trackerSessionReady: sessionSet,
-          error: sessionSet ? null : (sessionErrorMessage || prev.error || null),
-          debug: {
-            ...prev.debug,
-            params,
-            inviteToken,
-            orgId,
-            status: resp.status,
-            result,
-            sessionSet,
-            sessionErrorMessage,
-          },
-        }));
       } catch (err) {
         setInviteBootstrap(prev => ({
           ...prev,
