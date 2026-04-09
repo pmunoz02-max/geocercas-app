@@ -59,22 +59,10 @@ export default function TrackerGpsPage() {
     batteryOptimizationDisabled: null,
   });
   const [requestedOrgId, setRequestedOrgId] = useState(null);
-  const [assignmentState, setAssignmentState] = useState({
-    loading: true,
-    error: null,
-    active: false,
-    reason: "loading",
-    orgAccess: "none",
-    orgAccessSource: "backend:/api/tracker-active-assignment",
-    requestedOrgId: null,
-    effectiveOrgId: null,
-    assignment: null,
-  });
-  const [healthState, setHealthState] = useState({
-    loading: true,
-    error: null,
-    row: null,
-  });
+  // Assignment state is now background-only, not used for gating render
+  const [assignmentState, setAssignmentState] = useState({});
+  // Health state is background-only
+  const [healthState, setHealthState] = useState({});
   const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [batteryOptStatus, setBatteryOptStatus] = useState({
@@ -886,6 +874,7 @@ export default function TrackerGpsPage() {
   // --- NUEVO GATE: solo loading si faltan token u org_id ---
   const inviteTrackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
   const orgId = inviteBootstrap?.orgId || effectiveOrgId || null;
+  // Loading solo depende de token/org_id válidos o sesión fallida
   const loading = !inviteTrackerToken || !orgId;
 
   // Log render principal
