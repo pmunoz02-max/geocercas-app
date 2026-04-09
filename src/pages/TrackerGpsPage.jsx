@@ -882,75 +882,20 @@ export default function TrackerGpsPage() {
 
 
 
-  // --- CRITICAL DATA CHECKS ---
-  // Only these fields are critical for tracking to work
-  const hasCriticalTrackingData = Boolean(
-    inviteBootstrap?.inviteAccepted &&
-    inviteBootstrap?.trackerUserId &&
-    inviteBootstrap?.orgId &&
-    inviteBootstrap?.trackerSessionReady
-  );
-
-  // Battery prompt is not critical, just a UI prompt
-  const canShowBatteryPrompt = !batteryPromptDismissed;
-
-  // LOGS for critical state
-  if (!hasCriticalTrackingData) console.log('[TRACKER_PAGE] missing critical tracking data', {
-    inviteAccepted: inviteBootstrap?.inviteAccepted,
-    trackerUserId: inviteBootstrap?.trackerUserId,
-    orgId: inviteBootstrap?.orgId,
-    trackerSessionReady: inviteBootstrap?.trackerSessionReady,
-  });
+  // --- NUEVO GATE: solo loading si faltan token u org_id ---
+  const trackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
+  const orgId = inviteBootstrap?.orgId || effectiveOrgId || null;
+  const loading = !trackerToken || !orgId;
 
   // Log render principal
   console.log('[TRACKER_PAGE] rendering main content', {
     inviteBootstrap,
-    hasCriticalTrackingData,
+    trackerToken,
+    orgId,
+    loading,
     androidBridge: !!bridgeReady,
     batteryPromptDismissed,
   });
-
-  // Fallback visual obligatorio (critical error panel)
-  const renderFallbackPanel = () => (
-    <div
-      style={{
-        width: "100%",
-        maxWidth: 480,
-        border: "2px solid #e57373",
-        borderRadius: 12,
-        padding: 24,
-        background: "#fff3f3",
-        color: "#b71c1c",
-        marginTop: 32,
-        fontFamily: "monospace",
-        textAlign: "center",
-      }}
-    >
-      <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 12 }}>
-        No se pudo iniciar el tracking
-      </div>
-      <div style={{ fontSize: 16, marginBottom: 16 }}>
-        Faltan datos críticos para iniciar el seguimiento.
-      </div>
-      {inviteBootstrap.error && (
-        <div style={{ color: '#b71c1c', fontWeight: 600, marginBottom: 12, fontSize: 15 }}>
-          Error de invitación: {inviteBootstrap.error}
-        </div>
-      )}
-      <div style={{ fontSize: 15, textAlign: "left", margin: "0 auto", maxWidth: 320 }}>
-        <div>inviteAccepted: <b>{inviteBootstrap.inviteAccepted ? 'sí' : 'no'}</b></div>
-        <div>trackerUserId: <b>{inviteBootstrap.trackerUserId || '-'}</b></div>
-        <div>orgId: <b>{inviteBootstrap.orgId || '-'}</b></div>
-        <div>email: <b>{inviteBootstrap.email || '-'}</b></div>
-        <div>trackerSessionReady: <b>{inviteBootstrap.trackerSessionReady ? 'sí' : 'no'}</b></div>
-        <div>androidBridge: <b>{bridgeReady ? 'sí' : 'no'}</b></div>
-        <div>debug: <pre style={{ fontSize: 12, color: '#333', background: '#f5f5f5', padding: 6, borderRadius: 6, overflowX: 'auto' }}>{JSON.stringify(inviteBootstrap.debug, null, 2)}</pre></div>
-      </div>
-      <div style={{ marginTop: 16, fontSize: 13, color: "#333" }}>
-        Este panel es obligatorio y solo aparece si falta algún dato esencial después de continuar.
-      </div>
-    </div>
-  );
 
   // Render principal: nunca return null ni pantalla vacía
   return (
@@ -970,9 +915,11 @@ export default function TrackerGpsPage() {
       }}
     >
       {renderBatteryOptBlock()}
-      {!hasCriticalTrackingData && renderFallbackPanel()}
-      {/* Si todo está ok, mostrar mensaje de tracking activo */}
-      {hasCriticalTrackingData && (
+      {loading ? (
+        <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
+          Inicializando tracker...
+        </div>
+      ) : (
         <div
           style={{
             width: "100%",
@@ -993,7 +940,7 @@ export default function TrackerGpsPage() {
             Último estado: <b>{lastMessage}</b>
           </div>
           <div style={{ fontSize: 13, color: "#555" }}>
-            OrgId: <b>{String(effectiveOrgId)}</b>
+            OrgId: <b>{String(orgId)}</b>
           </div>
         </div>
       )}

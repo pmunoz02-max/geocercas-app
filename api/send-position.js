@@ -3,6 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "method_not_allowed" });
   }
 
+
   try {
     const chunks = [];
     for await (const chunk of req) {
@@ -15,6 +16,16 @@ export default async function handler(req, res) {
       incomingBody = rawBody ? JSON.parse(rawBody) : {};
     } catch {
       return res.status(400).json({ ok: false, error: "invalid_json" });
+    }
+
+    // Log received keys
+    console.log("[api/send-position] received body keys", Object.keys(incomingBody));
+
+    // Validate org_id only from body
+    const orgId = incomingBody.org_id;
+    if (!orgId || typeof orgId !== "string" || !orgId.trim()) {
+      console.error("[api/send-position] missing or invalid org_id", { orgId });
+      return res.status(400).json({ ok: false, error: "missing_org_id" });
     }
 
     // ==============================
