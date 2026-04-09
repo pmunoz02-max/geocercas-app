@@ -882,15 +882,16 @@ export default function TrackerGpsPage() {
 
 
 
+
   // --- NUEVO GATE: solo loading si faltan token u org_id ---
-  const trackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
+  const inviteTrackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
   const orgId = inviteBootstrap?.orgId || effectiveOrgId || null;
-  const loading = !trackerToken || !orgId;
+  const loading = !inviteTrackerToken || !orgId;
 
   // Log render principal
   console.log('[TRACKER_PAGE] rendering main content', {
     inviteBootstrap,
-    trackerToken,
+    inviteTrackerToken,
     orgId,
     loading,
     androidBridge: !!bridgeReady,
