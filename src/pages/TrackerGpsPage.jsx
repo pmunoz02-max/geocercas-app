@@ -59,10 +59,7 @@ export default function TrackerGpsPage() {
     batteryOptimizationDisabled: null,
   });
   const [requestedOrgId, setRequestedOrgId] = useState(null);
-  // Assignment state is now background-only, not used for gating render
-  const [assignmentState, setAssignmentState] = useState({});
-  // Health state is background-only
-  const [healthState, setHealthState] = useState({});
+  // Assignment and health state removed from render logic
   const [lastMessage, setLastMessage] = useState("Sincronizando estado con backend...");
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [batteryOptStatus, setBatteryOptStatus] = useState({
@@ -500,26 +497,24 @@ export default function TrackerGpsPage() {
     };
   }, [syncPassiveState]);
 
-  const effectiveOrgId = useMemo(
-    () => assignmentState.effectiveOrgId || assignmentState.assignment?.org_id || requestedOrgId || null,
-    [assignmentState.assignment, assignmentState.effectiveOrgId, requestedOrgId]
-  );
+  // effectiveOrgId is just requestedOrgId now
+  const effectiveOrgId = requestedOrgId;
 
+  // Start tracking immediately if bridge is ready, trackerToken and orgId exist
   useEffect(() => {
     if (!bridgeReady) return;
-
-    requestServiceBootstrapOnce({
-      backendAssignmentFound: assignmentState.active === true,
-      allowNoSessionFallback: assignmentState.reason === "no_session",
-      effectiveOrgId,
-    });
-  }, [
-    assignmentState.active,
-    assignmentState.reason,
-    bridgeReady,
-    effectiveOrgId,
-    requestServiceBootstrapOnce,
-  ]);
+    if (!trackerToken || !effectiveOrgId) return;
+    const bridge = getAndroidBridge();
+    if (bridge && typeof bridge.startTracking === "function") {
+      try {
+        bridge.startTracking();
+        setServiceBootstrapRequested(true);
+        markMessage("Seguimiento iniciado inmediatamente (sin esperar assignment/status)");
+      } catch (e) {
+        console.error("[TrackerGpsPage] startTracking failed", e);
+      }
+    }
+  }, [bridgeReady, trackerToken, effectiveOrgId, markMessage]);
 
   const refreshBatteryOptStatus = useCallback(() => {
     const bridge = getAndroidBridge();
@@ -871,22 +866,24 @@ export default function TrackerGpsPage() {
 
 
 
-  // --- RENDER: solo requiere token y org_id, nunca bloquea por assignment/status ---
+  // --- RENDER: solo bloquea si faltan trackerToken u orgId ---
   const inviteTrackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
   const orgId = inviteBootstrap?.orgId || effectiveOrgId || null;
-  const loading = !inviteTrackerToken || !orgId;
 
+  if (!inviteTrackerToken || !orgId) {
+    return <Inicializando />;
+  }
+
+  // 👉 TODO LO DEMÁS NO BLOQUEA
   // Log render principal
   console.log('[TRACKER_PAGE] rendering main content', {
     inviteBootstrap,
     inviteTrackerToken,
     orgId,
-    loading,
     androidBridge: !!bridgeReady,
     batteryPromptDismissed,
   });
 
-  // Render principal: nunca bloquea por assignment/status, solo requiere token y org_id
   return (
     <div
       style={{
@@ -904,37 +901,29 @@ export default function TrackerGpsPage() {
       }}
     >
       {renderBatteryOptBlock()}
-      {!loading && (
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 760,
-            border: "1px solid #d0d7de",
-            borderRadius: 12,
-            padding: 20,
-            background: "#f8f9fb",
-            marginTop: 24,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-            Tracker activo
-          </div>
-          <div style={{ fontSize: 15, marginBottom: 8 }}>
-            El tracking está funcionando correctamente.<br />
-            Último estado: <b>{lastMessage}</b>
-          </div>
-          <div style={{ fontSize: 13, color: "#555" }}>
-            OrgId: <b>{String(orgId)}</b>
-          </div>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 760,
+          border: "1px solid #d0d7de",
+          borderRadius: 12,
+          padding: 20,
+          background: "#f8f9fb",
+          marginTop: 24,
+          textAlign: "center",
+        }}
+      >
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+          Tracker activo
         </div>
-      )}
-      {loading && (
-        <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
-          Faltan credenciales de tracker u organización.<br />
-          Por favor, accede con un enlace válido.<br />
+        <div style={{ fontSize: 15, marginBottom: 8 }}>
+          El tracking está funcionando correctamente.<br />
+          Último estado: <b>{lastMessage}</b>
         </div>
-      )}
+        <div style={{ fontSize: 13, color: "#555" }}>
+          OrgId: <b>{String(orgId)}</b>
+        </div>
+      </div>
     </div>
   );
 }
