@@ -806,9 +806,13 @@ export default function TrackerGpsPage() {
         const accessToken = result?.session?.access_token || null;
         if (result?.ok && result?.tracker_user_id && result?.org_id && accessToken) {
           try {
+            // Always overwrite tracker_access_token with the new invite session access_token
             localStorage.setItem('tracker_access_token', accessToken);
             localStorage.setItem('tracker_user_id', result.tracker_user_id);
             localStorage.setItem('tracker_org_id', result.org_id);
+            // Clear any legacy tracker runtime auth tokens
+            try { localStorage.removeItem('geocercas-tracker-auth'); } catch {}
+            try { localStorage.removeItem('tracker_legacy_token'); } catch {}
             setInviteBootstrap(prev => ({
               ...prev,
               inviteAccepted: true,

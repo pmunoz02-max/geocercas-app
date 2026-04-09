@@ -91,25 +91,17 @@ export async function getSessionUser() {
 }
 
 async function getSessionAccessToken() {
-  // 1. Custom tracker token from localStorage (set by TrackerGpsPage)
+  // Only use tracker_access_token for tracker send_position calls
   if (typeof window !== "undefined") {
     try {
       const trackerToken = localStorage.getItem("tracker_access_token");
       if (trackerToken && trackerToken.length > 10) return trackerToken;
-    } catch {}
+      throw new Error("missing_tracker_access_token");
+    } catch (e) {
+      throw new Error("missing_tracker_access_token");
+    }
   }
-
-  // 2. In-memory token (AuthCallback)
-  const mem = getMemoryAccessToken?.();
-  if (mem) return mem;
-
-  // 3. Fallback: Supabase session (should not be used for tracker flows)
-  const { data, error } = await supabase.auth.getSession();
-  if (error) {
-    console.error("[trackerApi] getSessionAccessToken error:", error);
-    return "";
-  }
-  return data?.session?.access_token || "";
+  throw new Error("missing_tracker_access_token");
 }
 
 // ===================== Envío de posiciones =====================
