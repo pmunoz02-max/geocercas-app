@@ -16,10 +16,26 @@ console.log("[TG RUNTIME MARKER]", window.__TG_RUNTIME_MARKER);
 console.log("[BUILD_MARKER] preview-send-debug-02");
 
 // ── Service Worker / PWA bypass para rutas tracker ──────────────────────────
-const isTrackerRoute =
-  typeof window !== "undefined" && window.location.pathname.startsWith("/tracker-gps");
+function urlHasAnyTokenParam() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  return (
+    params.has("inviteToken") ||
+    params.has("invite_token") ||
+    params.has("token") ||
+    params.has("t")
+  );
+}
 
-console.log("[TRACKER_BOOT] main.jsx tracker bypass", { isTrackerRoute });
+const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+const isTrackerAccept = pathname === "/tracker-accept";
+const isTrackerGps = pathname === "/tracker-gps";
+const hasTokenParam = urlHasAnyTokenParam();
+
+const shouldBypass =
+  (isTrackerGps || isTrackerAccept) && !hasTokenParam;
+
+console.log("[TRACKER_BOOT] main.jsx tracker bypass", { isTrackerGps, isTrackerAccept, hasTokenParam, shouldBypass });
 
 if ("serviceWorker" in navigator) {
   // PWA/SW hard-disabled globally: unregister any residual service worker.
@@ -29,9 +45,8 @@ if ("serviceWorker" in navigator) {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
-
 // 🔥 TRACKER BYPASS: nunca return null ni pantalla blanca
-if (isTrackerRoute) {
+if (shouldBypass) {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
       Inicializando tracker...
