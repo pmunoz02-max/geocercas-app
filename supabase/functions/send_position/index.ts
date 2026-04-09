@@ -470,6 +470,18 @@ serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await authClient.auth.getUser();
+    // Extract JWT sub if possible
+    let jwtSub = null;
+    try {
+      const jwtParts = jwt.split(".");
+      if (jwtParts.length === 3) {
+        const payload = JSON.parse(atob(jwtParts[1]));
+        jwtSub = payload.sub || null;
+      }
+    } catch (e) {
+      jwtSub = null;
+    }
+
     if (userError || !userData?.user?.id) {
       let authReason = "invalid_token";
       let authDetail = "";
@@ -494,10 +506,17 @@ serve(async (req) => {
         user_error_status: userError?.status ?? null,
         user_error_name: userError?.name ?? null,
         user_id: userData?.user?.id ?? null,
+        jwt_sub: jwtSub,
         auth_reason: authReason,
         auth_detail: authDetail,
       });
       return json({ ok: false, error: "invalid_user", build_tag }, 401, CORS);
+    }
+
+    // Fallback user id (from body, if present and valid)
+    let fallbackUserId = null;
+    if (body.user_id && isValidUuid(body.user_id)) {
+      fallbackUserId = String(body.user_id);
     }
 
     const user_id = resolveRequiredUuid(userData.user.id, "user_id");
@@ -506,10 +525,16 @@ serve(async (req) => {
     const lng = normalizeNumber(body.lng);
     const accuracy = normalizeNumber(body.accuracy);
 
+    // Log all user id sources
+    console.log("[send_position][user_id_resolution]", {
+      jwt_sub: jwtSub,
+      fallback_user_id: fallbackUserId,
+      effective_user_id: user_id,
+    });
+
     if (!org_id || lat === null || lng === null) {
       return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
     }
-
 
     // LOG: Pasó rpc_tracker_can_send, intentando insert en positions
     console.log("[send_position][positions][web] passed rpc, inserting", {
@@ -540,6 +565,15 @@ serve(async (req) => {
         CORS,
       );
     }
+
+    // Log again for tracker_latest write
+    console.log("[send_position][tracker_latest][web] writing", {
+      user_id,
+      org_id,
+      jwt_sub: jwtSub,
+      fallback_user_id: fallbackUserId,
+      effective_user_id: user_id,
+    });
 
     const latestResult = await updateTrackerLatestOperationalState(admin, {
       org_id,
