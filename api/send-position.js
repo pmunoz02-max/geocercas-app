@@ -1,27 +1,40 @@
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
     return res.status(405).json({ ok: false, error: "method_not_allowed" });
   }
 
-
   try {
-    const chunks = [];
-    for await (const chunk of req) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    // Always read the raw body and parse as JSON if needed
+    let rawBody = null;
+    let incomingBody = {};
+    if (req.body && typeof req.body === "object") {
+      incomingBody = req.body;
+    } else if (req.body && typeof req.body === "string") {
+      rawBody = req.body;
+      try {
+        incomingBody = JSON.parse(rawBody);
+      } catch {
+        return res.status(400).json({ ok: false, error: "invalid_json" });
+      }
+    } else {
+      // Fallback: read the stream if body is not present
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      rawBody = Buffer.concat(chunks).toString("utf8");
+      try {
+        incomingBody = rawBody ? JSON.parse(rawBody) : {};
+      } catch {
+        return res.status(400).json({ ok: false, error: "invalid_json" });
+      }
     }
-    const rawBody = Buffer.concat(chunks).toString("utf8");
 
-    let incomingBody;
-    try {
-      incomingBody = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      return res.status(400).json({ ok: false, error: "invalid_json" });
-    }
-
-    // Log received keys
+    // Log received keys after parsing
     console.log("[api/send-position] received body keys", Object.keys(incomingBody));
 
-    // Validate org_id only from body
+    // Validate org_id only after parsing
     const orgId = incomingBody.org_id;
     if (!orgId || typeof orgId !== "string" || !orgId.trim()) {
       console.error("[api/send-position] missing or invalid org_id", { orgId });
