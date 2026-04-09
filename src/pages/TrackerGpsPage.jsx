@@ -818,6 +818,12 @@ export default function TrackerGpsPage() {
               sessionSet: true,
               trackerSessionReady: true,
               sessionErrorMessage: null,
+              debug: {
+                ...prev.debug,
+                status: resp.status,
+                result,
+                accessTokenStored: true,
+              },
             }));
           } catch (e) {
             setInviteBootstrap(prev => ({
@@ -857,9 +863,15 @@ export default function TrackerGpsPage() {
 
 
 
-  // trackingSessionReady depende de bootstrap exitoso
-  const trackingSessionReady = inviteBootstrap.inviteAccepted && !!inviteBootstrap.trackerUserId && assignmentState.active === true && healthState.row;
-  const missingToken = !trackerToken;
+  // trackingSessionReady depende SOLO de bootstrap exitoso y token persistido
+  const trackerAccessToken = typeof window !== 'undefined' ? localStorage.getItem('tracker_access_token') : null;
+  const trackingSessionReady = Boolean(
+    inviteBootstrap?.inviteAccepted &&
+    inviteBootstrap?.trackerUserId &&
+    inviteBootstrap?.orgId &&
+    trackerAccessToken
+  );
+  const missingToken = !trackerAccessToken;
   const missingInviteParams = !inviteBootstrap.done || !inviteBootstrap.inviteAccepted;
   const missingBridge = !bridgeReady;
   const missingSession = !trackingSessionReady;
