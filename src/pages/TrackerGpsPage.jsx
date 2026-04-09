@@ -871,10 +871,9 @@ export default function TrackerGpsPage() {
 
 
 
-  // --- NUEVO GATE: solo loading si faltan token u org_id ---
+  // --- RENDER: solo requiere token y org_id, nunca bloquea por assignment/status ---
   const inviteTrackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
   const orgId = inviteBootstrap?.orgId || effectiveOrgId || null;
-  // Loading solo depende de token/org_id válidos o sesión fallida
   const loading = !inviteTrackerToken || !orgId;
 
   // Log render principal
@@ -887,7 +886,7 @@ export default function TrackerGpsPage() {
     batteryPromptDismissed,
   });
 
-  // Render principal: nunca return null ni pantalla vacía
+  // Render principal: nunca bloquea por assignment/status, solo requiere token y org_id
   return (
     <div
       style={{
@@ -905,11 +904,7 @@ export default function TrackerGpsPage() {
       }}
     >
       {renderBatteryOptBlock()}
-      {loading ? (
-        <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
-          Inicializando tracker...
-        </div>
-      ) : (
+      {!loading && (
         <div
           style={{
             width: "100%",
@@ -932,6 +927,12 @@ export default function TrackerGpsPage() {
           <div style={{ fontSize: 13, color: "#555" }}>
             OrgId: <b>{String(orgId)}</b>
           </div>
+        </div>
+      )}
+      {loading && (
+        <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
+          Faltan credenciales de tracker u organización.<br />
+          Por favor, accede con un enlace válido.<br />
         </div>
       )}
     </div>

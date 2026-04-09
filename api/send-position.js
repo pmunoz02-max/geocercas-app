@@ -5,24 +5,35 @@ export default async function handler(req, res) {
   }
 export default async function handler(req, res) {
   try {
-    let body = req.body;
 
-    // 🔥 FIX CLAVE: asegurar parseo real
-    if (!body || typeof body === "string") {
-      try {
-        body = JSON.parse(body || "{}");
-      } catch (e) {
-        console.error("[send-position] JSON parse error", e);
-        return res.status(400).json({ ok: false, error: "invalid_json" });
-      }
+    // ❌ NO usar más req.body directamente
+    // const { org_id } = req.body;
+    let raw = "";
+    try {
+      raw = await new Promise((resolve, reject) => {
+        let data = "";
+        req.on("data", chunk => data += chunk);
+        req.on("end", () => resolve(data));
+        req.on("error", reject);
+      });
+    } catch (e) {
+      console.error("[send-position] raw read error", e);
     }
 
-    console.log("[send-position] body keys:", Object.keys(body));
+    let body = {};
+    try {
+      body = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      console.error("[send-position] JSON parse error", raw);
+    }
 
-    const { org_id, lat, lng } = body;
+    console.log("[send-position] RAW:", raw);
+    console.log("[send-position] PARSED KEYS:", Object.keys(body));
+
+    const { org_id } = body;
 
     if (!org_id) {
-      console.error("[send-position] missing org_id AFTER parse", body);
+      console.error("[send-position] STILL missing org_id", body);
       return res.status(400).json({ ok: false, error: "missing_org_id" });
     }
 
