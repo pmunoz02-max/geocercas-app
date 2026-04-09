@@ -816,6 +816,8 @@ export default function TrackerGpsPage() {
 
 
             // --- Push new access token and tracker user id to Android native bridge if available ---
+            // Después de bootstrap de invitación exitoso, enviar access_token y tracker_user_id al bridge nativo Android
+            // Ambos son requeridos para la autenticación nativa estricta
             const trackerUserId = result?.tracker_user_id;
             if (accessToken && trackerUserId && window.Android?.replaceTrackerToken) {
               try {
