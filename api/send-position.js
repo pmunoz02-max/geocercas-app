@@ -84,12 +84,15 @@ export default async function handler(req, res) {
       });
     }
 
-    const authHeader = req.headers.authorization || "";
+
+    // Forward Authorization header exactly as received (case-insensitive)
+    const authHeader = req.headers.authorization || req.headers.Authorization || "";
     const upstreamUrl = `${supabaseUrl}/functions/v1/send_position`;
 
     console.log("[api/send-position] proxy_start", {
       hasAuth: Boolean(authHeader),
       upstreamUrl,
+      forwardedAuthorization: authHeader,
     });
 
     const upstream = await fetch(upstreamUrl, {

@@ -470,16 +470,18 @@ serve(async (req) => {
     });
 
     const { data: userData, error: userError } = await authClient.auth.getUser();
-    // Extract JWT sub if possible
+    // Extract JWT claims (sub) if possible
     let jwtSub = null;
+    let claims = null;
     try {
       const jwtParts = jwt.split(".");
       if (jwtParts.length === 3) {
-        const payload = JSON.parse(atob(jwtParts[1]));
-        jwtSub = payload.sub || null;
+        claims = JSON.parse(atob(jwtParts[1]));
+        jwtSub = claims.sub || null;
       }
     } catch (e) {
       jwtSub = null;
+      claims = null;
     }
 
     if (userError || !userData?.user?.id) {
@@ -514,31 +516,38 @@ serve(async (req) => {
     }
 
     // Fallback user id (from body, if present and valid)
-    let fallbackUserId = null;
+    let legacyFallbackUserId = null;
     if (body.user_id && isValidUuid(body.user_id)) {
-      fallbackUserId = String(body.user_id);
+      legacyFallbackUserId = String(body.user_id);
     }
 
-    const user_id = resolveRequiredUuid(userData.user.id, "user_id");
+    // Priority: JWT sub if present, else fallback
+    const hasValidTrackerJwt = Boolean(claims?.sub);
+    const effectiveUserId = hasValidTrackerJwt
+      ? claims.sub
+      : legacyFallbackUserId ?? null;
+
     const org_id = resolveRequiredUuid(body.org_id, "org_id");
     const lat = normalizeNumber(body.lat);
     const lng = normalizeNumber(body.lng);
     const accuracy = normalizeNumber(body.accuracy);
 
-    // Log all user id sources
-    console.log("[send_position][user_id_resolution]", {
-      jwt_sub: jwtSub,
-      fallback_user_id: fallbackUserId,
-      effective_user_id: user_id,
+
+    // Clean identity trace log
+    console.log('[send_position][identity]', {
+      jwt_sub: claims?.sub ?? null,
+      fallback_user_id: legacyFallbackUserId ?? null,
+      effective_user_id: effectiveUserId ?? null,
+      org_id: org_id ?? null,
     });
 
-    if (!org_id || lat === null || lng === null) {
+    if (!org_id || lat === null || lng === null || !effectiveUserId) {
       return json({ ok: false, error: "missing_required_fields", build_tag }, 400, CORS);
     }
 
     // LOG: Pasó rpc_tracker_can_send, intentando insert en positions
     console.log("[send_position][positions][web] passed rpc, inserting", {
-      user_id,
+      user_id: effectiveUserId,
       org_id,
       lat,
       lng,
@@ -548,7 +557,7 @@ serve(async (req) => {
     });
 
     const { error: positionError } = await admin.from("positions").insert({
-      user_id,
+      user_id: effectiveUserId,
       org_id,
       lat,
       lng,
@@ -568,16 +577,17 @@ serve(async (req) => {
 
     // Log again for tracker_latest write
     console.log("[send_position][tracker_latest][web] writing", {
-      user_id,
+      user_id: effectiveUserId,
       org_id,
       jwt_sub: jwtSub,
-      fallback_user_id: fallbackUserId,
-      effective_user_id: user_id,
+      legacy_fallback_user_id: legacyFallbackUserId,
+      hasValidTrackerJwt,
+      effective_user_id: effectiveUserId,
     });
 
     const latestResult = await updateTrackerLatestOperationalState(admin, {
       org_id,
-      user_id,
+      user_id: effectiveUserId,
       trackerLatestPayload,
     });
 

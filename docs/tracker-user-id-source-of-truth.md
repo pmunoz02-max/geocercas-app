@@ -5,7 +5,7 @@ Branch: preview
 
 ## Problema detectado
 
-El tracker runtime con JWT custom estaba enviando posiciones correctamente, pero `send_position` persistía filas con un `user_id` distinto al `tracker_user_id` del invite bootstrap.
+El tracker runtime con JWT custom enviaba posiciones correctamente, pero `send_position` persistía actividad con un `user_id` distinto al `tracker_user_id` del invite bootstrap.
 
 Esto provocaba:
 
@@ -15,7 +15,7 @@ Esto provocaba:
 
 ## Regla de arquitectura
 
-Cuando `send_position` recibe un Bearer token válido del tracker bootstrap/custom runtime, la fuente de verdad para `user_id` es el claim:
+Cuando `send_position` recibe un Bearer token válido del tracker runtime/custom bootstrap, la fuente de verdad para `user_id` es el claim:
 
 - `sub`
 
