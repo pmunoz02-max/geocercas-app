@@ -46,7 +46,18 @@ if ("serviceWorker" in navigator) {
 // ────────────────────────────────────────────────────────────────────────────
 
 // 🔥 TRACKER BYPASS: nunca return null ni pantalla blanca
-if (shouldBypass) {
+function hasTrackerTokenAndOrgId() {
+  try {
+    const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
+    let trackerAuth = null;
+    try { trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null; } catch {}
+    const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || localStorage.getItem("tracker_access_token") || null;
+    const orgId = localStorage.getItem("org_id") || null;
+    return !!trackerToken && !!orgId;
+  } catch { return false; }
+}
+
+if (shouldBypass && !hasTrackerTokenAndOrgId()) {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
       Inicializando tracker...
