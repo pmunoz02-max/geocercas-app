@@ -20,5 +20,14 @@
   ],
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
-  }
+  },
+  "sqltools.connections": [
+      {
+        "name": "Supabase FIX",
+        "driver": "PostgreSQL",
+        "connectionString": "postgresql://postgres.mujwsfhkocsuuahlrssn:3kl2naM0YRJovceY\n@aws-0-us-west-2.pooler.supabase.com:5432/postgres",
+        "previewLimit": 50
+      }
+    ]
+  ]
 }

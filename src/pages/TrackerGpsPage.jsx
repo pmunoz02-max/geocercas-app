@@ -863,36 +863,35 @@ export default function TrackerGpsPage() {
 
 
 
-  // trackingSessionReady depende SOLO de bootstrap exitoso y token persistido
-  const trackerAccessToken = typeof window !== 'undefined' ? localStorage.getItem('tracker_access_token') : null;
-  const trackingSessionReady = Boolean(
+  // --- CRITICAL DATA CHECKS ---
+  // Only these fields are critical for tracking to work
+  const hasCriticalTrackingData = Boolean(
     inviteBootstrap?.inviteAccepted &&
     inviteBootstrap?.trackerUserId &&
     inviteBootstrap?.orgId &&
-    trackerAccessToken
+    inviteBootstrap?.trackerSessionReady
   );
-  const missingToken = !trackerAccessToken;
-  const missingInviteParams = !inviteBootstrap.done || !inviteBootstrap.inviteAccepted;
-  const missingBridge = !bridgeReady;
-  const missingSession = !trackingSessionReady;
-  const missingCritical = missingToken || missingInviteParams || missingBridge || missingSession;
 
-  // LOGS por cada estado crítico
-  if (missingToken) console.log('[TRACKER_PAGE] missing token');
-  if (missingInviteParams) console.log('[TRACKER_PAGE] missing invite bootstrap');
-  if (missingBridge) console.log('[TRACKER_PAGE] androidBridge not available');
-  if (missingSession) console.log('[TRACKER_PAGE] missing tracker session');
-  if (missingCritical) console.log('[TRACKER_PAGE] unexpected blank-state fallback');
+  // Battery prompt is not critical, just a UI prompt
+  const canShowBatteryPrompt = !batteryPromptDismissed;
+
+  // LOGS for critical state
+  if (!hasCriticalTrackingData) console.log('[TRACKER_PAGE] missing critical tracking data', {
+    inviteAccepted: inviteBootstrap?.inviteAccepted,
+    trackerUserId: inviteBootstrap?.trackerUserId,
+    orgId: inviteBootstrap?.orgId,
+    trackerSessionReady: inviteBootstrap?.trackerSessionReady,
+  });
 
   // Log render principal
   console.log('[TRACKER_PAGE] rendering main content', {
     inviteBootstrap,
-    trackerSessionReady: !!trackingSessionReady,
+    hasCriticalTrackingData,
     androidBridge: !!bridgeReady,
     batteryPromptDismissed,
   });
 
-  // Fallback visual obligatorio
+  // Fallback visual obligatorio (critical error panel)
   const renderFallbackPanel = () => (
     <div
       style={{
@@ -924,9 +923,8 @@ export default function TrackerGpsPage() {
         <div>trackerUserId: <b>{inviteBootstrap.trackerUserId || '-'}</b></div>
         <div>orgId: <b>{inviteBootstrap.orgId || '-'}</b></div>
         <div>email: <b>{inviteBootstrap.email || '-'}</b></div>
-        <div>trackerSessionReady: <b>{trackingSessionReady ? 'sí' : 'no'}</b></div>
+        <div>trackerSessionReady: <b>{inviteBootstrap.trackerSessionReady ? 'sí' : 'no'}</b></div>
         <div>androidBridge: <b>{bridgeReady ? 'sí' : 'no'}</b></div>
-        <div>batteryPromptDismissed: <b>{batteryPromptDismissed ? 'sí' : 'no'}</b></div>
         <div>debug: <pre style={{ fontSize: 12, color: '#333', background: '#f5f5f5', padding: 6, borderRadius: 6, overflowX: 'auto' }}>{JSON.stringify(inviteBootstrap.debug, null, 2)}</pre></div>
       </div>
       <div style={{ marginTop: 16, fontSize: 13, color: "#333" }}>
@@ -953,9 +951,9 @@ export default function TrackerGpsPage() {
       }}
     >
       {renderBatteryOptBlock()}
-      {missingCritical && renderFallbackPanel()}
+      {!hasCriticalTrackingData && renderFallbackPanel()}
       {/* Si todo está ok, mostrar mensaje de tracking activo */}
-      {!missingCritical && (
+      {hasCriticalTrackingData && (
         <div
           style={{
             width: "100%",
