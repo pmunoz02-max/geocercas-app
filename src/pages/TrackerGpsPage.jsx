@@ -814,21 +814,14 @@ export default function TrackerGpsPage() {
             try { localStorage.removeItem('geocercas-tracker-auth'); } catch {}
             try { localStorage.removeItem('tracker_legacy_token'); } catch {}
 
-            // --- Push new access token to Android native bridge if available ---
-            const androidBridge = getAndroidBridge && getAndroidBridge();
-            if (accessToken && androidBridge && typeof androidBridge.updateTrackerToken === 'function') {
+
+            // --- Push new access token and tracker user id to Android native bridge if available ---
+            const trackerUserId = result?.tracker_user_id;
+            if (accessToken && trackerUserId && window.Android?.replaceTrackerToken) {
               try {
-                androidBridge.updateTrackerToken(accessToken);
+                window.Android.replaceTrackerToken(accessToken, trackerUserId);
               } catch (e) {
-                // Fallback: try window.Android directly if not a function on bridge
-                try {
-                  if (window.Android && typeof window.Android.updateTrackerToken === 'function') {
-                    window.Android.updateTrackerToken(accessToken);
-                  }
-                } catch (err2) {
-                  // Log both errors
-                  console.error('[tracker] android token push failed', e, err2);
-                }
+                console.error('[tracker] android replaceTrackerToken failed', e);
               }
             }
 
