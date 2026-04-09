@@ -29,12 +29,22 @@ if ("serviceWorker" in navigator) {
 }
 // ────────────────────────────────────────────────────────────────────────────
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <I18nextProvider i18n={i18n}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </I18nextProvider>
-  </React.StrictMode>
-);
+
+// 🔥 TRACKER BYPASS: nunca return null ni pantalla blanca
+if (isTrackerRoute) {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
+      Inicializando tracker...
+    </div>
+  );
+} else {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+      <I18nextProvider i18n={i18n}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </I18nextProvider>
+    </React.StrictMode>
+  );
+}

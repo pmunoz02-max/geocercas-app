@@ -181,7 +181,8 @@ function extractBrevoMessageId(raw: string): string {
   return m?.[1] ? String(m[1]) : "";
 }
 
-// Siempre generar un enlace HTTPS puro hacia /tracker-gps con los parámetros requeridos
+
+// Siempre generar un enlace HTTPS puro hacia /tracker-accept con los parámetros requeridos
 function buildDirectTrackerInviteUrl(params: {
   siteUrl: string;
   orgId: string;
@@ -192,7 +193,7 @@ function buildDirectTrackerInviteUrl(params: {
   // Nunca usar intent://, #Intent, scheme=, android-app://
   // Solo HTTPS puro
   const url =
-    `${siteUrl}/tracker-gps` +
+    `${siteUrl}/tracker-accept` +
     `?inviteToken=${encodeURIComponent(params.accessToken)}` +
     `&t=${encodeURIComponent(params.accessToken)}` +
     `&org_id=${encodeURIComponent(params.orgId)}` +
@@ -543,9 +544,23 @@ serve(async (req) => {
       });
     }
 
-    const userJwt = (req.headers.get("x-user-jwt") || "").trim();
+
+    const xUserJwt = (req.headers.get("x-user-jwt") || "").trim();
+    const authHeader = (req.headers.get("authorization") || "").trim();
+
+    const bearerJwt = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
+
+    const userJwt = xUserJwt || bearerJwt;
+
     if (!userJwt) {
-      throw new Error("missing_caller_jwt");
+      return jsonResponse(401, {
+        ok: false,
+        error: "missing_caller_jwt",
+        detail: "Expected x-user-jwt or Authorization Bearer token",
+        build_tag: BUILD_TAG,
+      });
     }
 
     if (!looksLikeJwt(userJwt)) {
