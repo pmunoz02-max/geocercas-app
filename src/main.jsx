@@ -10,12 +10,10 @@ import "./index.css";
 
 import App from "./App.jsx";
 
-// ✅ MARKER INFALIBLE EN RUNTIME
-window.__TG_RUNTIME_MARKER = "RUNTIME_MARKER_2026-04-09_MAIN_FIX_A";
+window.__TG_RUNTIME_MARKER = "RUNTIME_MARKER_2026-04-09_MAIN_SINGLE_ROOT_A";
 console.log("[TG RUNTIME MARKER]", window.__TG_RUNTIME_MARKER);
-console.log("[BUILD_MARKER] preview-tracker-main-fix-01");
+console.log("[BUILD_MARKER] preview-tracker-single-root-01");
 
-// ── Service Worker / PWA bypass para rutas tracker ──────────────────────────
 function urlHasAnyTokenParam() {
   if (typeof window === "undefined") return false;
   const params = new URLSearchParams(window.location.search);
@@ -30,6 +28,7 @@ function urlHasAnyTokenParam() {
 const pathname = typeof window !== "undefined" ? window.location.pathname : "";
 const isTrackerAccept = pathname === "/tracker-accept";
 const isTrackerGps = pathname === "/tracker-gps";
+const isTrackerRoute = isTrackerGps || isTrackerAccept;
 const hasTokenParam = urlHasAnyTokenParam();
 
 console.log("[TRACKER_BOOT] main.jsx tracker route", {
@@ -39,18 +38,13 @@ console.log("[TRACKER_BOOT] main.jsx tracker route", {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker
-    .getRegistrations()
-    .then((regs) => {
-      regs.forEach((r) => r.unregister());
-    })
-    .catch(() => {});
+  navigator.serviceWorker.getRegistrations().then((regs) => {
+    regs.forEach((r) => r.unregister());
+  }).catch(() => {});
 }
-// ────────────────────────────────────────────────────────────────────────────
 
 function readTrackerBootstrapState() {
   try {
-    // 🔥 leer TODAS las posibles fuentes
     const rawAuth =
       localStorage.getItem("geocercas-tracker-auth") ||
       localStorage.getItem("tracker_auth_saved") ||
@@ -60,26 +54,21 @@ function readTrackerBootstrapState() {
     let parsed = null;
     try {
       parsed = rawAuth ? JSON.parse(rawAuth) : null;
-    } catch {}
+    } catch {
+      parsed = null;
+    }
 
     const trackerToken =
       parsed?.access_token ||
       parsed?.session?.access_token ||
       localStorage.getItem("tracker_access_token") ||
       localStorage.getItem("access_token") ||
-      localStorage.getItem("tg_token") ||
       null;
 
     const orgId =
       localStorage.getItem("org_id") ||
       localStorage.getItem("tracker_org_id") ||
-      localStorage.getItem("tg_org_id") ||
       null;
-
-    console.log("[TRACKER_BOOT] read state", {
-      trackerToken: !!trackerToken,
-      orgId: !!orgId,
-    });
 
     return {
       trackerToken,
@@ -105,14 +94,13 @@ function BootstrapScreen() {
 }
 
 function RootBootstrap() {
-  const isTrackerRoute = isTrackerGps || isTrackerAccept;
   const [bootReady, setBootReady] = React.useState(() => {
     if (!isTrackerRoute) return true;
     return readTrackerBootstrapState().ready;
   });
 
   React.useEffect(() => {
-    if (!isTrackerRoute) return;
+    if (!isTrackerRoute) return undefined;
 
     let cancelled = false;
 
@@ -120,7 +108,6 @@ function RootBootstrap() {
       if (cancelled) return;
 
       const state = readTrackerBootstrapState();
-
       console.log("[TRACKER_BOOT] reactive check", {
         ready: state.ready,
         hasToken: !!state.trackerToken,
@@ -130,8 +117,7 @@ function RootBootstrap() {
       if (state.ready) {
         setBootReady(true);
       } else {
-        // seguir intentando SIEMPRE
-        setTimeout(check, 250);
+        window.setTimeout(check, 250);
       }
     }
 
@@ -140,7 +126,7 @@ function RootBootstrap() {
     return () => {
       cancelled = true;
     };
-  }, [isTrackerRoute]);
+  }, []);
 
   if (!bootReady) {
     return <BootstrapScreen />;
