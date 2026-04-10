@@ -105,10 +105,43 @@ export default function TrackerGpsPage() {
         {!ready ? (
           <h2>Inicializando tracker...</h2>
         ) : (
-          <>
-            <h2>Tracker activo</h2>
-            <button onClick={() => setMsg("Clic OK")}>Probar estado</button>
-          </>
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 760,
+              border: "1px solid #d0d7de",
+              borderRadius: 12,
+              padding: 20,
+              background: "#f8f9fb",
+              marginTop: 24,
+              textAlign: "center",
+            }}
+          >
+            <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+              Tracker activo
+            </div>
+            <div style={{ fontSize: 15, marginBottom: 8 }}>
+              El tracking está funcionando correctamente.<br />
+              Último estado: <b>{msg}</b>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMsg("Clic OK")}
+              style={{
+                border: "none",
+                borderRadius: 10,
+                padding: "12px 16px",
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: "pointer",
+                background: "#222",
+                color: "#fff",
+                marginTop: 12,
+              }}
+            >
+              Probar estado
+            </button>
+          </div>
         )}
       </div>
   );
