@@ -50,37 +50,44 @@ if ("serviceWorker" in navigator) {
 
 function readTrackerBootstrapState() {
   try {
-    const trackerAuthRaw =
+    // 🔥 leer TODAS las posibles fuentes
+    const rawAuth =
       localStorage.getItem("geocercas-tracker-auth") ||
       localStorage.getItem("tracker_auth_saved") ||
+      localStorage.getItem("tracker_auth") ||
       null;
 
-    let trackerAuth = null;
+    let parsed = null;
     try {
-      trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
-    } catch {
-      trackerAuth = null;
-    }
+      parsed = rawAuth ? JSON.parse(rawAuth) : null;
+    } catch {}
 
     const trackerToken =
-      trackerAuth?.access_token ||
-      trackerAuth?.session?.access_token ||
+      parsed?.access_token ||
+      parsed?.session?.access_token ||
       localStorage.getItem("tracker_access_token") ||
       localStorage.getItem("access_token") ||
+      localStorage.getItem("tg_token") ||
       null;
 
     const orgId =
       localStorage.getItem("org_id") ||
       localStorage.getItem("tracker_org_id") ||
+      localStorage.getItem("tg_org_id") ||
       null;
+
+    console.log("[TRACKER_BOOT] read state", {
+      trackerToken: !!trackerToken,
+      orgId: !!orgId,
+    });
 
     return {
       trackerToken,
       orgId,
       ready: Boolean(trackerToken && orgId),
     };
-  } catch (error) {
-    console.error("[TRACKER_BOOT] readTrackerBootstrapState error", error);
+  } catch (e) {
+    console.error("[TRACKER_BOOT] read error", e);
     return {
       trackerToken: null,
       orgId: null,
