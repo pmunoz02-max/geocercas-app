@@ -25,6 +25,23 @@ export default function TrackerGpsPage() {
           androidAvailable: !!window?.Android,
         })
     );
+
+    if (token && orgId) {
+      try {
+        console.log(
+          "[TRACKER_SESSION_SEND] " +
+            JSON.stringify({
+              tokenPresent: !!token,
+              orgIdPresent: !!orgId,
+              androidAvailable: !!window?.Android?.saveSession,
+            })
+        );
+
+        window?.Android?.saveSession?.(token, orgId);
+      } catch (e) {
+        console.error("[TRACKER_SESSION_SEND] error", e);
+      }
+    }
   }, []);
 
   // Bootstrap/polling local: solo logs y lectura de localStorage
