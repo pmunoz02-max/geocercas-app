@@ -1,3 +1,22 @@
+// Devuelve el nombre amigable del tracker según prioridad solicitada
+function getFriendlyTrackerName(item) {
+  // 1. tracker.display_name
+  if (item?.tracker?.display_name) return item.tracker.display_name;
+  // 2. tracker.name
+  if (item?.tracker?.name) return item.tracker.name;
+  // 3. personal.full_name
+  if (item?.personal?.full_name) return item.personal.full_name;
+  // 4. profile.full_name
+  if (item?.profile?.full_name) return item.profile.full_name;
+  // 5. latest.tracker_label
+  if (item?.latest?.tracker_label) return item.latest.tracker_label;
+  // 6. latest.tracker_name
+  if (item?.latest?.tracker_name) return item.latest.tracker_name;
+  // 7. latest.name
+  if (item?.latest?.name) return item.latest.name;
+  // 8. fallback: id o key
+  return item?.id || item?.key || "(sin nombre)";
+}
 // src/pages/TrackerDashboard.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -693,7 +712,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
     return { color: baseColor, radius: 7, fillOpacity: 0.9, strokeOpacity: 1 };
   };
 
-  const renderTrackerTooltip = (trackerLabel, personalId, latest, latestLat, latestLng, live) => {
+  const renderTrackerTooltip = (item, latest, latestLat, latestLng, live) => {
     const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
     const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
 
@@ -720,12 +739,13 @@ const TrackerLayers = React.memo(function TrackerLayers({
     const status = String(live?.status || "offline");
     const ageText = formatAgeShort(live?.ageSec ?? null);
 
+    const trackerName = getFriendlyTrackerName(item);
     return (
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div className="text-xs">
-          <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerLabel}</div>
-          {personalId && (
-            <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(personalId)}</div>
+          <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerName}</div>
+          {item?.personalId && (
+            <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(item.personalId)}</div>
           )}
           <div><b>{tOr("trackerDashboard.tooltip.status", "Status")}</b>: {status}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lastSeen", "Last seen")}</b>: {ageText}</div>
@@ -758,12 +778,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
 
           const live = item?.live || { status: "offline", ageSec: null };
           const markerStyle = getMarkerStyleByStatus(live.status, item.color);
-          const trackerDisplayName =
-            item?.trackerLabel ||
-            latest?.tracker_label ||
-            latest?.name ||
-            latest?.tracker_name ||
-            item?.key;
 
           return (
             <AnimatedTrackerDot
@@ -774,7 +788,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
               fillOpacity={markerStyle.fillOpacity}
               strokeOpacity={markerStyle.strokeOpacity}
             >
-              {renderTrackerTooltip(trackerDisplayName, item.personalId, latest, latestLat, latestLng, live)}
+              {renderTrackerTooltip(item, latest, latestLat, latestLng, live)}
             </AnimatedTrackerDot>
           );
         })}
@@ -2463,7 +2477,7 @@ export default function TrackerDashboard() {
                         const ts = getPositionTs(t?.latest);
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-4 py-2 text-gray-900">{t?.baseLabel || t?.trackerLabel || t?.label || "—"}</td>
+                            <td className="px-4 py-2 text-gray-900">{getFriendlyTrackerName(t)}</td>
                             <td className="px-4 py-2 text-gray-700">{getStatusLabel(live?.status)}</td>
                             <td className="px-4 py-2 text-gray-700">
                               {Number.isFinite(lat) && Number.isFinite(lng)
