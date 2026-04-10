@@ -1,21 +1,16 @@
 // Devuelve el nombre amigable del tracker según prioridad solicitada
-function getFriendlyTrackerName(item) {
-  // 1. tracker.display_name
-  if (item?.tracker?.display_name) return item.tracker.display_name;
-  // 2. tracker.name
-  if (item?.tracker?.name) return item.tracker.name;
-  // 3. personal.full_name
-  if (item?.personal?.full_name) return item.personal.full_name;
-  // 4. profile.full_name
-  if (item?.profile?.full_name) return item.profile.full_name;
-  // 5. latest.tracker_label
-  if (item?.latest?.tracker_label) return item.latest.tracker_label;
-  // 6. latest.tracker_name
-  if (item?.latest?.tracker_name) return item.latest.tracker_name;
-  // 7. latest.name
-  if (item?.latest?.name) return item.latest.name;
-  // 8. fallback: id o key
-  return item?.id || item?.key || "(sin nombre)";
+// Nombre amigable de tracker según prioridad estricta
+function getFriendlyTrackerName(tracker) {
+  return (
+    tracker?.display_name ||
+    tracker?.name ||
+    tracker?.personal?.full_name ||
+    tracker?.profile?.full_name ||
+    tracker?.email ||
+    (isValidUuid(tracker?.user_id) ? undefined : tracker?.user_id) ||
+    tracker?.user_id ||
+    "(sin nombre)"
+  );
 }
 // src/pages/TrackerDashboard.jsx
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
@@ -743,7 +738,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
     return (
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div className="text-xs">
-          <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {trackerName}</div>
+          <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {getFriendlyTrackerName(item)}</div>
           {item?.personalId && (
             <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(item.personalId)}</div>
           )}
@@ -808,14 +803,14 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const person = personalId ? personalById.get(String(personalId)) : null;
   const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
   const trackerLabel =
-    latest?.tracker_label ||
-    latest?.tracker_name ||
-    latest?.name ||
-    person?.nombre ||
-    person?.email ||
-    byUser?.nombre ||
-    byUser?.email ||
-    trackerId;
+    getFriendlyTrackerName({
+      display_name: latest?.display_name,
+      name: latest?.name,
+      personal: person,
+      profile: byUser,
+      email: latest?.email || person?.email || byUser?.email,
+      user_id: trackerId,
+    });
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
@@ -1234,9 +1229,10 @@ export default function TrackerDashboard() {
 
     console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
 
+    // Traer joins de personal y profiles si existen
     const { data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts")
+      .select("user_id, org_id, lat, lng, accuracy, ts, display_name, name, email, personal:personal_id(*), profile:profile_id(*)")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
@@ -1690,115 +1686,86 @@ export default function TrackerDashboard() {
     return m;
   }, [trackerStatusRows]);
 
+
+  // --- NUEVA CONSTRUCCIÓN trackersUi: merge assignment + latest + joins, display_name amigable ---
   const trackersUi = useMemo(() => {
-    const map = new Map();
+    // Map de assignments por user_id
+    const assignmentsByUserId = new Map();
+    (assignmentTrackers || []).forEach((a) => {
+      if (a?.user_id) assignmentsByUserId.set(String(a.user_id), a);
+    });
 
-    // Helper: check if coordinates are valid
-    const hasValidCoords = (item) => {
-      if (!item) return false;
-      const lat = Number(item?.lat);
-      const lng = Number(item?.lng);
-      return Number.isFinite(lat) && Number.isFinite(lng) && isValidLatLng(lat, lng);
-    };
+    // Map de latest por user_id
+    const latestByUserId = new Map();
+    (positions || []).forEach((row) => {
+      if (row?.user_id) latestByUserId.set(String(row.user_id), row);
+    });
 
-    const mapBackendStatus = (value) => {
-      const v = String(value || "").toLowerCase();
-      if (v === "active") return "online";
-      if (v === "stale") return "stale";
-      if (v === "restricted") return "restricted";
-      if (v === "pending_permissions") return "pending";
-      return "offline";
-    };
+    // Unir todos los user_ids
+    const allUserIds = new Set([
+      ...Array.from(assignmentsByUserId.keys()),
+      ...Array.from(latestByUserId.keys()),
+    ]);
 
+    const result = [];
+    for (const user_id of allUserIds) {
+      const assignmentTracker = assignmentsByUserId.get(user_id) || {};
+      const latestTracker = latestByUserId.get(user_id) || {};
 
-    // Solo trackers con fila en tracker_latest (positions) y asignados
-    const assignedUserIds = new Set((assignmentTrackers || []).map(t => String(t.user_id)));
-    for (const row of positions || []) {
-      const trackerKey = getTrackerKey(row);
-      // Solo incluir si está asignado
-      if (!assignedUserIds.has(String(row.user_id))) continue;
-      // Log para validar fuente
-      console.log("[DASH_TRACKER_STATE]", {
-        user_id: row.user_id,
-        trackerKey,
-        source: "tracker_latest"
-      });
-      const person = row.personal_id ? personalById.get(String(row.personal_id)) : null;
-      const latestTs = getPositionTs(row);
-      const personalId = row.personal_id || null;
-      const firstName = person?.first_name || row?.first_name || null;
-      const lastName = person?.last_name || row?.last_name || null;
-      const fullName = person?.full_name || person?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
-      const email = person?.email || row?.email || null;
-      const baseLabel = fullName || email || trackerKey;
-      const lat = Number(row?.lat);
-      const lng = Number(row?.lng);
+      // Joins
+      const person = latestTracker.personal_id ? personalById.get(String(latestTracker.personal_id)) : null;
+      const profile = latestTracker.profile_id ? personalByUserId.get(String(latestTracker.profile_id)) : null;
 
-      if (!map.has(trackerKey)) {
-        const backendHealth = healthByUserId.get(String(row.user_id || ""));
-        const live = backendHealth ? { status: mapBackendStatus(backendHealth.status), ageSec: null } : getTrackerLiveStatus(row);
-        map.set(trackerKey, {
-          key: trackerKey,
-          tracker_key: trackerKey,
-          user_id: row.user_id || null,
-          personal_id: personalId,
-          personalId,
-          label: `[${String(live.status || "online").toUpperCase()}] ${baseLabel}`,
-          baseLabel,
-          trackerLabel: baseLabel,
-          firstName,
-          lastName,
-          fullName,
-          email,
-          latest: row,
-          live,
-          latestTs,
-          lat,
-          lng,
-          hasValidCoords: hasValidCoords({ lat, lng }),
-          statusPriority: getTrackerStatusPriority(live.status),
-        });
-        continue;
-      }
+      // Friendly name propagation
+      const display_name =
+        assignmentTracker?.display_name ||
+        assignmentTracker?.name ||
+        latestTracker?.display_name ||
+        latestTracker?.name ||
+        assignmentTracker?.personal?.full_name ||
+        latestTracker?.personal?.full_name ||
+        assignmentTracker?.profile?.full_name ||
+        latestTracker?.profile?.full_name ||
+        person?.full_name ||
+        profile?.full_name ||
+        assignmentTracker?.email ||
+        latestTracker?.email ||
+        assignmentTracker?.user_id ||
+        latestTracker?.user_id;
 
-      const existing = map.get(trackerKey);
-      if (latestTs > (existing?.latestTs ?? 0)) {
-        const backendHealth = healthByUserId.get(String(row.user_id || ""));
-        const live = backendHealth ? { status: mapBackendStatus(backendHealth.status), ageSec: null } : getTrackerLiveStatus(row);
-        map.set(trackerKey, {
-          ...existing,
-          key: trackerKey,
-          user_id: row.user_id || existing.user_id || null,
-          personal_id: personalId || existing.personal_id || null,
-          personalId: personalId || existing.personalId || null,
-          label: `[${String(live.status || "online").toUpperCase()}] ${baseLabel}`,
-          baseLabel,
-          trackerLabel: baseLabel,
-          firstName,
-          lastName,
-          fullName,
-          email,
-          latest: row,
-          live,
-          latestTs,
-          lat,
-          lng,
-          hasValidCoords: hasValidCoords({ lat, lng }),
-          statusPriority: getTrackerStatusPriority(live.status),
-        });
-      }
+      // Merge assignment y latest, latest sobrescribe assignment
+      const merged = {
+        ...assignmentTracker,
+        ...latestTracker,
+        display_name,
+      };
+
+      // Health y status
+      const backendHealth = healthByUserId.get(String(user_id));
+      const live = backendHealth ? { status: (backendHealth.status || "offline"), ageSec: null } : getTrackerLiveStatus(latestTracker);
+      merged.live = live;
+      merged.statusPriority = getTrackerStatusPriority(live.status);
+
+      // Coords
+      const lat = Number(merged?.lat);
+      const lng = Number(merged?.lng);
+      merged.hasValidCoords = Number.isFinite(lat) && Number.isFinite(lng) && isValidLatLng(lat, lng);
+
+      // Claves
+      merged.key = merged.tracker_key || merged.user_id || user_id;
+      merged.tracker_key = merged.tracker_key || merged.user_id || user_id;
+      merged.user_id = merged.user_id || user_id;
+
+      result.push(merged);
     }
 
-    // No fallback: solo trackers con fila en tracker_latest y asignados
-
-    return Array.from(map.values()).sort((a, b) => {
+    // Ordenar por prioridad de status, edad, nombre
+    return result.sort((a, b) => {
       const priorityDelta = (a.statusPriority ?? 2) - (b.statusPriority ?? 2);
       if (priorityDelta !== 0) return priorityDelta;
-
       const ageDelta = (b.live?.ageSec ?? -1) - (a.live?.ageSec ?? -1);
       if (ageDelta !== 0) return ageDelta;
-
-      return String(a.baseLabel || a.label || "").localeCompare(String(b.baseLabel || b.label || ""));
+      return String(a.display_name || a.label || "").localeCompare(String(b.display_name || b.label || ""));
     });
   }, [positions, assignmentTrackers, personalById, personalByUserId, healthByUserId]);
 

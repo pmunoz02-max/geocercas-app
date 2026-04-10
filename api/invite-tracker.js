@@ -95,15 +95,60 @@ function hasForbiddenMagicMarkers(url) {
   );
 }
 
-function isDirectTrackerInviteUrl(url) {
-  const s = toStr(url).trim();
-  if (!s) return false;
 
+// Acepta variantes válidas de parámetros y loggea
+
+// Nueva versión: acepta /tracker-accept y /accept-invite, tolera params en querystring y hash
+function parseTrackerInviteUrl(url) {
+  const s = toStr(url).trim();
+  if (!s) return { valid: false, reason: "URL vacía" };
   try {
-    const u = new URL(s);
-    return u.pathname === "/tracker-accept" && u.searchParams.has("org_id") && u.searchParams.has("access_token");
-  } catch {
-    return false;
+    // Permitir hash params
+    let urlObj;
+    try {
+      urlObj = new URL(s);
+    } catch (e) {
+      // Si no es URL absoluta, intentar agregar dummy host
+      urlObj = new URL(s, "https://dummy.local");
+    }
+    // Permitir ambos paths
+    const validPaths = ["/tracker-accept", "/accept-invite"];
+    if (!validPaths.includes(urlObj.pathname)) {
+      return { valid: false, reason: "Path inválido", url: s, pathname: urlObj.pathname };
+    }
+    // Extraer params de query y hash
+    const params = new URLSearchParams(urlObj.search);
+    if (urlObj.hash && urlObj.hash.startsWith("#")) {
+      const hashParams = new URLSearchParams(urlObj.hash.slice(1));
+      for (const [k, v] of hashParams.entries()) {
+        if (!params.has(k)) params.set(k, v);
+      }
+    }
+    // Acepta variantes de parámetros
+    const org_id = params.get("org_id") || params.get("org") || params.get("orgId");
+    const access_token = params.get("access_token") || params.get("token") || params.get("token_hash") || params.get("invite_token");
+    // Loggeo
+    console.log("[invite-tracker] invite_url recibida", { url: s, org_id, access_token, params: Object.fromEntries(params.entries()) });
+    // Solo lanzar error si faltan ambos org_id y token
+    if (!org_id && !access_token) {
+      return {
+        valid: false,
+        reason: "Faltan parámetros esenciales",
+        url: s,
+        org_id,
+        access_token,
+        params: Object.fromEntries(params.entries()),
+      };
+    }
+    return {
+      valid: true,
+      url: s,
+      org_id,
+      access_token,
+      params: Object.fromEntries(params.entries()),
+    };
+  } catch (e) {
+    return { valid: false, reason: "URL inválida", error: String(e), url: s };
   }
 }
 
@@ -489,12 +534,19 @@ export default async function handler(req, res) {
         });
       }
 
-      if (!isDirectTrackerInviteUrl(upstreamInviteUrl)) {
-        return res.status(502).json({
+      const parsedInviteUrl = parseTrackerInviteUrl(upstreamInviteUrl);
+      if (!parsedInviteUrl.valid) {
+        // Loggeo robusto
+        console.warn("[invite-tracker] URL de invitación inválida o incompleta", parsedInviteUrl);
+        return res.status(400).json({
           ok: false,
           build: BUILD_TAG,
           error: "invalid_tracker_invite_url_shape",
-          message: "Tracker invite URL must be direct /tracker-accept with org_id and access_token",
+          message:
+            parsedInviteUrl.reason === "Faltan parámetros esenciales"
+              ? "La URL de invitación no contiene los parámetros esenciales (org_id y access_token). Verifica que el link sea correcto o solicita una nueva invitación."
+              : `URL de invitación inválida: ${parsedInviteUrl.reason}`,
+          details: parsedInviteUrl,
           invite_url_preview: upstreamInviteUrl.slice(0, 220),
         });
       }
