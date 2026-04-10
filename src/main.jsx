@@ -107,12 +107,21 @@ function RootBootstrap() {
   React.useEffect(() => {
     if (!isTrackerRoute) return undefined;
 
+    function onTrackerSessionReady() {
+      console.log("[TRACKER_BOOT] session injected event");
+      setBootReady(true);
+    }
+
+    window.addEventListener("tracker-session-ready", onTrackerSessionReady);
+
     const initialState = readTrackerBootstrapState();
     console.log("[TRACKER_BOOT] initial bootstrap state", initialState);
 
     if (initialState.ready) {
       setBootReady(true);
-      return undefined;
+      return () => {
+        window.removeEventListener("tracker-session-ready", onTrackerSessionReady);
+      };
     }
 
     let cancelled = false;
@@ -141,6 +150,7 @@ function RootBootstrap() {
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.removeEventListener("tracker-session-ready", onTrackerSessionReady);
     };
   }, [isTrackerRoute]);
 
