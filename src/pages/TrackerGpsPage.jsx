@@ -701,6 +701,21 @@ export default function TrackerGpsPage() {
   }
   const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
 
+  // [TRACKER_BOOT] log after reading from storage
+  if (typeof window !== "undefined") {
+    const orgIdStorage = localStorage.getItem("org_id");
+    const tokenPresent = !!trackerToken;
+    const orgIdPresent = !!orgIdStorage;
+    const ready = tokenPresent && orgIdPresent;
+    console.log('[TRACKER_BOOT] storage', {
+      tokenPresent,
+      orgIdPresent,
+      ready,
+      trackerToken,
+      orgIdStorage,
+    });
+  }
+
 
   // Bootstrap de invitación: lectura única y estado persistente
   const [inviteBootstrap, setInviteBootstrap] = useState({
@@ -730,6 +745,18 @@ export default function TrackerGpsPage() {
       try { localStorage.setItem("org_id", orgId); } catch {}
     }
     setInviteBootstrap(prev => ({ ...prev, loading: true, done: false, error: null, debug: { params, inviteToken, orgId } }));
+    // [TRACKER_BOOT] log after invite bootstrap params
+    const tokenPresent = !!inviteToken;
+    const orgIdPresent = !!orgId;
+    const ready = tokenPresent && orgIdPresent;
+    console.log('[TRACKER_BOOT] inviteBootstrap', {
+      tokenPresent,
+      orgIdPresent,
+      ready,
+      inviteToken,
+      orgId,
+      params,
+    });
     if (!inviteToken || !orgId) {
       setInviteBootstrap(prev => ({ ...prev, loading: false, done: true, inviteAccepted: false, trackerUserId: null, orgId, email: null, error: "Faltan inviteToken u org_id", debug: { ...prev.debug, fail: true } }));
       return;
@@ -869,6 +896,19 @@ export default function TrackerGpsPage() {
   // --- RENDER: solo bloquea si faltan trackerToken u orgId ---
   const inviteTrackerToken = inviteBootstrap?.inviteToken || inviteBootstrap?.token || inviteBootstrap?.t || trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
   const orgId = inviteBootstrap?.orgId || effectiveOrgId || null;
+
+
+  // [TRACKER_BOOT] log before rendering main content
+  const tokenPresent = !!inviteTrackerToken;
+  const orgIdPresent = !!orgId;
+  const ready = tokenPresent && orgIdPresent;
+  console.log('[TRACKER_BOOT] renderCheck', {
+    tokenPresent,
+    orgIdPresent,
+    ready,
+    inviteTrackerToken,
+    orgId,
+  });
 
   if (!inviteTrackerToken || !orgId) {
     return <Inicializando />;
