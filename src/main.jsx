@@ -107,6 +107,13 @@ function RootBootstrap() {
   React.useEffect(() => {
     if (!isTrackerRoute) return undefined;
 
+    // Check global flag in case event was missed
+    if (window.__tracker_session_ready__) {
+      console.log("[TRACKER_BOOT] session ready via global flag");
+      setBootReady(true);
+      return;
+    }
+
     function onTrackerSessionReady() {
       console.log("[TRACKER_BOOT] session injected event");
       setBootReady(true);
