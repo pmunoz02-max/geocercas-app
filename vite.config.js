@@ -28,9 +28,11 @@ export default defineConfig(() => {
       __TG_BUILD_SHA__: JSON.stringify(BUILD_SHA),
     },
 
+
+    // --- Build config: preview vs producción ---
     build: {
-      sourcemap: true,
-      minify: DEBUG_BUILD ? false : "esbuild",
+      sourcemap: process.env.VERCEL_ENV === "preview" ? true : false,
+      minify: process.env.VERCEL_ENV === "preview" ? false : "esbuild",
       target: "es2020",
     },
 
