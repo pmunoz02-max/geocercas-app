@@ -101,9 +101,15 @@ export default function TrackerGpsPage() {
   }, []);
 
   return (
-    <div style={{ padding: 16 }}>
-      <h2>{msg}</h2>
-      <button onClick={() => setMsg("Clic OK")}>Probar estado</button>
-    </div>
+      <div style={{ padding: 16 }}>
+        {!ready ? (
+          <h2>Inicializando tracker...</h2>
+        ) : (
+          <>
+            <h2>Tracker activo</h2>
+            <button onClick={() => setMsg("Clic OK")}>Probar estado</button>
+          </>
+        )}
+      </div>
   );
 }
