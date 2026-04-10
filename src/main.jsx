@@ -1,3 +1,30 @@
+// --- Minimal ErrorBoundary ---
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: "" };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: String(error?.message || error) };
+  }
+
+  componentDidCatch(error, info) {
+    console.error("[APP_ERROR]", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 16 }}>
+          <h2>Error en la app</h2>
+          <pre>{this.state.message}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 import "./buildMarker.js";
 import React from "react";
 import ReactDOM from "react-dom/client";
@@ -135,7 +162,9 @@ function RootBootstrap() {
   return (
     <I18nextProvider i18n={i18n}>
       <BrowserRouter>
-        <App />
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
       </BrowserRouter>
     </I18nextProvider>
   );

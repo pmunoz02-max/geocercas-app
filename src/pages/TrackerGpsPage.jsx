@@ -486,8 +486,6 @@ export default function TrackerGpsPage() {
     const run = async () => {
       if (disposed) return;
 
-
-
       // [TRACKER_BOOT] reactive check log (JSON.stringify for readable output)
       let token = null;
       let orgId = null;
@@ -507,20 +505,6 @@ export default function TrackerGpsPage() {
         })
       );
 
-      // CHECK CRÍTICO: Enviar sesión a Android si ambos existen, con chequeo seguro y try/catch
-      if (token && orgId) {
-        try {
-          if (window.Android && typeof window.Android.saveSession === "function") {
-            console.log("[TRACKER_SESSION_SEND] sending to Android", { token, orgId });
-            window.Android.saveSession(token, orgId);
-          } else {
-            console.log("[TRACKER_SESSION_SEND] Android bridge not available");
-          }
-        } catch (e) {
-          console.error("[TRACKER_SESSION_SEND] error", e);
-        }
-      }
-
       await syncPassiveState();
       if (disposed) return;
       timerId = window.setTimeout(run, 30_000);
@@ -533,6 +517,29 @@ export default function TrackerGpsPage() {
       if (timerId) window.clearTimeout(timerId);
     };
   }, [syncPassiveState]);
+
+  // --- Android session bridge: send session to native layer if available ---
+  useEffect(() => {
+    try {
+      const token = localStorage.getItem("tracker_access_token");
+      const orgId = localStorage.getItem("org_id");
+
+      console.log(
+        "[TRACKER_BOOT] " +
+          JSON.stringify({
+            tokenPresent: !!token,
+            orgIdPresent: !!orgId,
+            ready: !!token && !!orgId,
+          })
+      );
+
+      if (!token || !orgId) return;
+
+      window?.Android?.saveSession?.(token, orgId);
+    } catch (e) {
+      console.error("[TRACKER_SESSION_SEND] error", e);
+    }
+  }, []);
 
   // effectiveOrgId is just requestedOrgId now
   const effectiveOrgId = requestedOrgId;
