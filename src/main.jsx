@@ -57,20 +57,12 @@ function hasTrackerTokenAndOrgId() {
   } catch { return false; }
 }
 
-if (shouldBypass && !hasTrackerTokenAndOrgId()) {
-  ReactDOM.createRoot(document.getElementById("root")).render(
-    <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
-      Inicializando tracker...
-    </div>
-  );
-} else {
-  ReactDOM.createRoot(document.getElementById("root")).render(
-    <React.StrictMode>
-      <I18nextProvider i18n={i18n}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </I18nextProvider>
-    </React.StrictMode>
-  );
-}
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <I18nextProvider i18n={i18n}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </I18nextProvider>
+  </React.StrictMode>
+);
