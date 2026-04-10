@@ -91,48 +91,48 @@ import { useState, useEffect, useRef } from "react";
 
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Tracker base OK");
-  const [ready, setReady] = useState(false);
+  // Definir ready dentro del componente, antes de usarse
+  let trackerAccessToken = null;
+  let orgId = null;
+  try {
+    trackerAccessToken = localStorage.getItem("tracker_access_token");
+    orgId = localStorage.getItem("org_id");
+  } catch {}
+  const ready = Boolean(trackerAccessToken && orgId);
 
   // Bridge Android: efecto plano, dentro del componente
   useEffect(() => {
     console.log("[TRACKER_STEP] bridge effect start");
 
-    let token = null;
-    let orgId = null;
-
-    try {
-      token = localStorage.getItem("tracker_access_token");
-      orgId = localStorage.getItem("org_id");
-    } catch (e) {
-      console.error("[TRACKER_STEP] bridge localStorage error", e);
-    }
+    let token = trackerAccessToken;
+    let org = orgId;
 
     console.log(
       "[TRACKER_STEP] bridge read " +
         JSON.stringify({
           tokenPresent: !!token,
-          orgIdPresent: !!orgId,
+          orgIdPresent: !!org,
           androidAvailable: !!window?.Android,
         })
     );
 
-    if (token && orgId) {
+    if (token && org) {
       try {
         console.log(
           "[TRACKER_SESSION_SEND] " +
             JSON.stringify({
               tokenPresent: !!token,
-              orgIdPresent: !!orgId,
+              orgIdPresent: !!org,
               androidAvailable: !!window?.Android?.saveSession,
             })
         );
 
-        window?.Android?.saveSession?.(token, orgId);
+        window?.Android?.saveSession?.(token, org);
       } catch (e) {
         console.error("[TRACKER_SESSION_SEND] error", e);
       }
     }
-  }, []);
+  }, [trackerAccessToken, orgId]);
 
   // --- BLOQUE REAL DE TRACKING ---
   useEffect(() => {
