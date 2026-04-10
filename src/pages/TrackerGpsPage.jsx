@@ -1,15 +1,18 @@
-  // Bridge Android: solo logs y lectura de localStorage, sin llamadas a Android
+  // Bridge Android: useEffect plano, sin helpers ni lógica extra
   useEffect(() => {
-    console.log("[TRACKER_STEP] android bridge effect start");
-    console.log("[TRACKER_STEP] before read localStorage (bridge)");
-    let token = null;
-    let orgId = null;
-    try {
-      token = localStorage.getItem("tracker_access_token");
-      orgId = localStorage.getItem("org_id");
-    } catch {}
-    console.log("[TRACKER_STEP] after read localStorage (bridge)", { tokenPresent: !!token, orgIdPresent: !!orgId });
-    // Aquí iría la llamada a window.Android.saveSession(token, orgId) si se habilita
+    console.log("[TRACKER_STEP] bridge effect start");
+
+    const token = localStorage.getItem("tracker_access_token");
+    const orgId = localStorage.getItem("org_id");
+
+    console.log(
+      "[TRACKER_STEP] bridge read " +
+        JSON.stringify({
+          tokenPresent: !!token,
+          orgIdPresent: !!orgId,
+          androidAvailable: !!window?.Android,
+        })
+    );
   }, []);
 
 import { useState, useEffect } from "react";
