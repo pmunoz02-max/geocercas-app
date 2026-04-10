@@ -75,6 +75,16 @@ export default function TrackerGpsPage() {
           })
       );
 
+      const ready = !!token && !!orgId;
+      console.log(
+        "[TRACKER_BOOT] " +
+          JSON.stringify({
+            tokenPresent: !!token,
+            orgIdPresent: !!orgId,
+            ready,
+          })
+      );
+
       timerId = window.setTimeout(run, 30000);
     };
 
