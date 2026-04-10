@@ -105,60 +105,27 @@ function RootBootstrap() {
   });
 
   React.useEffect(() => {
-    if (!isTrackerRoute) return undefined;
+    if (!isTrackerRoute) return;
 
-    // Check global flag in case event was missed
-    if (window.__tracker_session_ready__) {
-      console.log("[TRACKER_BOOT] session ready via global flag");
-      setBootReady(true);
-      return;
-    }
-
-    function onTrackerSessionReady() {
-      console.log("[TRACKER_BOOT] session injected event");
-      setBootReady(true);
-    }
-
-    window.addEventListener("tracker-session-ready", onTrackerSessionReady);
-
-    const initialState = readTrackerBootstrapState();
-    console.log("[TRACKER_BOOT] initial bootstrap state", initialState);
-
-    if (initialState.ready) {
-      setBootReady(true);
-      return () => {
-        window.removeEventListener("tracker-session-ready", onTrackerSessionReady);
-      };
-    }
-
-    let cancelled = false;
     let attempts = 0;
-    const maxAttempts = 12; // ~3s total
-    const intervalMs = 250;
+    const maxAttempts = 40; // ~10s robusto
+    const interval = setInterval(() => {
+      attempts++;
 
-    const interval = window.setInterval(() => {
-      if (cancelled) return;
-
-      attempts += 1;
       const state = readTrackerBootstrapState();
-      console.log("[TRACKER_BOOT] retry bootstrap state", {
+
+      console.log("[TRACKER_BOOT] polling", {
         attempts,
         ready: state.ready,
-        hasToken: Boolean(state.trackerToken),
-        hasOrgId: Boolean(state.orgId),
       });
 
       if (state.ready || attempts >= maxAttempts) {
-        window.clearInterval(interval);
-        setBootReady(true); // fail-open controlado
+        clearInterval(interval);
+        setBootReady(true);
       }
-    }, intervalMs);
+    }, 250);
 
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-      window.removeEventListener("tracker-session-ready", onTrackerSessionReady);
-    };
+    return () => clearInterval(interval);
   }, [isTrackerRoute]);
 
   if (!bootReady) {
