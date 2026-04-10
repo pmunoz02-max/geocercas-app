@@ -57,12 +57,43 @@ function hasTrackerTokenAndOrgId() {
   } catch { return false; }
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <I18nextProvider i18n={i18n}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </I18nextProvider>
-  </React.StrictMode>
-);
+
+function mountApp() {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <React.StrictMode>
+      <I18nextProvider i18n={i18n}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </I18nextProvider>
+    </React.StrictMode>
+  );
+}
+
+function mountTrackerBootstrapFallback() {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(
+    <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
+      Inicializando tracker...
+    </div>
+  );
+  setTimeout(() => {
+    // Re-check after short delay
+    if (hasTrackerTokenAndOrgId()) {
+      mountApp();
+    } else {
+      // Mount app anyway, with defensive guards inside
+      mountApp();
+    }
+  }, 900);
+}
+
+if (isTrackerGps || isTrackerAccept) {
+  if (hasTrackerTokenAndOrgId()) {
+    mountApp();
+  } else {
+    mountTrackerBootstrapFallback();
+  }
+} else {
+  mountApp();
+}
