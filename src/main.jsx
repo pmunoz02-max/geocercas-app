@@ -107,25 +107,32 @@ function RootBootstrap() {
   React.useEffect(() => {
     if (!isTrackerRoute) return;
 
-    let attempts = 0;
-    const maxAttempts = 40; // ~10s robusto
-    const interval = setInterval(() => {
-      attempts++;
+    let cancelled = false;
+
+    function check() {
+      if (cancelled) return;
 
       const state = readTrackerBootstrapState();
 
-      console.log("[TRACKER_BOOT] polling", {
-        attempts,
+      console.log("[TRACKER_BOOT] reactive check", {
         ready: state.ready,
+        hasToken: !!state.trackerToken,
+        hasOrgId: !!state.orgId,
       });
 
-      if (state.ready || attempts >= maxAttempts) {
-        clearInterval(interval);
+      if (state.ready) {
         setBootReady(true);
+      } else {
+        // seguir intentando SIEMPRE
+        setTimeout(check, 250);
       }
-    }, 250);
+    }
 
-    return () => clearInterval(interval);
+    check();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isTrackerRoute]);
 
   if (!bootReady) {
