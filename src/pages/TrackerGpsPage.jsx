@@ -487,6 +487,7 @@ export default function TrackerGpsPage() {
       if (disposed) return;
 
 
+
       // [TRACKER_BOOT] reactive check log (JSON.stringify for readable output)
       let token = null;
       let orgId = null;
@@ -505,6 +506,12 @@ export default function TrackerGpsPage() {
           ready: !!token && !!orgId,
         })
       );
+
+      // CHECK CRÍTICO: Enviar sesión a Android si ambos existen
+      if (token && orgId && typeof window !== "undefined" && window.Android?.saveSession) {
+        console.log("[TRACKER_SESSION_SEND] sending to Android", { token, orgId });
+        window.Android.saveSession(token, orgId);
+      }
 
       await syncPassiveState();
       if (disposed) return;
