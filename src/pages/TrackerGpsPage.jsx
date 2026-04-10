@@ -507,10 +507,18 @@ export default function TrackerGpsPage() {
         })
       );
 
-      // CHECK CRÍTICO: Enviar sesión a Android si ambos existen
-      if (token && orgId && typeof window !== "undefined" && window.Android?.saveSession) {
-        console.log("[TRACKER_SESSION_SEND] sending to Android", { token, orgId });
-        window.Android.saveSession(token, orgId);
+      // CHECK CRÍTICO: Enviar sesión a Android si ambos existen, con chequeo seguro y try/catch
+      if (token && orgId) {
+        try {
+          if (window.Android && typeof window.Android.saveSession === "function") {
+            console.log("[TRACKER_SESSION_SEND] sending to Android", { token, orgId });
+            window.Android.saveSession(token, orgId);
+          } else {
+            console.log("[TRACKER_SESSION_SEND] Android bridge not available");
+          }
+        } catch (e) {
+          console.error("[TRACKER_SESSION_SEND] error", e);
+        }
       }
 
       await syncPassiveState();
