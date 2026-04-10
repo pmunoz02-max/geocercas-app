@@ -1,3 +1,16 @@
+  // Bridge Android: solo logs y lectura de localStorage, sin llamadas a Android
+  useEffect(() => {
+    console.log("[TRACKER_STEP] android bridge effect start");
+    console.log("[TRACKER_STEP] before read localStorage (bridge)");
+    let token = null;
+    let orgId = null;
+    try {
+      token = localStorage.getItem("tracker_access_token");
+      orgId = localStorage.getItem("org_id");
+    } catch {}
+    console.log("[TRACKER_STEP] after read localStorage (bridge)", { tokenPresent: !!token, orgIdPresent: !!orgId });
+    // Aquí iría la llamada a window.Android.saveSession(token, orgId) si se habilita
+  }, []);
 
 import { useState, useEffect } from "react";
 
