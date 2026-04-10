@@ -1,6 +1,24 @@
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import supabaseTracker from "../lib/supabaseTrackerClient";
+
+// --- Android session bridge helper ---
+const sendSessionToAndroid = (token, orgId) => {
+  try {
+    console.log(
+      "[TRACKER_SESSION_SEND] " +
+        JSON.stringify({
+          tokenPresent: !!token,
+          orgIdPresent: !!orgId,
+          androidAvailable: !!window?.Android?.saveSession,
+        })
+    );
+    window?.Android?.saveSession?.(token, orgId);
+  } catch (e) {
+    console.error("[TRACKER_SESSION_SEND] error", e);
+  }
+};
 
 function getAndroidBridge() { 
   if (typeof window === "undefined") return null;
@@ -520,25 +538,10 @@ export default function TrackerGpsPage() {
 
   // --- Android session bridge: send session to native layer if available ---
   useEffect(() => {
-    try {
-      const token = localStorage.getItem("tracker_access_token");
-      const orgId = localStorage.getItem("org_id");
-
-      console.log(
-        "[TRACKER_BOOT] " +
-          JSON.stringify({
-            tokenPresent: !!token,
-            orgIdPresent: !!orgId,
-            ready: !!token && !!orgId,
-          })
-      );
-
-      if (!token || !orgId) return;
-
-      window?.Android?.saveSession?.(token, orgId);
-    } catch (e) {
-      console.error("[TRACKER_SESSION_SEND] error", e);
-    }
+    const token = localStorage.getItem("tracker_access_token");
+    const orgId = localStorage.getItem("org_id");
+    if (!token || !orgId) return;
+    sendSessionToAndroid(token, orgId);
   }, []);
 
   // effectiveOrgId is just requestedOrgId now
