@@ -1,8 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Tracker base OK");
+  useEffect(() => {
+    console.log("[TRACKER_PAGE] useEffect: mounted");
+  }, []);
   return (
     <div>
       <h2>{msg}</h2>
