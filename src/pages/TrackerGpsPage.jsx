@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Tracker base OK");
+  const [ready, setReady] = useState(false);
 
   // Bridge Android: efecto plano, dentro del componente
   useEffect(() => {
@@ -76,6 +77,9 @@ export default function TrackerGpsPage() {
       );
 
       const ready = !!token && !!orgId;
+      if (ready) {
+        setReady(true);
+      }
       console.log(
         "[TRACKER_BOOT] " +
           JSON.stringify({
