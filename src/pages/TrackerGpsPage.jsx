@@ -1,9 +1,21 @@
-  // Bridge Android: useEffect plano, sin helpers ni lógica extra
+import { useState, useEffect } from "react";
+
+export default function TrackerGpsPage() {
+  const [msg, setMsg] = useState("Tracker base OK");
+
+  // Bridge Android: efecto plano, dentro del componente
   useEffect(() => {
     console.log("[TRACKER_STEP] bridge effect start");
 
-    const token = localStorage.getItem("tracker_access_token");
-    const orgId = localStorage.getItem("org_id");
+    let token = null;
+    let orgId = null;
+
+    try {
+      token = localStorage.getItem("tracker_access_token");
+      orgId = localStorage.getItem("org_id");
+    } catch (e) {
+      console.error("[TRACKER_STEP] bridge localStorage error", e);
+    }
 
     console.log(
       "[TRACKER_STEP] bridge read " +
@@ -15,27 +27,37 @@
     );
   }, []);
 
-import { useState, useEffect } from "react";
-
-export default function TrackerGpsPage() {
-  const [msg, setMsg] = useState("Tracker base OK");
   // Bootstrap/polling local: solo logs y lectura de localStorage
   useEffect(() => {
     console.log("[TRACKER_STEP] bootstrap effect start");
+
     let disposed = false;
     let timerId = null;
 
     const run = () => {
       if (disposed) return;
+
       console.log("[TRACKER_STEP] polling tick");
       console.log("[TRACKER_STEP] before read localStorage");
+
       let token = null;
       let orgId = null;
+
       try {
         token = localStorage.getItem("tracker_access_token");
         orgId = localStorage.getItem("org_id");
-      } catch {}
-      console.log("[TRACKER_STEP] after read localStorage", { tokenPresent: !!token, orgIdPresent: !!orgId });
+      } catch (e) {
+        console.error("[TRACKER_STEP] bootstrap localStorage error", e);
+      }
+
+      console.log(
+        "[TRACKER_STEP] after read localStorage " +
+          JSON.stringify({
+            tokenPresent: !!token,
+            orgIdPresent: !!orgId,
+          })
+      );
+
       timerId = window.setTimeout(run, 30000);
     };
 
@@ -46,8 +68,9 @@ export default function TrackerGpsPage() {
       if (timerId) window.clearTimeout(timerId);
     };
   }, []);
+
   return (
-    <div>
+    <div style={{ padding: 16 }}>
       <h2>{msg}</h2>
       <button onClick={() => setMsg("Clic OK")}>Probar estado</button>
     </div>
