@@ -164,6 +164,24 @@ export async function upsertPositionCompat(payload) {
     headers.apikey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
   }
 
+  // LOG DETALLADO antes de enviar
+  console.log("[TRACKER_SEND_POSITION] about to send position", {
+    url: targetUrl,
+    orgId,
+    userId,
+    personalId,
+    lat,
+    lng,
+    accuracy,
+    speed,
+    heading,
+    battery,
+    at,
+    tokenPresent: !!token,
+    headers,
+    body,
+  });
+
   const res = await fetch(targetUrl, {
     method: "POST",
     headers,
@@ -183,15 +201,33 @@ export async function upsertPositionCompat(payload) {
     } catch {
       // ignore
     }
-    console.error("[trackerApi] upsertPositionCompat error:", err);
+    console.error("[TRACKER_SEND_POSITION] error:", err, {
+      url: targetUrl,
+      orgId,
+      userId,
+      personalId,
+      lat,
+      lng,
+      accuracy,
+      speed,
+      heading,
+      battery,
+      at,
+      tokenPresent: !!token,
+      headers,
+      body,
+      responseText: text,
+    });
     throw err;
   }
 
   try {
     const data = await res.json();
+    console.log("[TRACKER_SEND_POSITION] success", { data });
     emitTrackerActivePing({ orgId, userId, lat, lng });
     return data;
-  } catch {
+  } catch (e) {
+    console.error("[TRACKER_SEND_POSITION] response parse error", e);
     emitTrackerActivePing({ orgId, userId, lat, lng });
     return null;
   }

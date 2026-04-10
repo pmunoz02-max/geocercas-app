@@ -152,10 +152,7 @@ function normalizePlanLabel(planCode) {
   return v ? v.toUpperCase() : "—";
 }
 
-function resolveTrackerAuthIdFromPersonal(row) {
-  if (!row) return null;
-  return row.user_id || row.owner_id || row.auth_user_id || row.auth_uid || row.uid || row.user_uuid || null;
-}
+
 
 
 function isProbablyZeroZeroBounds(bounds) {
@@ -1652,11 +1649,11 @@ export default function TrackerDashboard() {
     };
   }, [resolvedOrgId]);
 
+  // Only map by user_id, no fallbacks
   const personalByUserId = useMemo(() => {
     const m = new Map();
     (personalRows || []).forEach((p) => {
-      const uid = resolveTrackerAuthIdFromPersonal(p);
-      if (uid) m.set(String(uid), p);
+      if (p?.user_id) m.set(String(p.user_id), p);
     });
     return m;
   }, [personalRows]);
@@ -1699,17 +1696,26 @@ export default function TrackerDashboard() {
       return "offline";
     };
 
+
+    // Solo trackers con fila en tracker_latest (positions) y asignados
+    const assignedUserIds = new Set((assignmentTrackers || []).map(t => String(t.user_id)));
     for (const row of positions || []) {
       const trackerKey = getTrackerKey(row);
+      // Solo incluir si está asignado
+      if (!assignedUserIds.has(String(row.user_id))) continue;
+      // Log para validar fuente
+      console.log("[DASH_TRACKER_STATE]", {
+        user_id: row.user_id,
+        trackerKey,
+        source: "tracker_latest"
+      });
       const person = row.personal_id ? personalById.get(String(row.personal_id)) : null;
-      const byUser = row.user_id ? personalByUserId.get(String(row.user_id)) : null;
-      const p = person || byUser || null;
       const latestTs = getPositionTs(row);
       const personalId = row.personal_id || null;
-      const firstName = p?.first_name || row?.first_name || null;
-      const lastName = p?.last_name || row?.last_name || null;
-      const fullName = p?.full_name || p?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
-      const email = p?.email || row?.email || null;
+      const firstName = person?.first_name || row?.first_name || null;
+      const lastName = person?.last_name || row?.last_name || null;
+      const fullName = person?.full_name || person?.nombre || row?.full_name || [firstName, lastName].filter(Boolean).join(" ") || null;
+      const email = person?.email || row?.email || null;
       const baseLabel = fullName || email || trackerKey;
       const lat = Number(row?.lat);
       const lng = Number(row?.lng);
@@ -1769,40 +1775,7 @@ export default function TrackerDashboard() {
       }
     }
 
-    if (map.size === 0) {
-      for (const tRow of assignmentTrackers || []) {
-        const user_id = String(tRow.user_id);
-        const p = personalByUserId.get(user_id) || null;
-        const firstName = p?.first_name || null;
-        const lastName = p?.last_name || null;
-        const fullName = p?.full_name || p?.nombre || [firstName, lastName].filter(Boolean).join(" ") || null;
-        const email = p?.email || null;
-        const baseLabel = fullName || email || user_id;
-        const backendHealth = healthByUserId.get(String(user_id));
-        const offlineStatus = backendHealth ? mapBackendStatus(backendHealth.status) : "offline";
-        map.set(user_id, {
-          key: user_id,
-          tracker_key: user_id,
-          user_id,
-          personal_id: null,
-          personalId: null,
-          label: `[${String(offlineStatus).toUpperCase()}] ${baseLabel}`,
-          baseLabel,
-          trackerLabel: baseLabel,
-          firstName,
-          lastName,
-          fullName,
-          email,
-          latest: null,
-          live: { status: offlineStatus, ageSec: null },
-          latestTs: 0,
-          lat: null,
-          lng: null,
-          hasValidCoords: false,
-          statusPriority: getTrackerStatusPriority("offline"),
-        });
-      }
-    }
+    // No fallback: solo trackers con fila en tracker_latest y asignados
 
     return Array.from(map.values()).sort((a, b) => {
       const priorityDelta = (a.statusPriority ?? 2) - (b.statusPriority ?? 2);

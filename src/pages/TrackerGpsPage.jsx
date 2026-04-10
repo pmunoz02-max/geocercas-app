@@ -1,4 +1,93 @@
-import { useState, useEffect } from "react";
+  // WatchPosition: envía cada update usando tracker_access_token vía fetch
+  useEffect(() => {
+    if (!ready) return;
+    let watchId = null;
+    let disposed = false;
+
+    function handlePosition(pos) {
+      if (disposed) return;
+      let token = null;
+      let orgId = null;
+      try {
+        token = localStorage.getItem("tracker_access_token");
+        orgId = localStorage.getItem("org_id");
+      } catch (e) {
+        setMsg("ERROR localStorage " + (e?.message || "?"));
+        return;
+      }
+      const lat = pos?.coords?.latitude;
+      const lng = pos?.coords?.longitude;
+      const accuracy = pos?.coords?.accuracy;
+      const at = new Date().toISOString();
+      if (!lat || !lng || !token || !orgId) return;
+
+      const body = { org_id: orgId, lat, lng, accuracy, at };
+      console.log("[SEND_POSITION_STEP] before", {
+        status: "sending",
+        ok: null,
+        user: "tracker",
+        body: { org_id: orgId, lat, lng, accuracy, at }
+      });
+
+      fetch("/api/send-position", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+        .then(async (res) => {
+          let data = null;
+          try { data = await res.json(); } catch {}
+          if (!res.ok) {
+            console.log("[SEND_POSITION_STEP] after", {
+              status: res.status,
+              ok: false,
+              user: "tracker",
+              body: { org_id: orgId, lat, lng, accuracy, at },
+              error: data?.error || res.statusText
+            });
+            throw new Error(data?.error || res.statusText);
+          }
+          console.log("[SEND_POSITION_STEP] after", {
+            status: res.status,
+            ok: true,
+            user: "tracker",
+            body: { org_id: orgId, lat, lng, accuracy, at },
+            result: data
+          });
+          setMsg("OK ✔");
+        })
+        .catch((err) => {
+          console.error("[SEND_POSITION_STEP] error", err);
+          setMsg("ERROR " + (err?.message || "?"));
+        });
+    }
+
+    function handleError(err) {
+      if (disposed) return;
+      setMsg("GEO_ERROR " + (err?.message || err?.code || "?"));
+    }
+
+    if (navigator?.geolocation) {
+      watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      });
+    } else {
+      setMsg("Geolocation API not available");
+    }
+
+    return () => {
+      disposed = true;
+      if (watchId != null && navigator?.geolocation?.clearWatch) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [ready]);
+import { useState, useEffect, useRef } from "react";
 
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Tracker base OK");
@@ -45,60 +134,75 @@ export default function TrackerGpsPage() {
     }
   }, []);
 
-  // Bootstrap/polling local: solo logs y lectura de localStorage
+  // --- BLOQUE REAL DE TRACKING ---
   useEffect(() => {
-    console.log("[TRACKER_STEP] bootstrap effect start");
-
+    if (!ready) return;
+    let watchId = null;
     let disposed = false;
-    let timerId = null;
 
-    const run = () => {
+    function handlePosition(pos) {
       if (disposed) return;
-
-      console.log("[TRACKER_STEP] polling tick");
-      console.log("[TRACKER_STEP] before read localStorage");
-
       let token = null;
       let orgId = null;
-
       try {
         token = localStorage.getItem("tracker_access_token");
         orgId = localStorage.getItem("org_id");
       } catch (e) {
-        console.error("[TRACKER_STEP] bootstrap localStorage error", e);
+        setMsg("ERROR localStorage " + (e?.message || "?"));
+        return;
       }
+      const lat = pos?.coords?.latitude;
+      const lng = pos?.coords?.longitude;
+      const accuracy = pos?.coords?.accuracy;
+      const at = new Date().toISOString();
+      if (!lat || !lng || !token || !orgId) return;
 
-      console.log(
-        "[TRACKER_STEP] after read localStorage " +
-          JSON.stringify({
-            tokenPresent: !!token,
-            orgIdPresent: !!orgId,
-          })
-      );
+      const body = { org_id: orgId, lat, lng, accuracy, at };
+      console.log("[SEND_POSITION_STEP] before", { tokenPresent: !!token, orgIdPresent: !!orgId, lat, lng, accuracy, at });
 
-      const ready = !!token && !!orgId;
-      if (ready) {
-        setReady(true);
-      }
-      console.log(
-        "[TRACKER_BOOT] " +
-          JSON.stringify({
-            tokenPresent: !!token,
-            orgIdPresent: !!orgId,
-            ready,
-          })
-      );
+      fetch("/api/send-position", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      })
+        .then(async (res) => {
+          let data = null;
+          try { data = await res.json(); } catch {}
+          if (!res.ok) throw new Error(data?.error || res.statusText);
+          console.log("[SEND_POSITION_STEP] success", { data });
+          setMsg("OK ✔");
+        })
+        .catch((err) => {
+          console.error("[SEND_POSITION_STEP] error", err);
+          setMsg("ERROR " + (err?.message || "?"));
+        });
+    }
 
-      timerId = window.setTimeout(run, 30000);
-    };
+    function handleError(err) {
+      if (disposed) return;
+      setMsg("GEO_ERROR " + (err?.message || err?.code || "?"));
+    }
 
-    run();
+    if (navigator?.geolocation) {
+      watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      });
+    } else {
+      setMsg("Geolocation API not available");
+    }
 
     return () => {
       disposed = true;
-      if (timerId) window.clearTimeout(timerId);
+      if (watchId != null && navigator?.geolocation?.clearWatch) {
+        navigator.geolocation.clearWatch(watchId);
+      }
     };
-  }, []);
+  }, [ready]);
 
   return (
       <div style={{ padding: 16 }}>
