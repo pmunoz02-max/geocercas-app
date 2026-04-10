@@ -1709,40 +1709,27 @@ export default function TrackerDashboard() {
 
     const result = [];
     for (const user_id of allUserIds) {
-      const assignmentTracker = assignmentsByUserId.get(user_id) || {};
-      const latestTracker = latestByUserId.get(user_id) || {};
+      const assignment = assignmentsByUserId.get(user_id) || {};
+      const latest = latestByUserId.get(user_id) || {};
 
-      // Joins
-      const person = latestTracker.personal_id ? personalById.get(String(latestTracker.personal_id)) : null;
-      const profile = latestTracker.profile_id ? personalByUserId.get(String(latestTracker.profile_id)) : null;
-
-      // Friendly name propagation
-      const display_name =
-        assignmentTracker?.display_name ||
-        assignmentTracker?.name ||
-        latestTracker?.display_name ||
-        latestTracker?.name ||
-        assignmentTracker?.personal?.full_name ||
-        latestTracker?.personal?.full_name ||
-        assignmentTracker?.profile?.full_name ||
-        latestTracker?.profile?.full_name ||
-        person?.full_name ||
-        profile?.full_name ||
-        assignmentTracker?.email ||
-        latestTracker?.email ||
-        assignmentTracker?.user_id ||
-        latestTracker?.user_id;
-
-      // Merge assignment y latest, latest sobrescribe assignment
+      // Regla universal para display_name
       const merged = {
-        ...assignmentTracker,
-        ...latestTracker,
-        display_name,
+        ...assignment,
+        ...latest,
+        display_name:
+          assignment.display_name ||
+          assignment.name ||
+          latest.display_name ||
+          assignment.personal?.full_name ||
+          latest.personal?.full_name ||
+          assignment.email ||
+          latest.email ||
+          assignment.user_id
       };
 
       // Health y status
       const backendHealth = healthByUserId.get(String(user_id));
-      const live = backendHealth ? { status: (backendHealth.status || "offline"), ageSec: null } : getTrackerLiveStatus(latestTracker);
+      const live = backendHealth ? { status: (backendHealth.status || "offline"), ageSec: null } : getTrackerLiveStatus(latest);
       merged.live = live;
       merged.statusPriority = getTrackerStatusPriority(live.status);
 

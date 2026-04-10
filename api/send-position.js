@@ -45,14 +45,30 @@ export default async function handler(req, res) {
       return res.status(401).json({ ok: false, error: "empty_token" });
     }
 
-    // 1. Validar el token y obtener el tracker_user_id real usando authClient
-    const { data: userData, error: userError } = await authClient.auth.getUser(token);
-    if (userError || !userData?.user?.id) {
-      console.error("[send-position] invalid tracker token", userError);
+    // Obtener token
+    // (ya extraído arriba como 'token')
+
+    // Resolver tracker desde token
+    const { data: trackerRow, error: trackerError } = await adminClient
+      .from("tracker_assignments")
+      .select("user_id, org_id")
+      .eq("tracker_access_token", token)
+      .eq("org_id", org_id)
+      .maybeSingle();
+
+    if (trackerError) {
+      console.error("[send-position] tracker lookup error", trackerError);
+      return res.status(500).json({ ok: false, error: "tracker_lookup_failed" });
+    }
+
+    if (!trackerRow) {
+      console.warn("[send-position] invalid tracker token");
       return res.status(401).json({ ok: false, error: "invalid_token" });
     }
-    const tracker_user_id = userData.user.id;
-    console.log("[send-position] tracker_user_id resolved", { tracker_user_id });
+
+    const tracker_user_id = trackerRow.user_id;
+
+    console.log("[send-position] tracker resolved", { tracker_user_id });
 
     // 2. Verificar que el tracker pertenezca o esté asignado a la org enviada
     // Primero, buscar en org_members
