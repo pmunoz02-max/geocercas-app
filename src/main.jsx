@@ -10,10 +10,10 @@ import "./index.css";
 
 import App from "./App.jsx";
 
-// ✅ MARKER INFALIBLE EN RUNTIME (no depende de Vite define)
-window.__TG_RUNTIME_MARKER = "RUNTIME_MARKER_2026-02-25_A";
+// ✅ MARKER INFALIBLE EN RUNTIME
+window.__TG_RUNTIME_MARKER = "RUNTIME_MARKER_2026-04-09_MAIN_FIX_A";
 console.log("[TG RUNTIME MARKER]", window.__TG_RUNTIME_MARKER);
-console.log("[BUILD_MARKER] preview-send-debug-02");
+console.log("[BUILD_MARKER] preview-tracker-main-fix-01");
 
 // ── Service Worker / PWA bypass para rutas tracker ──────────────────────────
 function urlHasAnyTokenParam() {
@@ -32,68 +32,136 @@ const isTrackerAccept = pathname === "/tracker-accept";
 const isTrackerGps = pathname === "/tracker-gps";
 const hasTokenParam = urlHasAnyTokenParam();
 
-const shouldBypass =
-  (isTrackerGps || isTrackerAccept) && !hasTokenParam;
-
-console.log("[TRACKER_BOOT] main.jsx tracker bypass", { isTrackerGps, isTrackerAccept, hasTokenParam, shouldBypass });
+console.log("[TRACKER_BOOT] main.jsx tracker route", {
+  isTrackerGps,
+  isTrackerAccept,
+  hasTokenParam,
+});
 
 if ("serviceWorker" in navigator) {
-  // PWA/SW hard-disabled globally: unregister any residual service worker.
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    regs.forEach((r) => r.unregister());
-  }).catch(() => {});
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((regs) => {
+      regs.forEach((r) => r.unregister());
+    })
+    .catch(() => {});
 }
 // ────────────────────────────────────────────────────────────────────────────
 
-// 🔥 TRACKER BYPASS: nunca return null ni pantalla blanca
-function hasTrackerTokenAndOrgId() {
+function readTrackerBootstrapState() {
   try {
-    const trackerAuthRaw = localStorage.getItem("geocercas-tracker-auth");
+    const trackerAuthRaw =
+      localStorage.getItem("geocercas-tracker-auth") ||
+      localStorage.getItem("tracker_auth_saved") ||
+      null;
+
     let trackerAuth = null;
-    try { trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null; } catch {}
-    const trackerToken = trackerAuth?.access_token || trackerAuth?.session?.access_token || localStorage.getItem("tracker_access_token") || null;
-    const orgId = localStorage.getItem("org_id") || null;
-    return !!trackerToken && !!orgId;
-  } catch { return false; }
+    try {
+      trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null;
+    } catch {
+      trackerAuth = null;
+    }
+
+    const trackerToken =
+      trackerAuth?.access_token ||
+      trackerAuth?.session?.access_token ||
+      localStorage.getItem("tracker_access_token") ||
+      localStorage.getItem("access_token") ||
+      null;
+
+    const orgId =
+      localStorage.getItem("org_id") ||
+      localStorage.getItem("tracker_org_id") ||
+      null;
+
+    return {
+      trackerToken,
+      orgId,
+      ready: Boolean(trackerToken && orgId),
+    };
+  } catch (error) {
+    console.error("[TRACKER_BOOT] readTrackerBootstrapState error", error);
+    return {
+      trackerToken: null,
+      orgId: null,
+      ready: false,
+    };
+  }
 }
 
-
-function mountApp() {
-  ReactDOM.createRoot(document.getElementById("root")).render(
-    <React.StrictMode>
-      <I18nextProvider i18n={i18n}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </I18nextProvider>
-    </React.StrictMode>
-  );
-}
-
-function mountTrackerBootstrapFallback() {
-  const root = ReactDOM.createRoot(document.getElementById("root"));
-  root.render(
-    <div style={{padding: 32, textAlign: 'center', fontSize: 18}}>
+function BootstrapScreen() {
+  return (
+    <div style={{ padding: 32, textAlign: "center", fontSize: 18 }}>
       Inicializando tracker...
     </div>
   );
-  setTimeout(() => {
-    // Re-check after short delay
-    if (hasTrackerTokenAndOrgId()) {
-      mountApp();
-    } else {
-      // Mount app anyway, with defensive guards inside
-      mountApp();
-    }
-  }, 900);
 }
 
-if (isTrackerGps || isTrackerAccept) {
-  if (hasTrackerTokenAndOrgId()) {
-    mountApp();
-  } else {
-    mountTrackerBootstrapFallback();
+function RootBootstrap() {
+  const isTrackerRoute = isTrackerGps || isTrackerAccept;
+  const [bootReady, setBootReady] = React.useState(() => {
+    if (!isTrackerRoute) return true;
+    return readTrackerBootstrapState().ready;
+  });
+
+  React.useEffect(() => {
+    if (!isTrackerRoute) return undefined;
+
+    const initialState = readTrackerBootstrapState();
+    console.log("[TRACKER_BOOT] initial bootstrap state", initialState);
+
+    if (initialState.ready) {
+      setBootReady(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 12; // ~3s total
+    const intervalMs = 250;
+
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+
+      attempts += 1;
+      const state = readTrackerBootstrapState();
+      console.log("[TRACKER_BOOT] retry bootstrap state", {
+        attempts,
+        ready: state.ready,
+        hasToken: Boolean(state.trackerToken),
+        hasOrgId: Boolean(state.orgId),
+      });
+
+      if (state.ready || attempts >= maxAttempts) {
+        window.clearInterval(interval);
+        setBootReady(true); // fail-open controlado
+      }
+    }, intervalMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [isTrackerRoute]);
+
+  if (!bootReady) {
+    return <BootstrapScreen />;
   }
-} else {
-  mountApp();
+
+  return (
+    <I18nextProvider i18n={i18n}>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </I18nextProvider>
+  );
 }
+
+const container = document.getElementById("root");
+const root = ReactDOM.createRoot(container);
+
+root.render(
+  <React.StrictMode>
+    <RootBootstrap />
+  </React.StrictMode>
+);
