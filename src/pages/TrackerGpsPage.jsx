@@ -478,12 +478,34 @@ export default function TrackerGpsPage() {
     };
   }, [buildMarker, markMessage, refreshBridgeState]);
 
+
   useEffect(() => {
     let disposed = false;
     let timerId = null;
 
     const run = async () => {
       if (disposed) return;
+
+
+      // [TRACKER_BOOT] reactive check log (JSON.stringify for readable output)
+      let token = null;
+      let orgId = null;
+      try {
+        const trackerAuthRaw = typeof window !== "undefined" ? localStorage.getItem("geocercas-tracker-auth") : null;
+        let trackerAuth = null;
+        try { trackerAuth = trackerAuthRaw ? JSON.parse(trackerAuthRaw) : null; } catch { trackerAuth = null; }
+        token = trackerAuth?.access_token || trackerAuth?.session?.access_token || null;
+        orgId = typeof window !== "undefined" ? localStorage.getItem("org_id") : null;
+      } catch {}
+      console.log(
+        "[TRACKER_BOOT] reactive check " +
+        JSON.stringify({
+          tokenPresent: !!token,
+          orgIdPresent: !!orgId,
+          ready: !!token && !!orgId,
+        })
+      );
+
       await syncPassiveState();
       if (disposed) return;
       timerId = window.setTimeout(run, 30_000);
