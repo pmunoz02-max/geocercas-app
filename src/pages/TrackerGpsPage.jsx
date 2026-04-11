@@ -1,27 +1,57 @@
-function decodeJwtSub(token) {
-  try {
-    const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload));
-    return decoded?.sub || null;
-  } catch {
-    return null;
-  }
-}
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const SUPABASE_FUNCTION_URL =
   "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
 
+function decodeJwtSub(token) {
+  try {
+    if (!token) return null;
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = JSON.parse(atob(padded));
+    return decoded?.sub || null;
+  } catch {
+    return null;
+  }
+}
+
 function readRuntimeSessionFromStorage() {
   try {
+    const authRaw = localStorage.getItem("geocercas-tracker-auth");
+    let authParsed = null;
+
+    if (authRaw) {
+      try {
+        authParsed = JSON.parse(authRaw);
+      } catch {
+        authParsed = null;
+      }
+    }
+
+    const runtimeToken =
+      localStorage.getItem("tracker_runtime_token") ||
+      localStorage.getItem("tracker_access_token") ||
+      authParsed?.access_token ||
+      null;
+
+    let trackerUserId = localStorage.getItem("tracker_user_id") || null;
+    if (!trackerUserId && runtimeToken) {
+      trackerUserId = decodeJwtSub(runtimeToken);
+    }
+
+    const orgId =
+      localStorage.getItem("org_id") ||
+      authParsed?.org_id ||
+      null;
+
     return {
-      runtimeToken:
-        localStorage.getItem("tracker_runtime_token") ||
-        localStorage.getItem("tracker_access_token") ||
-        null,
-      trackerUserId: localStorage.getItem("tracker_user_id") || null,
-      orgId: localStorage.getItem("org_id") || null,
+      runtimeToken,
+      trackerUserId,
+      orgId,
     };
   } catch {
     return {
@@ -39,7 +69,7 @@ function clearLegacyTrackerTokens() {
     localStorage.removeItem("auth_token");
     localStorage.removeItem("session_token");
   } catch {
-    // ignore storage cleanup errors
+    // ignore
   }
 }
 
@@ -68,11 +98,12 @@ export default function TrackerGpsPage() {
       stored.runtimeToken && stored.trackerUserId && stored.orgId,
     );
 
-    console.log("[TRACKER_STATE_REFRESH]", {
-      hasRuntimeToken: !!stored.runtimeToken,
-      hasTrackerUserId: !!stored.trackerUserId,
-      hasOrgId: !!stored.orgId,
-      hasCompleteSession,
+    console.log("[TRACKER_SESSION_STATE]", {
+      runtimeToken: stored.runtimeToken,
+      trackerUserId: stored.trackerUserId,
+      orgId: stored.orgId,
+      ready: hasCompleteSession,
+      acceptingInvite,
     });
 
     if (hasCompleteSession) {
@@ -127,6 +158,7 @@ export default function TrackerGpsPage() {
     }
 
     const data = JSON.parse(raw);
+
     const runtimeToken =
       data?.session?.access_token ||
       data?.access_token ||
@@ -134,7 +166,6 @@ export default function TrackerGpsPage() {
       data?.tracker_runtime_token ||
       data?.token ||
       null;
-
 
     let trackerUserId =
       data?.tracker_user_id ||
@@ -152,7 +183,7 @@ export default function TrackerGpsPage() {
       runtimeToken,
       trackerUserId,
       orgId,
-      raw: data
+      raw: data,
     });
 
     if (!runtimeToken || !trackerUserId || !orgId) {
@@ -172,24 +203,18 @@ export default function TrackerGpsPage() {
       localStorage.setItem("tracker_user_id", trackerUserId);
       localStorage.setItem("org_id", orgId);
       clearLegacyTrackerTokens();
-
-      console.log("[ACCEPT_LOCALSTORAGE_WRITTEN]", {
-        geocercasTrackerAuthExists: !!localStorage.getItem(
-          "geocercas-tracker-auth",
-        ),
-        trackerAccessTokenExists: !!localStorage.getItem(
-          "tracker_access_token",
-        ),
-        trackerRuntimeTokenExists: !!localStorage.getItem(
-          "tracker_runtime_token",
-        ),
-        trackerUserId: localStorage.getItem("tracker_user_id"),
-        orgId: localStorage.getItem("org_id"),
-      });
     } catch (e) {
       console.error("[ACCEPT_STORAGE_ERROR]", e);
       throw e;
     }
+
+    console.log("[ACCEPT_LOCALSTORAGE_WRITTEN]", {
+      geocercasTrackerAuthExists: !!localStorage.getItem("geocercas-tracker-auth"),
+      trackerAccessTokenExists: !!localStorage.getItem("tracker_access_token"),
+      trackerRuntimeTokenExists: !!localStorage.getItem("tracker_runtime_token"),
+      trackerUserId: localStorage.getItem("tracker_user_id"),
+      orgId: localStorage.getItem("org_id"),
+    });
 
     const nextSession = {
       runtimeToken,
@@ -215,12 +240,11 @@ export default function TrackerGpsPage() {
       }
     }
 
-    const nextUrl = `/tracker-gps?org_id=${encodeURIComponent(
-      orgId,
-    )}&lang=${encodeURIComponent(lang || "es")}`;
+    const nextUrl = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang || "es")}`;
     console.log("[ACCEPT_REDIRECT_TRACKER_GPS]", { nextUrl });
+    window.location.href = nextUrl;
 
-    return { nextSession, nextUrl };
+    return nextSession;
   }
 
   useEffect(() => {
@@ -241,6 +265,7 @@ export default function TrackerGpsPage() {
         href: window.location.href,
         inviteTokenExists: !!inviteToken,
         orgId,
+        lang,
       });
 
       if (!inviteToken || !orgId) {
@@ -250,15 +275,11 @@ export default function TrackerGpsPage() {
       const alreadyAccepted = sessionStorage.getItem(
         `accept_tracker_invite_done:${inviteToken}`,
       );
+
       if (alreadyAccepted) {
         console.log("[ACCEPT_SKIP] already processed");
         if (!cancelled) {
-          const stored = refreshRuntimeSessionState(
-            "Esperando sesión runtime válida...",
-          );
-          if (stored.runtimeToken && stored.trackerUserId && stored.orgId) {
-            setMsg("Tracker listo");
-          }
+          refreshRuntimeSessionState("Esperando sesión runtime válida...");
         }
         return;
       }
@@ -266,32 +287,11 @@ export default function TrackerGpsPage() {
       setAcceptingInvite(true);
       setMsg("Aceptando invitación...");
 
-      const { nextSession, nextUrl } = await acceptTrackerInvite(
-        inviteToken,
-        orgId,
-        lang,
-      );
+      await acceptTrackerInvite(inviteToken, orgId, lang);
       if (cancelled) return;
 
-      sessionStorage.setItem(
-        `accept_tracker_invite_done:${inviteToken}`,
-        "1",
-      );
-
-      console.log("[ACCEPT_DONE]", {
-        trackerUserId: nextSession.trackerUserId,
-        runtimeTokenStored: true,
-        orgId: nextSession.orgId,
-      });
-
-      refreshRuntimeSessionState();
-      setMsg("Invitación aceptada. Tracker listo.");
-
-      const currentPathAndSearch = `${window.location.pathname}${window.location.search}`;
-      if (currentPathAndSearch !== nextUrl) {
-        window.location.replace(nextUrl);
-        return;
-      }
+      sessionStorage.setItem(`accept_tracker_invite_done:${inviteToken}`, "1");
+      console.log("[ACCEPT_DONE]", { orgId });
     }
 
     runAcceptFromUrl()
@@ -313,34 +313,9 @@ export default function TrackerGpsPage() {
   }, []);
 
   useEffect(() => {
-    console.log("[TRACKER_SESSION_STATE]", {
-      hasRuntimeToken: !!runtimeSession.runtimeToken,
-      hasTrackerUserId: !!runtimeSession.trackerUserId,
-      hasOrgId: !!runtimeSession.orgId,
-      ready,
-      acceptingInvite,
-    });
-    console.log("[TRACKER_DEBUG_FULL]", {
-      runtimeToken: runtimeSession.runtimeToken,
-      trackerUserId: runtimeSession.trackerUserId,
-      orgId: runtimeSession.orgId,
-    });
-  }, [runtimeSession, ready, acceptingInvite]);
-
-  useEffect(() => {
     if (!ready) return;
 
-    console.log("[TRACKER_STEP] bridge effect start");
-
     try {
-      console.log("[TRACKER_SESSION_SEND]", {
-        tokenPresent: true,
-        trackerUserIdPresent: true,
-        orgIdPresent: true,
-        androidSetTrackerSession: !!window?.Android?.setTrackerSession,
-        androidSaveSession: !!window?.Android?.saveSession,
-      });
-
       if (window?.Android?.setTrackerSession) {
         window.Android.setTrackerSession(
           runtimeSession.runtimeToken,
@@ -379,16 +354,13 @@ export default function TrackerGpsPage() {
       const timestamp = new Date().toISOString();
 
       if (lat == null || lng == null || !token || !org || !trackerUserId) {
-        console.error(
-          "[SEND_POSITION_BLOCKED] missing runtime session or coordinates",
-          {
-            hasToken: !!token,
-            hasOrg: !!org,
-            hasTrackerUserId: !!trackerUserId,
-            lat,
-            lng,
-          },
-        );
+        console.error("[SEND_POSITION_BLOCKED] missing runtime session or coordinates", {
+          hasToken: !!token,
+          hasOrg: !!org,
+          hasTrackerUserId: !!trackerUserId,
+          lat,
+          lng,
+        });
         return;
       }
 
@@ -431,13 +403,13 @@ export default function TrackerGpsPage() {
         })
         .catch((err) => {
           console.error("[SEND_POSITION_STEP] error", err);
-          setMsg(`ERROR ${err?.message || "?"}`);
+          setMsg("ERROR " + (err?.message || "?"));
         });
     }
 
     function handleError(err) {
       if (disposed) return;
-      setMsg(`GEO_ERROR ${err?.message || err?.code || "?"}`);
+      setMsg("GEO_ERROR " + (err?.message || err?.code || "?"));
     }
 
     if (navigator?.geolocation) {
