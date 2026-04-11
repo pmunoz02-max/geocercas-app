@@ -125,8 +125,19 @@ function MainAppRoutes() {
       {/* ✅ App callback */}
       <Route path="/auth/callback" element={<AuthCallback />} />
 
-      {/* ✅ Tracker Accept (PUBLIC) */}
-      <Route path="/tracker-accept" element={<TrackerInviteStart />} />
+      {/* ✅ Tracker Accept (PUBLIC) - redirect to /tracker with query string */}
+      <Route
+        path="/tracker-accept"
+        element={
+          <RedirectWithQuery to="/tracker" />
+        }
+      />
+// Helper component to redirect preserving query string
+function RedirectWithQuery({ to }) {
+  const location = useLocation();
+  const search = location.search || "";
+  return <Navigate to={to + search} replace />;
+}
 
       {/* 🔐 Password flows */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
