@@ -20,19 +20,60 @@ function readRuntimeSessionFromStorage() {
   }
 }
 
+function clearLegacyTrackerTokens() {
+  try {
+    localStorage.removeItem("tracker_access_token");
+    localStorage.removeItem("tracker_token");
+    localStorage.removeItem("owner_token");
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("session_token");
+  } catch {
+    // ignore storage cleanup errors
+  }
+}
+
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Inicializando tracker...");
   const [runtimeSession, setRuntimeSession] = useState(() =>
     readRuntimeSessionFromStorage(),
   );
+  const [acceptingInvite, setAcceptingInvite] = useState(false);
 
-  const ready = useMemo(() => {
-    return Boolean(
-      runtimeSession.runtimeToken &&
-        runtimeSession.trackerUserId &&
-        runtimeSession.orgId,
+  const ready = useMemo(
+    () =>
+      Boolean(
+        runtimeSession.runtimeToken &&
+          runtimeSession.trackerUserId &&
+          runtimeSession.orgId,
+      ),
+    [runtimeSession],
+  );
+
+  function refreshRuntimeSessionState(nextMsgWhenMissing = null) {
+    const stored = readRuntimeSessionFromStorage();
+    setRuntimeSession(stored);
+
+    const hasCompleteSession = Boolean(
+      stored.runtimeToken && stored.trackerUserId && stored.orgId,
     );
-  }, [runtimeSession]);
+
+    console.log("[TRACKER_STATE_REFRESH]", {
+      hasRuntimeToken: !!stored.runtimeToken,
+      hasTrackerUserId: !!stored.trackerUserId,
+      hasOrgId: !!stored.orgId,
+      hasCompleteSession,
+    });
+
+    if (hasCompleteSession) {
+      setMsg((prev) =>
+        prev?.startsWith("ERROR") || prev?.startsWith("GEO_ERROR") ? prev : "Tracker listo",
+      );
+    } else if (nextMsgWhenMissing) {
+      setMsg(nextMsgWhenMissing);
+    }
+
+    return stored;
+  }
 
   async function acceptTrackerInvite(inviteToken, orgId) {
     const { data: sessionData, error: sessionError } =
@@ -84,12 +125,7 @@ export default function TrackerGpsPage() {
       localStorage.setItem("tracker_runtime_token", runtimeToken);
       localStorage.setItem("tracker_user_id", trackerUserId);
       localStorage.setItem("org_id", orgId);
-
-      localStorage.removeItem("tracker_access_token");
-      localStorage.removeItem("tracker_token");
-      localStorage.removeItem("owner_token");
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("session_token");
+      clearLegacyTrackerTokens();
     } catch (e) {
       console.error("[ACCEPT_STORAGE_ERROR]", e);
       throw e;
@@ -125,6 +161,8 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     let cancelled = false;
 
+    refreshRuntimeSessionState("Esperando invitación o sesión runtime...");
+
     async function runAcceptFromUrl() {
       const params = new URLSearchParams(window.location.search);
       const inviteToken =
@@ -148,15 +186,19 @@ export default function TrackerGpsPage() {
       );
       if (alreadyAccepted) {
         console.log("[ACCEPT_SKIP] already processed");
-        const stored = readRuntimeSessionFromStorage();
         if (!cancelled) {
-          setRuntimeSession(stored);
+          const stored = refreshRuntimeSessionState(
+            "Esperando sesión runtime válida...",
+          );
           if (stored.runtimeToken && stored.trackerUserId && stored.orgId) {
             setMsg("Tracker listo");
           }
         }
         return;
       }
+
+      setAcceptingInvite(true);
+      setMsg("Aceptando invitación...");
 
       const acceptedSession = await acceptTrackerInvite(inviteToken, orgId);
       if (cancelled) return;
@@ -172,15 +214,22 @@ export default function TrackerGpsPage() {
         orgId: acceptedSession.orgId,
       });
 
+      refreshRuntimeSessionState();
       setMsg("Invitación aceptada. Tracker listo.");
     }
 
-    runAcceptFromUrl().catch((err) => {
-      console.error("[ACCEPT_FATAL]", err);
-      if (!cancelled) {
-        setMsg(`ERROR ACCEPT ${err?.message || "?"}`);
-      }
-    });
+    runAcceptFromUrl()
+      .catch((err) => {
+        console.error("[ACCEPT_FATAL]", err);
+        if (!cancelled) {
+          setMsg(`ERROR ACCEPT ${err?.message || "?"}`);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setAcceptingInvite(false);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -193,8 +242,9 @@ export default function TrackerGpsPage() {
       hasTrackerUserId: !!runtimeSession.trackerUserId,
       hasOrgId: !!runtimeSession.orgId,
       ready,
+      acceptingInvite,
     });
-  }, [runtimeSession, ready]);
+  }, [runtimeSession, ready, acceptingInvite]);
 
   useEffect(() => {
     if (!ready) return;
@@ -247,20 +297,17 @@ export default function TrackerGpsPage() {
       const accuracy = pos?.coords?.accuracy;
       const timestamp = new Date().toISOString();
 
-      if (
-        lat == null ||
-        lng == null ||
-        !token ||
-        !org ||
-        !trackerUserId
-      ) {
-        console.error("[SEND_POSITION_BLOCKED] missing runtime session or coordinates", {
-          hasToken: !!token,
-          hasOrg: !!org,
-          hasTrackerUserId: !!trackerUserId,
-          lat,
-          lng,
-        });
+      if (lat == null || lng == null || !token || !org || !trackerUserId) {
+        console.error(
+          "[SEND_POSITION_BLOCKED] missing runtime session or coordinates",
+          {
+            hasToken: !!token,
+            hasOrg: !!org,
+            hasTrackerUserId: !!trackerUserId,
+            lat,
+            lng,
+          },
+        );
         return;
       }
 
@@ -333,7 +380,32 @@ export default function TrackerGpsPage() {
   return (
     <div style={{ padding: 16 }}>
       {!ready ? (
-        <h2>Inicializando tracker...</h2>
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 760,
+            border: "1px solid #d0d7de",
+            borderRadius: 12,
+            padding: 20,
+            background: "#f8f9fb",
+            marginTop: 24,
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
+            Inicializando tracker...
+          </div>
+
+          <div style={{ fontSize: 15, marginBottom: 8 }}>
+            {acceptingInvite ? "Aceptando invitación..." : msg}
+          </div>
+
+          <div style={{ fontSize: 13, opacity: 0.75 }}>
+            Token runtime: <b>{runtimeSession.runtimeToken ? "sí" : "no"}</b> ·
+            Tracker user: <b>{runtimeSession.trackerUserId ? "sí" : "no"}</b> ·
+            Org: <b>{runtimeSession.orgId ? "sí" : "no"}</b>
+          </div>
+        </div>
       ) : (
         <div
           style={{
@@ -359,7 +431,9 @@ export default function TrackerGpsPage() {
 
           <button
             type="button"
-            onClick={() => setMsg("Clic OK")}
+            onClick={() =>
+              refreshRuntimeSessionState("Esperando sesión runtime válida...")
+            }
             style={{
               border: "none",
               borderRadius: 10,
@@ -372,7 +446,7 @@ export default function TrackerGpsPage() {
               marginTop: 12,
             }}
           >
-            Probar estado
+            Refrescar estado
           </button>
         </div>
       )}
