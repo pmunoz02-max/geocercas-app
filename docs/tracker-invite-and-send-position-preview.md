@@ -1,27 +1,25 @@
-# Tracker preview updates
+# Canonical Tracker Invite & Send-Position Flow (Preview)
 
-Branch: preview only  
-Environment: preview only  
-Do not apply directly to production.
+## Resumen
 
-## Summary
-This update includes three changes for tracker flows in preview:
+- El usuario invita a un tracker desde el panel.
+- El tracker acepta la invitación.
+- El backend crea una sesión en `tracker_runtime_sessions`:
+  - Genera un `tracker_access_token` (opaco o JWT).
+  - Guarda solo el hash del token, junto con `org_id`, `tracker_user_id`, `expires_at`, `active=true`.
+- El cliente (Android/WebView) almacena el `tracker_access_token` y lo usa para autenticarse.
+- Cada vez que el tracker reporta posición:
+  - Envía POST a `/api/send-position` con `Authorization: Bearer <tracker_access_token>` y el payload de posición.
+  - El backend valida el hash del token contra `tracker_runtime_sessions`.
+  - Si es válido y tiene asignación activa, persiste la posición en `positions` y actualiza el estado en `tracker_latest`.
+- El dashboard y los sistemas realtime consumen los datos de `tracker_latest`.
 
-1. Invite URL parsing
-- Improved tracker invite URL parsing to accept valid preview invite shapes more robustly.
-- Error `invalid_tracker_invite_url_shape` should now appear only when required parameters are truly missing.
+## Reglas clave
 
-2. Real tracker position writes
-- `api/send-position.js` now validates the Bearer tracker token.
-- Position writes are intended to persist real tracker updates to `positions` and `tracker_latest`.
-- This flow is for invited tracker identity, not owner session fallback.
+- **Prohibido depender de owner session o sesión web para el tracking runtime.**
+- **Prohibido usar magic link como flujo canónico para trackers.**
+- El único flujo canónico es: invite → runtime session → tracker_access_token → envío directo a `/api/send-position`.
 
-3. Friendly tracker names in dashboard
-- Tracker Dashboard now prefers friendly labels instead of raw UUIDs.
-- Priority order is display name, name, personal/profile full name, email, and only then user_id.
+---
 
-## Notes
-- Preview only.
-- No main changes.
-- No production mixing.
-- After architecture changes, docs must be updated before commit.
+Última actualización: 2026-04-11

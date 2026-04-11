@@ -1,31 +1,25 @@
-# Tracker Onboarding Flow (Updated)
+# Canonical Tracker Onboarding Flow (Preview)
 
-## Context
+## Resumen
 
-Previously, tracker assignment required that a `personal` record already existed for the authenticated user.
+- El usuario invita a un tracker desde el panel.
+- El tracker acepta la invitación.
+- El backend crea una sesión en `tracker_runtime_sessions`:
+  - Genera un `tracker_access_token` (opaco o JWT).
+  - Guarda solo el hash del token, junto con `org_id`, `tracker_user_id`, `expires_at`, `active=true`.
+- El cliente (Android/WebView) almacena el `tracker_access_token` y lo usa para autenticarse.
+- Cada vez que el tracker reporta posición:
+  - Envía POST a `/api/send-position` con `Authorization: Bearer <tracker_access_token>` y el payload de posición.
+  - El backend valida el hash del token contra `tracker_runtime_sessions`.
+  - Si es válido y tiene asignación activa, persiste la posición en `positions` y actualiza el estado en `tracker_latest`.
+- El dashboard y los sistemas realtime consumen los datos de `tracker_latest`.
 
-This caused failures when trackers logged in with new users that were invited but not yet linked to the organization.
+## Reglas clave
 
-## New Behavior
+- **Prohibido depender de owner session o sesión web para el tracking runtime.**
+- **Prohibido usar magic link como flujo canónico para trackers.**
+- El único flujo canónico es: invite → runtime session → tracker_access_token → envío directo a `/api/send-position`.
 
-The system now supports dynamic onboarding via invitation.
+---
 
-Flow:
-
-1. User logs in (any email)
-2. System checks for pending invitation
-3. If invitation exists:
-   - Create or link `personal` record
-   - Attach `user_id` to `personal`
-   - Associate with `org_id`
-4. Then resolve active assignment
-
-## Key Rule
-
-Tracker onboarding is now invitation-driven, not pre-created user-driven.
-
-## Impact
-
-- Eliminates dependency on manual personal creation
-- Allows tracker login with any invited account
-- Ensures consistent assignment resolution
+Última actualización: 2026-04-11
