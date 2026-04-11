@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import supabase from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
 
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Tracker base OK");
