@@ -128,42 +128,53 @@ export default function TrackerGpsPage() {
     };
   }, [ready]);
 
-  // Ejemplo de función para aceptar invitación y persistir sesión runtime
-  async function acceptTrackerInvite(invitePayload) {
-    const url = "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
-    console.log("[ACCEPT_CALL] URL:", url);
-    const resp = await fetch(url, {
+  // 🔴 SOLO esta función y reglas para aceptar invitación
+  const SUPABASE_FUNCTION_URL = "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
+
+  async function acceptTrackerInvite(inviteToken, org_id) {
+    console.log("[ACCEPT_CALL] START", { inviteToken, org_id });
+
+    const resp = await fetch(SUPABASE_FUNCTION_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        inviteToken: invitePayload.inviteToken,
-        org_id: invitePayload.org_id,
+        inviteToken,
+        org_id,
       }),
     });
+
     const data = await resp.json();
+
     console.log("[ACCEPT_RESPONSE]", data);
+
+    if (!data?.ok) {
+      throw new Error("accept failed");
+    }
 
     const token = data?.session?.access_token;
     const userId = data?.tracker_user_id;
 
     if (!token || !userId) {
-      throw new Error("missing runtime session data");
+      throw new Error("missing runtime token");
     }
 
-    // Guardar limpio (sin mezclar con auth normal)
+    // 🔥 Persistencia correcta
     localStorage.setItem("tracker_runtime_token", token);
     localStorage.setItem("tracker_user_id", userId);
 
-    // Eliminar cualquier token viejo
-    localStorage.removeItem("tracker_token");
+    // 🔥 Limpieza TOTAL
     localStorage.removeItem("supabase.auth.token");
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("owner_token");
 
-    // Enviar a Android
+    // 🔥 Bridge Android
     if (window.Android?.setTrackerSession) {
       window.Android.setTrackerSession(token, userId);
     }
+
+    console.log("[ACCEPT_DONE]", { userId });
   }
 
   return (
