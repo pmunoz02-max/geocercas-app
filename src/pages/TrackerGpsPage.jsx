@@ -1,41 +1,234 @@
-
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-export default function TrackerGpsPage() {
-  const [msg, setMsg] = useState("Tracker base OK");
+const SUPABASE_FUNCTION_URL =
+  "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
 
-  // Leer credenciales
-  let trackerAccessToken = null;
-  let orgId = null;
-
+function readRuntimeSessionFromStorage() {
   try {
-    trackerAccessToken = localStorage.getItem("tracker_access_token");
-    orgId = localStorage.getItem("org_id");
-  } catch {}
+    return {
+      runtimeToken: localStorage.getItem("tracker_runtime_token") || null,
+      trackerUserId: localStorage.getItem("tracker_user_id") || null,
+      orgId: localStorage.getItem("org_id") || null,
+    };
+  } catch {
+    return {
+      runtimeToken: null,
+      trackerUserId: null,
+      orgId: null,
+    };
+  }
+}
 
-  const ready = Boolean(trackerAccessToken && orgId);
+export default function TrackerGpsPage() {
+  const [msg, setMsg] = useState("Inicializando tracker...");
+  const [runtimeSession, setRuntimeSession] = useState(() =>
+    readRuntimeSessionFromStorage(),
+  );
 
-  // Bridge Android → guardar sesión
-  useEffect(() => {
-    console.log("[TRACKER_STEP] bridge effect start");
+  const ready = useMemo(() => {
+    return Boolean(
+      runtimeSession.runtimeToken &&
+        runtimeSession.trackerUserId &&
+        runtimeSession.orgId,
+    );
+  }, [runtimeSession]);
 
-    if (trackerAccessToken && orgId) {
+  async function acceptTrackerInvite(inviteToken, orgId) {
+    const { data: sessionData, error: sessionError } =
+      await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
+
+    console.log("[ACCEPT_DEBUG]", {
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      hasAccessToken: !!accessToken,
+      hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+      sessionError: sessionError?.message ?? null,
+      orgId,
+      inviteTokenExists: !!inviteToken,
+    });
+
+    if (!accessToken) {
+      throw new Error("missing_owner_session_access_token");
+    }
+
+    const resp = await fetch(SUPABASE_FUNCTION_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({
+        inviteToken,
+        org_id: orgId,
+      }),
+    });
+
+    const raw = await resp.text();
+    console.log("[ACCEPT_RESPONSE_RAW]", resp.status, raw);
+
+    if (!resp.ok) {
+      throw new Error(`accept_tracker_invite_failed:${resp.status}:${raw}`);
+    }
+
+    const data = JSON.parse(raw);
+    const runtimeToken = data?.session?.access_token;
+    const trackerUserId = data?.tracker_user_id;
+
+    if (!runtimeToken || !trackerUserId || !orgId) {
+      throw new Error("missing_runtime_session_data");
+    }
+
+    try {
+      localStorage.setItem("tracker_runtime_token", runtimeToken);
+      localStorage.setItem("tracker_user_id", trackerUserId);
+      localStorage.setItem("org_id", orgId);
+
+      localStorage.removeItem("tracker_access_token");
+      localStorage.removeItem("tracker_token");
+      localStorage.removeItem("owner_token");
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("session_token");
+    } catch (e) {
+      console.error("[ACCEPT_STORAGE_ERROR]", e);
+      throw e;
+    }
+
+    const nextSession = {
+      runtimeToken,
+      trackerUserId,
+      orgId,
+    };
+
+    setRuntimeSession(nextSession);
+
+    if (window.Android?.setTrackerSession) {
       try {
-        console.log("[TRACKER_SESSION_SEND]", {
-          tokenPresent: true,
-          orgIdPresent: true,
-          androidAvailable: !!window?.Android?.saveSession,
-        });
-
-        window?.Android?.saveSession?.(trackerAccessToken, orgId);
+        window.Android.setTrackerSession(runtimeToken, trackerUserId, orgId);
       } catch (e) {
-        console.error("[TRACKER_SESSION_SEND] error", e);
+        console.error("[ANDROID_SET_TRACKER_SESSION_ERROR]", e);
       }
     }
-  }, [trackerAccessToken, orgId]);
 
-  // 🚀 BLOQUE REAL DE TRACKING
+    if (window.Android?.saveSession) {
+      try {
+        window.Android.saveSession(runtimeToken, orgId);
+      } catch (e) {
+        console.error("[ANDROID_SAVE_SESSION_ERROR]", e);
+      }
+    }
+
+    return nextSession;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runAcceptFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const inviteToken =
+        params.get("inviteToken") ||
+        params.get("invite_token") ||
+        params.get("t");
+      const orgId = params.get("org_id") || params.get("orgId");
+
+      console.log("[ACCEPT_URL_PARAMS]", {
+        href: window.location.href,
+        inviteTokenExists: !!inviteToken,
+        orgId,
+      });
+
+      if (!inviteToken || !orgId) {
+        return;
+      }
+
+      const alreadyAccepted = sessionStorage.getItem(
+        `accept_tracker_invite_done:${inviteToken}`,
+      );
+      if (alreadyAccepted) {
+        console.log("[ACCEPT_SKIP] already processed");
+        const stored = readRuntimeSessionFromStorage();
+        if (!cancelled) {
+          setRuntimeSession(stored);
+          if (stored.runtimeToken && stored.trackerUserId && stored.orgId) {
+            setMsg("Tracker listo");
+          }
+        }
+        return;
+      }
+
+      const acceptedSession = await acceptTrackerInvite(inviteToken, orgId);
+      if (cancelled) return;
+
+      sessionStorage.setItem(
+        `accept_tracker_invite_done:${inviteToken}`,
+        "1",
+      );
+
+      console.log("[ACCEPT_DONE]", {
+        trackerUserId: acceptedSession.trackerUserId,
+        runtimeTokenStored: true,
+        orgId: acceptedSession.orgId,
+      });
+
+      setMsg("Invitación aceptada. Tracker listo.");
+    }
+
+    runAcceptFromUrl().catch((err) => {
+      console.error("[ACCEPT_FATAL]", err);
+      if (!cancelled) {
+        setMsg(`ERROR ACCEPT ${err?.message || "?"}`);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    console.log("[TRACKER_SESSION_STATE]", {
+      hasRuntimeToken: !!runtimeSession.runtimeToken,
+      hasTrackerUserId: !!runtimeSession.trackerUserId,
+      hasOrgId: !!runtimeSession.orgId,
+      ready,
+    });
+  }, [runtimeSession, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+
+    console.log("[TRACKER_STEP] bridge effect start");
+
+    try {
+      console.log("[TRACKER_SESSION_SEND]", {
+        tokenPresent: true,
+        trackerUserIdPresent: true,
+        orgIdPresent: true,
+        androidSetTrackerSession: !!window?.Android?.setTrackerSession,
+        androidSaveSession: !!window?.Android?.saveSession,
+      });
+
+      if (window?.Android?.setTrackerSession) {
+        window.Android.setTrackerSession(
+          runtimeSession.runtimeToken,
+          runtimeSession.trackerUserId,
+          runtimeSession.orgId,
+        );
+      }
+
+      if (window?.Android?.saveSession) {
+        window.Android.saveSession(
+          runtimeSession.runtimeToken,
+          runtimeSession.orgId,
+        );
+      }
+    } catch (e) {
+      console.error("[TRACKER_SESSION_SEND] error", e);
+    }
+  }, [ready, runtimeSession]);
+
   useEffect(() => {
     if (!ready) return;
 
@@ -45,23 +238,31 @@ export default function TrackerGpsPage() {
     function handlePosition(pos) {
       if (disposed) return;
 
-      let token = null;
-      let org = null;
-
-      try {
-        token = localStorage.getItem("tracker_access_token");
-        org = localStorage.getItem("org_id");
-      } catch (e) {
-        setMsg("ERROR localStorage " + (e?.message || "?"));
-        return;
-      }
+      const token = runtimeSession.runtimeToken;
+      const org = runtimeSession.orgId;
+      const trackerUserId = runtimeSession.trackerUserId;
 
       const lat = pos?.coords?.latitude;
       const lng = pos?.coords?.longitude;
       const accuracy = pos?.coords?.accuracy;
       const timestamp = new Date().toISOString();
 
-      if (!lat || !lng || !token || !org) return;
+      if (
+        lat == null ||
+        lng == null ||
+        !token ||
+        !org ||
+        !trackerUserId
+      ) {
+        console.error("[SEND_POSITION_BLOCKED] missing runtime session or coordinates", {
+          hasToken: !!token,
+          hasOrg: !!org,
+          hasTrackerUserId: !!trackerUserId,
+          lat,
+          lng,
+        });
+        return;
+      }
 
       const body = {
         org_id: org,
@@ -69,6 +270,7 @@ export default function TrackerGpsPage() {
         lng,
         accuracy,
         timestamp,
+        tracker_user_id: trackerUserId,
       };
 
       console.log("[SEND_POSITION_STEP] request started", body);
@@ -85,7 +287,9 @@ export default function TrackerGpsPage() {
           let data = null;
           try {
             data = await res.json();
-          } catch {}
+          } catch {
+            data = null;
+          }
 
           console.log("[SEND_POSITION_STEP] status", res.status);
           console.log("[SEND_POSITION_STEP] ok", res.ok);
@@ -109,15 +313,11 @@ export default function TrackerGpsPage() {
     }
 
     if (navigator?.geolocation) {
-      watchId = navigator.geolocation.watchPosition(
-        handlePosition,
-        handleError,
-        {
-          enableHighAccuracy: true,
-          maximumAge: 10000,
-          timeout: 20000,
-        }
-      );
+      watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000,
+      });
     } else {
       setMsg("Geolocation API not available");
     }
@@ -128,42 +328,7 @@ export default function TrackerGpsPage() {
         navigator.geolocation.clearWatch(watchId);
       }
     };
-  }, [ready]);
-
-
-  // 🔴 SOLO esta función y reglas para aceptar invitación
-  const SUPABASE_FUNCTION_URL = "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
-
-  async function acceptTrackerInvite(inviteToken, org_id) {
-    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token;
-
-    console.log("[ACCEPT_DEBUG]", {
-      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
-      hasAccessToken: !!accessToken,
-      hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
-      sessionError: sessionError?.message ?? null,
-    });
-
-    const resp = await fetch(
-      SUPABASE_FUNCTION_URL,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${accessToken}`,
-          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
-        },
-        body: JSON.stringify({
-          inviteToken,
-          org_id,
-        }),
-      }
-    );
-
-    const raw = await resp.text();
-    console.log("[ACCEPT_RESPONSE_RAW]", resp.status, raw);
-  }
+  }, [ready, runtimeSession]);
 
   return (
     <div style={{ padding: 16 }}>
