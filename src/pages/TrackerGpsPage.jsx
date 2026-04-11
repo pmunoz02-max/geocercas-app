@@ -129,52 +129,38 @@ export default function TrackerGpsPage() {
   }, [ready]);
 
   // 🔴 SOLO esta función y reglas para aceptar invitación
+  import supabase from "../supabaseClient";
   const SUPABASE_FUNCTION_URL = "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
 
   async function acceptTrackerInvite(inviteToken, org_id) {
-    console.log("[ACCEPT_CALL] START", { inviteToken, org_id });
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const accessToken = sessionData?.session?.access_token;
 
-    const resp = await fetch(SUPABASE_FUNCTION_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inviteToken,
-        org_id,
-      }),
+    console.log("[ACCEPT_DEBUG]", {
+      supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
+      hasAccessToken: !!accessToken,
+      hasAnonKey: !!import.meta.env.VITE_SUPABASE_ANON_KEY,
+      sessionError: sessionError?.message ?? null,
     });
 
-    const data = await resp.json();
+    const resp = await fetch(
+      SUPABASE_FUNCTION_URL,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${accessToken}`,
+          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          inviteToken,
+          org_id,
+        }),
+      }
+    );
 
-    console.log("[ACCEPT_RESPONSE]", data);
-
-    if (!data?.ok) {
-      throw new Error("accept failed");
-    }
-
-    const token = data?.session?.access_token;
-    const userId = data?.tracker_user_id;
-
-    if (!token || !userId) {
-      throw new Error("missing runtime token");
-    }
-
-    // 🔥 Persistencia correcta
-    localStorage.setItem("tracker_runtime_token", token);
-    localStorage.setItem("tracker_user_id", userId);
-
-    // 🔥 Limpieza TOTAL
-    localStorage.removeItem("supabase.auth.token");
-    localStorage.removeItem("auth_token");
-    localStorage.removeItem("owner_token");
-
-    // 🔥 Bridge Android
-    if (window.Android?.setTrackerSession) {
-      window.Android.setTrackerSession(token, userId);
-    }
-
-    console.log("[ACCEPT_DONE]", { userId });
+    const raw = await resp.text();
+    console.log("[ACCEPT_RESPONSE_RAW]", resp.status, raw);
   }
 
   return (
