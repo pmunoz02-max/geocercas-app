@@ -128,6 +128,36 @@ export default function TrackerGpsPage() {
     };
   }, [ready]);
 
+  // Ejemplo de función para aceptar invitación y persistir sesión runtime
+  async function acceptTrackerInvite(invitePayload) {
+    const resp = await fetch("/accept-tracker-invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(invitePayload),
+    });
+    const data = await resp.json();
+
+    const token = data?.session?.access_token;
+    const userId = data?.tracker_user_id;
+
+    if (!token || !userId) {
+      throw new Error("missing runtime session data");
+    }
+
+    // Guardar limpio (sin mezclar con auth normal)
+    localStorage.setItem("tracker_runtime_token", token);
+    localStorage.setItem("tracker_user_id", userId);
+
+    // Eliminar cualquier token viejo
+    localStorage.removeItem("tracker_token");
+    localStorage.removeItem("supabase.auth.token");
+
+    // Enviar a Android
+    if (window.Android?.setTrackerSession) {
+      window.Android.setTrackerSession(token, userId);
+    }
+  }
+
   return (
     <div style={{ padding: 16 }}>
       {!ready ? (
