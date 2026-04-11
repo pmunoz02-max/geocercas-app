@@ -134,6 +134,7 @@ function MainAppRoutes() {
 
       {/* Tracker accept must go to the public runtime page, preserving params */}
       <Route path="/tracker-accept" element={<RedirectWithQuery to="/tracker-gps" />} />
+      <Route path="/accept-invite" element={<RedirectWithQuery to="/tracker-gps" />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
