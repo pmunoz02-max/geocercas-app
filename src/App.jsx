@@ -51,12 +51,6 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import PaddleCheckoutPage from "./pages/paddle-checkout.tsx";
 
-function RedirectWithQuery({ to }) {
-  const location = useLocation();
-  const search = location.search || "";
-  return <Navigate to={`${to}${search}`} replace />;
-}
-
 function RootEntry() {
   const location = useLocation();
   const auth = useAuthSafe();
@@ -131,10 +125,6 @@ function MainAppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
-
-      {/* Tracker accept and invite routes render TrackerGpsPage directly, preserving params */}
-      <Route path="/tracker-accept" element={<TrackerGpsPage />} />
-      <Route path="/accept-invite" element={<TrackerGpsPage />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
@@ -297,6 +287,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+      <Route path="/tracker-accept" element={<TrackerGpsPage />} />
+      <Route path="/accept-invite" element={<TrackerGpsPage />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
   );
