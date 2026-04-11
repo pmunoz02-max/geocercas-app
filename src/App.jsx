@@ -19,7 +19,7 @@ import ForgotPassword from "./pages/ForgotPassword.jsx";
 import UpdatePassword from "./pages/UpdatePassword.jsx";
 import TrackerInviteStart from "./pages/TrackerInviteStart.jsx";
 
-// ✅ Tracker GPS public page
+// Public tracker runtime page
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 // App pages
@@ -37,7 +37,7 @@ import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
 import DeleteAccountPage from "./pages/DeleteAccountPage.jsx";
 import Account from "@/pages/Account.jsx";
 
-// ✅ Billing / Pricing pages
+// Billing / Pricing pages
 import Billing from "./pages/Billing.jsx";
 import BillingSuccess from "./pages/BillingSuccess.jsx";
 import BillingCancel from "./pages/BillingCancel.jsx";
@@ -50,6 +50,12 @@ import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import PaddleCheckoutPage from "./pages/paddle-checkout.tsx";
+
+function RedirectWithQuery({ to }) {
+  const location = useLocation();
+  const search = location.search || "";
+  return <Navigate to={`${to}${search}`} replace />;
+}
 
 function RootEntry() {
   const location = useLocation();
@@ -90,7 +96,7 @@ function AdminRoute({ children }) {
     return (
       <Navigate
         to={`/login?next=${encodeURIComponent(location.pathname || "/inicio")}&err=${encodeURIComponent(
-          "auth_provider_missing"
+          "auth_provider_missing",
         )}`}
         replace
       />
@@ -112,7 +118,7 @@ function AdminRoute({ children }) {
 function MainAppRoutes() {
   return (
     <Routes>
-      {/* 🌐 Public */}
+      {/* Public */}
       <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
       <Route path="/" element={<RootEntry />} />
       <Route path="/landing" element={<Landing />} />
@@ -121,27 +127,13 @@ function MainAppRoutes() {
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/demo/mitidja" element={<Navigate to="/demos/mitidja-geofence-demo.html" replace />} />
       <Route path="/login" element={<Login />} />
-
-      {/* ✅ App callback */}
       <Route path="/auth/callback" element={<AuthCallback />} />
-
-      {/* ✅ Tracker Accept (PUBLIC) - redirect to /tracker with query string */}
-      <Route
-        path="/tracker-accept"
-        element={
-          <RedirectWithQuery to="/tracker" />
-        }
-      />
-// Helper component to redirect preserving query string
-function RedirectWithQuery({ to }) {
-  const location = useLocation();
-  const search = location.search || "";
-  return <Navigate to={to + search} replace />;
-}
-
-      {/* 🔐 Password flows */}
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
+      <Route path="/tracker-invite" element={<TrackerInviteStart />} />
+
+      {/* Tracker accept must go to the public runtime page, preserving params */}
+      <Route path="/tracker-accept" element={<RedirectWithQuery to="/tracker-gps" />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
@@ -151,7 +143,7 @@ function RedirectWithQuery({ to }) {
       <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
 
-      {/* 🔒 Protected */}
+      {/* Protected */}
       <Route
         element={
           <AuthGuard>
@@ -161,7 +153,6 @@ function RedirectWithQuery({ to }) {
       >
         <Route path="/inicio" element={<Inicio />} />
 
-          {/* ✅ Billing / Pricing */}
         <Route
           path="/billing"
           element={
@@ -288,7 +279,6 @@ function RedirectWithQuery({ to }) {
         />
       </Route>
 
-      {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
