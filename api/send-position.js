@@ -1,15 +1,15 @@
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_URL =
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing Supabase env vars for send-position");
 }
 
-const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 function sha256Hex(value) {
@@ -50,23 +50,12 @@ export default async function handler(req, res) {
       timestamp,
     } = body || {};
 
-    console.log("[send-position] payload", {
-      org_id,
-      lat,
-      lng,
-      accuracy,
-      timestamp,
-    });
-
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ ok: false, error: "missing_bearer_token" });
     }
 
     if (!org_id || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
-      return res.status(400).json({
-        ok: false,
-        error: "invalid_payload",
-      });
+      return res.status(400).json({ ok: false, error: "invalid_payload" });
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
@@ -75,56 +64,38 @@ export default async function handler(req, res) {
     }
 
     const tokenHash = sha256Hex(token);
+    const nowIso = new Date().toISOString();
 
-    console.log("[send-position] token hash computed", {
+    console.log("[send-position] runtime lookup start", {
       org_id,
       tokenHashPrefix: tokenHash.slice(0, 12),
     });
 
-    // 1) Resolver token opaco contra tracker_invites
-    const nowIso = new Date().toISOString();
-
-    const { data: inviteRow, error: inviteError } = await adminClient
-      .from("tracker_invites")
-      .select(
-        "id, org_id, email, is_active, expires_at, used_at, used_by_user_id, accepted_at, invite_token_hash"
-      )
+    const { data: runtimeSession, error: runtimeError } = await adminClient
+      .from("tracker_runtime_sessions")
+      .select("id, org_id, tracker_user_id, active, expires_at")
       .eq("org_id", org_id)
-      .eq("invite_token_hash", tokenHash)
-      .eq("is_active", true)
+      .eq("access_token_hash", tokenHash)
+      .eq("active", true)
       .gt("expires_at", nowIso)
       .maybeSingle();
 
-    if (inviteError) {
-      console.error("[send-position] tracker invite lookup error", inviteError);
+    if (runtimeError) {
+      console.error("[send-position] runtime lookup error", runtimeError);
       return res.status(500).json({
         ok: false,
-        error: "tracker_lookup_failed",
-        detail: inviteError.message,
+        error: "runtime_lookup_failed",
+        detail: runtimeError.message,
       });
     }
 
-    if (!inviteRow) {
-      console.warn("[send-position] invalid tracker token");
+    if (!runtimeSession) {
+      console.warn("[send-position] invalid runtime token");
       return res.status(401).json({ ok: false, error: "invalid_token" });
     }
 
-    const tracker_user_id = inviteRow.used_by_user_id;
+    const tracker_user_id = runtimeSession.tracker_user_id;
 
-    if (!tracker_user_id) {
-      console.warn("[send-position] invite accepted without bound tracker user");
-      return res.status(403).json({
-        ok: false,
-        error: "tracker_not_bound_to_user",
-      });
-    }
-
-    console.log("[send-position] tracker resolved", {
-      tracker_user_id,
-      invite_id: inviteRow.id,
-    });
-
-    // 2) Validar assignment activo real
     const { data: assignmentRow, error: assignmentError } = await adminClient
       .from("tracker_assignments")
       .select("id, tracker_user_id, org_id, active, start_date, end_date")
@@ -143,10 +114,6 @@ export default async function handler(req, res) {
     }
 
     if (!assignmentRow) {
-      console.warn("[send-position] tracker has no active assignment", {
-        tracker_user_id,
-        org_id,
-      });
       return res.status(403).json({
         ok: false,
         error: "tracker_not_assigned",
@@ -155,11 +122,9 @@ export default async function handler(req, res) {
 
     const recordedAt = timestamp || new Date().toISOString();
 
-    // 3) Insert histórico en tracker_positions
-    const trackerPositionPayload = {
+    const positionPayload = {
       org_id,
       user_id: tracker_user_id,
-      asignacion_id: assignmentRow.id,
       lat: Number(lat),
       lng: Number(lng),
       accuracy: accuracy ?? null,
@@ -167,43 +132,33 @@ export default async function handler(req, res) {
       heading: heading ?? null,
       battery: battery ?? null,
       is_mock: is_mock ?? false,
-      source: "tracker_webview",
+      source: "tracker_runtime",
       recorded_at: recordedAt,
     };
 
-    console.log("[send-position] tracker_positions insert payload", {
-      org_id,
-      user_id: tracker_user_id,
-      asignacion_id: assignmentRow.id,
-      lat: Number(lat),
-      lng: Number(lng),
-      recorded_at: recordedAt,
-    });
-
     const { data: positionRow, error: positionError } = await adminClient
-      .from("tracker_positions")
-      .insert([trackerPositionPayload])
+      .from("positions")
+      .insert([positionPayload])
       .select()
       .single();
 
     if (positionError || !positionRow) {
-      console.error("[send-position] tracker_positions insert error", positionError);
+      console.error("[send-position] positions insert error", positionError);
       return res.status(500).json({
         ok: false,
-        error: "tracker_positions_insert_failed",
+        error: "positions_insert_failed",
         detail: positionError?.message || "no insert result",
       });
     }
 
-    // 4) Upsert estado actual en tracker_latest
-    const trackerLatestPayload = {
+    const latestPayload = {
       org_id,
       user_id: tracker_user_id,
       lat: Number(lat),
       lng: Number(lng),
       accuracy: accuracy ?? null,
       ts: recordedAt,
-      source: "tracker_webview",
+      source: "tracker_runtime",
       battery: battery ?? null,
       is_mock: is_mock ?? false,
       speed: speed ?? null,
@@ -211,17 +166,9 @@ export default async function handler(req, res) {
       device_recorded_at: recordedAt,
     };
 
-    console.log("[send-position] tracker_latest upsert payload", {
-      org_id,
-      user_id: tracker_user_id,
-      lat: Number(lat),
-      lng: Number(lng),
-      ts: recordedAt,
-    });
-
     const { data: latestRow, error: latestError } = await adminClient
       .from("tracker_latest")
-      .upsert([trackerLatestPayload], { onConflict: "org_id,user_id" })
+      .upsert([latestPayload], { onConflict: "org_id,user_id" })
       .select()
       .single();
 
@@ -234,9 +181,14 @@ export default async function handler(req, res) {
       });
     }
 
+    await adminClient
+      .from("tracker_runtime_sessions")
+      .update({ last_seen_at: nowIso })
+      .eq("id", runtimeSession.id);
+
     console.log("[send-position] success", {
       tracker_user_id,
-      tracker_position_id: positionRow.id,
+      position_id: positionRow.id,
     });
 
     return res.status(200).json({

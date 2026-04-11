@@ -358,6 +358,44 @@ serve(async (req) => {
         orgId,
       });
 
+      // --- Nueva lógica: invalidar sesiones previas activas ---
+      const nowIso = new Date().toISOString();
+      const expiresAtIso = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(); // 7 días ejemplo
+      const accessTokenHash = await sha256Hex(access_token);
+
+      // Invalidar sesiones previas activas para este tracker/org
+      const { error: invalidateError } = await sbAdmin
+        .from("tracker_runtime_sessions")
+        .update({ active: false, revoked_at: nowIso })
+        .eq("org_id", orgId)
+        .eq("tracker_user_id", trackerUserId)
+        .eq("active", true);
+
+      if (invalidateError) {
+        console.error("[accept-tracker-invite] runtime session invalidate error", invalidateError);
+        return jsonResponse({ ok: false, error: "runtime_session_invalidate_failed" }, 500);
+      }
+
+      // Upsert nueva sesión runtime
+      const { error: runtimeSessionError } = await sbAdmin
+        .from("tracker_runtime_sessions")
+        .upsert(
+          [{
+            org_id: orgId,
+            tracker_user_id: trackerUserId,
+            access_token_hash: accessTokenHash,
+            active: true,
+            expires_at: expiresAtIso,
+            source: "accept_tracker_invite"
+          }],
+          { onConflict: "access_token_hash" }
+        );
+
+      if (runtimeSessionError) {
+        console.error("[accept-tracker-invite] runtime session upsert error", runtimeSessionError);
+        return jsonResponse({ ok: false, error: "runtime_session_upsert_failed" }, 500);
+      }
+
       return jsonResponse(200, {
         ok: true,
         tracker_user_id: trackerUserId,
