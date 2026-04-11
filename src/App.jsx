@@ -132,9 +132,9 @@ function MainAppRoutes() {
       <Route path="/reset-password" element={<UpdatePassword />} />
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
 
-      {/* Tracker accept must go to the public runtime page, preserving params */}
-      <Route path="/tracker-accept" element={<RedirectWithQuery to="/tracker-gps" />} />
-      <Route path="/accept-invite" element={<RedirectWithQuery to="/tracker-gps" />} />
+      {/* Tracker accept and invite routes render TrackerGpsPage directly, preserving params */}
+      <Route path="/tracker-accept" element={<TrackerGpsPage />} />
+      <Route path="/accept-invite" element={<TrackerGpsPage />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
