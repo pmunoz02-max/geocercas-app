@@ -2,7 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { SignJWT } from "https://esm.sh/jose@5.9.6";
 
-const BUILD_TAG = "accept-tracker-invite-v2_preview_20260408";
+const BUILD_TAG = "accept-tracker-invite-v3_preview_20260410";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -57,6 +57,8 @@ async function createTrackerAccessToken(params: {
 }
 
 serve(async (req) => {
+  console.log("[ACCEPT] function entered", { build_tag: BUILD_TAG });
+
   try {
     if (req.method === "OPTIONS") {
       return new Response("ok", { headers: corsHeaders });
@@ -178,7 +180,9 @@ serve(async (req) => {
       });
     }
 
-    const inviteEmail = String(inviteRow.email || inviteRow.email_norm || "").trim().toLowerCase();
+    const inviteEmail = String(inviteRow.email || inviteRow.email_norm || "")
+      .trim()
+      .toLowerCase();
 
     if (!inviteEmail || !inviteEmail.includes("@")) {
       return jsonResponse(500, {
@@ -358,43 +362,95 @@ serve(async (req) => {
         orgId,
       });
 
-      // --- Nueva lógica: invalidar sesiones previas activas ---
-      const nowIso = new Date().toISOString();
-      const expiresAtIso = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString(); // 7 días ejemplo
-      const accessTokenHash = await sha256Hex(access_token);
+      if (!access_token) {
+        console.error("[accept-tracker-invite] runtime_access_token missing");
+        throw new Error("runtime_token_missing");
+      }
 
-      // Invalidar sesiones previas activas para este tracker/org
-      const { error: invalidateError } = await sbAdmin
+      const accessTokenHash = await sha256Hex(access_token);
+      const nowIso = new Date().toISOString();
+      const expiresAtIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      console.log("[accept-tracker-invite] runtime session persist start", {
+        org_id: orgId,
+        tracker_user_id: trackerUserId,
+        hasToken: true,
+        access_token_hash_prefix: accessTokenHash.slice(0, 12),
+      });
+
+      const { error: revokeError } = await sbAdmin
         .from("tracker_runtime_sessions")
-        .update({ active: false, revoked_at: nowIso })
+        .update({
+          active: false,
+          revoked_at: nowIso,
+        })
         .eq("org_id", orgId)
         .eq("tracker_user_id", trackerUserId)
         .eq("active", true);
 
-      if (invalidateError) {
-        console.error("[accept-tracker-invite] runtime session invalidate error", invalidateError);
-        return jsonResponse({ ok: false, error: "runtime_session_invalidate_failed" }, 500);
+      if (revokeError) {
+        console.error("[accept-tracker-invite] runtime session revoke error", revokeError);
+        return jsonResponse(500, {
+          ok: false,
+          error: "runtime_session_revoke_failed",
+          detail: revokeError.message,
+          build_tag: BUILD_TAG,
+        });
       }
 
-      // Upsert nueva sesión runtime
-      const { error: runtimeSessionError } = await sbAdmin
+      const { data: runtimeInsert, error: runtimeInsertError } = await sbAdmin
         .from("tracker_runtime_sessions")
-        .upsert(
-          [{
+        .insert([
+          {
             org_id: orgId,
             tracker_user_id: trackerUserId,
             access_token_hash: accessTokenHash,
+            token_version: 1,
             active: true,
+            issued_at: nowIso,
             expires_at: expiresAtIso,
-            source: "accept_tracker_invite"
-          }],
-          { onConflict: "access_token_hash" }
-        );
+            source: "accept_tracker_invite",
+          },
+        ])
+        .select("id, org_id, tracker_user_id, token_version, active, expires_at")
+        .single();
 
-      if (runtimeSessionError) {
-        console.error("[accept-tracker-invite] runtime session upsert error", runtimeSessionError);
-        return jsonResponse({ ok: false, error: "runtime_session_upsert_failed" }, 500);
+      if (runtimeInsertError || !runtimeInsert) {
+        console.error(
+          "[accept-tracker-invite] runtime session insert error",
+          runtimeInsertError,
+        );
+        throw new Error("runtime_session_insert_failed");
       }
+
+      console.log("[accept-tracker-invite] runtime session persist ok", {
+        runtime_session_id: runtimeInsert.id,
+        org_id: orgId,
+        tracker_user_id: trackerUserId,
+        token_version: runtimeInsert.token_version,
+      });
+
+      const { data: checkRows, error: checkError } = await sbAdmin
+        .from("tracker_runtime_sessions")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("tracker_user_id", trackerUserId)
+        .eq("active", true);
+
+      if (checkError) {
+        console.error("[accept-tracker-invite] runtime session verify error", checkError);
+        throw new Error("runtime_session_verify_failed");
+      }
+
+      if (!checkRows || checkRows.length === 0) {
+        console.error("[accept-tracker-invite] runtime session NOT created");
+        throw new Error("runtime_session_missing_after_accept");
+      }
+
+      console.log("[ACCEPT] success before return", {
+        org_id: orgId,
+        tracker_user_id: trackerUserId,
+      });
 
       return jsonResponse(200, {
         ok: true,

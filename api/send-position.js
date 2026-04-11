@@ -75,7 +75,6 @@ export default async function handler(req, res) {
       tokenHashPrefix: tokenHash.slice(0, 12),
     });
 
-    // 1) Resolve runtime session
     const { data: runtimeSession, error: runtimeError } = await adminClient
       .from("tracker_runtime_sessions")
       .select("id, org_id, tracker_user_id, active, expires_at")
@@ -95,13 +94,15 @@ export default async function handler(req, res) {
     }
 
     if (!runtimeSession) {
-      console.warn("[send-position] invalid runtime token");
+      console.warn("[send-position] invalid runtime token", {
+        org_id,
+        tokenHashPrefix: tokenHash.slice(0, 12),
+      });
       return res.status(401).json({ ok: false, error: "invalid_token" });
     }
 
     const tracker_user_id = runtimeSession.tracker_user_id;
 
-    // 2) Validate active assignment
     const { data: assignmentRow, error: assignmentError } = await adminClient
       .from("tracker_assignments")
       .select("id, tracker_user_id, org_id, active, start_date, end_date")
@@ -132,7 +133,6 @@ export default async function handler(req, res) {
 
     const recordedAt = timestamp || nowIso;
 
-    // 3) Insert canonical position history
     const positionPayload = {
       org_id,
       user_id: tracker_user_id,
@@ -170,7 +170,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 4) Upsert live tracker state
     const latestPayload = {
       org_id,
       user_id: tracker_user_id,
@@ -201,7 +200,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // 5) Touch runtime session
     const { error: touchError } = await adminClient
       .from("tracker_runtime_sessions")
       .update({ last_seen_at: nowIso })
