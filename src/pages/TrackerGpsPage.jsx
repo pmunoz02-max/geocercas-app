@@ -1,4 +1,6 @@
+
 import { useState, useEffect } from "react";
+import supabase from "../supabaseClient";
 
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Tracker base OK");
@@ -128,8 +130,8 @@ export default function TrackerGpsPage() {
     };
   }, [ready]);
 
+
   // 🔴 SOLO esta función y reglas para aceptar invitación
-  import supabase from "../supabaseClient";
   const SUPABASE_FUNCTION_URL = "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
 
   async function acceptTrackerInvite(inviteToken, org_id) {
