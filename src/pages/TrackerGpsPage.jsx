@@ -124,18 +124,21 @@ export default function TrackerGpsPage() {
       data?.runtimeToken ||
       data?.tracker_runtime_token ||
       data?.token ||
-      "";
+      null;
+
     const trackerUserId =
       data?.tracker_user_id ||
       data?.trackerUserId ||
       data?.user_id ||
+      data?.user?.id ||
       data?.session?.user?.id ||
-      "";
+      null;
 
-    console.log("[ACCEPT_RUNTIME_TOKEN]", {
-      runtimeTokenExists: !!runtimeToken,
+    console.log("[ACCEPT_PARSED]", {
+      runtimeToken,
       trackerUserId,
       orgId,
+      raw: data
     });
 
     if (!runtimeToken || !trackerUserId || !orgId) {
