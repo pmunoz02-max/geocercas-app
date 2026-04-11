@@ -130,22 +130,19 @@ export default function TrackerGpsPage() {
 
   // Ejemplo de función para aceptar invitación y persistir sesión runtime
   async function acceptTrackerInvite(invitePayload) {
-    const url = "/accept-tracker-invite";
-    // TEMPORAL LOG OBLIGATORIO
+    const url = "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/accept-tracker-invite";
     console.log("[ACCEPT_CALL] URL:", url);
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(invitePayload),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        inviteToken: invitePayload.inviteToken,
+        org_id: invitePayload.org_id,
+      }),
     });
-    let data;
-    try {
-      data = await resp.json();
-    } catch (e) {
-      console.error("[ACCEPT_TRACKER_INVITE] Failed to parse JSON response", e);
-      throw e;
-    }
-    // TEMPORAL LOG OBLIGATORIO
+    const data = await resp.json();
     console.log("[ACCEPT_RESPONSE]", data);
 
     const token = data?.session?.access_token;
