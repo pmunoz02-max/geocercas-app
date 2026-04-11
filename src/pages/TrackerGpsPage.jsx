@@ -1,3 +1,12 @@
+function decodeJwtSub(token) {
+  try {
+    const payload = token.split(".")[1];
+    const decoded = JSON.parse(atob(payload));
+    return decoded?.sub || null;
+  } catch {
+    return null;
+  }
+}
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -126,13 +135,18 @@ export default function TrackerGpsPage() {
       data?.token ||
       null;
 
-    const trackerUserId =
+
+    let trackerUserId =
       data?.tracker_user_id ||
       data?.trackerUserId ||
       data?.user_id ||
       data?.user?.id ||
       data?.session?.user?.id ||
       null;
+
+    if (!trackerUserId && runtimeToken) {
+      trackerUserId = decodeJwtSub(runtimeToken);
+    }
 
     console.log("[ACCEPT_PARSED]", {
       runtimeToken,
@@ -305,6 +319,11 @@ export default function TrackerGpsPage() {
       hasOrgId: !!runtimeSession.orgId,
       ready,
       acceptingInvite,
+    });
+    console.log("[TRACKER_DEBUG_FULL]", {
+      runtimeToken: runtimeSession.runtimeToken,
+      trackerUserId: runtimeSession.trackerUserId,
+      orgId: runtimeSession.orgId,
     });
   }, [runtimeSession, ready, acceptingInvite]);
 
