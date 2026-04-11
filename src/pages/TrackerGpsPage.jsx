@@ -9,7 +9,6 @@ function decodeJwtSub(token) {
     if (!token) return null;
     const payload = token.split(".")[1];
     if (!payload) return null;
-
     const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
     const decoded = JSON.parse(atob(padded));
@@ -48,17 +47,9 @@ function readRuntimeSessionFromStorage() {
       authParsed?.org_id ||
       null;
 
-    return {
-      runtimeToken,
-      trackerUserId,
-      orgId,
-    };
+    return { runtimeToken, trackerUserId, orgId };
   } catch {
-    return {
-      runtimeToken: null,
-      trackerUserId: null,
-      orgId: null,
-    };
+    return { runtimeToken: null, trackerUserId: null, orgId: null };
   }
 }
 
@@ -190,23 +181,18 @@ export default function TrackerGpsPage() {
       throw new Error("missing_runtime_session_data");
     }
 
-    try {
-      localStorage.setItem(
-        "geocercas-tracker-auth",
-        JSON.stringify({
-          access_token: runtimeToken,
-          org_id: orgId,
-        }),
-      );
-      localStorage.setItem("tracker_access_token", runtimeToken);
-      localStorage.setItem("tracker_runtime_token", runtimeToken);
-      localStorage.setItem("tracker_user_id", trackerUserId);
-      localStorage.setItem("org_id", orgId);
-      clearLegacyTrackerTokens();
-    } catch (e) {
-      console.error("[ACCEPT_STORAGE_ERROR]", e);
-      throw e;
-    }
+    localStorage.setItem(
+      "geocercas-tracker-auth",
+      JSON.stringify({
+        access_token: runtimeToken,
+        org_id: orgId,
+      }),
+    );
+    localStorage.setItem("tracker_access_token", runtimeToken);
+    localStorage.setItem("tracker_runtime_token", runtimeToken);
+    localStorage.setItem("tracker_user_id", trackerUserId);
+    localStorage.setItem("org_id", orgId);
+    clearLegacyTrackerTokens();
 
     console.log("[ACCEPT_LOCALSTORAGE_WRITTEN]", {
       geocercasTrackerAuthExists: !!localStorage.getItem("geocercas-tracker-auth"),
@@ -216,28 +202,18 @@ export default function TrackerGpsPage() {
       orgId: localStorage.getItem("org_id"),
     });
 
-    const nextSession = {
-      runtimeToken,
-      trackerUserId,
-      orgId,
-    };
-
+    const nextSession = { runtimeToken, trackerUserId, orgId };
     setRuntimeSession(nextSession);
 
-    if (window.Android?.setTrackerSession) {
-      try {
+    try {
+      if (window.Android?.setTrackerSession) {
         window.Android.setTrackerSession(runtimeToken, trackerUserId, orgId);
-      } catch (e) {
-        console.error("[ANDROID_SET_TRACKER_SESSION_ERROR]", e);
       }
-    }
-
-    if (window.Android?.saveSession) {
-      try {
+      if (window.Android?.saveSession) {
         window.Android.saveSession(runtimeToken, orgId);
-      } catch (e) {
-        console.error("[ANDROID_SAVE_SESSION_ERROR]", e);
       }
+    } catch (e) {
+      console.error("[TRACKER_SESSION_SEND] error", e);
     }
 
     const nextUrl = `/tracker-gps?org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(lang || "es")}`;
@@ -311,29 +287,6 @@ export default function TrackerGpsPage() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-
-    try {
-      if (window?.Android?.setTrackerSession) {
-        window.Android.setTrackerSession(
-          runtimeSession.runtimeToken,
-          runtimeSession.trackerUserId,
-          runtimeSession.orgId,
-        );
-      }
-
-      if (window?.Android?.saveSession) {
-        window.Android.saveSession(
-          runtimeSession.runtimeToken,
-          runtimeSession.orgId,
-        );
-      }
-    } catch (e) {
-      console.error("[TRACKER_SESSION_SEND] error", e);
-    }
-  }, [ready, runtimeSession]);
 
   useEffect(() => {
     if (!ready) return;
@@ -433,18 +386,7 @@ export default function TrackerGpsPage() {
   return (
     <div style={{ padding: 16 }}>
       {!ready ? (
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 760,
-            border: "1px solid #d0d7de",
-            borderRadius: 12,
-            padding: 20,
-            background: "#f8f9fb",
-            marginTop: 24,
-            textAlign: "center",
-          }}
-        >
+        <div style={{ width: "100%", maxWidth: 760, border: "1px solid #d0d7de", borderRadius: 12, padding: 20, background: "#f8f9fb", marginTop: 24, textAlign: "center" }}>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
             Inicializando tracker...
           </div>
@@ -460,18 +402,7 @@ export default function TrackerGpsPage() {
           </div>
         </div>
       ) : (
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 760,
-            border: "1px solid #d0d7de",
-            borderRadius: 12,
-            padding: 20,
-            background: "#f8f9fb",
-            marginTop: 24,
-            textAlign: "center",
-          }}
-        >
+        <div style={{ width: "100%", maxWidth: 760, border: "1px solid #d0d7de", borderRadius: 12, padding: 20, background: "#f8f9fb", marginTop: 24, textAlign: "center" }}>
           <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
             Tracker activo
           </div>
@@ -484,20 +415,8 @@ export default function TrackerGpsPage() {
 
           <button
             type="button"
-            onClick={() =>
-              refreshRuntimeSessionState("Esperando sesión runtime válida...")
-            }
-            style={{
-              border: "none",
-              borderRadius: 10,
-              padding: "12px 16px",
-              fontSize: 15,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: "#222",
-              color: "#fff",
-              marginTop: 12,
-            }}
+            onClick={() => refreshRuntimeSessionState("Esperando sesión runtime válida...")}
+            style={{ border: "none", borderRadius: 10, padding: "12px 16px", fontSize: 15, fontWeight: 600, cursor: "pointer", background: "#222", color: "#fff", marginTop: 12 }}
           >
             Refrescar estado
           </button>
