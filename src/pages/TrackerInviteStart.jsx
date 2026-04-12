@@ -71,14 +71,26 @@ export default function TrackerInviteStart() {
         console.log('[invite-debug] fullUrl=', fullUrl)
         console.log('[invite-debug] deploymentMarker=', deploymentMarker)
 
+
+        // Runtime token sources
+        const runtimeInviteToken = window?.runtimeInviteToken || null
+        const token = window?.token || null
+        const authToken = inviteToken || runtimeInviteToken || token || null
+
+        console.log('[invite-debug] inviteToken=', inviteToken)
+        console.log('[invite-debug] runtimeInviteToken=', runtimeInviteToken)
+        console.log('[invite-debug] token=', token)
+        console.log('[invite-debug] authToken=', authToken)
+        console.log('[invite-debug] auth header token present =', !!authToken)
+
         const response = await fetch(requestUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${inviteToken}`,
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
           body: JSON.stringify({
-            org_id: orgId,
+            consentAccepted: true,
           }),
         })
 
