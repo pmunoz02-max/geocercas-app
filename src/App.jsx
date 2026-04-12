@@ -287,8 +287,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-      <Route path="/tracker-accept" element={<TrackerGpsPage />} />
-      <Route path="/accept-invite" element={<TrackerGpsPage />} />
+      <Route path="/tracker-accept" element={<TrackerInviteStart />} />
+      <Route path="/accept-invite" element={<TrackerInviteStart />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
   );
