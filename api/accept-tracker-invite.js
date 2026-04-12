@@ -5,167 +5,137 @@ import { createClient } from "@supabase/supabase-js";
 // Admin Supabase client (service role)
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
-const sbAdmin = createClient(supabaseUrl, serviceRoleKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-const BUILD_TAG = "accept-tracker-invite-proxy-v4_strict_preview_functions_20260305";
-
-function json(res, status, payload) {
-  res
-    .status(status)
-    .setHeader("Content-Type", "application/json; charset=utf-8")
-    .send(JSON.stringify(payload));
-}
-
-function getEnvFirst(...names) {
-  for (const n of names) {
-    const v = String(process.env[n] || "").trim();
-    if (v) return v;
-  }
-  return "";
-}
+import crypto from 'crypto'
+import { createClient } from '@supabase/supabase-js'
 
 function getBearerToken(req) {
-  const h = String(req.headers.authorization || "").trim();
-  if (!/^bearer\s+/i.test(h)) return "";
-  return h.replace(/^bearer\s+/i, "").trim();
+  const auth = req.headers.authorization || ''
+  const match = auth.match(/^Bearer\s+(.+)$/i)
+  return match ? match[1].trim() : ''
 }
 
-function isUuid(v) {
-  const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-function hmacHex(secret, msg) {
-  return crypto.createHmac("sha256", secret).update(msg).digest("hex");
-}
-
-function normalizeFunctionsBase(raw) {
-  const s = String(raw || "").trim().replace(/\/+$/, "");
-  if (!s) return "";
-
-  // Aceptar:
-  // https://<ref>.functions.supabase.co
-  // https://<ref>.supabase.co/functions/v1
-  if (/^https:\/\/[a-z0-9]+\.functions\.supabase\.co$/i.test(s)) return s;
-  if (/^https:\/\/[a-z0-9]+\.supabase\.co\/functions\/v1$/i.test(s)) return s;
-
-  // Si viene con /accept-tracker-invite al final o URL REST pura, la ignoramos
-  return "";
-}
-
-function deriveFunctionsBasesFromSupabaseUrl(sbUrl) {
-  const s = String(sbUrl || "").trim().replace(/\/+$/, "");
-  if (!s) return [];
-
-  try {
-    const u = new URL(s);
-    const host = u.hostname;
-    if (!host.endsWith(".supabase.co")) return [];
-    const ref = host.replace(".supabase.co", "");
-    return [
-      `https://${ref}.supabase.co/functions/v1`,
-      `https://${ref}.functions.supabase.co`,
-    ];
-  } catch {
-    return [];
-  }
-}
-
-async function tryPostJson(url, rawBody, headers) {
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: rawBody,
-  });
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {
-    data = null;
-  }
-
-  return {
-    ok: res.ok,
-    status: res.status,
-    url,
-    data,
-  };
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex')
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return json(res, 405, {
-      ok: false,
-      build_tag: BUILD_TAG,
-      error: "METHOD_NOT_ALLOWED",
-    });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', message: 'Method not allowed' })
   }
 
-  try {
-    const SUPABASE_URL = getEnvFirst("SUPABASE_URL", "VITE_SUPABASE_URL");
-    const SUPABASE_ANON_KEY = getEnvFirst("SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY");
-    const TRACKER_PROXY_SECRET = getEnvFirst("TRACKER_PROXY_SECRET", "VITE_TRACKER_PROXY_SECRET");
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
 
-    const explicitFunctionsRaw = getEnvFirst("SUPABASE_FUNCTIONS_URL", "VITE_SUPABASE_FUNCTIONS_URL");
-    const explicitFunctionsBase = normalizeFunctionsBase(explicitFunctionsRaw);
+  if (!supabaseUrl || !serviceRoleKey) {
+    return res.status(500).json({
+      code: 'SERVER_MISCONFIGURED',
+      message: 'Missing Supabase server credentials',
+    })
+  }
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !TRACKER_PROXY_SECRET) {
-      return json(res, 500, {
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "MISSING_ENV",
-        diag: {
-          has_SUPABASE_URL: !!SUPABASE_URL,
-          has_SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY,
-          has_TRACKER_PROXY_SECRET: !!TRACKER_PROXY_SECRET,
-          explicit_functions_raw: explicitFunctionsRaw || null,
-          explicit_functions_base: explicitFunctionsBase || null,
-        },
-      });
-    }
+  const sbAdmin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 
-    const inviteToken = getBearerToken(req);
+  const inviteToken = getBearerToken(req)
+  const orgId = req.body?.org_id || null
 
-    if (!inviteToken) {
-      return res.status(401).json({
-        code: 'MISSING_INVITE_TOKEN',
-        message: 'Missing invite token',
-      });
-    }
+  if (!inviteToken) {
+    return res.status(401).json({
+      code: 'MISSING_INVITE_TOKEN',
+      message: 'Missing invite token',
+    })
+  }
 
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const inviteTokenHash = sha256Hex(inviteToken)
 
-    if (!uuidRegex.test(inviteToken)) {
-      return res.status(400).json({
-        code: 'INVALID_INVITE_TOKEN',
-        message: 'Invite token must be a valid UUID',
-      });
-    }
+  const { data: invite, error: inviteError } = await sbAdmin
+    .from('tracker_invites')
+    .select('id, org_id, email, email_norm, is_active, expires_at, used_at, accepted_at')
+    .eq('invite_token_hash', inviteTokenHash)
+    .eq('is_active', true)
+    .is('used_at', null)
+    .is('accepted_at', null)
+    .single()
 
-    const { data, error } = await sbAdmin.rpc('accept_invitation', {
-      p_token: inviteToken,
-    });
+  if (inviteError || !invite) {
+    return res.status(404).json({
+      code: 'INVITE_NOT_FOUND',
+      message: 'Tracker invite not found or already used',
+      details: inviteError?.message || null,
+    })
+  }
 
-    if (error) {
-      return res.status(400).json({
-        code: 'ACCEPT_INVITATION_FAILED',
-        message: error.message || 'Could not accept invitation',
-        details: error,
-      });
-    }
+  if (orgId && invite.org_id !== orgId) {
+    return res.status(400).json({
+      code: 'ORG_MISMATCH',
+      message: 'Invite org does not match request org',
+    })
+  }
 
-    return res.status(200).json({
-      ok: true,
-      data,
-    });
+  if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+    return res.status(410).json({
+      code: 'INVITE_EXPIRED',
+      message: 'Tracker invite has expired',
+    })
+  }
 
-    const edgeBody = { org_id, user_id, email };
-    const rawBody = JSON.stringify(edgeBody);
-    const ts = String(Date.now());
+  const { data: claim, error: claimError } = await sbAdmin.rpc('get_tracker_invite_claim', {
+    p_invite_id: invite.id,
+  })
+
+  if (claimError) {
+    return res.status(400).json({
+      code: 'CLAIM_LOOKUP_FAILED',
+      message: claimError.message || 'Could not resolve tracker invite claim',
+      details: claimError,
+    })
+  }
+
+  if (!claim?.ok) {
+    return res.status(400).json({
+      code: claim?.error || 'CLAIM_INVALID',
+      message: 'Tracker invite claim could not be resolved',
+      claim,
+    })
+  }
+
+  const trackerUserId = claim?.tracker_user_id || null
+
+  const updatePayload = {
+    accepted_at: new Date().toISOString(),
+    used_at: new Date().toISOString(),
+    is_active: false,
+  }
+
+  if (trackerUserId) {
+    updatePayload.used_by_user_id = trackerUserId
+  }
+
+  const { error: updateError } = await sbAdmin
+    .from('tracker_invites')
+    .update(updatePayload)
+    .eq('id', invite.id)
+    .is('used_at', null)
+    .is('accepted_at', null)
+
+  if (updateError) {
+    return res.status(400).json({
+      code: 'INVITE_UPDATE_FAILED',
+      message: updateError.message || 'Could not mark tracker invite as accepted',
+      details: updateError,
+    })
+  }
+
+  return res.status(200).json({
+    ok: true,
+    invite_id: invite.id,
+    org_id: invite.org_id,
+    tracker_user_id: trackerUserId,
+    email: invite.email || invite.email_norm || null,
+  })
+}
     const fn = "accept-tracker-invite";
     const signature = hmacHex(TRACKER_PROXY_SECRET, `${fn}.${ts}.${rawBody}`);
 
