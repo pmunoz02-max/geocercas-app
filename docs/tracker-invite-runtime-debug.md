@@ -9,3 +9,4 @@ Confirm whether the persistent `FUNCTION_INVOCATION_FAILED` comes from runtime r
 ## Environment
 Preview only.
 Resolved root cause of FUNCTION_INVOCATION_FAILED: syntax error in api/accept-tracker-invite.js ("Unexpected token :"). Endpoint replaced with valid minimal Node handler for isolation.
+Agrega una nota corta diciendo que se añadió un debug temporal para inspeccionar si el header Authorization llega al endpoint.

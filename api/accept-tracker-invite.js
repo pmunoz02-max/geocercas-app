@@ -2,13 +2,18 @@ export const config = {
   runtime: 'nodejs',
 }
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
+  const authHeader =
+    req.headers?.authorization ||
+    req.headers?.Authorization ||
+    null
+
   return res.status(200).json({
     ok: true,
-    route: 'accept-tracker-invite',
-    debug: 'ACCEPT_INVITE_NODE_FIXED_V3',
+    debug: 'ACCEPT_HEADER_DEBUG_V1',
     method: req.method || null,
-    url: req.url || null,
-    ts: new Date().toISOString(),
+    hasAuthorization: !!authHeader,
+    authPrefix: authHeader ? String(authHeader).slice(0, 20) : null,
+    headerKeys: Object.keys(req.headers || {}),
   })
 }
