@@ -1,63 +1,9 @@
-import crypto from 'crypto'
-import { createClient } from '@supabase/supabase-js'
-
-function sha256Hex(value) {
-  return crypto.createHash('sha256').update(value, 'utf8').digest('hex')
+export default function handler(req, res) {
+  res.status(200).json({
+    ok: true,
+    debug: 'HANDLER_REACHED_MINIMAL',
+  })
 }
-export default async function handler(req, res) {
-  try {
-    return res.status(200).json({
-      debug: 'HANDLER_REACHED',
-    })
-    if (req.method !== 'POST') {
-      return res.status(405).json({
-        code: 'METHOD_NOT_ALLOWED',
-        message: 'Method not allowed',
-      })
-    }
-
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
-    const serviceRoleKey =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      return res.status(500).json({
-        code: 'SERVER_MISCONFIGURED',
-        message: 'Missing Supabase server credentials',
-        debug: {
-          hasSupabaseUrl: Boolean(supabaseUrl),
-          hasServiceRoleKey: Boolean(serviceRoleKey),
-        },
-      })
-    }
-
-    const inviteToken = getBearerToken(req)
-    const orgId = req.body?.org_id || null
-
-    if (!inviteToken) {
-      return res.status(401).json({
-        code: 'MISSING_INVITE_TOKEN',
-        message: 'Missing invite token',
-      })
-    }
-
-    const inviteTokenHash = sha256Hex(inviteToken)
-
-    console.log('[accept-tracker-invite] start', {
-      hasInviteToken: Boolean(inviteToken),
-      inviteTokenLength: inviteToken.length,
-      inviteTokenHash,
-      orgId,
-    })
-
-    const sbAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-
-    const { data: invite, error: inviteError } = await sbAdmin
-      .from('tracker_invites')
-      .select('id, org_id, email, email_norm, is_active, expires_at, used_at, accepted_at')
-      .eq('invite_token_hash', inviteTokenHash)
       .eq('is_active', true)
       .is('used_at', null)
       .is('accepted_at', null)
