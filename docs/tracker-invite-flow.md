@@ -39,6 +39,16 @@ This ensures that only the holder of the original invite token can accept the in
 
 ---
 
+## Backend Debug Instrumentation (accept-tracker-invite)
+
+- The endpoint computes a SHA-256 hash of the invite token (not stored in plaintext).
+- It looks up the hash in `tracker_invites.invite_token_hash`.
+- If found, it calls the `get_tracker_invite_claim` RPC to resolve the claim and user.
+- On success, it updates the invite row: sets `accepted_at` and `used_at` (and `used_by_user_id` if available).
+- Debug logs are emitted for each step: token hash, invite lookup, claim lookup, and update result.
+
+---
+
 Última actualización: 2026-04-11
 
 # Tracker Invite Flow (2026)
