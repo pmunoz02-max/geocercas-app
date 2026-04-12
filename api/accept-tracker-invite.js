@@ -1,5 +1,13 @@
 import crypto from "node:crypto";
+
 import { createClient } from "@supabase/supabase-js";
+
+// Admin Supabase client (service role)
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+const sbAdmin = createClient(supabaseUrl, serviceRoleKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 const BUILD_TAG = "accept-tracker-invite-proxy-v4_strict_preview_functions_20260305";
 
@@ -119,48 +127,41 @@ export default async function handler(req, res) {
       });
     }
 
-    const userJwt = getBearerToken(req);
-    if (!userJwt) {
-      return json(res, 401, {
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "MISSING_USER_JWT",
+    const inviteToken = getBearerToken(req);
+
+    if (!inviteToken) {
+      return res.status(401).json({
+        code: 'MISSING_INVITE_TOKEN',
+        message: 'Missing invite token',
       });
     }
 
-    const org_id = req.body?.org_id;
-    if (!isUuid(org_id)) {
-      return json(res, 400, {
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "INVALID_ORG_ID",
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    if (!uuidRegex.test(inviteToken)) {
+      return res.status(400).json({
+        code: 'INVALID_INVITE_TOKEN',
+        message: 'Invite token must be a valid UUID',
       });
     }
 
-    const sbUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${userJwt}`,
-        },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
+    const { data, error } = await sbAdmin.rpc('accept_invitation', {
+      p_token: inviteToken,
     });
 
-    const { data: userData, error: userErr } = await sbUser.auth.getUser();
-    if (userErr || !userData?.user?.id) {
-      return json(res, 401, {
-        ok: false,
-        build_tag: BUILD_TAG,
-        error: "INVALID_USER_JWT",
-        detail: userErr?.message || null,
+    if (error) {
+      return res.status(400).json({
+        code: 'ACCEPT_INVITATION_FAILED',
+        message: error.message || 'Could not accept invitation',
+        details: error,
       });
     }
 
-    const user_id = userData.user.id;
-    const email = userData.user.email || null;
+    return res.status(200).json({
+      ok: true,
+      data,
+    });
 
     const edgeBody = { org_id, user_id, email };
     const rawBody = JSON.stringify(edgeBody);

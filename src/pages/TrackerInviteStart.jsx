@@ -120,14 +120,6 @@ export default function TrackerInviteStart() {
     navigate(targetPath, { replace: true });
   }
 
-  function openInBrowser() {
-    if (!consent) {
-      setStatus("consent_required");
-      return;
-    }
-    setStatus("opening_browser");
-    navigate(targetPath, { replace: true });
-  }
 
   function installApp() {
     if (!consent) {
@@ -205,6 +197,7 @@ export default function TrackerInviteStart() {
             </div>
           ) : null}
 
+
           <button
             type="button"
             onClick={installApp}
@@ -221,13 +214,6 @@ export default function TrackerInviteStart() {
             Abrir en Play Store
           </button>
 
-          <button
-            type="button"
-            onClick={openInBrowser}
-            className="w-full rounded-xl border border-slate-300 bg-white text-slate-900 px-4 py-3 font-medium"
-          >
-            Continuar en navegador
-          </button>
         </div>
 
         <p className="mt-4 text-xs text-slate-500">Estado: {status}</p>
