@@ -257,12 +257,17 @@ export default function TrackerGpsPage() {
       const lang = params.get("lang") || "es";
 
       if (inviteToken && orgId) {
-        // Always prioritize invite acceptance, do not depend on previous state
+        const alreadyAccepted = sessionStorage.getItem(`accept_tracker_invite_done:${inviteToken}`);
+        if (alreadyAccepted) {
+          refreshRuntimeSessionState("Esperando sesión runtime válida...");
+          return;
+        }
+
+        sessionStorage.setItem(`accept_tracker_invite_done:${inviteToken}`, "1");
+
         setAcceptingInvite(true);
         setMsg("Aceptando invitación...");
         await acceptTrackerInvite(inviteToken, orgId, lang);
-        if (cancelled) return;
-        sessionStorage.setItem(`accept_tracker_invite_done:${inviteToken}`, "1");
         return;
       }
     }
