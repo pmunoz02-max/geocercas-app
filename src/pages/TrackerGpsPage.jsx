@@ -1,37 +1,4 @@
-  useEffect(() => {
-    // If inviteToken exists and not ready, do not poll or start tracking
-    const params = new URLSearchParams(window.location.search);
-    const inviteToken =
-      params.get("inviteToken") ||
-      params.get("invite_token") ||
-      params.get("t");
-    if (!ready && inviteToken) {
-      // Wait for bootstrap to complete
-      return;
-    }
-
-    if (ready) return;
-
-    const interval = setInterval(() => {
-      const stored = readRuntimeSessionFromStorage();
-
-      const hasSession =
-        stored.runtimeToken &&
-        stored.trackerUserId &&
-        stored.orgId;
-
-      if (hasSession) {
-        console.log("[TRACKER_POLL] session detected");
-        setRuntimeSession(stored);
-        setMsg("Tracker listo");
-        clearInterval(interval);
-      } else {
-        console.log("[TRACKER_POLL] waiting for session...");
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [ready]);
+// ...existing code...
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
