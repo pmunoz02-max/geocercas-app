@@ -62,7 +62,16 @@ export default function TrackerInviteStart() {
       try {
         setAccepting(true)
 
-        const response = await fetch('/api/accept-tracker-invite', {
+        const requestUrl = '/api/accept-tracker-invite'
+        const fullUrl = new URL(requestUrl, window.location.origin).toString()
+        const deploymentMarker = 'DEPLOYMENT_MARKER_V1'
+        console.log('[invite-debug] origin=', window.location.origin)
+        console.log('[invite-debug] pathname=', window.location.pathname)
+        console.log('[invite-debug] requestUrl=', requestUrl)
+        console.log('[invite-debug] fullUrl=', fullUrl)
+        console.log('[invite-debug] deploymentMarker=', deploymentMarker)
+
+        const response = await fetch(requestUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -96,8 +105,16 @@ export default function TrackerInviteStart() {
         if (lang) nextUrl.searchParams.set('lang', lang)
 
         window.location.assign(nextUrl.toString())
-      } catch (err) {
-        setAcceptError(err?.message || 'No se pudo aceptar la invitación')
+      } catch (error) {
+        const debugInfo = [
+          `origin=${window.location.origin}`,
+          `pathname=${window.location.pathname}`,
+          `fullUrl=${new URL('/api/accept-tracker-invite', window.location.origin).toString()}`,
+          `deploymentMarker=DEPLOYMENT_MARKER_V1`,
+          `message=${error?.message || 'unknown_error'}`
+        ].join('\n')
+        console.error('[tracker-invite] accept failed', debugInfo, error)
+        setAcceptError(debugInfo)
       } finally {
         setAccepting(false)
       }
