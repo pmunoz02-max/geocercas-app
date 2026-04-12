@@ -1,39 +1,15 @@
+export const config = {
+  runtime: 'nodejs',
+}
+
 export default function handler(req, res) {
   return res.status(200).json({
     ok: true,
-    debug: 'HANDLER_REACHED_MINIMAL',
+    route: 'accept-tracker-invite',
+    debug: 'ACCEPT_INVITE_NODE_FORCED_V2',
+    ts: new Date().toISOString(),
   })
-    }
-
-    const { data: claim, error: claimError } = await sbAdmin.rpc('get_tracker_invite_claim', {
-      p_invite_id: invite.id,
-    })
-
-    console.log('[accept-tracker-invite] claim lookup', {
-      claim,
-      claimError,
-    })
-
-    if (claimError) {
-      return res.status(400).json({
-        code: 'CLAIM_LOOKUP_FAILED',
-        message: claimError.message || 'Could not resolve tracker invite claim',
-        details: claimError,
-      })
-    }
-
-    if (!claim?.ok) {
-      return res.status(400).json({
-        code: claim?.error || 'CLAIM_INVALID',
-        message: 'Tracker invite claim could not be resolved',
-        claim,
-      })
-    }
-
-    const trackerUserId = claim?.tracker_user_id || null
-    const nowIso = new Date().toISOString()
-
-    const updatePayload = {
+}
       accepted_at: nowIso,
       used_at: nowIso,
       is_active: false,
