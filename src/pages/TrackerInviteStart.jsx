@@ -1,3 +1,22 @@
+const getInviteParams = () => {
+  const url = new URL(window.location.href)
+
+  const inviteToken =
+    url.searchParams.get('inviteToken') ||
+    url.searchParams.get('t') ||
+    url.searchParams.get('access_token') ||
+    ''
+
+  const orgId =
+    url.searchParams.get('org_id') ||
+    url.searchParams.get('organization_id') ||
+    url.searchParams.get('orgId') ||
+    ''
+
+  const lang = url.searchParams.get('lang') || 'es'
+
+  return { inviteToken, orgId, lang }
+}
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -25,6 +44,57 @@ function getTrackerTarget(search) {
 }
 
 export default function TrackerInviteStart() {
+    const [accepting, setAccepting] = useState(false)
+    const [acceptError, setAcceptError] = useState('')
+
+    const handleAcceptInvite = async () => {
+      if (accepting) return
+
+      setAcceptError('')
+
+      const { inviteToken, orgId, lang } = getInviteParams()
+
+      if (!inviteToken) {
+        setAcceptError('Falta invite token en la URL')
+        return
+      }
+
+      try {
+        setAccepting(true)
+
+        const response = await fetch('/api/accept-tracker-invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${inviteToken}`,
+          },
+          body: JSON.stringify({
+            org_id: orgId,
+          }),
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(
+            data?.message ||
+              data?.error ||
+              `accept_tracker_invite_failed:${response.status}`
+          )
+        }
+
+        const nextUrl = new URL('/tracker-gps', window.location.origin)
+        nextUrl.searchParams.set('t', inviteToken)
+        if (orgId) nextUrl.searchParams.set('org_id', orgId)
+        if (lang) nextUrl.searchParams.set('lang', lang)
+
+        window.location.assign(nextUrl.toString())
+      } catch (err) {
+        setAcceptError(err?.message || 'No se pudo aceptar la invitación')
+      } finally {
+        setAccepting(false)
+      }
+    }
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -118,14 +188,22 @@ export default function TrackerInviteStart() {
             : "Esta invitación está pensada para abrirse desde un dispositivo Android."}
         </p>
 
+
         <div className="mt-5 space-y-3">
           <button
             type="button"
-            onClick={openApp}
+            onClick={handleAcceptInvite}
+            disabled={accepting}
             className="w-full rounded-xl bg-slate-900 text-white px-4 py-3 font-medium"
           >
-            Abrir app
+            {accepting ? 'Aceptando...' : 'Aceptar y continuar'}
+
           </button>
+          {acceptError ? (
+            <div style={{ color: 'red', marginTop: 12 }}>
+              {acceptError}
+            </div>
+          ) : null}
 
           <button
             type="button"
