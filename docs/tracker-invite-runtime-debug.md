@@ -1,3 +1,9 @@
+# Key Security Note
+
+- The invite token is an opaque string and must never be parsed, decoded, or validated as a JWT.
+- The `/api/accept-tracker-invite` endpoint must validate the invite token **only** by computing its SHA-256 hash and matching it against `tracker_invites.invite_token_hash` in the database.
+- No user session, JWT verification, or token decoding should be performed for invite acceptance.
+
 # Tracker Invite Runtime Debug
 
 ## Change
@@ -9,4 +15,3 @@ Confirm whether the persistent `FUNCTION_INVOCATION_FAILED` comes from runtime r
 ## Environment
 Preview only.
 Resolved root cause of FUNCTION_INVOCATION_FAILED: syntax error in api/accept-tracker-invite.js ("Unexpected token :"). Endpoint replaced with valid minimal Node handler for isolation.
-Agrega una nota corta diciendo que se añadió un debug temporal para inspeccionar si el header Authorization llega al endpoint.
