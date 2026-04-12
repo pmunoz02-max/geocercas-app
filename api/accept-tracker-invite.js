@@ -6,6 +6,9 @@ function sha256Hex(value) {
 }
 export default async function handler(req, res) {
   try {
+    return res.status(200).json({
+      debug: 'HANDLER_REACHED',
+    })
     if (req.method !== 'POST') {
       return res.status(405).json({
         code: 'METHOD_NOT_ALLOWED',

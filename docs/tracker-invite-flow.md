@@ -114,3 +114,5 @@ const { data, error } = await sbAdmin.rpc('accept_invitation', { p_token: invite
 - No session is persisted before explicit consent and invite acceptance.
 - Only the service role client can call the RPC to accept the invite.
 - The flow is robust against replay and duplicate processing.
+## Debug (Abril 2026)
+Se agregó aislamiento de handler en /api/accept-tracker-invite para diagnosticar error 500.
