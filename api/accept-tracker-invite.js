@@ -1,43 +1,8 @@
 export default function handler(req, res) {
-  res.status(200).json({
+  return res.status(200).json({
     ok: true,
     debug: 'HANDLER_REACHED_MINIMAL',
   })
-}
-      .eq('is_active', true)
-      .is('used_at', null)
-      .is('accepted_at', null)
-      .single()
-
-    console.log('[accept-tracker-invite] invite lookup', {
-      invite,
-      inviteError,
-    })
-
-    if (inviteError || !invite) {
-      return res.status(404).json({
-        code: 'INVITE_NOT_FOUND',
-        message: 'Tracker invite not found or already used',
-        details: inviteError?.message || null,
-      })
-    }
-
-    if (orgId && invite.org_id !== orgId) {
-      return res.status(400).json({
-        code: 'ORG_MISMATCH',
-        message: 'Invite org does not match request org',
-        debug: {
-          requestOrgId: orgId,
-          inviteOrgId: invite.org_id,
-        },
-      })
-    }
-
-    if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
-      return res.status(410).json({
-        code: 'INVITE_EXPIRED',
-        message: 'Tracker invite has expired',
-      })
     }
 
     const { data: claim, error: claimError } = await sbAdmin.rpc('get_tracker_invite_claim', {

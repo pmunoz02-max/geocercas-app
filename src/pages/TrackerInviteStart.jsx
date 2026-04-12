@@ -73,13 +73,20 @@ export default function TrackerInviteStart() {
           }),
         })
 
-        const data = await response.json().catch(() => ({}))
+        const rawText = await response.text()
+        let data = {}
+        try {
+          data = rawText ? JSON.parse(rawText) : {}
+        } catch {
+          data = { rawText }
+        }
 
         if (!response.ok) {
           throw new Error(
             data?.message ||
-              data?.error ||
-              `accept_tracker_invite_failed:${response.status}`
+            data?.code ||
+            data?.rawText ||
+            `accept_tracker_invite_failed:${response.status}`
           )
         }
 
