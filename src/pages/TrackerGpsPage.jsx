@@ -125,6 +125,7 @@ export default function TrackerGpsPage() {
       headers: {
         "Content-Type": "application/json",
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        Authorization: inviteToken ? `Bearer ${inviteToken}` : undefined,
       },
       body: JSON.stringify({
         inviteToken,
