@@ -55,7 +55,7 @@ function urlHasAnyTokenParam() {
 const pathname = typeof window !== "undefined" ? window.location.pathname : "";
 const isTrackerAccept = pathname === "/tracker-accept";
 const isTrackerGps = pathname === "/tracker-gps";
-const isTrackerRoute = isTrackerGps || isTrackerAccept;
+const isTrackerRoute = isTrackerGps; // Only bootstrap on /tracker-gps
 const hasTokenParam = urlHasAnyTokenParam();
 
 console.log("[TRACKER_BOOT] main.jsx tracker route", {
@@ -122,12 +122,12 @@ function BootstrapScreen() {
 
 function RootBootstrap() {
   const [bootReady, setBootReady] = React.useState(() => {
-    if (!isTrackerRoute) return true;
+    if (!isTrackerGps) return true;
     return readTrackerBootstrapState().ready;
   });
 
   React.useEffect(() => {
-    if (!isTrackerRoute) return undefined;
+    if (!isTrackerGps) return undefined;
 
     let cancelled = false;
 
