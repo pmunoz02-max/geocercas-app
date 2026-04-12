@@ -12,8 +12,11 @@ export default function AuthGuard({ children }) {
   const location = useLocation();
 
   // BYPASS: Allow tracker routes to skip all auth checks
-  if (isTrackerGpsPath(location.pathname)) {
-    console.log("[AuthGuard] Bypass for tracker route", location.pathname);
+  if (
+    location.pathname.startsWith("/tracker-gps") ||
+    location.pathname.startsWith("/tracker-accept")
+  ) {
+    console.log("[AuthGuard] HARD BYPASS for tracker route", location.pathname);
     return children || <Outlet />;
   }
   const missingProviderLoggedRef = useRef(false);

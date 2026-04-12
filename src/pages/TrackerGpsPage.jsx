@@ -1,3 +1,37 @@
+  useEffect(() => {
+    // If inviteToken exists and not ready, do not poll or start tracking
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken =
+      params.get("inviteToken") ||
+      params.get("invite_token") ||
+      params.get("t");
+    if (!ready && inviteToken) {
+      // Wait for bootstrap to complete
+      return;
+    }
+
+    if (ready) return;
+
+    const interval = setInterval(() => {
+      const stored = readRuntimeSessionFromStorage();
+
+      const hasSession =
+        stored.runtimeToken &&
+        stored.trackerUserId &&
+        stored.orgId;
+
+      if (hasSession) {
+        console.log("[TRACKER_POLL] session detected");
+        setRuntimeSession(stored);
+        setMsg("Tracker listo");
+        clearInterval(interval);
+      } else {
+        console.log("[TRACKER_POLL] waiting for session...");
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [ready]);
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
@@ -71,6 +105,24 @@ export default function TrackerGpsPage() {
   );
   const [acceptingInvite, setAcceptingInvite] = useState(false);
 
+  // Polling to refresh runtime session every 1s until ready
+  useEffect(() => {
+    if (ready) return;
+    let cancelled = false;
+    const poll = () => {
+      if (cancelled) return;
+      refreshRuntimeSessionState();
+      if (!ready) {
+        setTimeout(poll, 1000);
+      }
+    };
+    poll();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
   const ready = useMemo(
     () =>
       Boolean(
@@ -111,9 +163,6 @@ export default function TrackerGpsPage() {
   }
 
   async function acceptTrackerInvite(inviteToken, orgId, lang) {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const accessToken = sessionData?.session?.access_token;
-
     console.log("[ACCEPT_URL_PARAMS]", {
       href: window.location.href,
       inviteTokenExists: !!inviteToken,
@@ -121,15 +170,10 @@ export default function TrackerGpsPage() {
       lang,
     });
 
-    if (!accessToken) {
-      throw new Error("missing_owner_session_access_token");
-    }
-
     const resp = await fetch(SUPABASE_FUNCTION_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
       },
       body: JSON.stringify({
@@ -224,8 +268,7 @@ export default function TrackerGpsPage() {
       lang || "es",
     )}`;
 
-    console.log("[ACCEPT_REDIRECT_TRACKER_GPS]", { nextUrl });
-    window.location.href = nextUrl;
+
 
     return nextSession;
   }
@@ -244,27 +287,15 @@ export default function TrackerGpsPage() {
       const orgId = params.get("org_id") || params.get("orgId");
       const lang = params.get("lang") || "es";
 
-      if (!inviteToken || !orgId) {
+      if (inviteToken && orgId) {
+        // Always prioritize invite acceptance, do not depend on previous state
+        setAcceptingInvite(true);
+        setMsg("Aceptando invitación...");
+        await acceptTrackerInvite(inviteToken, orgId, lang);
+        if (cancelled) return;
+        sessionStorage.setItem(`accept_tracker_invite_done:${inviteToken}`, "1");
         return;
       }
-
-      const alreadyAccepted = sessionStorage.getItem(
-        `accept_tracker_invite_done:${inviteToken}`,
-      );
-
-      if (alreadyAccepted) {
-        refreshRuntimeSessionState("Esperando sesión runtime válida...");
-        return;
-      }
-
-      setAcceptingInvite(true);
-      setMsg("Aceptando invitación...");
-
-      await acceptTrackerInvite(inviteToken, orgId, lang);
-
-      if (cancelled) return;
-
-      sessionStorage.setItem(`accept_tracker_invite_done:${inviteToken}`, "1");
     }
 
     runAcceptFromUrl()
