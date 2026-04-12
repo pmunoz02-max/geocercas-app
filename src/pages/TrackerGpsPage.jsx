@@ -98,12 +98,24 @@ function clearLegacyTrackerTokens() {
   }
 }
 
+
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Inicializando tracker...");
   const [runtimeSession, setRuntimeSession] = useState(() =>
     readRuntimeSessionFromStorage(),
   );
   const [acceptingInvite, setAcceptingInvite] = useState(false);
+
+  // ready must be defined before any useEffect that references it
+  const ready = useMemo(
+    () =>
+      Boolean(
+        runtimeSession.runtimeToken &&
+          runtimeSession.trackerUserId &&
+          runtimeSession.orgId,
+      ),
+    [runtimeSession],
+  );
 
   // Polling to refresh runtime session every 1s until ready
   useEffect(() => {
@@ -122,16 +134,6 @@ export default function TrackerGpsPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
-
-  const ready = useMemo(
-    () =>
-      Boolean(
-        runtimeSession.runtimeToken &&
-          runtimeSession.trackerUserId &&
-          runtimeSession.orgId,
-      ),
-    [runtimeSession],
-  );
 
   function refreshRuntimeSessionState(nextMsgWhenMissing = null) {
     const stored = readRuntimeSessionFromStorage();
