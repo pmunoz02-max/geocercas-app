@@ -159,3 +159,4 @@ The invite creation UI must send the current authenticated user access token in 
 Without this header, the edge function cannot validate the acting user and responds with:
 
 - `invalid_user_jwt`
+echo "TrackerGpsPage no longer auto-accepts invites from URL; invite acceptance is handled exclusively by TrackerInviteStart.
