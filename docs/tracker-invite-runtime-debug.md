@@ -1,3 +1,6 @@
+# Deployment Compliance
+
+All changes and debug flows are documented here to ensure traceability and compliance with deployment rules. Any temporary or experimental routing, endpoint, or validation logic must be reflected in this file for audit and rollback purposes.
 # Migration Note
 
 Routing and POST were confirmed OK. `/api/accept-tracker-invite` now moves from the route override marker to the real invite-token-hash validation flow, using the opaque bearer token and no JWT parsing.

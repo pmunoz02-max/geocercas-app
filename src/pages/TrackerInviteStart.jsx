@@ -84,7 +84,7 @@ export default function TrackerInviteStart() {
           );
         }
 
-        setError(`DEBUG OK ${JSON.stringify(data)}`);
+        navigate(data?.redirectTo || '/tracker-gps', { replace: true });
       } catch (error) {
         console.error('[tracker-invite] accept failed', error);
         setError(error?.message || 'accept_tracker_invite_failed');

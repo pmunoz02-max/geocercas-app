@@ -2,11 +2,111 @@ export const config = {
   runtime: 'nodejs',
 }
 
-export default function handler(req, res) {
-  return res.status(200).json({
-    ok: true,
-    debug: 'ROUTE_OVERRIDE_CONFIRM_V3',
-    method: req.method || null,
-    ts: new Date().toISOString(),
-  })
+import crypto from 'node:crypto'
+import { createClient } from '@supabase/supabase-js'
+
+function sha256Hex(value) {
+  return crypto.createHash('sha256').update(value).digest('hex')
+}
+
+export default async function handler(req, res) {
+  try {
+    if (req.method !== 'POST') {
+      return res.status(405).json({
+        code: 405,
+        message: 'Method not allowed',
+      })
+    }
+
+    const authHeader =
+      req.headers?.authorization ||
+      req.headers?.Authorization ||
+      ''
+
+    const inviteToken = authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : ''
+
+    if (!inviteToken) {
+      return res.status(401).json({
+        code: 401,
+        message: 'Missing authorization header',
+      })
+    }
+
+    const inviteTokenHash = sha256Hex(inviteToken)
+
+    const supabase = createClient(
+      process.env.VITE_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    )
+
+    const { data: invite, error: inviteError } = await supabase
+      .from('tracker_invites')
+      .select('*')
+      .eq('invite_token_hash', inviteTokenHash)
+      .maybeSingle()
+
+    if (inviteError) {
+      return res.status(500).json({
+        code: 500,
+        message: inviteError.message,
+      })
+    }
+
+    if (!invite) {
+      return res.status(404).json({
+        code: 404,
+        message: 'Invite not found',
+      })
+    }
+
+    if (!invite.is_active) {
+      return res.status(409).json({
+        code: 409,
+        message: 'Invite inactive',
+      })
+    }
+
+    if (invite.used_at) {
+      return res.status(409).json({
+        code: 409,
+        message: 'Invite already used',
+      })
+    }
+
+    if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
+      return res.status(410).json({
+        code: 410,
+        message: 'Invite expired',
+      })
+    }
+
+    const { error: updateError } = await supabase
+      .from('tracker_invites')
+      .update({
+        accepted_at: new Date().toISOString(),
+        used_at: new Date().toISOString(),
+      })
+      .eq('id', invite.id)
+
+    if (updateError) {
+      return res.status(500).json({
+        code: 500,
+        message: updateError.message,
+      })
+    }
+
+    return res.status(200).json({
+      ok: true,
+      inviteId: invite.id,
+      redirectTo: '/tracker-gps',
+      debug: 'ACCEPT_INVITE_SUCCESS_V1',
+    })
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      message: String(error?.message || error),
+    })
+  }
 }
