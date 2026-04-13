@@ -739,29 +739,22 @@ export default async function handler(req, res) {
     }
     // If no assignment_id, do nothing: tracker is created and can be linked to assignments later
 
-    // Log invite creation response with key fields before returning
+    // Extract and log invite_id, created_at, and invite_url from current request only
     const inviteId = json?.invite_id || json?.id || null;
     const createdAt = json?.created_at || null;
-    const orgIdLog = org_id;
-    // Try to extract plain invite token (prefix only for safety)
-    let plainInviteToken = null;
-    if (upstreamInviteUrl) {
-      const parsed = parseTrackerInviteUrl(upstreamInviteUrl);
-      if (parsed?.access_token) {
-        plainInviteToken = String(parsed.access_token).slice(0, 8);
-      }
-    }
+    const inviteUrl = upstreamInviteUrl || null;
     console.log('[invite-tracker] invite created', {
       invite_id: inviteId,
       created_at: createdAt,
-      org_id: orgIdLog,
-      invite_token_prefix: plainInviteToken,
+      invite_url: inviteUrl,
+      org_id,
     });
 
-    // Return only the fresh invite link and ok
+    // Return only invite_id, created_at, and invite_url from this request
     return res.status(200).json({
-      ok: true,
-      invite_url: upstreamInviteUrl || null
+      invite_id: inviteId,
+      created_at: createdAt,
+      invite_url: inviteUrl
     });
   } catch (e) {
     return res.status(500).json({

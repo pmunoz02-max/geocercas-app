@@ -314,8 +314,10 @@ export default function InvitarTracker() {
 
     try {
       setBusy(true);
-      // Always clear previous invite link before creating a new one
+      // Siempre limpiar estado previo antes de crear nueva invitación
       setInviteLink("");
+      // Si guardas más estado relacionado a la invitación, límpialo aquí:
+      // setInviteData(null);
 
       const caller_jwt = await getCallerJwt();
       if (!caller_jwt) {
@@ -347,11 +349,12 @@ export default function InvitarTracker() {
 
       const body = await res.json().catch(() => null);
 
-      // Log and store the exact invite link returned by the API
-      if (body?.invite_url || body?.action_link || body?.redirect_to) {
-        const freshInviteLink = body.invite_url || body.action_link || body.redirect_to;
-        setInviteLink(freshInviteLink);
-        console.log('[invite-tracker] invite link', freshInviteLink);
+      // Log the full fresh response for debugging
+      console.log('[invite-create] fresh response', body);
+
+      // Guardar solo el enlace fresco de la respuesta actual
+      if (body?.invite_url) {
+        setInviteLink(body.invite_url);
       } else {
         setInviteLink("");
       }
@@ -506,10 +509,10 @@ export default function InvitarTracker() {
                           type="button"
                           className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
                           onClick={() => {
-                            // Always use the latest invite link, clear before copy
+                            // Siempre usar solo el enlace recién cargado
                             if (inviteLink) {
+                              console.log('[invite-open] using link', inviteLink);
                               navigator.clipboard.writeText(inviteLink);
-                              console.log('[invite-tracker] copied invite link', inviteLink);
                             }
                           }}
                         >
@@ -519,10 +522,10 @@ export default function InvitarTracker() {
                           type="button"
                           className="rounded bg-green-600 text-white px-3 py-1 text-xs font-semibold hover:bg-green-700"
                           onClick={() => {
-                            // Always use the latest invite link, clear before open
+                            // Siempre usar solo el enlace recién cargado
                             if (inviteLink) {
-                              window.open(inviteLink, '_blank', 'noopener');
-                              console.log('[invite-tracker] opened invite link', inviteLink);
+                              console.log('[invite-open] using link', inviteLink);
+                              window.location.href = inviteLink;
                             }
                           }}
                         >

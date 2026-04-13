@@ -1,3 +1,4 @@
+**Nota importante:** Las acciones de abrir o copiar el enlace de invitación deben usar únicamente el valor de `invite_url` devuelto por la respuesta más reciente de creación de invitación. Nunca reutilices enlaces previos de estado, caché o almacenamiento local.
 ---
 
 **Nota de implementación:** El handler de aceptación debe usar una sola variable (por ejemplo, `invite`) para el registro cargado desde la base de datos durante toda la validación. Usar nombres inconsistentes puede causar errores ReferenceError en tiempo de ejecución.
