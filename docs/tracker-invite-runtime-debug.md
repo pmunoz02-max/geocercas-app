@@ -1,6 +1,6 @@
 # Routing Isolation Note
 
-Due to the Vercel Hobby function limit, routing isolation and diagnostics must use only existing API files. Do not create new temporary endpoints under /api/ for debugging, as this can exceed the allowed function count and break deployment.
+Routing isolation in preview must reuse existing API files only, because Vercel Hobby is capped at 12 functions. Creating new temporary endpoints under /api/ can exceed this limit and break deployment.
 # Key Security Note
 
 - The invite token is an opaque string and must never be parsed, decoded, or validated as a JWT.
@@ -15,6 +15,6 @@ Forced Node runtime for `/api/accept-tracker-invite` and kept a minimal handler 
 ## Purpose
 Confirm whether the persistent `FUNCTION_INVOCATION_FAILED` comes from runtime resolution before business logic execution.
 
-## Environment
+## Environment...
 Preview only.
 Resolved root cause of FUNCTION_INVOCATION_FAILED: syntax error in api/accept-tracker-invite.js ("Unexpected token :"). Endpoint replaced with valid minimal Node handler for isolation.
