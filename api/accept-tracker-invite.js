@@ -38,17 +38,7 @@ export default async function handler(req, res) {
     const inviteTokenHash = sha256Hex(inviteToken)
 
 
-    // --- DB lookup and runtime session creation (placeholder for real logic) ---
-    // Replace the following with actual DB/session logic as needed
-    // Example placeholder values:
-    const plainRuntimeToken = inviteToken; // In real logic, generate a new token
-    const trackerUserId = invite?.tracker_user_id || 'tracker_user_id_placeholder';
-    const orgId = invite?.org_id || 'org_id_placeholder';
-
-    // ...existing code for DB lookup and invite validation...
-
-    // --- DB lookup below (disabled for debug) ---
-    /*
+    // --- DB lookup and runtime session creation ---
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -59,7 +49,6 @@ export default async function handler(req, res) {
       .select('*')
       .eq('invite_token_hash', inviteTokenHash)
       .maybeSingle()
-    */
 
     if (inviteError) {
       return res.status(500).json({
@@ -96,7 +85,6 @@ export default async function handler(req, res) {
       })
     }
 
-
     const { error: updateError } = await supabase
       .from('tracker_invites')
       .update({
@@ -110,6 +98,11 @@ export default async function handler(req, res) {
         message: updateError.message,
       })
     }
+
+    // Use invite for all downstream fields
+    const plainRuntimeToken = inviteToken; // In real logic, generate a new token
+    const trackerUserId = invite.tracker_user_id;
+    const orgId = invite.org_id;
 
     return res.status(200).json({
       ok: true,
