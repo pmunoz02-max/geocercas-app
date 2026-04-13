@@ -129,7 +129,7 @@ export default function TrackerInviteStart() {
         setAcceptError(debugInfo)
       } finally {
         setAccepting(false)
-      }
+              const response = await fetch('/api/accept-tracker-invite', {
     }
   const location = useLocation();
   const navigate = useNavigate();
