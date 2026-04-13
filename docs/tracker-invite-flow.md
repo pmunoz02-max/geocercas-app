@@ -151,3 +151,11 @@ On error, the API always returns JSON with status, error, and upstream_body:
   "upstream_body": { "error": "invite_row_missing_after_insert" }
 }
 ```
+
+## Frontend auth requirement
+
+The invite creation UI must send the current authenticated user access token in the Authorization Bearer header when calling `/api/invite-tracker`.
+
+Without this header, the edge function cannot validate the acting user and responds with:
+
+- `invalid_user_jwt`

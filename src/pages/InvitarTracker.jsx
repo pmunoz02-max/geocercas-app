@@ -341,11 +341,21 @@ export default function InvitarTracker() {
         assignment_id: selectedAssignment.id,
       };
 
+
+      // Get current Supabase session access token
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log("[invite-create] has access token", !!session?.access_token);
+
       const res = await fetch("/api/invite-tracker", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token || ""}`,
+        },
+        body: JSON.stringify({
+          org_id: orgId,
+          email: cleanEmail,
+        }),
       });
 
       const body = await res.json().catch(() => null);
