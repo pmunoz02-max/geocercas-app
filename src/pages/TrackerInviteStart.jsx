@@ -81,28 +81,19 @@ export default function TrackerInviteStart() {
 
         console.log('[invite-debug] authToken present =', !!authToken);
 
+
+        // --- Canonical fetch and log for invite acceptance ---
         const response = await fetch('/api/accept-tracker-invite', {
           method: 'POST',
           headers: {
+            Authorization: `Bearer ${inviteToken}`,
             'Content-Type': 'application/json',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
-          body: JSON.stringify({
-            consentAccepted: true,
-          }),
         });
 
-        const rawText = await response.text();
-
-        let data = {};
-        try {
-          data = rawText ? JSON.parse(rawText) : {};
-        } catch {
-          data = { rawText };
-        }
-
-        console.log('[invite-debug] status=', response.status);
-        console.log('[invite-debug] data=', data);
+        const data = await response.json();
+        console.log('[invite-accept] status', response.status);
+        console.log('[invite-accept] response', data);
 
         if (!response.ok) {
           throw new Error(
@@ -126,6 +117,10 @@ export default function TrackerInviteStart() {
         if (data.org_id) {
           localStorage.setItem('tracker_org_id', data.org_id);
         }
+
+        // Log status and response before redirect
+        console.log('[invite-accept] status', response.status);
+        console.log('[invite-accept] response', data);
 
         // On success, navigate to redirectTo or fallback
         navigate(data?.redirectTo || '/tracker-gps', { replace: true });
