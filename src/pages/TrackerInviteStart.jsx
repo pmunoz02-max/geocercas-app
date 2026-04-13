@@ -117,20 +117,15 @@ export default function TrackerInviteStart() {
         if (lang) nextUrl.searchParams.set('lang', lang)
 
         window.location.assign(nextUrl.toString())
+
       } catch (error) {
-        const debugInfo = [
-          `origin=${window.location.origin}`,
-          `pathname=${window.location.pathname}`,
-          `fullUrl=${new URL('/api/accept-tracker-invite', window.location.origin).toString()}`,
-          `deploymentMarker=DEPLOYMENT_MARKER_V1`,
-          `message=${error?.message || 'unknown_error'}`
-        ].join('\n')
-        console.error('[tracker-invite] accept failed', debugInfo, error)
-        setAcceptError(debugInfo)
+        console.error('[tracker-invite] accept failed', error)
+        setAcceptError(error?.message || 'accept_tracker_invite_failed')
       } finally {
         setAccepting(false)
-              const response = await fetch('/api/accept-tracker-invite', {
+      }
     }
+
   const location = useLocation();
   const navigate = useNavigate();
 
