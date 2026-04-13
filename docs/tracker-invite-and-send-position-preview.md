@@ -1,23 +1,27 @@
 # Canonical Tracker Invite & Send-Position Flow (Preview)
 
+
 ## Resumen
 
 - El usuario invita a un tracker desde el panel.
 - El tracker acepta la invitación.
 - El backend crea una sesión en `tracker_runtime_sessions`:
-  - Genera un `tracker_access_token` (opaco o JWT).
+  - Genera un **tracker runtime token opaco** (no es un JWT ni está ligado a una sesión de usuario).
   - Guarda solo el hash del token, junto con `org_id`, `tracker_user_id`, `expires_at`, `active=true`.
-- El cliente (Android/WebView) almacena el `tracker_access_token` y lo usa para autenticarse.
+- El cliente (Android/WebView) almacena el **tracker runtime token opaco** y lo usa como **único mecanismo de autenticación** para el tracker.
 - Cada vez que el tracker reporta posición:
-  - Envía POST a `/api/send-position` con `Authorization: Bearer <tracker_access_token>` y el payload de posición.
+  - Envía POST a `/api/send-position` con `Authorization: Bearer <tracker runtime token opaco>` y el payload de posición.
   - El backend valida el hash del token contra `tracker_runtime_sessions`.
   - Si es válido y tiene asignación activa, persiste la posición en `positions` y actualiza el estado en `tracker_latest`.
 - El dashboard y los sistemas realtime consumen los datos de `tracker_latest`.
 
+**Importante:** Todo el flujo de tracking se basa en el `tracker_access_token` generado en tiempo de ejecución. **No depende de la autenticación del usuario, sesiones web, ni magic links.** El token runtime es el único requisito para que el tracker pueda enviar posiciones.
+
+
 ## Reglas clave
 
-- **Prohibido depender de owner session o sesión web para el tracking runtime.**
-- **Prohibido usar magic link como flujo canónico para trackers.**
+- **El tracking runtime solo usa el `tracker_access_token` generado al aceptar la invitación.**
+- **Prohibido depender de sesión de usuario, sesión web, o magic link para el tracking runtime.**
 - El único flujo canónico es: invite → runtime session → tracker_access_token → envío directo a `/api/send-position`.
 
 ---

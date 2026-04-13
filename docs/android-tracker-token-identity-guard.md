@@ -7,12 +7,13 @@ Branch: preview
 
 El servicio nativo podía seguir reutilizando un token viejo del owner aunque el tracker esperado fuera otro.
 
+
 ## Regla de seguridad
 
-Antes de cada envío nativo, el JWT debe cumplir:
+Antes de cada envío nativo, **el runtime token debe resolver una `tracker_runtime_session` activa**:
 
-- `sub == tracker_user_id` esperado
-- `exp` vigente
+- El token debe corresponder a una sesión activa en `tracker_runtime_sessions` para el `tracker_user_id` esperado
+- La sesión debe estar vigente (`active=true` y no expirada)
 
 ## Si falla
 

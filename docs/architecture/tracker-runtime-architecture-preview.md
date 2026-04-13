@@ -1,14 +1,15 @@
 # Tracker Runtime Architecture (Preview)
 
+
 ## Overview
-This document describes the canonical architecture for tracker runtime authentication and position reporting in the preview version of the Geocercas platform. The flow is designed to be stateless, secure, and independent of any web or owner session.
+This document describes the canonical architecture for tracker runtime authentication and position reporting in the preview version of the Geocercas platform. **All tracker actions use a dedicated runtime token (`tracker_access_token`) for authentication, not user credentials or web sessions.** The flow is stateless, secure, and fully decoupled from any owner or web authentication.
 
 ---
 
 ## 1. Invite Acceptance & Runtime Session Creation
 - When a tracker accepts an invite (via email link or similar), the backend:
   - Resolves the `tracker_user_id` and `org_id`.
-  - Generates a new `tracker_access_token` (opaque or JWT).
+  - Generates a new **tracker runtime token opaco** (no es un JWT).
   - Hashes the token and upserts a new row in `public.tracker_runtime_sessions`:
     - `org_id`, `tracker_user_id`, `access_token_hash`, `active=true`, `expires_at`, `source`.
   - Invalidates any previous active sessions for the same tracker/org.
@@ -16,12 +17,13 @@ This document describes the canonical architecture for tracker runtime authentic
 
 ---
 
+
 ## 2. Tracker Client (Android/WebView)
-- Stores the `tracker_access_token` and `org_id` locally (e.g., localStorage or secure storage).
-- For every position update, sends a POST to `/api/send-position` with:
-  - `Authorization: Bearer <tracker_access_token>`
-  - JSON body: `{ org_id, lat, lng, ... }`
-- **No dependency on owner session or Supabase web session.**
+- Stores the **tracker runtime token opaco** and `org_id` locally (e.g., localStorage o almacenamiento seguro).
+- Para cada actualización de posición, envía un POST a `/api/send-position` con:
+  - `Authorization: Bearer <tracker runtime token opaco>`
+  - Cuerpo JSON: `{ org_id, lat, lng, ... }`
+- **El tracker nunca usa autenticación de usuario, sesión web ni magic link. Solo el token runtime es necesario para autenticar y enviar posiciones.**
 
 ---
 
@@ -37,7 +39,7 @@ This document describes the canonical architecture for tracker runtime authentic
 
 ## 4. Security & Statelessness
 - The runtime flow is **stateless**: no cookies, no web session, no owner login required.
-- All authentication is via the Bearer `tracker_access_token`.
+- All authentication is via the Bearer **tracker runtime token opaco**.
 - Tokens are never stored in plain form in the database; only their hash is persisted.
 - Sessions can be revoked by marking `active=false` in `tracker_runtime_sessions`.
 
@@ -47,7 +49,7 @@ This document describes the canonical architecture for tracker runtime authentic
 
 ```mermaid
 graph TD
-  A[Invite Accepted] --> B[Create tracker_access_token]
+  A[Invite Accepted] --> B[Create tracker runtime token opaco]
   B --> C[Upsert tracker_runtime_sessions]
   C --> D[Return token to client]
   D --> E[Android/WebView stores token]
@@ -58,8 +60,9 @@ graph TD
 
 ---
 
+
 ## 6. Key Properties
-- **No web session required** for runtime tracking.
+- **No user authentication or web session required** for runtime tracking. Only the runtime token is used.
 - **Single source of truth**: all runtime validation is via `tracker_runtime_sessions`.
 - **Easy revocation**: set `active=false` to revoke a token.
 - **No exposure of user credentials**: only the tracker token is used for runtime auth.

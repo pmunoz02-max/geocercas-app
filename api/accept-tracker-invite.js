@@ -34,8 +34,21 @@ export default async function handler(req, res) {
       })
     }
 
+
     const inviteTokenHash = sha256Hex(inviteToken)
 
+    // TEMPORAL: Debug info before DB lookup
+    return res.status(200).json({
+      ok: true,
+      debug: 'ACCEPT_INVITE_HASH_DEBUG_V1',
+      inviteTokenLength: inviteToken.length,
+      inviteTokenPrefix: inviteToken.slice(0, 8),
+      inviteTokenSuffix: inviteToken.slice(-6),
+      inviteTokenHashPrefix: inviteTokenHash.slice(0, 16),
+    })
+
+    // --- DB lookup below (disabled for debug) ---
+    /*
     const supabase = createClient(
       process.env.VITE_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -46,6 +59,7 @@ export default async function handler(req, res) {
       .select('*')
       .eq('invite_token_hash', inviteTokenHash)
       .maybeSingle()
+    */
 
     if (inviteError) {
       return res.status(500).json({
@@ -82,11 +96,11 @@ export default async function handler(req, res) {
       })
     }
 
+
     const { error: updateError } = await supabase
       .from('tracker_invites')
       .update({
         accepted_at: new Date().toISOString(),
-        used_at: new Date().toISOString(),
       })
       .eq('id', invite.id)
 

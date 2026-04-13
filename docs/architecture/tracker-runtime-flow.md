@@ -11,11 +11,11 @@
 2. El tracker acepta la invitación.
 3. El backend resuelve la identidad del tracker invitado.
 4. El backend crea una sesión runtime en `tracker_runtime_sessions`:
-   - Genera un `tracker_access_token` (opaco o JWT).
-   - Guarda solo el hash del token, junto con `org_id`, `tracker_user_id`, `expires_at`, `active=true`.
-5. El cliente (Android/WebView) almacena y usa el `tracker_access_token` para autenticarse.
+   - Genera un **tracker runtime token opaco** (no es un JWT).
+   - Guarda solo el hash del token opaco, junto con `org_id`, `tracker_user_id`, `expires_at`, `active=true`.
+5. El cliente (Android/WebView) almacena y usa el **tracker runtime token opaco** para autenticarse.
 6. Cada vez que el tracker reporta posición:
-   - Envía POST a `/api/send-position` con `Authorization: Bearer <tracker_access_token>` y el payload de posición.
+   - Envía POST a `/api/send-position` con `Authorization: Bearer <tracker runtime token opaco>` y el payload de posición.
    - El backend valida el hash del token contra `tracker_runtime_sessions`.
    - Si es válido y tiene asignación activa, persiste la posición en `positions` y actualiza el estado en `tracker_latest`.
 7. El dashboard y los sistemas realtime consumen los datos de `tracker_latest`.
@@ -36,25 +36,25 @@
 - **Prohibido resolver identidad desde tracker_invites en cada envío.**
 - **Prohibido fallback a auth_token legacy o cookies web.**
 - **Prohibido mezclar arquitecturas duales de autenticación runtime.**
-- **El único flujo canónico es:** invite → runtime session → tracker_access_token → envío directo a `/api/send-position`.
+- **El único flujo canónico es:** invite → runtime session → tracker runtime token opaco → envío directo a `/api/send-position`.
 
 ---
 
 ## Detalles técnicos
 
 ### tracker_runtime_sessions
-- Solo almacena hash del token
+- Solo almacena el hash del token opaco de runtime
 - Campos recomendados: `org_id`, `tracker_user_id`, `access_token_hash`, `active`, `issued_at`, `expires_at`, `last_seen_at`, `revoked_at`
 
 ### send-position
-- Lee `Authorization: Bearer <tracker_access_token>`
+- Lee `Authorization: Bearer <tracker runtime token opaco>`
 - Hashea el token recibido
-- Resuelve sesión en `tracker_runtime_sessions`
+- Resuelve sesión en `tracker_runtime_sessions` usando el hash
 - Valida asignación activa en `tracker_assignments`
 - Inserta en `positions` y actualiza `tracker_latest`
 
 ### Android/WebView
-- Solo usa `tracker_access_token` para tracking
+- Solo usa el **tracker runtime token opaco** para tracking
 - No depende de owner session, auth_token legacy ni cookies
 - El reemplazo de token debe ser explícito si cambia la identidad
 

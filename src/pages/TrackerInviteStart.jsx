@@ -46,23 +46,38 @@ function getTrackerTarget(search) {
 export default function TrackerInviteStart() {
     const [acceptError, setError] = useState('')
 
+
+    // Runtime token sources
+    const runtimeInviteToken = window?.runtimeInviteToken || null;
+    const token = window?.token || null;
+    const { inviteToken } = getInviteParams();
+    const authToken =
+      inviteToken ||
+      runtimeInviteToken ||
+      token ||
+      null;
+
+    const authTokenDebug = authToken
+      ? {
+          length: authToken.length,
+          prefix: authToken.slice(0, 8),
+          suffix: authToken.slice(-6),
+          source: inviteToken
+            ? 'inviteToken'
+            : runtimeInviteToken
+              ? 'runtimeInviteToken'
+              : token
+                ? 'token'
+                : 'none',
+        }
+      : null;
+
     const handleAccept = async (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
 
       try {
         setError('');
-
-
-        // Runtime token sources
-        const runtimeInviteToken = window?.runtimeInviteToken || null;
-        const token = window?.token || null;
-        const { inviteToken } = getInviteParams();
-        const authToken =
-          inviteToken ||
-          runtimeInviteToken ||
-          token ||
-          null;
 
         console.log('[invite-debug] authToken present =', !!authToken);
 
@@ -192,7 +207,17 @@ export default function TrackerInviteStart() {
         </p>
 
 
+
         <div className="mt-5 space-y-3">
+          {authTokenDebug && (
+            <div className="mb-2 p-2 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700">
+              <strong>Invite Token Debug:</strong><br />
+              length: {authTokenDebug.length}<br />
+              prefix: {authTokenDebug.prefix}<br />
+              suffix: {authTokenDebug.suffix}<br />
+              source: {authTokenDebug.source}
+            </div>
+          )}
 
           <button
             type="button"
