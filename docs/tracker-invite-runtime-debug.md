@@ -1,3 +1,6 @@
+# Migration Note
+
+Routing and POST were confirmed OK. `/api/accept-tracker-invite` now moves from the route override marker to the real invite-token-hash validation flow, using the opaque bearer token and no JWT parsing.
 # Debug Confirmation
 
 Confirmed: /api/accept-tracker-invite returns 200 for both GET and POST requests directly.
