@@ -183,6 +183,7 @@ function pickCreatedAtFromUpstream(json) {
   );
 }
 
+
 export default async function handler(req, res) {
   try {
     const { org_id, email } = req.body || {}
@@ -194,13 +195,20 @@ export default async function handler(req, res) {
       })
     }
 
+    // 1. Extract user JWT from request
+    const userJwt =
+      req.headers["x-user-jwt"] ||
+      (req.headers.authorization || "").replace("Bearer ", "");
+
     const edgeUrl = `${process.env.SUPABASE_URL}/functions/v1/send-tracker-invite-brevo`
 
+    // 2. Forward userJwt as x-user-jwt header to Edge Function
     const upstreamRes = await fetch(edgeUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        "x-user-jwt": userJwt,
       },
       body: JSON.stringify({ org_id, email }),
     })
