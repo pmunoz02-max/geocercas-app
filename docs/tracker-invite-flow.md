@@ -123,3 +123,31 @@ email → app → consentimiento → accept-tracker-invite → tracker-gps → r
   // ...otros campos...
 }
 ```
+
+## API hardening update
+
+`api/invite-tracker.js` was hardened so upstream responses are always read as raw text first and JSON parsing is attempted safely.
+
+This prevents empty or null frontend responses when the upstream edge function fails or returns a non-JSON payload.
+
+### Current API contract
+
+On success, the API always returns JSON:
+
+```json
+{
+  "ok": true
+  // ...other fields from upstreamJson...
+}
+```
+
+On error, the API always returns JSON with status, error, and upstream_body:
+
+```json
+{
+  "ok": false,
+  "error": "invite_upstream_failed",
+  "upstream_status": 500,
+  "upstream_body": { "error": "invite_row_missing_after_insert" }
+}
+```
