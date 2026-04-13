@@ -97,7 +97,7 @@ TrackerInviteStart:
 ✔ Aceptación idempotente  
 ✔ Persistencia básica de runtime  
 
-## Próximos pasos.....
+## Próximos pasos
 
 - Runtime token real (no reutilizar invite token)
 - Tracker session persistente

@@ -1,26 +1,29 @@
-const getInviteParams = () => {
-  const url = new URL(window.location.href)
-
-  const inviteToken =
-    url.searchParams.get('inviteToken') ||
-    url.searchParams.get('t') ||
-    url.searchParams.get('access_token') ||
-    ''
-
-  const orgId =
-    url.searchParams.get('org_id') ||
-    url.searchParams.get('organization_id') ||
-    url.searchParams.get('orgId') ||
-    ''
-
-  const lang = url.searchParams.get('lang') || 'es'
-
-  return { inviteToken, orgId, lang }
-}
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-function getTrackerTarget(search) {
+function getInviteParams() {
+  const url = new URL(window.location.href);
+
+  const inviteToken =
+    url.searchParams.get("inviteToken") ||
+    url.searchParams.get("invite_token") ||
+    url.searchParams.get("t") ||
+    url.searchParams.get("token") ||
+    url.searchParams.get("access_token") ||
+    "";
+
+  const orgId =
+    url.searchParams.get("org_id") ||
+    url.searchParams.get("organization_id") ||
+    url.searchParams.get("orgId") ||
+    "";
+
+  const lang = url.searchParams.get("lang") || "es";
+
+  return { inviteToken, orgId, lang };
+}
+
+function getTrackerTarget(search, fallbackOrgId = "") {
   const incoming = new URLSearchParams(search || "");
   const out = new URLSearchParams();
 
@@ -39,102 +42,46 @@ function getTrackerTarget(search) {
     if (v) out.set(k, v);
   });
 
+  if (!out.get("org_id") && fallbackOrgId) {
+    out.set("org_id", fallbackOrgId);
+  }
+
   const qs = out.toString();
   return qs ? `/tracker-gps?${qs}` : "/tracker-gps";
 }
 
 export default function TrackerInviteStart() {
-    const [acceptError, setError] = useState('')
-
-
-    // Runtime token sources
-    const runtimeInviteToken = window?.runtimeInviteToken || null;
-    const token = window?.token || null;
-    const { inviteToken } = getInviteParams();
-    const authToken =
-      inviteToken ||
-      runtimeInviteToken ||
-      token ||
-      null;
-
-    const authTokenDebug = authToken
-      ? {
-          length: authToken.length,
-          prefix: authToken.slice(0, 8),
-          suffix: authToken.slice(-6),
-          source: inviteToken
-            ? 'inviteToken'
-            : runtimeInviteToken
-              ? 'runtimeInviteToken'
-              : token
-                ? 'token'
-                : 'none',
-        }
-      : null;
-
-    const handleAccept = async (e) => {
-      e?.preventDefault?.();
-      e?.stopPropagation?.();
-
-      try {
-        setError('');
-
-        console.log('[invite-debug] authToken present =', !!authToken);
-
-
-        // --- Canonical fetch and log for invite acceptance ---
-        const response = await fetch('/api/accept-tracker-invite', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${inviteToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        const data = await response.json();
-        console.log('[invite-accept] status', response.status);
-        console.log('[invite-accept] response', data);
-
-        if (!response.ok) {
-          throw new Error(
-            data?.message ||
-            data?.code ||
-            data?.rawText ||
-            `accept_tracker_invite_failed:${response.status}`
-          );
-        }
-
-        // Log the full successful response
-        console.log('[invite-accept] response', data);
-
-        // Persist runtime_token, tracker_user_id, and org_id before redirect
-        if (data.tracker_runtime_token) {
-          localStorage.setItem('tracker_runtime_token', data.tracker_runtime_token);
-        }
-        if (data.tracker_user_id) {
-          localStorage.setItem('tracker_user_id', data.tracker_user_id);
-        }
-        if (data.org_id) {
-          localStorage.setItem('tracker_org_id', data.org_id);
-        }
-
-        // Log status and response before redirect
-        console.log('[invite-accept] status', response.status);
-        console.log('[invite-accept] response', data);
-
-        // On success, navigate to redirectTo or fallback
-        navigate(data?.redirectTo || '/tracker-gps', { replace: true });
-      } catch (error) {
-        console.error('[tracker-invite] accept failed', error);
-        setError(error?.message || 'accept_tracker_invite_failed');
-      }
-    }
-
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [status, setStatus] = useState("opening");
+  const [acceptError, setAcceptError] = useState("");
+  const [status, setStatus] = useState("ready");
   const [consent, setConsent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const { inviteToken, orgId } = getInviteParams();
+
+  const runtimeInviteToken =
+    typeof window !== "undefined" ? window.runtimeInviteToken || null : null;
+  const token =
+    typeof window !== "undefined" ? window.token || null : null;
+
+  const authToken = inviteToken || runtimeInviteToken || token || null;
+
+  const authTokenDebug = authToken
+    ? {
+        length: authToken.length,
+        prefix: authToken.slice(0, 8),
+        suffix: authToken.slice(-6),
+        source: inviteToken
+          ? "inviteToken"
+          : runtimeInviteToken
+            ? "runtimeInviteToken"
+            : token
+              ? "token"
+              : "none",
+      }
+    : null;
 
   const isAndroid = useMemo(
     () => /Android/i.test(String(navigator.userAgent || "")),
@@ -142,25 +89,101 @@ export default function TrackerInviteStart() {
   );
 
   const targetPath = useMemo(
-    () => getTrackerTarget(location.search),
-    [location.search],
+    () => getTrackerTarget(location.search, orgId),
+    [location.search, orgId],
   );
 
-  function openApp() {
+  async function handleAccept(e) {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
     if (!consent) {
       setStatus("consent_required");
+      setAcceptError("Debes aceptar el consentimiento antes de continuar.");
       return;
     }
-    setStatus("opening_app");
-    navigate(targetPath, { replace: true });
-  }
 
+    if (!authToken) {
+      setStatus("missing_invite_token");
+      setAcceptError("Missing invite token.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setAcceptError("");
+      setStatus("accepting");
+
+      const response = await fetch("/api/accept-tracker-invite", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          inviteToken: authToken,
+          org_id: orgId || null,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      console.log("[invite-accept] status", response.status);
+      console.log("[invite-accept] response", data);
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(
+          data?.message ||
+            data?.code ||
+            data?.error ||
+            `accept_tracker_invite_failed:${response.status}`,
+        );
+      }
+
+      if (data.tracker_runtime_token) {
+        localStorage.setItem("tracker_runtime_token", data.tracker_runtime_token);
+        sessionStorage.setItem("tracker_runtime_token", data.tracker_runtime_token);
+      }
+
+      if (data.tracker_user_id) {
+        localStorage.setItem("tracker_user_id", data.tracker_user_id);
+        sessionStorage.setItem("tracker_user_id", data.tracker_user_id);
+      }
+
+      if (data.org_id) {
+        localStorage.setItem("tracker_org_id", data.org_id);
+        sessionStorage.setItem("tracker_org_id", data.org_id);
+      }
+
+      if (data.invite_id) {
+        localStorage.setItem("tracker_invite_id", data.invite_id);
+        sessionStorage.setItem("tracker_invite_id", data.invite_id);
+      }
+
+      setStatus(data.idempotent ? "already_accepted" : "accepted");
+
+      const redirectTo =
+        typeof data?.redirectTo === "string" && data.redirectTo
+          ? data.redirectTo
+          : targetPath;
+
+      navigate(redirectTo, { replace: true });
+    } catch (error) {
+      console.error("[tracker-invite] accept failed", error);
+      setStatus("accept_failed");
+      setAcceptError(error?.message || "accept_tracker_invite_failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   function installApp() {
     if (!consent) {
       setStatus("consent_required");
+      setAcceptError("Debes aceptar el consentimiento antes de continuar.");
       return;
     }
+
     setStatus("opening_play_store");
     window.location.href =
       "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
@@ -169,8 +192,10 @@ export default function TrackerInviteStart() {
   function openPlayStoreApp() {
     if (!consent) {
       setStatus("consent_required");
+      setAcceptError("Debes aceptar el consentimiento antes de continuar.");
       return;
     }
+
     setStatus("opening_play_store");
     window.location.href =
       "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
@@ -201,7 +226,13 @@ export default function TrackerInviteStart() {
           <input
             type="checkbox"
             checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
+            onChange={(e) => {
+              setConsent(e.target.checked);
+              if (e.target.checked) {
+                setAcceptError("");
+                setStatus("ready");
+              }
+            }}
             className="mt-1"
           />
           <span>
@@ -215,15 +246,17 @@ export default function TrackerInviteStart() {
             : "Esta invitación está pensada para abrirse desde un dispositivo Android."}
         </p>
 
-
-
         <div className="mt-5 space-y-3">
           {authTokenDebug && (
             <div className="mb-2 p-2 rounded bg-slate-50 border border-slate-200 text-xs text-slate-700">
-              <strong>Invite Token Debug:</strong><br />
-              length: {authTokenDebug.length}<br />
-              prefix: {authTokenDebug.prefix}<br />
-              suffix: {authTokenDebug.suffix}<br />
+              <strong>Invite Token Debug:</strong>
+              <br />
+              length: {authTokenDebug.length}
+              <br />
+              prefix: {authTokenDebug.prefix}
+              <br />
+              suffix: {authTokenDebug.suffix}
+              <br />
               source: {authTokenDebug.source}
             </div>
           )}
@@ -231,16 +264,17 @@ export default function TrackerInviteStart() {
           <button
             type="button"
             onClick={handleAccept}
-            className="w-full rounded-xl bg-slate-900 text-white px-4 py-3 font-medium"
+            disabled={submitting}
+            className="w-full rounded-xl bg-slate-900 text-white px-4 py-3 font-medium disabled:opacity-60"
           >
-            Aceptar y continuar
+            {submitting ? "Aceptando..." : "Aceptar y continuar"}
           </button>
+
           {acceptError ? (
-            <div style={{ color: 'red', marginTop: 12 }}>
+            <div className="text-red-600 text-sm mt-2">
               {acceptError}
             </div>
           ) : null}
-
 
           <button
             type="button"
@@ -257,7 +291,6 @@ export default function TrackerInviteStart() {
           >
             Abrir en Play Store
           </button>
-
         </div>
 
         <p className="mt-4 text-xs text-slate-500">Estado: {status}</p>
