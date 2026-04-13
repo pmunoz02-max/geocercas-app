@@ -419,8 +419,9 @@ export default async function handler(req, res) {
       edge_url: edgeUrl,
     });
 
-    const started = Date.now();
-    const upstream = await fetch(edgeUrl, {
+
+    // --- New upstream fetch and error handling ---
+    const upstreamRes = await fetch(edgeUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -444,36 +445,38 @@ export default async function handler(req, res) {
     });
 
     const ms = Date.now() - started;
-    const text = await upstream.text();
-
-    let json = null;
+    const upstreamText = await upstreamRes.text();
+    let upstreamJson = null;
     try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = { raw: text };
+      upstreamJson = upstreamText ? JSON.parse(upstreamText) : null;
+    } catch (_) {
+      upstreamJson = null;
     }
 
-    const upstreamInviteUrl = pickInviteUrlFromUpstream(json);
-    const realInviteId = pickInviteIdFromUpstream(json);
-    const realCreatedAt = pickCreatedAtFromUpstream(json);
+    const upstreamInviteUrl = pickInviteUrlFromUpstream(upstreamJson);
+    const realInviteId = pickInviteIdFromUpstream(upstreamJson);
+    const realCreatedAt = pickCreatedAtFromUpstream(upstreamJson);
 
     console.log("[invite-tracker] upstream response", {
-      status: upstream.status,
-      ok: upstream.ok,
+      status: upstreamRes.status,
+      ok: upstreamRes.ok,
       ms,
       invite_id: realInviteId || null,
       created_at: realCreatedAt || null,
       invite_url: upstreamInviteUrl || null,
-      raw_keys: json && typeof json === "object" ? Object.keys(json) : [],
+      raw_keys: upstreamJson && typeof upstreamJson === "object" ? Object.keys(upstreamJson) : [],
     });
 
-    if (!upstream.ok) {
-      return res.status(502).json({
+    if (!upstreamRes.ok) {
+      console.error("[api/invite-tracker] upstream failed", {
+        status: upstreamRes.status,
+        body: upstreamText,
+      });
+      return res.status(upstreamRes.status).json({
         ok: false,
-        build: BUILD_TAG,
-        error: "invite_upstream_failed",
-        edge_status: upstream.status,
-        upstream: json || null,
+        error: upstreamJson?.error || "invite_upstream_failed",
+        upstream_status: upstreamRes.status,
+        upstream_body: upstreamJson || upstreamText || null,
       });
     }
 
@@ -483,8 +486,8 @@ export default async function handler(req, res) {
         build: BUILD_TAG,
         error: "missing_invite_url_from_upstream",
         message: "Upstream invite flow did not return invite_url/inviteUrl/action_link/redirect_to",
-        edge_status: upstream.status,
-        upstream: json || null,
+        upstream_status: upstreamRes.status,
+        upstream_body: upstreamJson || upstreamText || null,
       });
     }
 
@@ -520,24 +523,13 @@ export default async function handler(req, res) {
         error: "invite_row_was_not_created",
         message:
           "invite-tracker must not return invite_url unless upstream returns invite_id and created_at from a real tracker_invites row",
-        upstream: json || null,
+        upstream_body: upstreamJson || upstreamText || null,
       });
     }
 
-    if (!trackerUserId) {
-      trackerUserId =
-        toStr(json?.tracker_user_id).trim() ||
-        toStr(json?.user_id).trim() ||
-        (await resolveUserIdByEmail({ email, serviceKey, supabaseUrl })) ||
-        null;
-    }
-
-    if (!trackerUserId) {
-      return res.status(500).json({
-        ok: false,
-        build: BUILD_TAG,
-        error: "tracker_user_id_missing",
-        message: "No tracker_user_id returned from invite or found by email. Cannot link personal record.",
+    // Use upstreamJson as the response body for success
+    const data = upstreamJson || {};
+    return res.status(200).json(data);
         personal_id,
         org_id,
       });

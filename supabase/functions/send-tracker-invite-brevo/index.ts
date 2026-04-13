@@ -1,1144 +1,406 @@
-// NOTE (2026-04-07):
-// Tracker invite flow must NEVER use Supabase magic links.
-// This function builds a direct tracker URL with access_token and sends it only through Brevo.
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 console.log("🔥 send-tracker-invite-brevo loaded");
 
-const BUILD_TAG = "send-tracker-invite-brevo-v32_DIRECT_URL_ONLY_20260407";
-const SEND_COOLDOWN_SECONDS = 180;
-const TRACKER_INVITE_LOG_MARKER = "TRACKER_INVITE_EDGE_2026_04_07";
+const BUILD_TAG = "send-tracker-invite-brevo-2026-04-13-return-invite-row-v1";
+const DEFAULT_INVITE_TTL_HOURS = 24 * 7;
 
-const corsHeaders: Record<string, string> = {
+const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, x-api-key, content-type, x-user-jwt, x-app-lang",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-user-jwt",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Max-Age": "86400",
 };
 
-type EmailCopy = {
-  subject: string;
-  title: string;
-  intro1: string;
-  intro2: string;
-  acceptPrompt: string;
-  expires: string;
-  cta: string;
-  copyLink: string;
-  footer1: string;
-  footer2: string;
-  assignedWindowLabel: string;
-  assignedGeofenceLabel: string;
-  assignedTaskLabel: string;
-  valueNotSpecified: string;
-  detailsTitle: string;
+type InviteRequestBody = {
+  org_id?: string;
+  email?: string;
+  name?: string;
+  personal_id?: string | null;
+  assignment_id?: string | null;
 };
 
-type AssignmentEmailDetails = {
-  found: boolean;
-  timeWindow: string;
-  geofenceName: string;
-  taskName: string;
-};
+type JsonRecord = Record<string, unknown>;
 
-function jsonResponse(status: number, body: unknown) {
+function jsonResponse(body: JsonRecord, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
   });
 }
 
-function isUuid(v: unknown) {
-  const s = String(v ?? "").trim();
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-function normEmail(email: string) {
-  return String(email || "").trim().toLowerCase();
-}
-
-function isPgUniqueViolation(err: any) {
-  const code = err?.code || err?.details?.code;
-  return String(code) === "23505";
-}
-
-function looksLikeJwt(t: string) {
-  const s = String(t || "").trim();
-  return s.split(".").length === 3;
-}
-
-function normRole(role: unknown) {
-  return String(role ?? "").trim().toLowerCase();
-}
-
-const SUPPORTED_LANGS = new Set(["es", "en", "fr"]);
-
-function sanitizeLang(v: unknown) {
-  const raw = String(v ?? "").trim().toLowerCase();
-  const two = raw.slice(0, 2);
-  return SUPPORTED_LANGS.has(two) ? two : "es";
-}
-
-function pickLangFromAcceptLanguage(h: string | null) {
-  const s = String(h || "").toLowerCase();
-  if (!s) return "";
-  const first = s.split(",")[0].trim();
-  return first.slice(0, 2);
-}
-
-function defaultEmailCopy(lang: string): EmailCopy {
-  if (lang === "en") {
-    return {
-      subject: "Invitation: GPS Tracker – App Geofences",
-      title: "Invitation to GPS Tracker",
-      intro1: "You have been invited to use the GPS Tracker for App Geofences.",
-      intro2: "This link will open the Tracker in the correct organization.",
-      acceptPrompt: "To accept this invitation, click the button below and sign in with this email.",
-      expires: "This link expires in 7 days.",
-      cta: "Open GPS Tracker",
-      copyLink: "If you can't click, copy and paste this link:",
-      footer1:
-        "You received this email because an App Geofences administrator invited you to access the GPS Tracker.",
-      footer2:
-        "If you weren't expecting this invitation, you can ignore this message or reply to report it.",
-      assignedWindowLabel: "Assigned time window",
-      assignedGeofenceLabel: "Assigned geofence",
-      assignedTaskLabel: "Assigned task",
-      valueNotSpecified: "Not specified",
-      detailsTitle: "Assignment details",
-    };
+function getEnv(name: string, fallback?: string): string {
+  const value = Deno.env.get(name) ?? fallback;
+  if (!value) {
+    throw new Error(`missing_env_${name}`);
   }
-
-  if (lang === "fr") {
-    return {
-      subject: "Invitation : GPS Tracker – App Geocercas",
-      title: "Invitation au GPS Tracker",
-      intro1: "Vous avez été invité à utiliser le GPS Tracker d’App Geocercas.",
-      intro2: "Ce lien ouvrira le Tracker dans la bonne organisation.",
-      acceptPrompt:
-        "Pour accepter cette invitation, cliquez sur le bouton ci-dessous et connectez-vous avec cet e-mail.",
-      expires: "Ce lien expire en 7 jours.",
-      cta: "Ouvrir le GPS Tracker",
-      copyLink: "Si vous ne pouvez pas cliquer, copiez et collez ce lien :",
-      footer1:
-        "Vous recevez cet e-mail car un administrateur App Geocercas vous a invité à accéder au GPS Tracker.",
-      footer2:
-        "Si vous n’attendiez pas cette invitation, vous pouvez ignorer ce message ou répondre pour le signaler.",
-      assignedWindowLabel: "Fenêtre horaire assignée",
-      assignedGeofenceLabel: "Géorepère assigné",
-      assignedTaskLabel: "Tâche assignée",
-      valueNotSpecified: "Non spécifié",
-      detailsTitle: "Détails de l’assignation",
-    };
-  }
-
-  return {
-    subject: "Invitación: Tracker GPS – App Geocercas",
-    title: "Invitación a Tracker GPS",
-    intro1: "Has sido invitado a usar el Tracker GPS de App Geocercas.",
-    intro2: "Este enlace abrirá el Tracker en la organización correcta.",
-    acceptPrompt:
-      "Para aceptar esta invitación, haz clic en el botón de abajo e inicia sesión con este correo.",
-    expires: "Este enlace expira en 7 días.",
-    cta: "Abrir Tracker GPS",
-    copyLink: "Si no puedes hacer clic, copia y pega este enlace:",
-    footer1:
-      "Recibiste este correo porque un administrador de App Geocercas te invitó a acceder al Tracker GPS.",
-    footer2:
-      "Si no esperabas esta invitación, puedes ignorar este mensaje o responder a este correo para reportarlo.",
-    assignedWindowLabel: "Ventana asignada",
-    assignedGeofenceLabel: "Geocerca asignada",
-    assignedTaskLabel: "Tarea asignada",
-    valueNotSpecified: "No especificada",
-    detailsTitle: "Detalle de la asignación",
-  };
+  return value;
 }
 
-function escHtml(s: string) {
-  return String(s ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function normalizeEmail(value: string | undefined | null): string {
+  return String(value ?? "").trim().toLowerCase();
 }
 
-function safeJsonParse(s: string) {
-  try {
-    return { ok: true as const, json: JSON.parse(s) };
-  } catch {
-    return { ok: false as const, json: null };
-  }
+function normalizeOptionalString(value: unknown): string | null {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : null;
 }
 
-function extractBrevoMessageId(raw: string): string {
-  const parsed = safeJsonParse(raw);
-  const mid = parsed.ok ? (parsed.json?.messageId ?? "") : "";
-  if (mid) return String(mid);
-  const m = String(raw || "").match(/"messageId"\s*:\s*"([^"]+)"/i);
-  return m?.[1] ? String(m[1]) : "";
+function getJwtFromRequest(req: Request): string | null {
+  const xUserJwt = req.headers.get("x-user-jwt")?.trim();
+  if (xUserJwt) return xUserJwt;
+
+  const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+  if (!authHeader) return null;
+
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
 }
 
-
-// Siempre generar un enlace HTTPS puro hacia /tracker-accept con los parámetros requeridos
-function buildDirectTrackerInviteUrl(params: {
-  siteUrl: string;
-  orgId: string;
-  lang: string;
-  accessToken: string;
-}) {
-  const siteUrl = params.siteUrl.replace(/\/$/, "");
-  // Nunca usar intent://, #Intent, scheme=, android-app://
-  // Solo HTTPS puro
-  const url =
-    `${siteUrl}/tracker-accept` +
-    `?inviteToken=${encodeURIComponent(params.accessToken)}` +
-    `&t=${encodeURIComponent(params.accessToken)}` +
-    `&org_id=${encodeURIComponent(params.orgId)}` +
-    `&lang=${encodeURIComponent(params.lang || "es")}`;
-  return url;
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function assertDirectTrackerInviteUrl(inviteUrl: string) {
-  const url = String(inviteUrl || "").trim();
-
-  if (!url) {
-    throw new Error("missing_invite_url");
-  }
-
-  if (
-    url.includes("auth/callback") ||
-    url.includes("token_hash") ||
-    url.includes("magiclink") ||
-    url.includes("type=magiclink")
-  ) {
-    throw new Error("forbidden_magiclink_pattern_in_upstream_invite_url");
-  }
-
-  if (!(url.includes("/tracker-gps") || url.includes("/tracker") || url.includes("/tracker-accept"))) {
-    throw new Error("invalid_tracker_invite_path");
-  }
-
-  // Debe incluir inviteToken= o t= (token único)
-  if (!/([?&](inviteToken|t)=)[^&]+/.test(url)) {
-    throw new Error("missing_invite_token_in_tracker_invite_url");
-  }
-
-  return url;
+function buildInviteTokenPlain(): string {
+  return `${crypto.randomUUID()}.${crypto.randomUUID()}.${Date.now()}`;
 }
 
-async function brevoSendEmail(opts: {
+function buildInviteUrl(appBaseUrl: string, inviteTokenPlain: string, orgId: string): string {
+  const url = new URL("/tracker-accept", appBaseUrl);
+  url.searchParams.set("t", inviteTokenPlain);
+  url.searchParams.set("org_id", orgId);
+  return url.toString();
+}
+
+function getAppBaseUrl(): string {
+  const raw = Deno.env.get("APP_BASE_URL")
+    ?? Deno.env.get("PUBLIC_APP_URL")
+    ?? Deno.env.get("SITE_URL")
+    ?? "https://app.tugeocercas.com";
+
+  return raw.replace(/\/$/, "");
+}
+
+async function sendBrevoEmail(args: {
   apiKey: string;
+  email: string;
+  name: string | null;
+  inviteUrl: string;
   senderEmail: string;
   senderName: string;
-  toEmail: string;
-  toName?: string;
-  subject: string;
-  html: string;
-  text?: string;
-  replyToEmail?: string;
-  replyToName?: string;
-  params?: Record<string, unknown>;
-}) {
-  const payload: any = {
-    sender: { email: opts.senderEmail, name: opts.senderName },
-    to: [{ email: opts.toEmail, name: opts.toName || opts.toEmail }],
-    subject: opts.subject,
-    htmlContent: opts.html,
-    textContent: opts.text || undefined,
-    tracking: {
-      click: false,
-    },
-  };
+  orgId: string;
+}): Promise<{ ok: boolean; status?: number; bodyText?: string }> {
+  const recipientName = args.name?.trim() || "";
+  const subject = "Invitación para tracker";
+  const textContent = [
+    recipientName ? `Hola ${recipientName},` : "Hola,",
+    "",
+    "Has recibido una invitación para acceder como tracker.",
+    "Abre este enlace desde tu teléfono para aceptar la invitación:",
+    args.inviteUrl,
+    "",
+    `Organización: ${args.orgId}`,
+  ].join("\n");
 
-  if (opts.params && typeof opts.params === "object") {
-    payload.params = opts.params;
-  }
+  const htmlContent = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#111">
+      <p>${recipientName ? `Hola ${recipientName},` : "Hola,"}</p>
+      <p>Has recibido una invitación para acceder como <strong>tracker</strong>.</p>
+      <p>
+        <a href="${args.inviteUrl}" style="display:inline-block;padding:12px 18px;border-radius:8px;text-decoration:none;border:1px solid #111;color:#111">
+          Aceptar invitación
+        </a>
+      </p>
+      <p>Si el botón no funciona, abre este enlace:</p>
+      <p><a href="${args.inviteUrl}">${args.inviteUrl}</a></p>
+      <p>Organización: ${args.orgId}</p>
+    </div>
+  `;
 
-  if (opts.replyToEmail) {
-    payload.replyTo = {
-      email: opts.replyToEmail,
-      name: opts.replyToName || opts.replyToEmail,
-    };
-  }
-
-  const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: {
-      "api-key": opts.apiKey,
-      "Content-Type": "application/json",
-      Accept: "application/json",
+      "accept": "application/json",
+      "content-type": "application/json",
+      "api-key": args.apiKey,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      sender: {
+        email: args.senderEmail,
+        name: args.senderName,
+      },
+      to: [
+        {
+          email: args.email,
+          ...(recipientName ? { name: recipientName } : {}),
+        },
+      ],
+      subject,
+      htmlContent,
+      textContent,
+    }),
   });
 
-  const text = await resp.text();
-  if (!resp.ok) {
-    console.error("[brevo] error", text);
-    throw new Error(`Brevo send failed: ${resp.status} ${text}`);
-  }
-
-  return text;
-}
-
-async function authUserIdFromJwt(params: {
-  supabaseUrl: string;
-  anonKey: string;
-  jwt: string;
-}) {
-  const url = `${params.supabaseUrl.replace(/\/$/, "")}/auth/v1/user`;
-
-  const r = await fetch(url, {
-    method: "GET",
-    headers: { apikey: params.anonKey, Authorization: `Bearer ${params.jwt}` },
-  });
-
-  const text = await r.text();
-  let json: any = null;
-
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = { raw: text };
-  }
-
-  if (!r.ok) return { ok: false as const, status: r.status, body: json };
-
-  const id = json?.id ? String(json.id) : "";
-  if (!id) return { ok: false as const, status: 500, body: { error: "NO_USER_ID", raw: json } };
-
-  return { ok: true as const, user_id: id };
-}
-
-async function findOpenInvite(sbAdmin: any, org_id: string, email_norm: string) {
-  const { data, error } = await sbAdmin
-    .from("tracker_invites")
-    .select(
-      "id, org_id, email, email_norm, is_active, used_at, accepted_at, created_at, expires_at, brevo_sent_at, brevo_message_id, brevo_last_status",
-    )
-    .eq("org_id", org_id)
-    .eq("email_norm", email_norm)
-    .or("accepted_at.is.null,used_at.is.null,is_active.eq.true")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data || null;
-}
-
-function secondsSince(ts: string | null | undefined) {
-  if (!ts) return Number.POSITIVE_INFINITY;
-  const ms = Date.parse(ts);
-  if (!Number.isFinite(ms)) return Number.POSITIVE_INFINITY;
-  return (Date.now() - ms) / 1000;
-}
-
-async function updateInviteBrevoState(
-  sbAdmin: any,
-  inviteId: string,
-  patch: Record<string, unknown>,
-) {
-  const { error } = await sbAdmin
-    .from("tracker_invites")
-    .update({ ...(patch as any) })
-    .eq("id", inviteId);
-
-  if (error) throw error;
-}
-
-async function deactivateOtherActives(
-  sbAdmin: any,
-  org_id: string,
-  email_norm: string,
-  keepId: string,
-) {
-  const { error } = await sbAdmin
-    .from("tracker_invites")
-    .update({ is_active: false } as any)
-    .eq("org_id", org_id)
-    .eq("email_norm", email_norm)
-    .neq("id", keepId)
-    .eq("is_active", true);
-
-  if (error) throw error;
-}
-
-function firstNonEmpty(...vals: unknown[]) {
-  for (const v of vals) {
-    const s = String(v ?? "").trim();
-    if (s) return s;
-  }
-  return "";
-}
-
-function formatDateTimeForLang(iso: string | null | undefined, lang: string) {
-  if (!iso) return "";
-  const ms = Date.parse(iso);
-  if (!Number.isFinite(ms)) return "";
-
-  try {
-    const locale = lang === "en" ? "en-US" : lang === "fr" ? "fr-FR" : "es-EC";
-
-    return new Intl.DateTimeFormat(locale, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      timeZone: "America/Guayaquil",
-    }).format(new Date(ms));
-  } catch {
-    return iso;
-  }
-}
-
-function formatTimeWindow(
-  startIso: string | null | undefined,
-  endIso: string | null | undefined,
-  fallback: string,
-  lang: string,
-) {
-  const a = formatDateTimeForLang(startIso, lang);
-  const b = formatDateTimeForLang(endIso, lang);
-  if (a && b) return `${a} → ${b}`;
-  if (a) return a;
-  if (b) return b;
-  return fallback;
-}
-
-async function getAssignmentEmailDetails(
-  sbAdmin: any,
-  params: {
-    assignmentId: string;
-    orgId: string;
-    fallbackLabel: string;
-    lang: string;
-  },
-): Promise<AssignmentEmailDetails> {
-  const { data: asg, error: asgErr } = await sbAdmin
-    .from("asignaciones")
-    .select(`
-      id,
-      org_id,
-      geofence_id,
-      geocerca_id,
-      activity_id,
-      start_time,
-      end_time,
-      start_date,
-      end_date
-    `)
-    .eq("id", params.assignmentId)
-    .eq("org_id", params.orgId)
-    .maybeSingle();
-
-  if (asgErr) throw asgErr;
-
-  if (!asg) {
-    return {
-      found: false,
-      timeWindow: params.fallbackLabel,
-      geofenceName: params.fallbackLabel,
-      taskName: params.fallbackLabel,
-    };
-  }
-
-  const geofenceId = firstNonEmpty(asg.geocerca_id, asg.geofence_id);
-  let geofenceName = "";
-  let taskName = "";
-
-  if (geofenceId && isUuid(geofenceId)) {
-    const { data: geo, error: geoErr } = await sbAdmin
-      .from("geocercas")
-      .select("id, org_id, name, nombre")
-      .eq("id", geofenceId)
-      .eq("org_id", params.orgId)
-      .maybeSingle();
-
-    if (geoErr) throw geoErr;
-    geofenceName = firstNonEmpty(geo?.name, geo?.nombre);
-  }
-
-  if (asg.activity_id && isUuid(asg.activity_id)) {
-    const { data: act, error: actErr } = await sbAdmin
-      .from("activities")
-      .select("id, tenant_id, org_id, name")
-      .eq("id", asg.activity_id)
-      .eq("org_id", params.orgId)
-      .maybeSingle();
-
-    if (actErr) throw actErr;
-    taskName = firstNonEmpty(act?.name);
-  }
-
-  const startIso =
-    firstNonEmpty(asg.start_time) ||
-    (asg.start_date ? `${String(asg.start_date)}T00:00:00-05:00` : "");
-
-  const endIso =
-    firstNonEmpty(asg.end_time) ||
-    (asg.end_date ? `${String(asg.end_date)}T23:59:59-05:00` : "");
-
-  const timeWindow = formatTimeWindow(
-    startIso || null,
-    endIso || null,
-    params.fallbackLabel,
-    params.lang,
-  );
+  const bodyText = await response.text();
 
   return {
-    found: true,
-    timeWindow: timeWindow || params.fallbackLabel,
-    geofenceName: geofenceName || params.fallbackLabel,
-    taskName: taskName || params.fallbackLabel,
+    ok: response.ok,
+    status: response.status,
+    bodyText,
   };
 }
 
-serve(async (req) => {
-  console.log("🔥 handler start", { method: req.method, build_tag: BUILD_TAG });
+serve(async (req: Request) => {
+  console.log("🔥 handler start", BUILD_TAG, req.method, req.url);
+
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return jsonResponse({ ok: false, error: "method_not_allowed", build_tag: BUILD_TAG }, 405);
+  }
 
   try {
-    if (req.method === "OPTIONS") {
-      return new Response("ok", { headers: corsHeaders });
-    }
+    const supabaseUrl = getEnv("SUPABASE_URL");
+    const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = getEnv("SUPABASE_ANON_KEY");
+    const appBaseUrl = getAppBaseUrl();
+    const brevoApiKey = Deno.env.get("BREVO_API_KEY")?.trim() || "";
+    const brevoSenderEmail = Deno.env.get("BREVO_SENDER_EMAIL")?.trim() || "noreply@app.tugeocercas.com";
+    const brevoSenderName = Deno.env.get("BREVO_SENDER_NAME")?.trim() || "Geocercas";
 
-    if (req.method !== "POST") {
-      return jsonResponse(405, {
-        ok: false,
-        error: "Method not allowed",
-        build_tag: BUILD_TAG,
-      });
-    }
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
 
-    const t0 = Date.now();
-
-    const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
-    const SUPABASE_SERVICE_ROLE_KEY = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim();
-    const SUPABASE_ANON_KEY = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
-
-    const BREVO_API_KEY = (Deno.env.get("BREVO_API_KEY") || "").trim();
-    const BREVO_SENDER_EMAIL = (Deno.env.get("BREVO_SENDER_EMAIL") || "").trim();
-    const BREVO_SENDER_NAME = (Deno.env.get("BREVO_SENDER_NAME") || "App Geocercas").trim();
-    const BREVO_REPLYTO_EMAIL = (Deno.env.get("BREVO_REPLYTO_EMAIL") || "").trim();
-
-    const APP_PREVIEW_URL = (Deno.env.get("APP_PREVIEW_URL") || "https://preview.tugeocercas.com")
-      .replace(/\/$/, "");
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY",
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    if (!SUPABASE_ANON_KEY) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "Missing SUPABASE_ANON_KEY",
-        build_tag: BUILD_TAG,
-      });
-    }
-
-
-    const xUserJwt = (req.headers.get("x-user-jwt") || "").trim();
-    const authHeader = (req.headers.get("authorization") || "").trim();
-
-    const bearerJwt = authHeader.toLowerCase().startsWith("bearer ")
-      ? authHeader.slice(7).trim()
-      : "";
-
-    const userJwt = xUserJwt || bearerJwt;
-
+    const userJwt = getJwtFromRequest(req);
     if (!userJwt) {
-      return jsonResponse(401, {
-        ok: false,
-        error: "missing_caller_jwt",
-        detail: "Expected x-user-jwt or Authorization Bearer token",
-        build_tag: BUILD_TAG,
-      });
+      return jsonResponse({ ok: false, error: "missing_user_jwt", build_tag: BUILD_TAG }, 401);
     }
 
-    if (!looksLikeJwt(userJwt)) {
-      return jsonResponse(401, {
-        ok: false,
-        error: "Invalid x-user-jwt format",
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    const sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const supabaseAdmin = sbAdmin;
-
-    const u = await authUserIdFromJwt({
-      supabaseUrl: SUPABASE_URL,
-      anonKey: SUPABASE_ANON_KEY,
-      jwt: userJwt,
+    const authClient = createClient(supabaseUrl, anonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${userJwt}`,
+        },
+      },
     });
 
-    if (!u.ok) {
-      return jsonResponse(401, {
-        ok: false,
-        error: "Invalid JWT",
-        detail: u.body,
-        status: u.status,
-        build_tag: BUILD_TAG,
-      });
+    const { data: authData, error: authError } = await authClient.auth.getUser();
+    if (authError || !authData.user?.id) {
+      console.error("[invite-edge] auth getUser failed", authError);
+      return jsonResponse({ ok: false, error: "invalid_user_jwt", build_tag: BUILD_TAG }, 401);
     }
 
-    const callerUserId = u.user_id;
+    const requesterUserId = authData.user.id;
 
-    const body = await req.json().catch(() => ({} as any));
-    const org_id = String(body?.org_id || "").trim();
-    const email = normEmail(body?.email || "");
-    const to_name = String(body?.name || "").trim() || undefined;
-    const assignment_id = String(body?.assignment_id || "").trim();
-    const personal_id = String(body?.personal_id || "").trim();
-
-    let lang = "es";
-    const bodyLangRaw = body?.lang;
-    const headerLangRaw = req.headers.get("x-app-lang");
-    const acceptLangRaw = pickLangFromAcceptLanguage(req.headers.get("accept-language"));
-
-    if (bodyLangRaw && String(bodyLangRaw).trim()) lang = sanitizeLang(bodyLangRaw);
-    else if (headerLangRaw && String(headerLangRaw).trim()) lang = sanitizeLang(headerLangRaw);
-    else if (acceptLangRaw && String(acceptLangRaw).trim()) lang = sanitizeLang(acceptLangRaw);
-
-    const copyFromBody =
-      body?.email_copy && typeof body.email_copy === "object" ? body.email_copy : null;
-    const copy: EmailCopy = { ...defaultEmailCopy(lang), ...(copyFromBody || {}) };
-
-    if (!isUuid(org_id)) {
-      return jsonResponse(400, { ok: false, error: "Invalid org_id", build_tag: BUILD_TAG });
+    let body: InviteRequestBody;
+    try {
+      body = await req.json();
+    } catch {
+      return jsonResponse({ ok: false, error: "invalid_json_body", build_tag: BUILD_TAG }, 400);
     }
 
-    if (!email || !email.includes("@")) {
-      return jsonResponse(400, { ok: false, error: "Invalid email", build_tag: BUILD_TAG });
+    const orgId = normalizeOptionalString(body.org_id);
+    const email = normalizeEmail(body.email);
+    const name = normalizeOptionalString(body.name);
+    const personalId = normalizeOptionalString(body.personal_id);
+    const assignmentId = normalizeOptionalString(body.assignment_id);
+
+    if (!orgId) {
+      return jsonResponse({ ok: false, error: "missing_org_id", build_tag: BUILD_TAG }, 400);
     }
 
-    if (assignment_id && !isUuid(assignment_id)) {
-      return jsonResponse(400, {
-        ok: false,
-        error: "Invalid assignment_id",
-        build_tag: BUILD_TAG,
-      });
+    if (!email) {
+      return jsonResponse({ ok: false, error: "missing_email", build_tag: BUILD_TAG }, 400);
     }
 
-    const { data: ownerRow, error: ownerErr } = await sbAdmin
-      .from("memberships")
-      .select("role, revoked_at")
-      .eq("org_id", org_id)
-      .eq("user_id", callerUserId)
-      .is("revoked_at", null)
-      .limit(1)
+    const { data: membership, error: membershipError } = await supabaseAdmin
+      .from("org_members")
+      .select("org_id, user_id, role, active")
+      .eq("org_id", orgId)
+      .eq("user_id", requesterUserId)
+      .eq("active", true)
+      .in("role", ["owner", "admin"])
       .maybeSingle();
 
-    if (ownerErr) {
-      console.error("[invite] auth_check_failed_db_error", {
-        build_tag: BUILD_TAG,
-        org_id,
-        caller_user_id: callerUserId,
-        message: ownerErr.message,
-        code: (ownerErr as any).code ?? null,
-        details: (ownerErr as any).details ?? null,
-      });
-
-      return jsonResponse(500, {
-        ok: false,
-        error: "DB error checking owner",
-        detail: ownerErr.message,
-        build_tag: BUILD_TAG,
-      });
+    if (membershipError) {
+      console.error("[invite-edge] membership lookup failed", membershipError);
+      return jsonResponse({ ok: false, error: "membership_lookup_failed", build_tag: BUILD_TAG }, 500);
     }
 
-    const roleNorm = normRole(ownerRow?.role);
-    let failureReason: string | null = null;
-
-    if (!ownerRow) {
-      failureReason = "NO_MEMBERSHIP_FOUND_FOR_USER_IN_ORG";
-    } else if (ownerRow.revoked_at !== null) {
-      failureReason = "MEMBERSHIP_REVOKED";
-    } else if (roleNorm !== "owner") {
-      failureReason = `NOT_OWNER_ROLE_IS_${roleNorm.toUpperCase()}`;
+    if (!membership) {
+      return jsonResponse({ ok: false, error: "forbidden_org_membership", build_tag: BUILD_TAG }, 403);
     }
 
-    if (failureReason) {
-      return jsonResponse(403, {
-        ok: false,
-        error: "Not allowed (must be owner of org)",
-        build_tag: BUILD_TAG,
-        diag: {
-          callerUserId,
-          org_id,
-          role: ownerRow?.role ?? null,
-          revoked_at: ownerRow?.revoked_at ?? null,
-          reason: failureReason,
-        },
-      });
+    let personalRow: { id: string; email: string | null; org_id: string; user_id?: string | null } | null = null;
+
+    if (personalId) {
+      const { data, error } = await supabaseAdmin
+        .from("personal")
+        .select("id, email, org_id, user_id")
+        .eq("id", personalId)
+        .eq("org_id", orgId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("[invite-edge] personal lookup by id failed", error);
+        return jsonResponse({ ok: false, error: "personal_lookup_failed", build_tag: BUILD_TAG }, 500);
+      }
+
+      personalRow = data;
     }
 
-    let assignmentDetails: AssignmentEmailDetails = {
-      found: false,
-      timeWindow: copy.valueNotSpecified,
-      geofenceName: copy.valueNotSpecified,
-      taskName: copy.valueNotSpecified,
+    if (!personalRow) {
+      const { data, error } = await supabaseAdmin
+        .from("personal")
+        .select("id, email, org_id, user_id")
+        .eq("org_id", orgId)
+        .ilike("email", email)
+        .maybeSingle();
+
+      if (error) {
+        console.error("[invite-edge] personal lookup by email failed", error);
+        return jsonResponse({ ok: false, error: "personal_lookup_failed", build_tag: BUILD_TAG }, 500);
+      }
+
+      personalRow = data;
+    }
+
+    if (!personalRow?.id) {
+      return jsonResponse({ ok: false, error: "personal_not_found_for_invite", build_tag: BUILD_TAG }, 400);
+    }
+
+    const inviteTokenPlain = buildInviteTokenPlain();
+    const inviteTokenHash = await sha256Hex(inviteTokenPlain);
+    const inviteUrl = buildInviteUrl(appBaseUrl, inviteTokenPlain, orgId);
+    const expiresAt = new Date(Date.now() + DEFAULT_INVITE_TTL_HOURS * 60 * 60 * 1000).toISOString();
+
+    const insertPayload: Record<string, unknown> = {
+      org_id: orgId,
+      email,
+      personal_id: personalRow.id,
+      invite_token_hash: inviteTokenHash,
+      is_active: true,
+      accepted_at: null,
+      used_at: null,
+      used_by_user_id: null,
+      expires_at: expiresAt,
     };
 
-    let effectivePersonalId = personal_id || "";
-
-    if (assignment_id) {
-      try {
-        const details = await getAssignmentEmailDetails(sbAdmin, {
-          assignmentId: assignment_id,
-          orgId: org_id,
-          fallbackLabel: copy.valueNotSpecified,
-          lang,
-        });
-
-        assignmentDetails = details;
-      } catch (e) {
-        console.warn("[send-tracker-invite-brevo] error fetching assignment details", e);
-      }
+    if (assignmentId) {
+      insertPayload.assignment_id = assignmentId;
     }
 
-    if (!effectivePersonalId && personal_id) {
-      effectivePersonalId = personal_id;
-    }
+    const { data: inviteRow, error: inviteInsertError } = await supabaseAdmin
+      .from("tracker_invites")
+      .insert(insertPayload)
+      .select("id, created_at")
+      .single();
 
-    if (!effectivePersonalId) {
-      console.warn("[send-tracker-invite-brevo] No personalId found for invite", {
-        org_id,
-        email,
-        assignment_id,
-        personal_id,
-      });
-    }
-
-    const nowIso = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
-
-
-    // --- Generar token opaco seguro (32 bytes base64url) ---
-    function randomBase64Url(bytes = 32) {
-      const arr = new Uint8Array(bytes);
-      crypto.getRandomValues(arr);
-      return btoa(String.fromCharCode(...arr))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-    }
-
-    async function sha256Hex(str) {
-      const data = new TextEncoder().encode(str);
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-      return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
-    }
-
-    const inviteTokenPlain = randomBase64Url(32);
-    const inviteTokenHash = await sha256Hex(inviteTokenPlain);
-
-    const rawInviteUrl = buildDirectTrackerInviteUrl({
-      siteUrl: APP_PREVIEW_URL,
-      orgId: org_id,
-      lang,
-      accessToken: inviteTokenPlain,
-    });
-    console.log('[TRACKER_INVITE] inviteUrl generated:', rawInviteUrl);
-    const inviteUrl = assertDirectTrackerInviteUrl(rawInviteUrl);
-
-    let trackerInviteId: string | null = null;
-    let mode: "updated" | "inserted" | "cooldown" | null = null;
-    let openInvite: any | null = null;
-
-
-    let inviteRow: any = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const open = await findOpenInvite(sbAdmin, org_id, email);
-        openInvite = open;
-
-        if (open?.id) {
-          const { error: updErr } = await sbAdmin
-            .from("tracker_invites")
-            .update({
-              email,
-              email_norm: email,
-              is_active: true,
-              expires_at: expiresAt,
-              invite_token_hash: inviteTokenHash,
-            } as any)
-            .eq("id", open.id);
-
-          if (updErr) throw updErr;
-
-          await deactivateOtherActives(sbAdmin, org_id, email, open.id);
-
-          // Fetch the real DB row after update
-          const { data: freshRow, error: fetchErr } = await sbAdmin
-            .from("tracker_invites")
-            .select("id, created_at, invite_token_hash")
-            .eq("id", open.id)
-            .maybeSingle();
-          if (fetchErr) throw fetchErr;
-          if (!freshRow?.id || !freshRow?.created_at) {
-            throw new Error("invite_row_missing_after_update");
-          }
-          trackerInviteId = freshRow.id;
-          inviteRow = freshRow;
-          mode = "updated";
-        } else {
-          const { data: invRow, error: insErr } = await sbAdmin
-            .from("tracker_invites")
-            .insert({
-              org_id,
-              email,
-              email_norm: email,
-              created_by_user_id: callerUserId,
-              created_at: nowIso,
-              expires_at: expiresAt,
-              used_at: null,
-              used_by_user_id: null,
-              accepted_at: null,
-              is_active: true,
-              invite_token_hash: inviteTokenHash,
-            } as any)
-            .select("id, created_at, invite_token_hash")
-            .single();
-
-          if (insErr) throw insErr;
-          if (!invRow?.id || !invRow?.created_at) {
-            throw new Error("invite_row_missing_after_insert");
-          }
-          trackerInviteId = invRow.id;
-          inviteRow = invRow;
-          mode = "inserted";
-        }
-
-        break;
-      } catch (err) {
-        if (attempt === 1 && isPgUniqueViolation(err)) continue;
-        throw err;
-      }
-    }
-
-    if (!trackerInviteId || !inviteRow?.id || !inviteRow?.created_at) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "Failed upserting invite",
-        detail: "No invite id or created_at returned from DB row",
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    // Optionally, verify the invite_token_hash matches (diagnostic)
-    if (inviteRow.invite_token_hash !== inviteTokenHash) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "invite_token_hash_mismatch",
-        detail: {
-          expected: inviteTokenHash,
-          actual: inviteRow.invite_token_hash,
-        },
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    const sentSecondsAgo = secondsSince(openInvite?.brevo_sent_at);
-    const cooldownRemaining = Math.max(0, Math.ceil(SEND_COOLDOWN_SECONDS - sentSecondsAgo));
-    const withinCooldown = false;
-
-    if (Number.isFinite(sentSecondsAgo) && sentSecondsAgo < SEND_COOLDOWN_SECONDS) {
-      console.log("[invite] cooldown ignored for resend");
-    }
-
-    const actionLink = inviteUrl;
-    // --- DEBUG LOGS: invite_id, token length, hash, URL ---
-    console.log('[send-tracker-invite] DEBUG', {
-      invite_id: trackerInviteId,
-      invite_token_length: inviteTokenPlain.length,
-      invite_token_hash: inviteTokenHash,
-      invite_url: inviteUrl,
-    });
-    // Log temporal para verificar que inviteUrl es https
-    console.log('[send-tracker-invite] inviteUrl=', inviteUrl);
-
-    try {
-      console.error("[metrics] invite_sent reached", {
-        build_tag: BUILD_TAG,
-        org_id,
-        callerUserId,
-        email,
-      });
-
-      await supabaseAdmin.from("org_metrics_events").insert({
-        org_id,
-        user_id: callerUserId,
-        event_type: "invite_sent",
-        meta: { email },
-      });
-    } catch {
-      // no bloquear flujo principal
-    }
-
-    if (withinCooldown) {
-      try {
-        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
-          brevo_last_status: "cooldown",
-          brevo_last_event_at: nowIso,
-        });
-      } catch (e) {
-        console.error("[invite] invite_state_update_failed", {
+    if (inviteInsertError || !inviteRow?.id || !inviteRow?.created_at) {
+      console.error("[invite-edge] failed insert tracker_invites", inviteInsertError);
+      return jsonResponse(
+        {
+          ok: false,
+          error: "tracker_invite_insert_failed",
           build_tag: BUILD_TAG,
-          stage: "cooldown",
-          tracker_invite_id: trackerInviteId,
-          message: String((e as any)?.message || e),
-        });
-      }
-
-      return jsonResponse(200, {
-        ok: true,
-        build_tag: BUILD_TAG,
-        mode: "cooldown",
-        lang,
-        org_id,
-        email,
-        assignment_id: assignment_id || null,
-        tracker_invite_id: trackerInviteId,
-        inviteUrl,
-        redirect_to: inviteUrl,
-        action_link: actionLink,
-        delivery_hint:
-          "Email delivery may take a few minutes depending on the provider. Recent invite was already sent.",
-        cooldown_seconds: cooldownRemaining,
-        assignment_details: assignmentDetails,
-      });
-    }
-
-    if (!BREVO_API_KEY || !BREVO_SENDER_EMAIL) {
-      try {
-        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
-          brevo_last_status: "disabled",
-          brevo_last_event_at: nowIso,
-          brevo_last_error: "BREVO_DISABLED_MISSING_ENV",
-        });
-      } catch (e) {
-        console.error("[invite] invite_state_update_failed", {
-          build_tag: BUILD_TAG,
-          stage: "brevo_disabled",
-          tracker_invite_id: trackerInviteId,
-          message: String((e as any)?.message || e),
-        });
-      }
-
-      return jsonResponse(200, {
-        ok: true,
-        build_tag: BUILD_TAG,
-        mode,
-        lang,
-        org_id,
-        email,
-        assignment_id: assignment_id || null,
-        tracker_invite_id: trackerInviteId,
-        inviteUrl,
-        redirect_to: inviteUrl,
-        action_link: actionLink,
-        warning: "BREVO_DISABLED_MISSING_ENV",
-        assignment_details: assignmentDetails,
-        diag: {
-          hasBrevoKey: !!BREVO_API_KEY,
-          hasSender: !!BREVO_SENDER_EMAIL,
-          senderName: BREVO_SENDER_NAME,
         },
-      });
+        500,
+      );
     }
 
-    const safeAction = escHtml(actionLink);
-    const subject = copy.subject;
+    if (!inviteUrl) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "invite_url_not_built",
+          build_tag: BUILD_TAG,
+        },
+        500,
+      );
+    }
 
-    const html = `
-      <div style="font-family:Arial,sans-serif;line-height:1.55;color:#111827">
-        <h2 style="margin:0 0 12px 0">${escHtml(copy.title)}</h2>
-        <p style="margin:0 0 10px 0">${escHtml(copy.intro1)}</p>
-        <p style="margin:0 0 14px 0">
-          ${escHtml(copy.intro2)}<br />
-          <span style="color:#6b7280;font-size:12px">${escHtml(copy.expires)}</span>
-        </p>
-
-        <p style="margin:0 0 14px 0;font-weight:600">${escHtml(copy.acceptPrompt)}</p>
-
-        <div style="margin:0 0 16px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc">
-          <div style="font-weight:700;margin:0 0 8px 0">${escHtml(copy.detailsTitle)}</div>
-          <div style="margin:0 0 6px 0"><b>${escHtml(copy.assignedWindowLabel)}:</b> ${escHtml(assignmentDetails.timeWindow)}</div>
-          <div style="margin:0 0 6px 0"><b>${escHtml(copy.assignedGeofenceLabel)}:</b> ${escHtml(assignmentDetails.geofenceName)}</div>
-          <div style="margin:0"><b>${escHtml(copy.assignedTaskLabel)}:</b> ${escHtml(assignmentDetails.taskName)}</div>
-        </div>
-
-        <p style="margin:0 0 16px 0">
-          <a href="${safeAction}"
-             style="display:inline-block;padding:12px 16px;background:#10b981;color:#0b1220;text-decoration:none;border-radius:10px;font-weight:700">
-            ${escHtml(copy.cta)}
-          </a>
-        </p>
-
-        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">${escHtml(copy.copyLink)}</p>
-        <p style="word-break:break-all;font-size:12px;margin:0 0 16px 0">${safeAction}</p>
-        <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0" />
-        <p style="color:#6b7280;font-size:12px;margin:0 0 6px 0">${escHtml(copy.footer1)}</p>
-        <p style="color:#6b7280;font-size:12px;margin:0">${escHtml(copy.footer2)}</p>
-      </div>
-    `;
-
-    const text =
-      `${copy.title}\n\n` +
-      `${copy.intro1}\n` +
-      `${copy.intro2}\n` +
-      `${copy.acceptPrompt}\n` +
-      `${copy.expires}\n\n` +
-      `${copy.detailsTitle}\n` +
-      `${copy.assignedWindowLabel}: ${assignmentDetails.timeWindow}\n` +
-      `${copy.assignedGeofenceLabel}: ${assignmentDetails.geofenceName}\n` +
-      `${copy.assignedTaskLabel}: ${assignmentDetails.taskName}\n\n` +
-      `${actionLink}\n\n` +
-      `${copy.footer2}\n`;
-
-    let brevoResp = "";
-    let brevoMessageId = "";
-
-    try {
-      const brevoTemplateParams = {
+    if (!brevoApiKey) {
+      console.warn("[invite-edge] BREVO_API_KEY missing; returning manual action link");
+      return jsonResponse({
+        ok: true,
+        invite_id: inviteRow.id,
+        created_at: inviteRow.created_at,
         invite_url: inviteUrl,
         action_link: inviteUrl,
-        redirect_to: inviteUrl,
-      };
-
-      console.log(TRACKER_INVITE_LOG_MARKER);
-      console.log(`inviteUrl=${inviteUrl}`);
-      console.log("[send-tracker-invite-brevo] final_brevo_template_params", {
-        marker: TRACKER_INVITE_LOG_MARKER,
-        inviteUrl,
-        invite_url: brevoTemplateParams.invite_url,
-        action_link: brevoTemplateParams.action_link,
-        redirect_to: brevoTemplateParams.redirect_to,
-      });
-
-      brevoResp = await brevoSendEmail({
-        apiKey: BREVO_API_KEY,
-        senderEmail: BREVO_SENDER_EMAIL,
-        senderName: BREVO_SENDER_NAME,
-        toEmail: email,
-        toName: to_name,
-        subject,
-        html,
-        text,
-        replyToEmail: BREVO_REPLYTO_EMAIL || BREVO_SENDER_EMAIL,
-        replyToName: BREVO_SENDER_NAME,
-        params: brevoTemplateParams,
-      });
-
-      brevoMessageId = extractBrevoMessageId(brevoResp);
-
-      try {
-        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
-          brevo_message_id: brevoMessageId || null,
-          brevo_sent_at: nowIso,
-          brevo_last_status: "sent",
-          brevo_last_event_at: nowIso,
-          brevo_last_response: String(brevoResp).slice(0, 500),
-          brevo_last_error: null,
-        });
-      } catch (e) {
-        console.error("[invite] invite_state_update_failed", {
-          build_tag: BUILD_TAG,
-          stage: "brevo_sent",
-          tracker_invite_id: trackerInviteId,
-          message: String((e as any)?.message || e),
-        });
-      }
-    } catch (e) {
-      console.error("[invite] brevo_send_error", {
+        email_sent: false,
+        email_provider: "none",
+        warning: "brevo_api_key_missing",
         build_tag: BUILD_TAG,
-        tracker_invite_id: trackerInviteId,
-        org_id,
-        email,
-        message: String((e as any)?.message || e),
-      });
-
-      try {
-        await updateInviteBrevoState(sbAdmin, trackerInviteId, {
-          brevo_sent_at: nowIso,
-          brevo_last_status: "error",
-          brevo_last_event_at: nowIso,
-          brevo_last_error: String((e as any)?.message || e).slice(0, 500),
-        });
-      } catch (e2) {
-        console.error("[invite] invite_state_update_failed", {
-          build_tag: BUILD_TAG,
-          stage: "brevo_send_error",
-          tracker_invite_id: trackerInviteId,
-          message: String((e2 as any)?.message || e2),
-        });
-      }
-
-      return jsonResponse(200, {
-        ok: true,
-        build_tag: BUILD_TAG,
-        mode,
-        lang,
-        org_id,
-        email,
-        assignment_id: assignment_id || null,
-        tracker_invite_id: trackerInviteId,
-        inviteUrl,
-        redirect_to: inviteUrl,
-        action_link: actionLink,
-        assignment_details: assignmentDetails,
-        warning: "BREVO_SEND_FAILED_RETURNING_MANUAL_LINK",
-        error: String((e as any)?.message || e),
       });
     }
 
-    return jsonResponse(200, {
-      ok: true,
-      build_tag: BUILD_TAG,
-      mode,
-      lang,
-      org_id,
+    const brevoResult = await sendBrevoEmail({
+      apiKey: brevoApiKey,
       email,
-      assignment_id: assignment_id || null,
-      tracker_invite_id: inviteRow.id,
-      invite_created_at: inviteRow.created_at,
+      name,
       inviteUrl,
-      redirect_to: inviteUrl,
-      action_link: actionLink,
-      delivery_hint: "Email delivery may take a few minutes depending on the provider.",
-      assignment_details: assignmentDetails,
-      brevo: {
-        ok: true,
-        messageId: brevoMessageId || null,
-        sample: String(brevoResp).slice(0, 160),
-      },
-      elapsed_ms: Date.now() - t0,
+      senderEmail: brevoSenderEmail,
+      senderName: brevoSenderName,
+      orgId,
     });
-  } catch (err: any) {
-    console.error("[send-tracker-invite-brevo] UNHANDLED ERROR", err);
 
-    return new Response(
-      JSON.stringify({
-        ok: false,
-        error: "unhandled_exception",
-        message: String(err?.message || err),
+    if (!brevoResult.ok) {
+      console.error("[invite-edge] brevo send failed", {
+        status: brevoResult.status,
+        bodyText: brevoResult.bodyText,
+      });
+
+      return jsonResponse({
+        ok: true,
+        invite_id: inviteRow.id,
+        created_at: inviteRow.created_at,
+        invite_url: inviteUrl,
+        action_link: inviteUrl,
+        email_sent: false,
+        email_provider: "brevo",
+        brevo_status: brevoResult.status ?? null,
+        warning: "brevo_send_failed",
         build_tag: BUILD_TAG,
-      }),
+      });
+    }
+
+    return jsonResponse({
+      ok: true,
+      invite_id: inviteRow.id,
+      created_at: inviteRow.created_at,
+      invite_url: inviteUrl,
+      action_link: inviteUrl,
+      email_sent: true,
+      email_provider: "brevo",
+      build_tag: BUILD_TAG,
+    });
+  } catch (error) {
+    console.error("[invite-edge] unhandled", error);
+    return jsonResponse(
       {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        ok: false,
+        error: "internal_error",
+        detail: error instanceof Error ? error.message : String(error),
+        build_tag: BUILD_TAG,
       },
+      500,
     );
   }
 });

@@ -93,3 +93,33 @@ email → app → consentimiento → accept-tracker-invite → tracker-gps → r
 - Se confirmó que cualquier cambio de backend/arquitectura debe ir acompañado de actualización en `docs/`.
 
 Última actualización: 2026-04-12
+
+---
+
+## Actualización de flujo y contrato de endpoints (Abril 2026)
+
+- El endpoint `/api/invite-tracker` ahora retorna el status y body reales del edge function (`send-tracker-invite-brevo`) en caso de error (por ejemplo, errores de validación, fallos de base de datos, etc). Esto permite depuración y diagnóstico directo desde el frontend o sistemas integradores.
+- En caso de éxito, `/api/invite-tracker` responde con el body ya parseado del edge function.
+- El edge function `send-tracker-invite-brevo` **siempre** retorna los campos `invite_id`, `created_at` y `invite_url` obtenidos de la fila real insertada/actualizada en la tabla `tracker_invites`. Si falta alguno de estos campos, responde con error 500 y detalle explícito.
+- El frontend y cualquier consumidor deben usar únicamente el `invite_url` y metadatos retornados por la respuesta más reciente de la función.
+
+**Ejemplo de error propagado:**
+```json
+{
+  "ok": false,
+  "error": "invite_upstream_failed",
+  "upstream_status": 500,
+  "upstream_body": { "error": "invite_row_missing_after_insert" }
+}
+```
+
+**Ejemplo de respuesta exitosa:**
+```json
+{
+  "ok": true,
+  "invite_id": "...",
+  "invite_created_at": "2026-04-13T12:34:56.789Z",
+  "inviteUrl": "https://.../tracker-accept?..."
+  // ...otros campos...
+}
+```
