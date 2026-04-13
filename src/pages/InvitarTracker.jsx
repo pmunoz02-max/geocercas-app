@@ -32,6 +32,8 @@ function normalizePlanLabel(planCode) {
 }
 
 export default function InvitarTracker() {
+  // State for the latest invite link
+  const [inviteLink, setInviteLink] = useState("");
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const auth = useAuthSafe();
@@ -312,6 +314,8 @@ export default function InvitarTracker() {
 
     try {
       setBusy(true);
+      // Always clear previous invite link before creating a new one
+      setInviteLink("");
 
       const caller_jwt = await getCallerJwt();
       if (!caller_jwt) {
@@ -342,6 +346,15 @@ export default function InvitarTracker() {
       });
 
       const body = await res.json().catch(() => null);
+
+      // Log and store the exact invite link returned by the API
+      if (body?.invite_url || body?.action_link || body?.redirect_to) {
+        const freshInviteLink = body.invite_url || body.action_link || body.redirect_to;
+        setInviteLink(freshInviteLink);
+        console.log('[invite-tracker] invite link', freshInviteLink);
+      } else {
+        setInviteLink("");
+      }
 
       if (!res.ok || body?.ok === false) {
         const msg = body?.error || body?.message || `HTTP ${res.status}`;
@@ -483,6 +496,41 @@ export default function InvitarTracker() {
         ) : null}
 
         <form onSubmit={onSendInvite} className="mt-6 space-y-4">
+                  {inviteLink && (
+                    <div className="mt-4 flex flex-col gap-2">
+                      <div className="text-xs text-slate-700 break-all">
+                        <b>Enlace de invitación:</b> <span>{inviteLink}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
+                          onClick={() => {
+                            // Always use the latest invite link, clear before copy
+                            if (inviteLink) {
+                              navigator.clipboard.writeText(inviteLink);
+                              console.log('[invite-tracker] copied invite link', inviteLink);
+                            }
+                          }}
+                        >
+                          Copiar enlace
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded bg-green-600 text-white px-3 py-1 text-xs font-semibold hover:bg-green-700"
+                          onClick={() => {
+                            // Always use the latest invite link, clear before open
+                            if (inviteLink) {
+                              window.open(inviteLink, '_blank', 'noopener');
+                              console.log('[invite-tracker] opened invite link', inviteLink);
+                            }
+                          }}
+                        >
+                          Abrir enlace
+                        </button>
+                      </div>
+                    </div>
+                  )}
           <div>
             <label className="block text-sm font-medium text-gray-900">
               {t("inviteTracker.selectPersonLabel", { defaultValue: "Selecciona una persona" })}

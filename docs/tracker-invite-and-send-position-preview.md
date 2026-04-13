@@ -24,7 +24,13 @@
 **Requisito de implementación:** El endpoint `/api/accept-tracker-invite` debe retornar explícitamente `tracker_runtime_token`, `tracker_user_id` y `org_id` en la respuesta exitosa. Estos tres valores deben persistirse (por ejemplo, en localStorage o storage equivalente) antes de redirigir a `/tracker-gps`.
 
 
+
 ## Reglas clave
+
+**Invitación de tracker:**
+- Siempre se debe usar el enlace de invitación (invite link) fresco devuelto por la respuesta de la API `/api/invite-tracker`.
+- Está prohibido reutilizar enlaces de invitación previos almacenados en el estado de la UI, caché, o variables antiguas. Cada acción de invitar debe descartar cualquier enlace anterior y utilizar únicamente el enlace recién recibido de la API.
+
 
 - **El tracking runtime solo usa el `tracker_access_token` generado al aceptar la invitación.**
 - **Prohibido depender de sesión de usuario, sesión web, o magic link para el tracking runtime.**
