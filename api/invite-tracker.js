@@ -739,15 +739,36 @@ export default async function handler(req, res) {
     }
     // If no assignment_id, do nothing: tracker is created and can be linked to assignments later
 
-    // Extract and log invite_id, created_at, and invite_url from current request only
-    const inviteId = json?.invite_id || json?.id || null;
-    const createdAt = json?.created_at || null;
+    // --- INVITE CREATION FLOW LOGGING ---
+    const tracker_identifier = trackerUserId || email || null;
+    console.log('[invite-tracker] start', {
+      org_id,
+      tracker_identifier,
+    });
+
+    // Simulate insert result (should be from DB insert in real flow)
+    const invite = json?.invite || json || {};
+    console.log('[invite-tracker] insert result', {
+      invite_id: invite?.id,
+      created_at: invite?.created_at,
+      has_hash: !!invite?.invite_token_hash,
+    });
+
+    // Fail loudly if no invite row was inserted
+    if (!invite?.id) {
+      return res.status(500).json({
+        ok: false,
+        message: 'Invite row was not created',
+      });
+    }
+
+    const inviteId = invite?.id;
+    const createdAt = invite?.created_at || null;
     const inviteUrl = upstreamInviteUrl || null;
-    console.log('[invite-tracker] invite created', {
+    console.log('[invite-tracker] return', {
       invite_id: inviteId,
       created_at: createdAt,
       invite_url: inviteUrl,
-      org_id,
     });
 
     // Return only invite_id, created_at, and invite_url from this request

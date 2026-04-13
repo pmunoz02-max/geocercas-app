@@ -1,3 +1,6 @@
+**Requisito de backend:**
+- El endpoint `/api/invite-tracker` debe crear siempre una nueva fila en la tabla `tracker_invites` en cada creación exitosa de invitación.
+- Debe retornar explícitamente los campos `invite_id`, `created_at` y `invite_url` de esa nueva fila en la respuesta.
 **Nota importante:** Las acciones de abrir o copiar el enlace de invitación deben usar únicamente el valor de `invite_url` devuelto por la respuesta más reciente de creación de invitación. Nunca reutilices enlaces previos de estado, caché o almacenamiento local.
 ---
 

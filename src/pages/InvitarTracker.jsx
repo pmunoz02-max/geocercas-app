@@ -32,8 +32,9 @@ function normalizePlanLabel(planCode) {
 }
 
 export default function InvitarTracker() {
-  // State for the latest invite link
+  // State for the latest invite link and invite metadata
   const [inviteLink, setInviteLink] = useState("");
+  const [inviteMeta, setInviteMeta] = useState(null); // { invite_id, created_at, invite_url }
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const auth = useAuthSafe();
@@ -349,14 +350,21 @@ export default function InvitarTracker() {
 
       const body = await res.json().catch(() => null);
 
+
       // Log the full fresh response for debugging
       console.log('[invite-create] fresh response', body);
 
-      // Guardar solo el enlace fresco de la respuesta actual
-      if (body?.invite_url) {
+      // Guardar y mostrar invite_id, created_at, invite_url
+      if (body?.invite_url && body?.invite_id) {
         setInviteLink(body.invite_url);
+        setInviteMeta({
+          invite_id: body.invite_id,
+          created_at: body.created_at,
+          invite_url: body.invite_url,
+        });
       } else {
         setInviteLink("");
+        setInviteMeta(null);
       }
 
       if (!res.ok || body?.ok === false) {
@@ -499,20 +507,28 @@ export default function InvitarTracker() {
         ) : null}
 
         <form onSubmit={onSendInvite} className="mt-6 space-y-4">
-                  {inviteLink && (
+                  {inviteLink && inviteMeta && (
                     <div className="mt-4 flex flex-col gap-2">
                       <div className="text-xs text-slate-700 break-all">
                         <b>Enlace de invitación:</b> <span>{inviteLink}</span>
+                      </div>
+                      <div className="text-xs text-slate-700 break-all">
+                        <b>invite_id:</b> <span>{inviteMeta.invite_id}</span><br />
+                        <b>created_at:</b> <span>{inviteMeta.created_at}</span>
                       </div>
                       <div className="flex gap-2">
                         <button
                           type="button"
                           className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
                           onClick={() => {
-                            // Siempre usar solo el enlace recién cargado
-                            if (inviteLink) {
-                              console.log('[invite-open] using link', inviteLink);
-                              navigator.clipboard.writeText(inviteLink);
+                            // Mostrar y loggear los datos antes de copiar
+                            if (inviteMeta?.invite_url) {
+                              console.log('[invite-open] using', {
+                                invite_id: inviteMeta.invite_id,
+                                created_at: inviteMeta.created_at,
+                                invite_url: inviteMeta.invite_url,
+                              });
+                              navigator.clipboard.writeText(inviteMeta.invite_url);
                             }
                           }}
                         >
@@ -522,10 +538,14 @@ export default function InvitarTracker() {
                           type="button"
                           className="rounded bg-green-600 text-white px-3 py-1 text-xs font-semibold hover:bg-green-700"
                           onClick={() => {
-                            // Siempre usar solo el enlace recién cargado
-                            if (inviteLink) {
-                              console.log('[invite-open] using link', inviteLink);
-                              window.location.href = inviteLink;
+                            // Mostrar y loggear los datos antes de abrir
+                            if (inviteMeta?.invite_url) {
+                              console.log('[invite-open] using', {
+                                invite_id: inviteMeta.invite_id,
+                                created_at: inviteMeta.created_at,
+                                invite_url: inviteMeta.invite_url,
+                              });
+                              window.location.href = inviteMeta.invite_url;
                             }
                           }}
                         >

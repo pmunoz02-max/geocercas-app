@@ -1,3 +1,39 @@
+// Invitar TRACKER usando API /api/invite-tracker
+export async function createTrackerInvite({ email, org_id, assignment_id, name, lang = "es", caller_jwt }) {
+  if (!email || !org_id || !assignment_id || !caller_jwt) throw new Error("Faltan parámetros obligatorios para crear invitación de tracker");
+
+  const payload = {
+    email,
+    org_id,
+    assignment_id,
+    name,
+    lang,
+    caller_jwt,
+    role: "tracker",
+  };
+
+  const res = await fetch("/api/invite-tracker", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json().catch(() => null);
+  console.log("[inviteApi] /api/invite-tracker response", data);
+
+  if (!res.ok || !data?.invite_id || !data?.invite_url) {
+    throw new Error(data?.message || data?.error || `Error creando invitación: HTTP ${res.status}`);
+  }
+
+  // Exponer solo los campos relevantes
+  return {
+    invite_id: data.invite_id,
+    created_at: data.created_at,
+    invite_url: data.invite_url,
+    raw: data,
+  };
+}
 // src/lib/inviteApi.js
 import { supabase } from "../lib/supabaseClient";
 
