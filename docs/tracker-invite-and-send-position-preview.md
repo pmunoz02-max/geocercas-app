@@ -46,4 +46,14 @@ El endpoint `/api/invite-tracker` debe retornar los campos `invite_id` y `create
 
 ---
 
+## Requisito estricto para send-tracker-invite-brevo
+
+El endpoint `send-tracker-invite-brevo` (Supabase Edge Function) debe:
+- Insertar (o actualizar) siempre una fila real en la tabla `tracker_invites` para cada invitación enviada.
+- Recuperar y retornar explícitamente los campos `invite_id`, `created_at` y `invite_url` obtenidos de esa fila real de la base de datos (no valores generados en memoria).
+- Si no se logra obtener cualquiera de estos valores (`invite_id`, `created_at`, `invite_url`) de la fila real, la petición debe fallar (HTTP 500) y **no se debe exponer ni utilizar ningún `invite_url`**.
+- El frontend y cualquier consumidor deben usar únicamente el `invite_url` y metadatos retornados por la respuesta más reciente de la función.
+
+---
+
 Última actualización: 2026-04-11

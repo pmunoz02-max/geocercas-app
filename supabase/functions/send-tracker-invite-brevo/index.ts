@@ -756,11 +756,12 @@ serve(async (req) => {
     let mode: "updated" | "inserted" | "cooldown" | null = null;
     let openInvite: any | null = null;
 
+
+    let inviteRow: any = null;
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const open = await findOpenInvite(sbAdmin, org_id, email);
         openInvite = open;
-
 
         if (open?.id) {
           const { error: updErr } = await sbAdmin
@@ -778,7 +779,18 @@ serve(async (req) => {
 
           await deactivateOtherActives(sbAdmin, org_id, email, open.id);
 
-          trackerInviteId = open.id;
+          // Fetch the real DB row after update
+          const { data: freshRow, error: fetchErr } = await sbAdmin
+            .from("tracker_invites")
+            .select("id, created_at, invite_token_hash")
+            .eq("id", open.id)
+            .maybeSingle();
+          if (fetchErr) throw fetchErr;
+          if (!freshRow?.id || !freshRow?.created_at) {
+            throw new Error("invite_row_missing_after_update");
+          }
+          trackerInviteId = freshRow.id;
+          inviteRow = freshRow;
           mode = "updated";
         } else {
           const { data: invRow, error: insErr } = await sbAdmin
@@ -796,12 +808,15 @@ serve(async (req) => {
               is_active: true,
               invite_token_hash: inviteTokenHash,
             } as any)
-            .select("id")
+            .select("id, created_at, invite_token_hash")
             .single();
 
           if (insErr) throw insErr;
-
-          trackerInviteId = invRow?.id || null;
+          if (!invRow?.id || !invRow?.created_at) {
+            throw new Error("invite_row_missing_after_insert");
+          }
+          trackerInviteId = invRow.id;
+          inviteRow = invRow;
           mode = "inserted";
         }
 
@@ -812,11 +827,24 @@ serve(async (req) => {
       }
     }
 
-    if (!trackerInviteId) {
+    if (!trackerInviteId || !inviteRow?.id || !inviteRow?.created_at) {
       return jsonResponse(500, {
         ok: false,
         error: "Failed upserting invite",
-        detail: "No invite id returned",
+        detail: "No invite id or created_at returned from DB row",
+        build_tag: BUILD_TAG,
+      });
+    }
+
+    // Optionally, verify the invite_token_hash matches (diagnostic)
+    if (inviteRow.invite_token_hash !== inviteTokenHash) {
+      return jsonResponse(500, {
+        ok: false,
+        error: "invite_token_hash_mismatch",
+        detail: {
+          expected: inviteTokenHash,
+          actual: inviteRow.invite_token_hash,
+        },
         build_tag: BUILD_TAG,
       });
     }
@@ -1083,7 +1111,8 @@ serve(async (req) => {
       org_id,
       email,
       assignment_id: assignment_id || null,
-      tracker_invite_id: trackerInviteId,
+      tracker_invite_id: inviteRow.id,
+      invite_created_at: inviteRow.created_at,
       inviteUrl,
       redirect_to: inviteUrl,
       action_link: actionLink,
