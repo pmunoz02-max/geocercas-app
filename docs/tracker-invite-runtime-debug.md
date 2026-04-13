@@ -15,6 +15,6 @@ Forced Node runtime for `/api/accept-tracker-invite` and kept a minimal handler 
 ## Purpose
 Confirm whether the persistent `FUNCTION_INVOCATION_FAILED` comes from runtime resolution before business logic execution.
 
-## Environment...
+## Environment
 Preview only.
 Resolved root cause of FUNCTION_INVOCATION_FAILED: syntax error in api/accept-tracker-invite.js ("Unexpected token :"). Endpoint replaced with valid minimal Node handler for isolation.

@@ -326,7 +326,7 @@ export default async function handler(req, res) {
     const query = getQuery(req);
     const payload = req.method === "POST" ? (await readBody(req)) || {} : null;
     // Import dinámico para evitar circularidad si aplica
-    const { extractRequestedOrgId } = await import("./_lib/extractRequestedOrgId.js");
+    const { extractRequestedOrgId } = await import("../server/api-lib/extractRequestedOrgId.js");
     const requestedOrgId = extractRequestedOrgId({ payload, query });
     const ctxRes = await resolveContext(req, { requestedOrgId });
     if (!ctxRes.ok) {
