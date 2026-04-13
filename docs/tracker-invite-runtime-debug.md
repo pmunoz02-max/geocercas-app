@@ -1,3 +1,6 @@
+# Legacy Data Note
+
+Invite acceptance by sha256 hash is working conceptually. However, preview still contains legacy tracker_invites rows with invite_token_hash = null. These invites cannot be accepted by the new architecture and must be reissued through the corrected invite creation flow.
 # Frontend Fix Note
 
 After restoring the real accept flow, the frontend had to re-add the Authorization Bearer inviteToken in the POST request to /api/accept-tracker-invite. Omitting this header caused authentication failures even with a valid invite token.
