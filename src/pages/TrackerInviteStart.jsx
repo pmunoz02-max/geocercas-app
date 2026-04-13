@@ -62,7 +62,7 @@ export default function TrackerInviteStart() {
       try {
         setAccepting(true)
 
-        const requestUrl = '/api/accept-tracker-invite'
+          const requestUrl = '/api/accept-invite-v2'
         const fullUrl = new URL(requestUrl, window.location.origin).toString()
         const deploymentMarker = 'DEPLOYMENT_MARKER_V1'
         console.log('[invite-debug] origin=', window.location.origin)

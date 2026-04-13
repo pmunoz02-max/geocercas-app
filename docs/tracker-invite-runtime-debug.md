@@ -1,3 +1,6 @@
+# Routing Isolation Note
+
+Due to the Vercel Hobby function limit, routing isolation and diagnostics must use only existing API files. Do not create new temporary endpoints under /api/ for debugging, as this can exceed the allowed function count and break deployment.
 # Key Security Note
 
 - The invite token is an opaque string and must never be parsed, decoded, or validated as a JWT.
