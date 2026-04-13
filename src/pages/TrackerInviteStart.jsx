@@ -53,10 +53,24 @@ export default function TrackerInviteStart() {
       try {
         setError('');
 
+
+        // Runtime token sources
+        const runtimeInviteToken = window?.runtimeInviteToken || null;
+        const token = window?.token || null;
+        const { inviteToken } = getInviteParams();
+        const authToken =
+          inviteToken ||
+          runtimeInviteToken ||
+          token ||
+          null;
+
+        console.log('[invite-debug] authToken present =', !!authToken);
+
         const response = await fetch('/api/accept-tracker-invite', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
           body: JSON.stringify({
             consentAccepted: true,
@@ -84,6 +98,7 @@ export default function TrackerInviteStart() {
           );
         }
 
+        // On success, navigate to redirectTo or fallback
         navigate(data?.redirectTo || '/tracker-gps', { replace: true });
       } catch (error) {
         console.error('[tracker-invite] accept failed', error);

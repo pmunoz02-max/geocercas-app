@@ -1,3 +1,6 @@
+# Frontend Fix Note
+
+After restoring the real accept flow, the frontend had to re-add the Authorization Bearer inviteToken in the POST request to /api/accept-tracker-invite. Omitting this header caused authentication failures even with a valid invite token.
 # Deployment Compliance
 
 All changes and debug flows are documented here to ensure traceability and compliance with deployment rules. Any temporary or experimental routing, endpoint, or validation logic must be reflected in this file for audit and rollback purposes.
