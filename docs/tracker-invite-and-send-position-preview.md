@@ -1,3 +1,7 @@
+## Validación estricta de creación de invitación
+
+El endpoint `/api/invite-tracker` debe retornar los campos `invite_id` y `created_at` obtenidos de una fila real recién insertada en la tabla `tracker_invites`. Si no se logra crear la fila o no se obtienen estos valores, la petición debe fallar (HTTP 500) y **no se debe exponer ni utilizar ningún `invite_url`**.
+
 **Requisito de backend:**
 - El endpoint `/api/invite-tracker` debe crear siempre una nueva fila en la tabla `tracker_invites` en cada creación exitosa de invitación.
 - Debe retornar explícitamente los campos `invite_id`, `created_at` y `invite_url` de esa nueva fila en la respuesta.
