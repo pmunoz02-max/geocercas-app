@@ -15,7 +15,10 @@
   - Si es válido y tiene asignación activa, persiste la posición en `positions` y actualiza el estado en `tracker_latest`.
 - El dashboard y los sistemas realtime consumen los datos de `tracker_latest`.
 
-**Importante:** Todo el flujo de tracking se basa en el `tracker_access_token` generado en tiempo de ejecución. **No depende de la autenticación del usuario, sesiones web, ni magic links.** El token runtime es el único requisito para que el tracker pueda enviar posiciones.
+
+**Importante:** Todo el flujo de tracking se basa en el token opaco de runtime generado en tiempo de ejecución. **No depende de la autenticación del usuario, sesiones web, ni magic links.** El token runtime es el único requisito para que el tracker pueda enviar posiciones.
+
+**Requisito de implementación:** El endpoint `/api/accept-tracker-invite` debe retornar explícitamente `tracker_runtime_token`, `tracker_user_id` y `org_id` en la respuesta exitosa. Estos tres valores deben persistirse (por ejemplo, en localStorage o storage equivalente) antes de redirigir a `/tracker-gps`.
 
 
 ## Reglas clave

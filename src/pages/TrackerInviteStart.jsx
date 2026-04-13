@@ -113,6 +113,20 @@ export default function TrackerInviteStart() {
           );
         }
 
+        // Log the full successful response
+        console.log('[invite-accept] response', data);
+
+        // Persist runtime_token, tracker_user_id, and org_id before redirect
+        if (data.tracker_runtime_token) {
+          localStorage.setItem('tracker_runtime_token', data.tracker_runtime_token);
+        }
+        if (data.tracker_user_id) {
+          localStorage.setItem('tracker_user_id', data.tracker_user_id);
+        }
+        if (data.org_id) {
+          localStorage.setItem('tracker_org_id', data.org_id);
+        }
+
         // On success, navigate to redirectTo or fallback
         navigate(data?.redirectTo || '/tracker-gps', { replace: true });
       } catch (error) {

@@ -37,15 +37,15 @@ export default async function handler(req, res) {
 
     const inviteTokenHash = sha256Hex(inviteToken)
 
-    // TEMPORAL: Debug info before DB lookup
-    return res.status(200).json({
-      ok: true,
-      debug: 'ACCEPT_INVITE_HASH_DEBUG_V1',
-      inviteTokenLength: inviteToken.length,
-      inviteTokenPrefix: inviteToken.slice(0, 8),
-      inviteTokenSuffix: inviteToken.slice(-6),
-      inviteTokenHashPrefix: inviteTokenHash.slice(0, 16),
-    })
+
+    // --- DB lookup and runtime session creation (placeholder for real logic) ---
+    // Replace the following with actual DB/session logic as needed
+    // Example placeholder values:
+    const plainRuntimeToken = inviteToken; // In real logic, generate a new token
+    const trackerUserId = invite?.tracker_user_id || 'tracker_user_id_placeholder';
+    const orgId = invite?.org_id || 'org_id_placeholder';
+
+    // ...existing code for DB lookup and invite validation...
 
     // --- DB lookup below (disabled for debug) ---
     /*
@@ -113,9 +113,10 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      inviteId: invite.id,
+      tracker_runtime_token: plainRuntimeToken,
+      tracker_user_id: trackerUserId,
+      org_id: orgId,
       redirectTo: '/tracker-gps',
-      debug: 'ACCEPT_INVITE_SUCCESS_V1',
     })
   } catch (error) {
     return res.status(500).json({
