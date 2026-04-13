@@ -44,63 +44,36 @@ function getTrackerTarget(search) {
 }
 
 export default function TrackerInviteStart() {
-    const [accepting, setAccepting] = useState(false)
-    const [acceptError, setAcceptError] = useState('')
+    const [acceptError, setError] = useState('')
 
-    const handleAcceptInvite = async () => {
-      if (accepting) return
-
-      setAcceptError('')
-
-      const { inviteToken, orgId, lang } = getInviteParams()
-
-      if (!inviteToken) {
-        setAcceptError('Falta invite token en la URL')
-        return
-      }
+    const handleAccept = async (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
 
       try {
-        setAccepting(true)
+        setError('');
 
-          const requestUrl = '/api/accept-invite-v2'
-        const fullUrl = new URL(requestUrl, window.location.origin).toString()
-        const deploymentMarker = 'DEPLOYMENT_MARKER_V1'
-        console.log('[invite-debug] origin=', window.location.origin)
-        console.log('[invite-debug] pathname=', window.location.pathname)
-        console.log('[invite-debug] requestUrl=', requestUrl)
-        console.log('[invite-debug] fullUrl=', fullUrl)
-        console.log('[invite-debug] deploymentMarker=', deploymentMarker)
-
-
-        // Runtime token sources
-        const runtimeInviteToken = window?.runtimeInviteToken || null
-        const token = window?.token || null
-        const authToken = inviteToken || runtimeInviteToken || token || null
-
-        console.log('[invite-debug] inviteToken=', inviteToken)
-        console.log('[invite-debug] runtimeInviteToken=', runtimeInviteToken)
-        console.log('[invite-debug] token=', token)
-        console.log('[invite-debug] authToken=', authToken)
-        console.log('[invite-debug] auth header token present =', !!authToken)
-
-        const response = await fetch(requestUrl, {
+        const response = await fetch('/api/accept-tracker-invite', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
           },
           body: JSON.stringify({
             consentAccepted: true,
           }),
-        })
+        });
 
-        const rawText = await response.text()
-        let data = {}
+        const rawText = await response.text();
+
+        let data = {};
         try {
-          data = rawText ? JSON.parse(rawText) : {}
+          data = rawText ? JSON.parse(rawText) : {};
         } catch {
-          data = { rawText }
+          data = { rawText };
         }
+
+        console.log('[invite-debug] status=', response.status);
+        console.log('[invite-debug] data=', data);
 
         if (!response.ok) {
           throw new Error(
@@ -108,21 +81,13 @@ export default function TrackerInviteStart() {
             data?.code ||
             data?.rawText ||
             `accept_tracker_invite_failed:${response.status}`
-          )
+          );
         }
 
-        const nextUrl = new URL('/tracker-gps', window.location.origin)
-        nextUrl.searchParams.set('t', inviteToken)
-        if (orgId) nextUrl.searchParams.set('org_id', orgId)
-        if (lang) nextUrl.searchParams.set('lang', lang)
-
-        window.location.assign(nextUrl.toString())
-
+        setError(`DEBUG OK ${JSON.stringify(data)}`);
       } catch (error) {
-        console.error('[tracker-invite] accept failed', error)
-        setAcceptError(error?.message || 'accept_tracker_invite_failed')
-      } finally {
-        setAccepting(false)
+        console.error('[tracker-invite] accept failed', error);
+        setError(error?.message || 'accept_tracker_invite_failed');
       }
     }
 
@@ -213,14 +178,13 @@ export default function TrackerInviteStart() {
 
 
         <div className="mt-5 space-y-3">
+
           <button
             type="button"
-            onClick={handleAcceptInvite}
-            disabled={accepting}
+            onClick={handleAccept}
             className="w-full rounded-xl bg-slate-900 text-white px-4 py-3 font-medium"
           >
-            {accepting ? 'Aceptando...' : 'Aceptar y continuar'}
-
+            Aceptar y continuar
           </button>
           {acceptError ? (
             <div style={{ color: 'red', marginTop: 12 }}>

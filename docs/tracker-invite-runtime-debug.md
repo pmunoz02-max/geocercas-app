@@ -1,3 +1,7 @@
+# Debug Confirmation
+
+Confirmed: /api/accept-tracker-invite returns 200 for both GET and POST requests directly.
+Remaining issue is in the TrackerInviteStart UI flow, likely due to form submission or duplicate handler execution, not the backend endpoint.
 # Routing Isolation Note
 
 Routing isolation in preview must reuse existing API files only, because Vercel Hobby is capped at 12 functions. Creating new temporary endpoints under /api/ can exceed this limit and break deployment.
