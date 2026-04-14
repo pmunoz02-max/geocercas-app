@@ -716,6 +716,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
       latest?.tracker_latest_at ??
       latest?.position_at ??
       latest?.created_at ??
+      latest?.ts ??
       null;
     const latestTimeText = latestTimeRaw ? formatTime(latestTimeRaw) : "—";
 
@@ -839,7 +840,7 @@ export default function TrackerDashboard() {
     try {
       const safeStatus = status || "offline";
       return typeof t === "function"
-        ? t(`status.${safeStatus}`)
+        ? t(`status.${safeStatus}`, { defaultValue: safeStatus })
         : safeStatus;
     } catch {
       return status || "offline";
@@ -1232,7 +1233,7 @@ export default function TrackerDashboard() {
     // Traer joins de personal y profiles si existen
     const { data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts, display_name, name, email, personal:personal_id(*), profile:profile_id(*)")
+      .select("user_id, org_id, lat, lng, accuracy, ts, event, source, speed, heading, battery, is_mock, device_recorded_at")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
@@ -1242,7 +1243,44 @@ export default function TrackerDashboard() {
       return { rows: [], error };
     }
 
-    const rows = Array.isArray(data) ? data.map(mapTrackerLatestRow).filter(Boolean) : [];
+    console.log("[tracker-dashboard] tracker_latest RAW:", data);
+
+    const rows = Array.isArray(data)
+      ? data
+          .map((row) => {
+            const mapped = mapTrackerLatestRow(row);
+            if (!mapped) return null;
+            return {
+              ...mapped,
+              user_id: row?.user_id ? String(row.user_id) : mapped.user_id,
+              lat: row?.lat ?? mapped.lat,
+              lng: row?.lng ?? mapped.lng,
+              accuracy: row?.accuracy ?? mapped.accuracy ?? null,
+              recorded_at: row?.ts ?? mapped.recorded_at ?? null,
+              ts: row?.ts ?? mapped.ts ?? null,
+              source: row?.source ?? mapped.source ?? null,
+              speed: row?.speed ?? mapped.speed ?? null,
+              heading: row?.heading ?? mapped.heading ?? null,
+              battery: row?.battery ?? mapped.battery ?? null,
+              is_mock: row?.is_mock ?? mapped.is_mock ?? null,
+              latest: {
+                ...(mapped.latest || {}),
+                user_id: row?.user_id ? String(row.user_id) : mapped?.latest?.user_id,
+                lat: row?.lat ?? mapped?.latest?.lat,
+                lng: row?.lng ?? mapped?.latest?.lng,
+                accuracy: row?.accuracy ?? mapped?.latest?.accuracy ?? null,
+                ts: row?.ts ?? mapped?.latest?.ts ?? null,
+                recorded_at: row?.ts ?? mapped?.latest?.recorded_at ?? null,
+                source: row?.source ?? mapped?.latest?.source ?? null,
+                speed: row?.speed ?? mapped?.latest?.speed ?? null,
+                heading: row?.heading ?? mapped?.latest?.heading ?? null,
+                battery: row?.battery ?? mapped?.latest?.battery ?? null,
+                is_mock: row?.is_mock ?? mapped?.latest?.is_mock ?? null,
+              },
+            };
+          })
+          .filter(Boolean)
+      : [];
 
     return { rows, error: null };
   }
