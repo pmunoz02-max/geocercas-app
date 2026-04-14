@@ -202,15 +202,27 @@ export default function TrackerGpsPage() {
     }
 
     if (navigator?.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        handlePosition,
+        (err) => {
+          console.warn("[GEO_BOOTSTRAP_ERROR]", err);
+          setMsg("GEO_BOOTSTRAP " + (err?.message || err?.code || "?"));
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 30000,
+          timeout: 60000,
+        }
+      );
+
       watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
         enableHighAccuracy: true,
-        maximumAge: 10000,
-        timeout: 20000,
+        maximumAge: 30000,
+        timeout: 60000,
       });
     } else {
       setMsg("Geolocation API not available");
     }
-
     return () => {
       disposed = true;
       if (watchId != null && navigator?.geolocation?.clearWatch) {
