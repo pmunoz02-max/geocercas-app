@@ -38,6 +38,57 @@ function extractBearerToken(req) {
   return authHeader.slice(7).trim()
 }
 
+async function resolveTrackerUserId(supabase, invite) {
+  const orgId = String(invite?.org_id || '').trim()
+  const emailNorm = String(invite?.email_norm || '').trim().toLowerCase()
+  const rawEmail = String(invite?.email || '').trim()
+
+  if (!orgId) {
+    return {
+      trackerUserId: null,
+      error: 'Invite missing org_id',
+    }
+  }
+
+  let personalQuery = supabase
+    .from('personal')
+    .select('id,email,email_norm,org_id,activo,activo_bool,vigente,is_deleted')
+    .eq('org_id', orgId)
+    .limit(1)
+
+  if (emailNorm) {
+    personalQuery = personalQuery.eq('email_norm', emailNorm)
+  } else if (rawEmail) {
+    personalQuery = personalQuery.eq('email', rawEmail)
+  } else {
+    return {
+      trackerUserId: null,
+      error: 'Invite missing email/email_norm',
+    }
+  }
+
+  const { data, error } = await personalQuery.maybeSingle()
+
+  if (error) {
+    return {
+      trackerUserId: null,
+      error: error.message,
+    }
+  }
+
+  if (!data?.id) {
+    return {
+      trackerUserId: null,
+      error: 'Tracker person not found for invite',
+    }
+  }
+
+  return {
+    trackerUserId: data.id,
+    error: null,
+  }
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
@@ -109,13 +160,24 @@ export default async function handler(req, res) {
       })
     }
 
-    // Idempotente: si ya fue aceptado, devolvemos éxito.
+    const trackerResolution = await resolveTrackerUserId(supabase, invite)
+
+    if (trackerResolution.error || !trackerResolution.trackerUserId) {
+      return res.status(409).json({
+        ok: false,
+        code: 409,
+        message: trackerResolution.error || 'Tracker user could not be resolved',
+      })
+    }
+
+    const trackerUserId = trackerResolution.trackerUserId
+
     if (invite.accepted_at) {
       return res.status(200).json({
         ok: true,
         idempotent: true,
         tracker_runtime_token: inviteToken,
-        tracker_user_id: invite.tracker_user_id || null,
+        tracker_user_id: trackerUserId,
         org_id: invite.org_id,
         invite_id: invite.id,
         redirectTo: `/tracker-gps?org_id=${encodeURIComponent(invite.org_id)}`,
@@ -141,7 +203,6 @@ export default async function handler(req, res) {
       })
     }
 
-    // Relectura para cubrir carrera y mantener respuesta consistente
     const { data: acceptedInvite, error: rereadError } = await supabase
       .from('tracker_invites')
       .select('*')
@@ -160,7 +221,7 @@ export default async function handler(req, res) {
       ok: true,
       idempotent: false,
       tracker_runtime_token: inviteToken,
-      tracker_user_id: acceptedInvite.tracker_user_id || null,
+      tracker_user_id: trackerUserId,
       org_id: acceptedInvite.org_id,
       invite_id: acceptedInvite.id,
       redirectTo: `/tracker-gps?org_id=${encodeURIComponent(acceptedInvite.org_id)}`,

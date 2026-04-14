@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const BUILD_TAG = "send-tracker-invite-brevo-2026-04-13-active-invite-self-heal-v5"
+const BUILD_TAG = "send-tracker-invite-brevo-2026-04-13-invite-url-robust-v8"
 const JSON_HEADERS = {
   "Content-Type": "application/json",
 }
@@ -10,6 +10,13 @@ type JsonRecord = Record<string, unknown>
 type InviteInsertRow = {
   id: string
   created_at: string
+}
+
+type InviteInsertError = {
+  message: string | null
+  details: string | null
+  hint: string | null
+  code: string | null
 }
 
 function json(status: number, payload: JsonRecord) {
@@ -41,18 +48,68 @@ async function sha256Hex(input: string): Promise<string> {
     .join("")
 }
 
+function safeUrlBase(value: string): string {
+  return value.trim().replace(/\/+$/, "")
+}
+
+function tryParseOriginLike(value: string | null): string {
+  if (!value) return ""
+  try {
+    const u = new URL(value)
+    return safeUrlBase(u.origin)
+  } catch {
+    return ""
+  }
+}
+
+function resolveSiteUrl(req: Request): { siteUrl: string; source: string } {
+  const envPublic = Deno.env.get("PUBLIC_SITE_URL")?.trim() || ""
+  if (envPublic) {
+    return { siteUrl: safeUrlBase(envPublic), source: "PUBLIC_SITE_URL" }
+  }
+
+  const envSite = Deno.env.get("SITE_URL")?.trim() || ""
+  if (envSite) {
+    return { siteUrl: safeUrlBase(envSite), source: "SITE_URL" }
+  }
+
+  const origin =
+    req.headers.get("origin") ||
+    req.headers.get("Origin") ||
+    ""
+  const parsedOrigin = tryParseOriginLike(origin)
+  if (parsedOrigin) {
+    return { siteUrl: parsedOrigin, source: "origin_header" }
+  }
+
+  const referer =
+    req.headers.get("referer") ||
+    req.headers.get("Referer") ||
+    ""
+  const parsedReferer = tryParseOriginLike(referer)
+  if (parsedReferer) {
+    return { siteUrl: parsedReferer, source: "referer_header" }
+  }
+
+  return { siteUrl: "", source: "relative_fallback" }
+}
+
 function extractUserJwt(req: Request): string {
   const explicit = req.headers.get("x-user-jwt")?.trim()
   if (explicit) return explicit
 
-  const auth = req.headers.get("authorization") || req.headers.get("Authorization") || ""
+  const auth =
+    req.headers.get("authorization") || req.headers.get("Authorization") || ""
   if (auth.toLowerCase().startsWith("bearer ")) {
     return auth.slice(7).trim()
   }
   return ""
 }
 
-async function resolveActingUser(supabaseAdmin: ReturnType<typeof createClient>, req: Request) {
+async function resolveActingUser(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  req: Request,
+) {
   const userJwt = extractUserJwt(req)
   if (!userJwt) {
     return { user: null, error: "invalid_user_jwt" as const }
@@ -128,22 +185,26 @@ async function ensureMembership(
   return { membership: retryLookup.data, error: null }
 }
 
-async function closeExistingActiveInvites(
+async function closeExistingConflictingInvites(
   supabaseAdmin: ReturnType<typeof createClient>,
   orgId: string,
+  email: string,
   emailNorm: string,
 ) {
+  const nowIso = new Date().toISOString()
+
   const { error } = await supabaseAdmin
     .from("tracker_invites")
     .update({
       is_active: false,
+      used_at: nowIso,
     })
     .eq("org_id", orgId)
-    .eq("email_norm", emailNorm)
+    .or(`email.eq.${email},email_norm.eq.${emailNorm}`)
     .eq("is_active", true)
 
   if (error) {
-    console.error("[invite-edge] close active invites failed", {
+    console.error("[invite-edge] close conflicting invites failed", {
       message: error.message,
       details: error.details,
       hint: error.hint,
@@ -192,21 +253,44 @@ async function createInviteRow(
     invite_token_hash: string
     expires_at: string
   },
-) {
+): Promise<{
+  data: InviteInsertRow | null
+  error: InviteInsertError | null
+}> {
+  const preClose = await closeExistingConflictingInvites(
+    supabaseAdmin,
+    payload.org_id,
+    payload.email,
+    payload.email_norm,
+  )
+
+  if (preClose.error) {
+    return {
+      data: null,
+      error: {
+        message: preClose.error,
+        details: null,
+        hint: null,
+        code: "APP_PRE_CLOSE_ACTIVE_INVITES_FAILED",
+      },
+    }
+  }
+
   let insertAttempt = await insertFreshInvite(supabaseAdmin, payload)
 
   if (insertAttempt.error?.code === "23505") {
-    const closeAttempt = await closeExistingActiveInvites(
+    const retryClose = await closeExistingConflictingInvites(
       supabaseAdmin,
       payload.org_id,
+      payload.email,
       payload.email_norm,
     )
 
-    if (closeAttempt.error) {
+    if (retryClose.error) {
       return {
         data: null,
         error: {
-          message: closeAttempt.error,
+          message: retryClose.error,
           details: null,
           hint: null,
           code: "APP_REPLACE_ACTIVE_INVITE_FAILED",
@@ -217,7 +301,22 @@ async function createInviteRow(
     insertAttempt = await insertFreshInvite(supabaseAdmin, payload)
   }
 
-  return insertAttempt
+  if (insertAttempt.error) {
+    return {
+      data: null,
+      error: {
+        message: insertAttempt.error.message,
+        details: insertAttempt.error.details,
+        hint: insertAttempt.error.hint,
+        code: insertAttempt.error.code,
+      },
+    }
+  }
+
+  return {
+    data: insertAttempt.data ?? null,
+    error: null,
+  }
 }
 
 async function sendViaBrevo(args: {
@@ -230,6 +329,35 @@ async function sendViaBrevo(args: {
   expiresAt: string
 }) {
   const endpoint = "https://api.brevo.com/v3/smtp/email"
+
+  const htmlContent = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
+      <p>You have been invited to join an organization as a tracker.</p>
+      <p>
+        <a
+          href="${args.inviteUrl}"
+          target="_blank"
+          rel="noopener noreferrer"
+          style="display:inline-block;padding:10px 16px;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:8px"
+        >
+          Accept invitation
+        </a>
+      </p>
+      <p><strong>Direct link:</strong><br />${args.inviteUrl}</p>
+      <p>Organization: ${args.orgId}</p>
+      <p>Expires at: ${args.expiresAt}</p>
+    </div>
+  `.trim()
+
+  const textContent = [
+    "You have been invited to join an organization as a tracker.",
+    "",
+    `Accept invitation: ${args.inviteUrl}`,
+    "",
+    `Organization: ${args.orgId}`,
+    `Expires at: ${args.expiresAt}`,
+  ].join("\n")
+
   const body = {
     sender: {
       email: args.senderEmail,
@@ -237,12 +365,8 @@ async function sendViaBrevo(args: {
     },
     to: [{ email: args.toEmail }],
     subject: "Tracker invitation",
-    htmlContent: `
-      <p>You have been invited to join an organization as a tracker.</p>
-      <p><a href="${args.inviteUrl}">Accept invitation</a></p>
-      <p>Organization: ${args.orgId}</p>
-      <p>Expires at: ${args.expiresAt}</p>
-    `,
+    htmlContent,
+    textContent,
   }
 
   const res = await fetch(endpoint, {
@@ -276,7 +400,8 @@ Deno.serve(async (req) => {
       headers: {
         ...JSON_HEADERS,
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-user-jwt",
+        "Access-Control-Allow-Headers":
+          "authorization, x-client-info, apikey, content-type, x-user-jwt",
         "Access-Control-Allow-Methods": "POST, OPTIONS",
       },
     })
@@ -289,8 +414,10 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = getEnv("SUPABASE_URL")
     const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY")
-    const siteUrl = Deno.env.get("PUBLIC_SITE_URL")?.trim() || Deno.env.get("SITE_URL")?.trim() || ""
-    const inviteTtlHours = Number(Deno.env.get("TRACKER_INVITE_TTL_HOURS") || "168")
+    const { siteUrl, source: siteUrlSource } = resolveSiteUrl(req)
+    const inviteTtlHours = Number(
+      Deno.env.get("TRACKER_INVITE_TTL_HOURS") || "168",
+    )
 
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -310,14 +437,21 @@ Deno.serve(async (req) => {
       return json(401, { ok: false, error: "invalid_user_jwt" })
     }
 
-    const membership = await ensureMembership(supabaseAdmin, orgId, actingUser.user.id)
+    const membership = await ensureMembership(
+      supabaseAdmin,
+      orgId,
+      actingUser.user.id,
+    )
     if (membership.error) {
       return json(500, { ok: false, error: membership.error })
     }
 
     const inviteToken = crypto.randomUUID()
     const inviteTokenHash = await sha256Hex(inviteToken)
-    const expiresAt = addHoursIso(new Date(), Number.isFinite(inviteTtlHours) ? inviteTtlHours : 168)
+    const expiresAt = addHoursIso(
+      new Date(),
+      Number.isFinite(inviteTtlHours) ? inviteTtlHours : 168,
+    )
 
     const insertResult = await createInviteRow(supabaseAdmin, {
       org_id: orgId,
@@ -327,7 +461,11 @@ Deno.serve(async (req) => {
       expires_at: expiresAt,
     })
 
-    if (insertResult.error || !insertResult.data?.id || !insertResult.data?.created_at) {
+    if (
+      insertResult.error ||
+      !insertResult.data?.id ||
+      !insertResult.data?.created_at
+    ) {
       console.error("[invite-edge] insert error full", {
         message: insertResult.error?.message,
         details: insertResult.error?.details,
@@ -346,9 +484,13 @@ Deno.serve(async (req) => {
       })
     }
 
+    const invitePath =
+      `/tracker-accept?inviteToken=${encodeURIComponent(inviteToken)}` +
+      `&org_id=${encodeURIComponent(orgId)}`
+
     const inviteUrl = siteUrl
-      ? `${siteUrl.replace(/\/$/, "")}/tracker/accept-invite?token=${encodeURIComponent(inviteToken)}`
-      : `tracker/accept-invite?token=${encodeURIComponent(inviteToken)}`
+      ? `${siteUrl}${invitePath}`
+      : invitePath
 
     const brevoApiKey = Deno.env.get("BREVO_API_KEY")?.trim() || ""
     const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL")?.trim() || ""
@@ -393,6 +535,9 @@ Deno.serve(async (req) => {
       invite_id: insertResult.data.id,
       created_at: insertResult.data.created_at,
       invite_url: inviteUrl,
+      invite_path: invitePath,
+      site_url_used: siteUrl || null,
+      site_url_source: siteUrlSource,
       expires_at: expiresAt,
       delivery,
     })
