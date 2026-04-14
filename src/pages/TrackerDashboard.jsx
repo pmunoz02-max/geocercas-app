@@ -98,7 +98,7 @@ function replacePositionByUserId(rows, nextRow) {
 function formatTime(dtString) {
   if (!dtString) return "-";
   try {
-    return new Date(dtString).toLocaleTimeString();
+    return new Date(dtString).toLocaleString();
   } catch {
     return dtString;
   }
@@ -711,13 +711,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
     const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
     const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
 
-    const latestTimeRaw =
-      latest?.recorded_at ??
-      latest?.tracker_latest_at ??
-      latest?.position_at ??
-      latest?.created_at ??
-      latest?.ts ??
-      null;
+    const latestTimeRaw = getPositionTs(latest) || null;
     const latestTimeText = latestTimeRaw ? formatTime(latestTimeRaw) : "—";
 
     const accuracyNum = Number(latest?.accuracy);
@@ -826,7 +820,20 @@ const TrackerLayers = React.memo(function TrackerLayers({
         fillOpacity={markerStyle.fillOpacity}
         strokeOpacity={markerStyle.strokeOpacity}
       >
-        {renderTrackerTooltip(trackerLabel, personalId, latest, latestLat, latestLng, live)}
+        {renderTrackerTooltip(
+          {
+            display_name: latest?.display_name || trackerLabel,
+            name: latest?.name || trackerLabel,
+            personal: person,
+            profile: byUser,
+            email: latest?.email || person?.email || byUser?.email,
+            user_id: trackerId,
+          },
+          latest,
+          latestLat,
+          latestLng,
+          live
+        )}
       </AnimatedTrackerDot>
     </>
   );
@@ -2005,8 +2012,8 @@ export default function TrackerDashboard() {
 
     const markers = rows.reduce((acc, item, idx) => {
       const latest = item?.latest || null;
-      const lat = Number(latest?.lat);
-      const lng = Number(latest?.lng);
+      const lat = Number(latest?.lat ?? item?.lat);
+      const lng = Number(latest?.lng ?? item?.lng);
 
       if (!isValidLatLng(lat, lng)) return acc;
 
@@ -2015,12 +2022,26 @@ export default function TrackerDashboard() {
         latest,
         lat,
         lng,
+
+        // Campos necesarios para getFriendlyTrackerName()
+        display_name: item?.display_name ?? item?.label ?? item?.trackerLabel ?? null,
+        name: item?.name ?? null,
+        personal: item?.personal ?? null,
+        profile: item?.profile ?? null,
+        email: item?.email ?? item?.personal?.email ?? item?.profile?.email ?? null,
+        user_id: item?.user_id ?? null,
+
         personalId: item?.personalId || item?.personal_id || null,
         firstName: item?.firstName || null,
         lastName: item?.lastName || null,
         fullName: item?.fullName || null,
-        email: item?.email || null,
-        trackerLabel: item?.label || item?.baseLabel || item?.trackerLabel || item?.tracker_key || item?.user_id,
+        trackerLabel:
+          item?.label ||
+          item?.display_name ||
+          item?.baseLabel ||
+          item?.trackerLabel ||
+          item?.tracker_key ||
+          item?.user_id,
         color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
         live: item?.live || getTrackerLiveStatus(latest),
         hasValidCoords: true,
