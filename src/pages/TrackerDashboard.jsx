@@ -1367,13 +1367,6 @@ export default function TrackerDashboard() {
     return Array.from(latestByUser.values());
   }
 
-  const fetchDashboardData = useCallback(
-    async (currentOrgId, options = { showSpinner: true }) => {
-      const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) {
-        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
-        return;
-      }
 
       const { showSpinner } = options;
 
@@ -1660,6 +1653,13 @@ export default function TrackerDashboard() {
       setGeofenceEvents([]);
     }
   }, []);
+  const fetchDashboardData = useCallback(
+    async (currentOrgId, options = { showSpinner: true }) => {
+      const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) {
+        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
+        return;
+      }
 
   const reloadAllForCurrentOrg = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
