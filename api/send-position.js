@@ -30,6 +30,10 @@ function todayUtcDateString() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function buildPointWkt(lng, lat) {
+  return `SRID=4326;POINT(${Number(lng)} ${Number(lat)})`;
+}
+
 export default async function handler(req, res) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
 
@@ -167,11 +171,15 @@ export default async function handler(req, res) {
         ? source.trim()
         : "tracker_runtime";
 
+    const numericLat = Number(lat);
+    const numericLng = Number(lng);
+    const geomWkt = buildPointWkt(numericLng, numericLat);
+
     const positionPayload = {
       org_id,
       user_id: tracker_user_id,
-      lat: Number(lat),
-      lng: Number(lng),
+      lat: numericLat,
+      lng: numericLng,
       accuracy: accuracy ?? null,
       speed: speed ?? null,
       heading: heading ?? null,
@@ -184,8 +192,8 @@ export default async function handler(req, res) {
     console.log("[send-position] positions insert payload", {
       org_id,
       user_id: tracker_user_id,
-      lat: Number(lat),
-      lng: Number(lng),
+      lat: numericLat,
+      lng: numericLng,
       recorded_at: recordedAt,
     });
 
@@ -207,17 +215,35 @@ export default async function handler(req, res) {
     const latestPayload = {
       org_id,
       user_id: tracker_user_id,
-      lat: Number(lat),
-      lng: Number(lng),
+      event: "POSITION",
+      lat: numericLat,
+      lng: numericLng,
       accuracy: accuracy ?? null,
       ts: recordedAt,
+      geom: geomWkt,
+      permissions_ok:
+        permissions_ok === undefined ? true : !!permissions_ok,
+      battery_optimized:
+        battery_optimized === undefined ? null : !!battery_optimized,
+      background_allowed:
+        background_allowed === undefined ? true : !!background_allowed,
+      service_running:
+        service_running === undefined ? true : !!service_running,
       source: runtimeSource,
       battery: battery ?? null,
       is_mock: is_mock ?? false,
       speed: speed ?? null,
       heading: heading ?? null,
-      device_recorded_at: recordedAt,
+      device_recorded_at: device_recorded_at || recordedAt,
     };
+
+    console.log("[send-position] tracker_latest upsert payload", {
+      org_id,
+      user_id: tracker_user_id,
+      event: latestPayload.event,
+      ts: latestPayload.ts,
+      source: latestPayload.source,
+    });
 
     const { data: latestRow, error: latestError } = await adminClient
       .from("tracker_latest")
@@ -248,7 +274,7 @@ export default async function handler(req, res) {
             permissions_ok:
               permissions_ok === undefined ? true : !!permissions_ok,
             battery_optimized:
-              battery_optimized === undefined ? false : !!battery_optimized,
+              battery_optimized === undefined ? null : !!battery_optimized,
             background_allowed:
               background_allowed === undefined ? true : !!background_allowed,
             service_running:
