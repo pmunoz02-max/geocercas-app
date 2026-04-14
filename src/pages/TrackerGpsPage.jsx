@@ -126,6 +126,7 @@ export default function TrackerGpsPage() {
   const bootstrapTimerRef = useRef(null);
   const pollTimerRef = useRef(null);
   const watchIdRef = useRef(null);
+  const intervalRef = useRef(null);
   const isSendingRef = useRef(false);
   const disposedRef = useRef(false);
 
@@ -298,6 +299,27 @@ export default function TrackerGpsPage() {
     }));
   }
 
+  function requestSinglePosition(source = "interval") {
+    if (disposedRef.current) return;
+    if (!navigator?.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (disposedRef.current) return;
+        console.log(`[TRACKER_SINGLE_FIX] source=${source}`);
+        sendPosition(pos);
+      },
+      (error) => {
+        console.warn(`[TRACKER_SINGLE_FIX_ERROR] source=${source}`, error);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 20000,
+      },
+    );
+  }
+
   useEffect(() => {
     disposedRef.current = false;
 
@@ -413,6 +435,19 @@ export default function TrackerGpsPage() {
       },
     );
 
+    intervalRef.current = window.setInterval(() => {
+      if (disposedRef.current) return;
+      requestSinglePosition("interval");
+    }, 15000);
+
+    const handleVisibilityOrFocus = () => {
+      if (disposedRef.current) return;
+      requestSinglePosition("resume");
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
     return () => {
       disposedRef.current = true;
 
@@ -423,6 +458,14 @@ export default function TrackerGpsPage() {
         navigator.geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
+
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
     };
   }, [ready]);
 
