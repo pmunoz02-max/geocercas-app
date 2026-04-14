@@ -1,6 +1,8 @@
 ﻿// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { listGeofences } from "../lib/geofencesApi";
+import { useAuth } from "@/context/auth.js";
 
 function normalizeGeofenceRow(g) {
   const id = g?.id || "";
@@ -11,8 +13,6 @@ function normalizeGeofenceRow(g) {
     source_geocerca_id: g?.source_geocerca_id || null,
   };
 }
-import { useTranslation } from "react-i18next";
-import { useAuth } from "@/context/auth.js";
 
 function toCsvValue(v) {
   const s = v === null || v === undefined ? "" : String(v);
@@ -24,37 +24,23 @@ function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendanc
     return false;
   }
 
-  // Costos: export only cost columns, friendly headers, formatted percent
   if (reportType === "cost") {
     const columns = [
       { key: "work_date", label: "Fecha" },
-      { key: "tracker_user_id", label: "Tracker" },
-      { key: "assignment_id", label: "Asignación" },
-      { key: "activity_id", label: "Actividad" },
-      { key: "km_observados", label: "Km observados" },
-      { key: "horas_observadas", label: "Horas observadas" },
-      { key: "minutos_sin_cobertura", label: "Min sin cobertura" },
-      { key: "numero_huecos", label: "Huecos" },
-      { key: "porcentaje_cobertura", label: "Cobertura %" },
+      { key: "personal_nombre", label: "Colaborador" },
+      { key: "activity_nombre", label: "Actividad" },
+      { key: "geofence_nombre", label: "Geocerca" },
+      { key: "horas", label: "Horas" },
+      { key: "costo_base", label: "Costo base" },
       { key: "nivel_confianza", label: "Confianza" },
-      { key: "hourly_rate", label: "Tarifa hora" },
-      { key: "km_rate", label: "Tarifa km" },
-      { key: "currency_code", label: "Moneda" },
-      { key: "costo_total", label: "Costo total" },
+      { key: "estado_auditoria", label: "Auditoría" },
+      { key: "costo_final", label: "Costo final" },
     ];
+
     const header = columns.map((c) => toCsvValue(c.label)).join(",");
     const lines = rows.map((r) =>
       columns
         .map((c) => {
-          if (c.key === "porcentaje_cobertura") {
-            // Format as percent with 2 decimals if numeric
-            const v = r[c.key];
-            if (typeof v === "number" && !isNaN(v)) {
-              return toCsvValue((v * 100).toFixed(2) + "%");
-            }
-            return toCsvValue("");
-          }
-          // Prefer work_date, fallback to date for Fecha
           if (c.key === "work_date") {
             return toCsvValue(r.work_date || r.date || "");
           }
@@ -62,6 +48,7 @@ function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendanc
         })
         .join(",")
     );
+
     const csv = [header, ...lines].join("\n");
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -76,7 +63,6 @@ function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendanc
     return true;
   }
 
-  // Asistencia: export all columns as before
   const columns = Object.keys(rows[0]);
   const header = columns.map(toCsvValue).join(",");
   const lines = rows.map((r) => columns.map((k) => toCsvValue(r[k])).join(","));
@@ -94,9 +80,46 @@ function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendanc
   return true;
 }
 
+function getAuditBadgeClass(status) {
+  switch (status) {
+    case "AUDITADO_ALTO":
+      return "text-green-700 bg-green-50 border border-green-200";
+    case "AUDITADO_MEDIO":
+      return "text-yellow-700 bg-yellow-50 border border-yellow-200";
+    case "AUDITADO_BAJO":
+      return "text-red-700 bg-red-50 border border-red-200";
+    case "SIN_EVIDENCIA":
+      return "text-amber-700 bg-amber-50 border border-amber-200";
+    case "NO_AUDITABLE":
+    default:
+      return "text-gray-700 bg-gray-50 border border-gray-200";
+  }
+}
+
+function getConfidenceBadgeClass(level) {
+  switch (level) {
+    case "ALTO":
+      return "text-green-700 bg-green-50 border border-green-200";
+    case "MEDIO":
+      return "text-yellow-700 bg-yellow-50 border border-yellow-200";
+    case "BAJO":
+      return "text-red-700 bg-red-50 border border-red-200";
+    case "INSUFICIENTE":
+    case "SIN_EVIDENCIA":
+    default:
+      return "text-gray-700 bg-gray-50 border border-gray-200";
+  }
+}
+
+function formatMoney(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  return n.toFixed(2);
+}
+
 export default function Reports() {
-    // Report type toggle: 'attendance' or 'cost'
-    const [reportType, setReportType] = useState("attendance");
+  const [reportType, setReportType] = useState("attendance");
   const { t } = useTranslation();
   const { ready, authenticated, currentOrg } = useAuth();
 
@@ -173,11 +196,10 @@ export default function Reports() {
     setLoadingFilters(true);
     setErrorMsg("");
     try {
-      // Personas, activities y asignaciones desde API legacy
       const url = "/api/reportes?action=filters";
       const json = await apiGet(url);
       const data = json?.data || {};
-      // Geofences canónicas del org activo
+
       let geocercas = [];
       if (currentOrg?.id) {
         const geofencesRaw = await listGeofences(currentOrg.id, true);
@@ -185,6 +207,7 @@ export default function Reports() {
           .map(normalizeGeofenceRow)
           .filter((g) => g.id && g.source_geocerca_id);
       }
+
       setFilters({
         geocercas,
         personas: Array.isArray(data.personas) ? data.personas : [],
@@ -217,7 +240,7 @@ export default function Reports() {
         );
         return;
       }
-      // Require both start and end for costs report type
+
       if (reportType === "cost" && (!start || !end)) {
         setErrorMsg(
           tr(
@@ -227,6 +250,7 @@ export default function Reports() {
         );
         return;
       }
+
       if (start && end && start > end) {
         setErrorMsg(
           tr(
@@ -238,14 +262,23 @@ export default function Reports() {
       }
 
       const params = new URLSearchParams();
-      params.set("action", "costs");
+      params.set("action", reportType === "cost" ? "costs_hybrid" : "attendance");
+
       if (start) params.set("start", start);
       if (end) params.set("end", end);
 
-      if (selectedGeocercaIds.length) params.set("geocerca_ids", selectedGeocercaIds.join(","));
-      if (selectedPersonalIds.length) params.set("personal_ids", selectedPersonalIds.join(","));
-      if (selectedActivityIds.length) params.set("activity_ids", selectedActivityIds.join(","));
-      if (selectedAsignacionIds.length) params.set("asignacion_ids", selectedAsignacionIds.join(","));
+      if (selectedGeocercaIds.length) {
+        params.set("geocerca_ids", selectedGeocercaIds.join(","));
+      }
+      if (selectedPersonalIds.length) {
+        params.set("personal_ids", selectedPersonalIds.join(","));
+      }
+      if (selectedActivityIds.length) {
+        params.set("activity_ids", selectedActivityIds.join(","));
+      }
+      if (selectedAsignacionIds.length) {
+        params.set("asignacion_ids", selectedAsignacionIds.join(","));
+      }
 
       params.set("limit", "500");
       params.set("offset", "0");
@@ -317,7 +350,6 @@ export default function Reports() {
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-      {/* Report type toggle */}
       <div className="flex items-center gap-4 mb-2">
         <label className="text-sm font-medium text-gray-900">Tipo de reporte:</label>
         <label className="inline-flex items-center gap-1">
@@ -343,6 +375,7 @@ export default function Reports() {
           <span>Costos</span>
         </label>
       </div>
+
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-gray-900">
           {tr("reports.title", "Reports")}
@@ -607,52 +640,72 @@ export default function Reports() {
               </p>
             ) : reportType === "cost" ? (
               <>
-                <div className="mb-2 text-xs text-gray-600">
-                  <span className="font-medium">Nota:</span> La <b>cobertura observada</b> indica el porcentaje de tiempo con datos de ubicación válidos durante la jornada. El <b>nivel de confianza</b> refleja la calidad de la información recolectada para el cálculo de costos.
+                <div className="mb-2 px-4 pt-3 text-xs text-gray-600">
+                  <span className="font-medium">Nota:</span> El reporte híbrido usa{" "}
+                  <b>costo base administrativo</b> y, cuando existe histórico técnico, agrega{" "}
+                  <b>confianza</b> y <b>estado de auditoría</b>. Si no hay histórico GPS para el
+                  período, el costo final queda igual al costo base.
                 </div>
+
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50 text-gray-900">
                     <tr className="border-b border-gray-200">
                       <th className="p-2 text-left font-semibold">Fecha</th>
                       <th className="p-2 text-left font-semibold">Colaborador</th>
-                      <th className="p-2 text-left font-semibold">Asignación</th>
                       <th className="p-2 text-left font-semibold">Actividad</th>
-                      <th className="p-2 text-right font-semibold">Km recorridos</th>
-                      <th className="p-2 text-right font-semibold">Horas trabajadas</th>
-                      <th className="p-2 text-right font-semibold">Min sin señal</th>
-                      <th className="p-2 text-right font-semibold">Interrupciones</th>
-                      <th className="p-2 text-right font-semibold">Cobertura observada</th>
+                      <th className="p-2 text-left font-semibold">Geocerca</th>
+                      <th className="p-2 text-right font-semibold">Horas</th>
+                      <th className="p-2 text-right font-semibold">Costo base</th>
                       <th className="p-2 text-right font-semibold">Confianza</th>
-                      <th className="p-2 text-right font-semibold">Tarifa por hora</th>
-                      <th className="p-2 text-right font-semibold">Tarifa por km</th>
-                      <th className="p-2 text-right font-semibold">Moneda</th>
-                      <th className="p-2 text-right font-semibold">Costo total</th>
+                      <th className="p-2 text-right font-semibold">Auditoría</th>
+                      <th className="p-2 text-right font-semibold">Costo final</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r, i) => (
-                      <tr
-                        key={r.assignment_id ? `${r.assignment_id}-${i}` : i}
-                        className={`border-t border-gray-100 hover:bg-gray-50 ${
-                          i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                        }`}
-                      >
-                        <td className="p-2 text-gray-900">{r.work_date || r.date || "—"}</td>
-                        <td className="p-2 text-gray-900">{r.tracker_user_id || "—"}</td>
-                        <td className="p-2 text-gray-900">{r.assignment_id || "—"}</td>
-                        <td className="p-2 text-gray-900">{r.activity_id || "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.km_observados ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.horas_observadas ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.minutos_sin_cobertura ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.numero_huecos ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{typeof r.porcentaje_cobertura === "number" ? (r.porcentaje_cobertura * 100).toFixed(2) + "%" : "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.nivel_confianza ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.hourly_rate ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.km_rate ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.currency_code ?? "—"}</td>
-                        <td className="p-2 text-right text-gray-900">{r.costo_total ?? "—"}</td>
-                      </tr>
-                    ))}
+                    {rows.map((r, i) => {
+                      const rowKey = r.asignacion_id
+                        ? `${r.asignacion_id}-${r.work_date || i}`
+                        : i;
+
+                      return (
+                        <tr
+                          key={rowKey}
+                          className={`border-t border-gray-100 hover:bg-gray-50 ${
+                            i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                          }`}
+                        >
+                          <td className="p-2 text-gray-900">{r.work_date || "—"}</td>
+                          <td className="p-2 text-gray-900">{r.personal_nombre || "—"}</td>
+                          <td className="p-2 text-gray-900">{r.activity_nombre || "—"}</td>
+                          <td className="p-2 text-gray-900">{r.geofence_nombre || "—"}</td>
+                          <td className="p-2 text-right text-gray-900">{r.horas ?? "—"}</td>
+                          <td className="p-2 text-right text-gray-900">
+                            {formatMoney(r.costo_base)}
+                          </td>
+                          <td className="p-2 text-right">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getConfidenceBadgeClass(
+                                r.nivel_confianza
+                              )}`}
+                            >
+                              {r.nivel_confianza ?? "—"}
+                            </span>
+                          </td>
+                          <td className="p-2 text-right">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getAuditBadgeClass(
+                                r.estado_auditoria
+                              )}`}
+                            >
+                              {r.estado_auditoria ?? "—"}
+                            </span>
+                          </td>
+                          <td className="p-2 text-right font-semibold text-gray-900">
+                            {formatMoney(r.costo_final)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </>
@@ -687,10 +740,16 @@ export default function Reports() {
                       <td className="p-2 text-gray-900">{r.activity_id || "—"}</td>
                       <td className="p-2 text-right text-gray-900">{r.km_observados ?? "—"}</td>
                       <td className="p-2 text-right text-gray-900">{r.horas_observadas ?? "—"}</td>
-                      <td className="p-2 text-right text-gray-900">{r.minutos_sin_cobertura ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">
+                        {r.minutos_sin_cobertura ?? "—"}
+                      </td>
                       <td className="p-2 text-right text-gray-900">{r.numero_huecos ?? "—"}</td>
-                      <td className="p-2 text-right text-gray-900">{r.porcentaje_cobertura ?? "—"}</td>
-                      <td className="p-2 text-right text-gray-900">{r.nivel_confianza ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">
+                        {r.porcentaje_cobertura ?? "—"}
+                      </td>
+                      <td className="p-2 text-right text-gray-900">
+                        {r.nivel_confianza ?? "—"}
+                      </td>
                       <td className="p-2 text-right text-gray-900">{r.costo_total ?? "—"}</td>
                     </tr>
                   ))}
