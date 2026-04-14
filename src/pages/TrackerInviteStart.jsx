@@ -161,10 +161,61 @@ export default function TrackerInviteStart() {
     [],
   );
 
+const isInAppBrowser = useMemo(() => {
+  const ua = String(navigator.userAgent || "").toLowerCase();
+
+  return (
+    ua.includes("wv") || // Android WebView
+    ua.includes("version/") && ua.includes("chrome") === false || // webview fallback
+    ua.includes("gmail") ||
+    ua.includes("gsa") ||
+    ua.includes("fbav") ||
+    ua.includes("instagram") ||
+    ua.includes("line")
+  );
+}, []);
   const targetPath = useMemo(
     () => getTrackerTarget(location.search, orgId),
     [location.search, orgId],
   );
+
+  async function retryGeolocation() {
+    try {
+      setAcceptError("");
+      setStatus("retrying_geo");
+
+      const geo = await ensureGeolocationPermissionByPrompt();
+
+      if (!geo.ok) {
+        setStatus("geo_permission_required");
+        setAcceptError(geo.message);
+        return;
+      }
+
+      setStatus("ready");
+    } catch (error) {
+      console.error("[tracker-invite] retry geolocation failed", error);
+      setStatus("geo_permission_required");
+      setAcceptError("No se pudo volver a solicitar la ubicación.");
+    }
+  }
+
+  function openInChrome() {
+    try {
+      const url = window.location.href;
+
+      if (isAndroid) {
+        const cleanUrl = url.replace(/^https?:\/\//, "");
+        window.location.href = `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;end`;
+        return;
+      }
+
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error("[tracker-invite] openInChrome failed", error);
+      setAcceptError("No se pudo abrir en Chrome automáticamente.");
+    }
+  }
 
   async function handleAccept(e) {
     e?.preventDefault?.();
@@ -225,7 +276,10 @@ export default function TrackerInviteStart() {
 
       if (data.tracker_runtime_token) {
         localStorage.setItem("tracker_runtime_token", data.tracker_runtime_token);
-        sessionStorage.setItem("tracker_runtime_token", data.tracker_runtime_token);
+        sessionStorage.setItem(
+          "tracker_runtime_token",
+          data.tracker_runtime_token,
+        );
       }
 
       if (data.tracker_user_id) {
@@ -355,10 +409,50 @@ export default function TrackerInviteStart() {
             {submitting ? "Aceptando..." : "Aceptar y continuar"}
           </button>
 
-          {acceptError ? (
-            <div className="text-red-600 text-sm mt-2">
-              {acceptError}
+          {status === "geo_permission_required" ? (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm">
+              <p className="font-medium text-red-700">
+                Necesitamos tu ubicación para continuar
+              </p>
+
+              <p className="mt-2 text-red-600">
+                Tu navegador tiene la ubicación bloqueada o no pudo mostrar el
+                permiso. Debes habilitarla manualmente para seguir.
+              </p>
+
+              {acceptError ? (
+                <p className="mt-2 text-red-600">{acceptError}</p>
+              ) : null}
+
+              <div className="mt-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={retryGeolocation}
+                  className="w-full rounded-lg bg-slate-900 px-4 py-2 text-white font-medium"
+                >
+                  Reintentar permisos
+                </button>
+
+                {isAndroid ? (
+                  <button
+                    type="button"
+                    onClick={openInChrome}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-800 font-medium"
+                  >
+                    Abrir en Chrome
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="mt-3 rounded-lg bg-white/70 p-3 text-xs text-red-700 border border-red-100">
+                <p className="font-medium">Cómo habilitarlo en Android:</p>
+                <p className="mt-1">
+                  Chrome → Configuración del sitio → Ubicación → Permitir
+                </p>
+              </div>
             </div>
+          ) : acceptError ? (
+            <div className="mt-2 text-sm text-red-600">{acceptError}</div>
           ) : null}
 
           <button
