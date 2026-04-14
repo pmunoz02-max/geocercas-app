@@ -365,16 +365,18 @@ export default function TrackerInviteStart() {
           <span>Acepto el seguimiento de ubicación</span>
         </label>
 
-        <button
-          type="button"
-          onClick={startPermissionStep}
-          disabled={submitting}
-          className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
-        >
-          {submitting && status === "accepting"
-            ? "Procesando..."
-            : "Aceptar y continuar"}
-        </button>
+        {!showPermissionCard && !showBlockedCard && (
+          <button
+            type="button"
+            onClick={startPermissionStep}
+            disabled={submitting}
+            className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
+          >
+            {submitting && status === "accepting"
+              ? "Procesando..."
+              : "Aceptar y continuar"}
+          </button>
+        )}
 
         {showPermissionCard && (
           <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
