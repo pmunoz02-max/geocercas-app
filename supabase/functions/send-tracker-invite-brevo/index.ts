@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const BUILD_TAG = "send-tracker-invite-brevo-2026-04-13-invite-url-robust-v8"
+const BUILD_TAG = "send-tracker-invite-brevo-2026-04-13-preview-hardcoded-v10"
 const JSON_HEADERS = {
   "Content-Type": "application/json",
 }
@@ -46,52 +46,6 @@ async function sha256Hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
-}
-
-function safeUrlBase(value: string): string {
-  return value.trim().replace(/\/+$/, "")
-}
-
-function tryParseOriginLike(value: string | null): string {
-  if (!value) return ""
-  try {
-    const u = new URL(value)
-    return safeUrlBase(u.origin)
-  } catch {
-    return ""
-  }
-}
-
-function resolveSiteUrl(req: Request): { siteUrl: string; source: string } {
-  const envPublic = Deno.env.get("PUBLIC_SITE_URL")?.trim() || ""
-  if (envPublic) {
-    return { siteUrl: safeUrlBase(envPublic), source: "PUBLIC_SITE_URL" }
-  }
-
-  const envSite = Deno.env.get("SITE_URL")?.trim() || ""
-  if (envSite) {
-    return { siteUrl: safeUrlBase(envSite), source: "SITE_URL" }
-  }
-
-  const origin =
-    req.headers.get("origin") ||
-    req.headers.get("Origin") ||
-    ""
-  const parsedOrigin = tryParseOriginLike(origin)
-  if (parsedOrigin) {
-    return { siteUrl: parsedOrigin, source: "origin_header" }
-  }
-
-  const referer =
-    req.headers.get("referer") ||
-    req.headers.get("Referer") ||
-    ""
-  const parsedReferer = tryParseOriginLike(referer)
-  if (parsedReferer) {
-    return { siteUrl: parsedReferer, source: "referer_header" }
-  }
-
-  return { siteUrl: "", source: "relative_fallback" }
 }
 
 function extractUserJwt(req: Request): string {
@@ -333,17 +287,8 @@ async function sendViaBrevo(args: {
   const htmlContent = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#0f172a">
       <p>You have been invited to join an organization as a tracker.</p>
-      <p>
-        <a
-          href="${args.inviteUrl}"
-          target="_blank"
-          rel="noopener noreferrer"
-          style="display:inline-block;padding:10px 16px;background:#0f172a;color:#ffffff;text-decoration:none;border-radius:8px"
-        >
-          Accept invitation
-        </a>
-      </p>
-      <p><strong>Direct link:</strong><br />${args.inviteUrl}</p>
+      <p><strong>Open this link in Chrome:</strong></p>
+      <p style="word-break:break-all">${args.inviteUrl}</p>
       <p>Organization: ${args.orgId}</p>
       <p>Expires at: ${args.expiresAt}</p>
     </div>
@@ -352,7 +297,7 @@ async function sendViaBrevo(args: {
   const textContent = [
     "You have been invited to join an organization as a tracker.",
     "",
-    `Accept invitation: ${args.inviteUrl}`,
+    `Open this link in Chrome: ${args.inviteUrl}`,
     "",
     `Organization: ${args.orgId}`,
     `Expires at: ${args.expiresAt}`,
@@ -365,6 +310,9 @@ async function sendViaBrevo(args: {
     },
     to: [{ email: args.toEmail }],
     subject: "Tracker invitation",
+    headers: {
+      "X-Mailin-track": "0",
+    },
     htmlContent,
     textContent,
   }
@@ -414,7 +362,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = getEnv("SUPABASE_URL")
     const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY")
-    const { siteUrl, source: siteUrlSource } = resolveSiteUrl(req)
     const inviteTtlHours = Number(
       Deno.env.get("TRACKER_INVITE_TTL_HOURS") || "168",
     )
@@ -484,13 +431,13 @@ Deno.serve(async (req) => {
       })
     }
 
+    const forcedBaseUrl = "https://preview.tugeocercas.com"
+
     const invitePath =
       `/tracker-accept?inviteToken=${encodeURIComponent(inviteToken)}` +
       `&org_id=${encodeURIComponent(orgId)}`
 
-    const inviteUrl = siteUrl
-      ? `${siteUrl}${invitePath}`
-      : invitePath
+    const inviteUrl = `${forcedBaseUrl}${invitePath}`
 
     const brevoApiKey = Deno.env.get("BREVO_API_KEY")?.trim() || ""
     const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL")?.trim() || ""
@@ -536,8 +483,8 @@ Deno.serve(async (req) => {
       created_at: insertResult.data.created_at,
       invite_url: inviteUrl,
       invite_path: invitePath,
-      site_url_used: siteUrl || null,
-      site_url_source: siteUrlSource,
+      site_url_used: forcedBaseUrl,
+      site_url_source: "forced_preview_base_url",
       expires_at: expiresAt,
       delivery,
     })
