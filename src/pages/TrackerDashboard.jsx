@@ -1394,176 +1394,18 @@ export default function TrackerDashboard() {
           setTrackerCounts(countsRow);
         }
 
-        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-        const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
+   const latestRes = await loadLatestPositions(safeOrgId);
 
-        const latestRes = await loadLatestPositions(safeOrgId);
-        const latestRows = filterRowsToAssignedTrackers(latestRes?.rows || []);
-        let source = "tracker_latest";
-        let finalRows = latestRows;
+// ✅ MISMO FIX AQUÍ
+let latestRows = latestRes?.rows || [];
 
-        if (latestRows.length === 0) {
-          finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
-          source = "positions";
-        }
-
-        finalRows = (finalRows || []).filter((p) => {
-          const lat = Number(p?.lat);
-          const lng = Number(p?.lng);
-          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
-        });
-
-        setPositions(finalRows);
-        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
-      } finally {
-        if (showSpinner) setLoading(false);
-      }
-    },
-    [timeWindowId]
+if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
+  latestRows = latestRows.filter((row) =>
+    allowedAssignmentUserIds.has(String(row?.user_id))
   );
+}
 
-  const loadLatestPositionsForDashboard = useCallback(
-    async (currentOrgId, options = { showSpinner: true }) => {
-      const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) {
-        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
-        return;
-      }
-      const { showSpinner } = options;
-
-      try {
-        if (showSpinner) setLoading(true);
-        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
-        setErrorMsg("");
-
-        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-        const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
-
-        const latestRes = await loadLatestPositions(safeOrgId)
-        const latestRows = filterRowsToAssignedTrackers(latestRes?.rows || []);
-        console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
-
-        let source = "tracker_latest";
-        let finalRows = latestRows;
-
-        if (latestRows.length > 0) {
-          logLiveMetric("tracker_latest_used", {
-            orgId: safeOrgId,
-            rows: latestRows.length,
-          });
-        }
-
-        if (latestRows.length === 0) {
-          const fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours)
-          console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
-          logLiveMetric("fallback_positions_used", {
-            orgId: safeOrgId,
-            rows: fallbackRows.length,
-          });
-          source = "positions";
-          finalRows = fallbackRows;
-        }
-
-        finalRows = (finalRows || []).filter((p) => {
-          const lat = Number(p?.lat);
-          const lng = Number(p?.lng);
-          return p?.lat != null && p?.lng != null && !Number.isNaN(lat) && !Number.isNaN(lng);
-        });
-
-        console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
-
-        setPositions(finalRows);
-        setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
-      } finally {
-        if (showSpinner) setLoading(false);
-      }
-    },
-    [assignmentTrackers, timeWindowId]
-  );
-
-  async function loadLatestPositionsSafe(currentOrgId) {
-    const safeOrgId = normalizeUuid(currentOrgId);
-    if (!safeOrgId) {
-      console.warn("[tracker-dashboard] invalid org_id for tracker_latest, skipping query", currentOrgId);
-      return [];
-    }
-
-    const res = await loadLatestPositions(safeOrgId);
-    return res?.rows || [];
-  }
-
-  async function loadPositionsFallbackSafe(currentOrgId, hoursBack) {
-    const safeOrgId = normalizeUuid(currentOrgId);
-    if (!safeOrgId) {
-      console.warn("[tracker-dashboard] invalid org_id for positions fallback, skipping query", currentOrgId);
-      return [];
-    }
-
-    return await loadLivePositionsFromPositions(safeOrgId, hoursBack);
-  }
-
-  const fetchPositions = useCallback(
-    async (currentOrgId, options = { showSpinner: true }) => {
-      const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) return;
-      const { showSpinner } = options;
-
-      try {
-        if (showSpinner) setLoading(true);
-        setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
-        setErrorMsg("");
-
-        const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
-        const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
-
-        const selectCols =
-          "id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at";
-
-        const orTime =
-          `recorded_at.gte.${fromIso},and(recorded_at.is.null,created_at.gte.${fromIso})`;
-
-        const queryTable = async (tableName) => {
-          let q = supabase
-            .from(tableName)
-            .select(selectCols)
-            .eq("org_id", safeOrgId)
-            .or(orTime)
-            .order("recorded_at", { ascending: false, nullsFirst: false })
-            .order("created_at", { ascending: false })
-            .limit(500);
-
-          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-            const allowedUserIds = assignmentTrackers
-              .map((x) => normalizeUuid(x?.user_id))
-              .filter(Boolean);
-            if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
-          }
-
-          return await q;
-        };
-
-        const latestRes = await loadLatestPositions(safeOrgId);
-        const latestRows = filterRowsToAssignedTrackers(latestRes?.rows || []);
-
-        let finalRows = [];
-        let tableUsed = "tracker_latest";
-
-        if (latestRows.length > 0) {
-          finalRows = latestRows;
-        } else {
-          tableUsed = "positions";
-          let res = await queryTable("positions");
-
-          const shouldFallbackToLegacy =
-            !!res.error ||
-            !Array.isArray(res.data) ||
-            res.data.length === 0;
-
-          if (shouldFallbackToLegacy) {
-            const res2 = await queryTable("tracker_positions");
-            tableUsed = "tracker_positions";
-            res = res2;
-          }
+console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
 
           if (!res.error && Array.isArray(res.data)) {
             finalRows = res.data.map((p) => ({
