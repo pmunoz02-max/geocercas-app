@@ -50,7 +50,7 @@ function getTrackerTarget(search, fallbackOrgId = "") {
   return qs ? `/tracker-gps?${qs}` : "/tracker-gps";
 }
 
-function requestCurrentPosition() {
+function requestCurrentPositionOnce() {
   return new Promise((resolve, reject) => {
     if (!navigator?.geolocation) {
       reject(new Error("Geolocation API not available"));
@@ -59,53 +59,66 @@ function requestCurrentPosition() {
 
     navigator.geolocation.getCurrentPosition(resolve, reject, {
       enableHighAccuracy: true,
-      maximumAge: 30000,
+      maximumAge: 0,
       timeout: 60000,
     });
   });
 }
 
-async function ensureGeolocationPermission() {
-  if (!navigator?.geolocation) {
+function getGeoErrorMessage(error) {
+  const code = error?.code;
+  const raw = String(error?.message || "").toLowerCase();
+
+  if (code === 1 || raw.includes("permission")) {
+    return "La ubicación está bloqueada para este sitio. Habilítala en Chrome para continuar.";
+  }
+
+  if (code === 2) {
+    return "No se pudo obtener la ubicación. Activa GPS y vuelve a intentar.";
+  }
+
+  if (code === 3 || raw.includes("timeout")) {
+    return "La ubicación tardó demasiado. Intenta de nuevo con mejor señal GPS.";
+  }
+
+  return "No se pudo obtener permiso de ubicación.";
+}
+
+async function getPermissionState() {
+  try {
+    if (!navigator?.permissions?.query) return "unknown";
+    const result = await navigator.permissions.query({ name: "geolocation" });
+    return result?.state || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function ensureGeolocationPermissionByPrompt() {
+  const state = await getPermissionState();
+
+  if (state === "granted") {
+    return { ok: true, permissionState: "granted" };
+  }
+
+  if (state === "denied") {
     return {
       ok: false,
-      code: "geo_not_supported",
-      message: "Este dispositivo no soporta geolocalización.",
+      permissionState: "denied",
+      message:
+        "La ubicación está bloqueada para este sitio. En Chrome: Ajustes del sitio → Ubicación → Permitir.",
     };
   }
 
   try {
-    if (navigator.permissions?.query) {
-      const status = await navigator.permissions.query({ name: "geolocation" });
-
-      if (status.state === "granted") {
-        return { ok: true, state: "granted" };
-      }
-
-      // Si está denied, igual intentamos una lectura por si el navegador decide repreguntar.
-      try {
-        await requestCurrentPosition();
-        return { ok: true, state: "granted_after_prompt" };
-      } catch (error) {
-        return {
-          ok: false,
-          code: "geo_permission_denied",
-          message:
-            error?.message ||
-            "Debes habilitar el permiso de ubicación para continuar.",
-        };
-      }
-    }
-
-    await requestCurrentPosition();
-    return { ok: true, state: "granted_after_prompt" };
+    await requestCurrentPositionOnce();
+    return { ok: true, permissionState: "prompt_or_unknown" };
   } catch (error) {
     return {
       ok: false,
-      code: "geo_permission_denied",
-      message:
-        error?.message ||
-        "Debes habilitar el permiso de ubicación para continuar.",
+      permissionState: state,
+      message: getGeoErrorMessage(error),
+      rawError: error,
     };
   }
 }
@@ -172,6 +185,16 @@ export default function TrackerInviteStart() {
     try {
       setSubmitting(true);
       setAcceptError("");
+
+      setStatus("requesting_geo_permission");
+      const geo = await ensureGeolocationPermissionByPrompt();
+
+      if (!geo.ok) {
+        setStatus("geo_permission_required");
+        setAcceptError(geo.message);
+        return;
+      }
+
       setStatus("accepting");
 
       const response = await fetch("/api/accept-tracker-invite", {
@@ -213,23 +236,13 @@ export default function TrackerInviteStart() {
       if (data.org_id) {
         localStorage.setItem("tracker_org_id", data.org_id);
         sessionStorage.setItem("tracker_org_id", data.org_id);
+        localStorage.setItem("org_id", data.org_id);
+        sessionStorage.setItem("org_id", data.org_id);
       }
 
       if (data.invite_id) {
         localStorage.setItem("tracker_invite_id", data.invite_id);
         sessionStorage.setItem("tracker_invite_id", data.invite_id);
-      }
-
-      setStatus("requesting_geo_permission");
-
-      const geo = await ensureGeolocationPermission();
-
-      if (!geo.ok) {
-        setStatus("geo_permission_required");
-        setAcceptError(
-          "Debes permitir ubicación precisa para iniciar el tracker.",
-        );
-        return;
       }
 
       setStatus(data.idempotent ? "already_accepted" : "accepted");
