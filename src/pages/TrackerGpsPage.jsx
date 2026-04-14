@@ -1,81 +1,157 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-function decodeJwtSub(token) {
+function getStorageItem(key) {
   try {
-    if (!token) return null;
+    const localValue = localStorage.getItem(key);
+    if (localValue) return localValue;
 
-    const payload = token.split(".")[1];
-    if (!payload) return null;
+    const sessionValue = sessionStorage.getItem(key);
+    if (sessionValue) return sessionValue;
 
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    const decoded = JSON.parse(atob(padded));
-
-    return decoded?.sub || null;
+    return null;
   } catch {
     return null;
   }
 }
 
+function setStorageItem(key, value) {
+  try {
+    if (value == null || value === "") return;
+    localStorage.setItem(key, value);
+    sessionStorage.setItem(key, value);
+  } catch {
+    // no-op
+  }
+}
+
 function readRuntimeSessionFromStorage() {
   try {
-    const authRaw = localStorage.getItem("geocercas-tracker-auth");
-    let authParsed = null;
-
-    if (authRaw) {
-      try {
-        authParsed = JSON.parse(authRaw);
-      } catch {
-        authParsed = null;
-      }
-    }
-
     const runtimeToken =
-      localStorage.getItem("tracker_runtime_token") ||
-      localStorage.getItem("tracker_access_token") ||
-      authParsed?.access_token ||
-      null;
+      getStorageItem("tracker_runtime_token") ||
+      getStorageItem("tracker_access_token") ||
+      (typeof window !== "undefined" ? window.runtimeInviteToken || null : null);
 
-    let trackerUserId = localStorage.getItem("tracker_user_id") || null;
-    if (!trackerUserId && runtimeToken) {
-      trackerUserId = decodeJwtSub(runtimeToken);
-    }
+    const trackerUserId =
+      getStorageItem("tracker_user_id") ||
+      getStorageItem("user_id") ||
+      (typeof window !== "undefined" ? window.trackerUserId || null : null);
 
     const orgId =
-      localStorage.getItem("org_id") ||
-      localStorage.getItem("tracker_org_id") ||
-      authParsed?.org_id ||
-      null;
+      getStorageItem("tracker_org_id") ||
+      getStorageItem("org_id") ||
+      (typeof window !== "undefined" ? window.orgId || null : null);
 
-    return { runtimeToken, trackerUserId, orgId };
+    return {
+      runtimeToken: runtimeToken || null,
+      trackerUserId: trackerUserId || null,
+      orgId: orgId || null,
+    };
   } catch {
     return { runtimeToken: null, trackerUserId: null, orgId: null };
   }
 }
 
+function syncRuntimeSession(session) {
+  try {
+    const runtimeToken = session?.runtimeToken || null;
+    const trackerUserId = session?.trackerUserId || null;
+    const orgId = session?.orgId || null;
+
+    if (runtimeToken) {
+      setStorageItem("tracker_runtime_token", runtimeToken);
+      setStorageItem("tracker_access_token", runtimeToken);
+      if (typeof window !== "undefined") {
+        window.runtimeInviteToken = runtimeToken;
+      }
+    }
+
+    if (trackerUserId) {
+      setStorageItem("tracker_user_id", trackerUserId);
+      setStorageItem("user_id", trackerUserId);
+      if (typeof window !== "undefined") {
+        window.trackerUserId = trackerUserId;
+      }
+    }
+
+    if (orgId) {
+      setStorageItem("tracker_org_id", orgId);
+      setStorageItem("org_id", orgId);
+      if (typeof window !== "undefined") {
+        window.orgId = orgId;
+      }
+    }
+  } catch {
+    // no-op
+  }
+}
+
+function buildPositionPayload(runtimeSession, pos) {
+  const lat = pos?.coords?.latitude;
+  const lng = pos?.coords?.longitude;
+  const accuracy = pos?.coords?.accuracy ?? null;
+  const speed = pos?.coords?.speed ?? null;
+  const heading = pos?.coords?.heading ?? null;
+  const altitude = pos?.coords?.altitude ?? null;
+
+  return {
+    org_id: runtimeSession.orgId,
+    tracker_user_id: runtimeSession.trackerUserId,
+    lat,
+    lng,
+    accuracy,
+    speed,
+    heading,
+    altitude,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export default function TrackerGpsPage() {
   const [msg, setMsg] = useState("Inicializando tracker...");
-  const [runtimeSession, setRuntimeSession] = useState(() =>
-    readRuntimeSessionFromStorage(),
-  );
+  const [runtimeSession, setRuntimeSession] = useState(() => {
+    const initial = readRuntimeSessionFromStorage();
+    syncRuntimeSession(initial);
+    return initial;
+  });
 
-  const ready = useMemo(
-    () =>
-      Boolean(
-        runtimeSession.runtimeToken &&
-          runtimeSession.trackerUserId &&
-          runtimeSession.orgId,
-      ),
-    [runtimeSession],
-  );
+  const [debugInfo, setDebugInfo] = useState(() => ({
+    hasRuntimeToken: false,
+    hasTrackerUserId: false,
+    hasOrgId: false,
+    lastSendAt: null,
+    lastSendOk: false,
+    lastError: null,
+  }));
+
+  const bootstrapTimerRef = useRef(null);
+  const pollTimerRef = useRef(null);
+  const watchIdRef = useRef(null);
+  const isSendingRef = useRef(false);
+  const disposedRef = useRef(false);
+
+  const ready = useMemo(() => {
+    return Boolean(
+      runtimeSession.runtimeToken &&
+        runtimeSession.trackerUserId &&
+        runtimeSession.orgId,
+    );
+  }, [runtimeSession]);
 
   function refreshRuntimeSessionState(nextMsgWhenMissing = null) {
     const stored = readRuntimeSessionFromStorage();
+    syncRuntimeSession(stored);
     setRuntimeSession(stored);
 
     const hasCompleteSession = Boolean(
       stored.runtimeToken && stored.trackerUserId && stored.orgId,
     );
+
+    setDebugInfo((prev) => ({
+      ...prev,
+      hasRuntimeToken: !!stored.runtimeToken,
+      hasTrackerUserId: !!stored.trackerUserId,
+      hasOrgId: !!stored.orgId,
+    }));
 
     console.log("[TRACKER_SESSION_STATE]", {
       hasRuntimeToken: !!stored.runtimeToken,
@@ -85,11 +161,17 @@ export default function TrackerGpsPage() {
     });
 
     if (hasCompleteSession) {
-      setMsg((prev) =>
-        prev?.startsWith("ERROR") || prev?.startsWith("GEO_ERROR")
-          ? prev
-          : "Tracker listo",
-      );
+      setMsg((prev) => {
+        if (
+          typeof prev === "string" &&
+          (prev.startsWith("ERROR") ||
+            prev.startsWith("GEO_ERROR") ||
+            prev.startsWith("GEO_BOOTSTRAP"))
+        ) {
+          return prev;
+        }
+        return "Tracker listo";
+      });
     } else if (nextMsgWhenMissing) {
       setMsg(nextMsgWhenMissing);
     }
@@ -97,8 +179,151 @@ export default function TrackerGpsPage() {
     return stored;
   }
 
+  async function sendPosition(pos) {
+    if (disposedRef.current) return;
+
+    const currentSession = readRuntimeSessionFromStorage();
+    syncRuntimeSession(currentSession);
+    setRuntimeSession(currentSession);
+
+    const token = currentSession.runtimeToken;
+    const orgId = currentSession.orgId;
+    const trackerUserId = currentSession.trackerUserId;
+
+    const lat = pos?.coords?.latitude;
+    const lng = pos?.coords?.longitude;
+
+    if (!token || !orgId || !trackerUserId) {
+      const errorMsg = "ERROR runtime_session_incomplete";
+      console.error("[SEND_POSITION_BLOCKED]", {
+        hasToken: !!token,
+        hasOrgId: !!orgId,
+        hasTrackerUserId: !!trackerUserId,
+      });
+      setMsg(errorMsg);
+      setDebugInfo((prev) => ({
+        ...prev,
+        hasRuntimeToken: !!token,
+        hasTrackerUserId: !!trackerUserId,
+        hasOrgId: !!orgId,
+        lastError: errorMsg,
+      }));
+      return;
+    }
+
+    if (lat == null || lng == null) {
+      const errorMsg = "ERROR missing_coordinates";
+      console.error("[SEND_POSITION_BLOCKED]", { lat, lng });
+      setMsg(errorMsg);
+      setDebugInfo((prev) => ({
+        ...prev,
+        lastError: errorMsg,
+      }));
+      return;
+    }
+
+    if (isSendingRef.current) {
+      console.log("[SEND_POSITION_SKIPPED] request already in flight");
+      return;
+    }
+
+    isSendingRef.current = true;
+
+    try {
+      const body = buildPositionPayload(currentSession, pos);
+
+      const response = await fetch("/api/send-position", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data?.ok === false) {
+        throw new Error(
+          data?.message ||
+            data?.code ||
+            data?.error ||
+            response.statusText ||
+            "send_position_failed",
+        );
+      }
+
+      const okMsg = "OK ✔ posición enviada";
+      setMsg(okMsg);
+      setDebugInfo((prev) => ({
+        ...prev,
+        hasRuntimeToken: true,
+        hasTrackerUserId: true,
+        hasOrgId: true,
+        lastSendAt: new Date().toISOString(),
+        lastSendOk: true,
+        lastError: null,
+      }));
+
+      console.log("[SEND_POSITION_OK]", {
+        trackerUserId,
+        orgId,
+        lat,
+        lng,
+      });
+    } catch (error) {
+      const errorMsg = `ERROR ${error?.message || "send_position_failed"}`;
+      console.error("[SEND_POSITION_ERROR]", error);
+      setMsg(errorMsg);
+      setDebugInfo((prev) => ({
+        ...prev,
+        lastSendOk: false,
+        lastError: errorMsg,
+      }));
+    } finally {
+      isSendingRef.current = false;
+    }
+  }
+
+  function handleGeoError(error, prefix = "GEO_ERROR") {
+    if (disposedRef.current) return;
+
+    const message = error?.message || error?.code || "?";
+    const full = `${prefix} ${message}`;
+    console.error(`[${prefix}]`, error);
+    setMsg(full);
+    setDebugInfo((prev) => ({
+      ...prev,
+      lastError: full,
+    }));
+  }
+
   useEffect(() => {
-    refreshRuntimeSessionState("Esperando sesión runtime válida...");
+    disposedRef.current = false;
+
+    const stored = refreshRuntimeSessionState("Esperando sesión runtime válida...");
+
+    if (!stored.runtimeToken || !stored.trackerUserId || !stored.orgId) {
+      bootstrapTimerRef.current = window.setTimeout(() => {
+        if (disposedRef.current) return;
+        const latest = refreshRuntimeSessionState(
+          "Esperando sesión runtime válida...",
+        );
+
+        if (!latest.runtimeToken || !latest.trackerUserId || !latest.orgId) {
+          setMsg("Esperando sesión runtime válida...");
+        }
+      }, 300);
+    }
+
+    return () => {
+      disposedRef.current = true;
+
+      if (bootstrapTimerRef.current) {
+        window.clearTimeout(bootstrapTimerRef.current);
+        bootstrapTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -107,129 +332,99 @@ export default function TrackerGpsPage() {
     let cancelled = false;
 
     const poll = () => {
-      if (cancelled) return;
+      if (cancelled || disposedRef.current) return;
 
       const stored = readRuntimeSessionFromStorage();
       const hasSession =
-        stored.runtimeToken && stored.trackerUserId && stored.orgId;
+        !!stored.runtimeToken && !!stored.trackerUserId && !!stored.orgId;
 
       if (hasSession) {
-        console.log("[TRACKER_POLL] session detected");
+        console.log("[TRACKER_POLL] runtime session detected");
+        syncRuntimeSession(stored);
         setRuntimeSession(stored);
         setMsg("Tracker listo");
+        setDebugInfo((prev) => ({
+          ...prev,
+          hasRuntimeToken: true,
+          hasTrackerUserId: true,
+          hasOrgId: true,
+        }));
         return;
       }
 
-      console.log("[TRACKER_POLL] waiting for session...");
-      window.setTimeout(poll, 1000);
+      console.log("[TRACKER_POLL] waiting for runtime session...");
+      pollTimerRef.current = window.setTimeout(poll, 1000);
     };
 
     poll();
 
     return () => {
       cancelled = true;
+      if (pollTimerRef.current) {
+        window.clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
     };
   }, [ready]);
 
   useEffect(() => {
     if (!ready) return;
 
-    let watchId = null;
-    let disposed = false;
+    disposedRef.current = false;
 
-    function handlePosition(pos) {
-      if (disposed) return;
-
-      const token = runtimeSession.runtimeToken;
-      const org = runtimeSession.orgId;
-      const trackerUserId = runtimeSession.trackerUserId;
-
-      const lat = pos?.coords?.latitude;
-      const lng = pos?.coords?.longitude;
-      const accuracy = pos?.coords?.accuracy;
-      const timestamp = new Date().toISOString();
-
-      if (lat == null || lng == null || !token || !org || !trackerUserId) {
-        console.error("[SEND_POSITION_BLOCKED] missing runtime session or coordinates", {
-          hasToken: !!token,
-          hasOrg: !!org,
-          hasTrackerUserId: !!trackerUserId,
-          lat,
-          lng,
-        });
-        return;
-      }
-
-      const body = {
-        org_id: org,
-        lat,
-        lng,
-        accuracy,
-        timestamp,
-        tracker_user_id: trackerUserId,
-      };
-
-      fetch("/api/send-position", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      })
-        .then(async (res) => {
-          let data = null;
-          try {
-            data = await res.json();
-          } catch {
-            data = null;
-          }
-
-          if (!res.ok) {
-            throw new Error(data?.error || res.statusText);
-          }
-
-          setMsg("OK ✔");
-        })
-        .catch((err) => {
-          setMsg("ERROR " + (err?.message || "?"));
-        });
+    if (!navigator?.geolocation) {
+      setMsg("ERROR geolocation_not_available");
+      setDebugInfo((prev) => ({
+        ...prev,
+        lastError: "ERROR geolocation_not_available",
+      }));
+      return;
     }
 
-    function handleError(err) {
-      if (disposed) return;
-      setMsg("GEO_ERROR " + (err?.message || err?.code || "?"));
-    }
+    setMsg("Tracker activo, obteniendo ubicación...");
 
-    if (navigator?.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        handlePosition,
-        (err) => {
-          console.warn("[GEO_BOOTSTRAP_ERROR]", err);
-          setMsg("GEO_BOOTSTRAP " + (err?.message || err?.code || "?"));
-        },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 30000,
-          timeout: 60000,
-        }
-      );
-
-      watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        if (disposedRef.current) return;
+        sendPosition(pos);
+      },
+      (error) => {
+        handleGeoError(error, "GEO_BOOTSTRAP");
+      },
+      {
         enableHighAccuracy: true,
-        maximumAge: 30000,
+        maximumAge: 15000,
         timeout: 60000,
-      });
-    } else {
-      setMsg("Geolocation API not available");
-    }
+      },
+    );
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (disposedRef.current) return;
+        sendPosition(pos);
+      },
+      (error) => {
+        handleGeoError(error, "GEO_ERROR");
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 15000,
+        timeout: 60000,
+      },
+    );
+
     return () => {
-      disposed = true;
-      if (watchId != null && navigator?.geolocation?.clearWatch) {
-        navigator.geolocation.clearWatch(watchId);
+      disposedRef.current = true;
+
+      if (
+        watchIdRef.current != null &&
+        navigator?.geolocation?.clearWatch
+      ) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
       }
     };
-  }, [ready, runtimeSession]);
+  }, [ready]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -279,6 +474,15 @@ export default function TrackerGpsPage() {
             El tracking está funcionando correctamente.
             <br />
             Último estado: <b>{msg}</b>
+          </div>
+
+          <div style={{ fontSize: 13, opacity: 0.8, marginTop: 12 }}>
+            Último envío:{" "}
+            <b>{debugInfo.lastSendAt ? debugInfo.lastSendAt : "sin envíos aún"}</b>
+            <br />
+            Último resultado: <b>{debugInfo.lastSendOk ? "OK" : "pendiente/error"}</b>
+            <br />
+            Último error: <b>{debugInfo.lastError || "ninguno"}</b>
           </div>
 
           <button

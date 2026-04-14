@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 function getInviteParams() {
   const url = new URL(window.location.href);
@@ -21,49 +21,31 @@ function getInviteParams() {
   return { inviteToken, orgId };
 }
 
-function getTrackerTarget(search, fallbackOrgId = "") {
-  const incoming = new URLSearchParams(search || "");
-  const out = new URLSearchParams();
-
-  [
-    "org_id",
-    "orgId",
-    "invite_id",
-    "inviteToken",
-    "invite_token",
-    "t",
-    "token",
-    "access_token",
-  ].forEach((k) => {
-    const v = incoming.get(k);
-    if (v) out.set(k, v);
-  });
-
-  if (!out.get("org_id") && fallbackOrgId) {
-    out.set("org_id", fallbackOrgId);
+function setStorageItem(key, value) {
+  try {
+    if (value == null || value === "") return;
+    localStorage.setItem(key, value);
+    sessionStorage.setItem(key, value);
+  } catch {
+    // no-op
   }
-
-  const qs = out.toString();
-  return qs ? `/tracker-gps?${qs}` : "/tracker-gps";
 }
 
-function decodeJwtSub(token) {
+function clearLegacyTrackerTokens() {
   try {
-    if (!token) return null;
-    const parts = token.split(".");
-    if (parts.length < 2) return null;
-
-    const payload = parts[1]
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-
-    const padding = (4 - (payload.length % 4 || 4)) % 4;
-    const normalized = payload + "=".repeat(padding);
-    const decoded = JSON.parse(atob(normalized));
-
-    return decoded?.sub || null;
+    [
+      "auth_token",
+      "owner_token",
+      "session_token",
+      "tracker_token",
+      "access_token",
+      "geocercas-tracker-auth",
+    ].forEach((key) => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    });
   } catch {
-    return null;
+    // no-op
   }
 }
 
@@ -140,7 +122,6 @@ async function ensureGeolocationPermissionByPrompt() {
 }
 
 export default function TrackerInviteStart() {
-  const location = useLocation();
   const navigate = useNavigate();
 
   const [acceptError, setAcceptError] = useState("");
@@ -152,9 +133,7 @@ export default function TrackerInviteStart() {
 
   const authToken =
     inviteToken ||
-    window.runtimeInviteToken ||
-    window.token ||
-    null;
+    (typeof window !== "undefined" ? window.runtimeInviteToken || null : null);
 
   const isAndroid = useMemo(
     () => /Android/i.test(String(navigator.userAgent || "")),
@@ -169,59 +148,48 @@ export default function TrackerInviteStart() {
       ua.includes("gsa") ||
       ua.includes("fbav") ||
       ua.includes("instagram") ||
-      ua.includes("line")
+      ua.includes("line") ||
+      ua.includes("whatsapp")
     );
   }, []);
 
-  const targetPath = useMemo(
-    () => getTrackerTarget(location.search, orgId),
-    [location.search, orgId],
-  );
-
   async function persistTrackerSessionFromResponse(data) {
     const runtimeToken = data?.tracker_runtime_token || null;
-    const resolvedTrackerUserId =
-      data?.tracker_user_id || decodeJwtSub(runtimeToken);
+    const resolvedTrackerUserId = data?.tracker_user_id || null;
     const resolvedOrgId = data?.org_id || orgId || null;
+    const inviteId = data?.invite_id || null;
 
-    if (runtimeToken) {
-      localStorage.setItem("tracker_runtime_token", runtimeToken);
-      sessionStorage.setItem("tracker_runtime_token", runtimeToken);
-
-      localStorage.setItem("tracker_access_token", runtimeToken);
-      sessionStorage.setItem("tracker_access_token", runtimeToken);
+    if (!runtimeToken || !resolvedTrackerUserId || !resolvedOrgId) {
+      throw new Error("accept_response_missing_runtime_fields");
     }
 
-    if (resolvedTrackerUserId) {
-      localStorage.setItem("tracker_user_id", resolvedTrackerUserId);
-      sessionStorage.setItem("tracker_user_id", resolvedTrackerUserId);
-      localStorage.setItem("user_id", resolvedTrackerUserId);
-      sessionStorage.setItem("user_id", resolvedTrackerUserId);
-    }
+    clearLegacyTrackerTokens();
 
-    if (resolvedOrgId) {
-      localStorage.setItem("tracker_org_id", resolvedOrgId);
-      sessionStorage.setItem("tracker_org_id", resolvedOrgId);
-      localStorage.setItem("org_id", resolvedOrgId);
-      sessionStorage.setItem("org_id", resolvedOrgId);
-    }
+    setStorageItem("tracker_runtime_token", runtimeToken);
+    setStorageItem("tracker_access_token", runtimeToken);
 
-    if (data?.invite_id) {
-      localStorage.setItem("tracker_invite_id", data.invite_id);
-      sessionStorage.setItem("tracker_invite_id", data.invite_id);
+    setStorageItem("tracker_user_id", resolvedTrackerUserId);
+    setStorageItem("user_id", resolvedTrackerUserId);
+
+    setStorageItem("tracker_org_id", resolvedOrgId);
+    setStorageItem("org_id", resolvedOrgId);
+
+    if (inviteId) {
+      setStorageItem("tracker_invite_id", inviteId);
     }
 
     if (typeof window !== "undefined") {
-      if (runtimeToken) {
-        window.runtimeInviteToken = runtimeToken;
-      }
-      if (resolvedTrackerUserId) {
-        window.trackerUserId = resolvedTrackerUserId;
-      }
-      if (resolvedOrgId) {
-        window.orgId = resolvedOrgId;
-      }
+      window.runtimeInviteToken = runtimeToken;
+      window.trackerUserId = resolvedTrackerUserId;
+      window.orgId = resolvedOrgId;
     }
+
+    console.log("[TRACKER_RUNTIME_PERSISTED]", {
+      hasRuntimeToken: !!runtimeToken,
+      hasTrackerUserId: !!resolvedTrackerUserId,
+      hasOrgId: !!resolvedOrgId,
+      inviteId: inviteId || null,
+    });
   }
 
   async function acceptInviteAndContinue() {
@@ -263,12 +231,7 @@ export default function TrackerInviteStart() {
 
       setStatus(data?.idempotent ? "already_accepted" : "accepted");
 
-      const redirectTo =
-        typeof data?.redirectTo === "string" && data.redirectTo
-          ? data.redirectTo
-          : targetPath;
-
-      navigate(redirectTo, { replace: true });
+      navigate("/tracker-gps", { replace: true });
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
       setStatus("accept_failed");
@@ -487,8 +450,7 @@ export default function TrackerInviteStart() {
 
             {isInAppBrowser ? (
               <p className="mt-3 text-xs text-red-500">
-                Estás dentro de Gmail o WhatsApp. Usa <strong>Abrir app</strong>
-                .
+                Estás dentro de Gmail o WhatsApp. Usa <strong>Abrir app</strong>.
               </p>
             ) : null}
 
