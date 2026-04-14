@@ -958,7 +958,7 @@ export default function TrackerDashboard() {
       skippedZeroZero: 0,
       selectedGeofences: 0,
     }));
-  }, [resolvedOrgId, fetchDashboardData]);
+  }, [resolvedOrgId]);
 
   useEffect(() => {
     if (!resolvedOrgId) return;
@@ -1368,6 +1368,14 @@ export default function TrackerDashboard() {
   }
 
 
+  const fetchDashboardData = useCallback(
+    async (currentOrgId, options = { showSpinner: true }) => {
+      const safeOrgId = normalizeUuid(currentOrgId);
+      if (!safeOrgId) {
+        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
+        return;
+      }
+
       const { showSpinner } = options;
 
       try {
@@ -1441,6 +1449,8 @@ export default function TrackerDashboard() {
     [timeWindowId, allowedAssignmentUserIds]
   );
 
+
+
   const loadLatestPositionsForDashboard = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       const safeOrgId = normalizeUuid(currentOrgId);
@@ -1508,6 +1518,7 @@ export default function TrackerDashboard() {
     [assignmentTrackers, timeWindowId, allowedAssignmentUserIds]
   );
 
+
   async function loadLatestPositionsSafe(currentOrgId) {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) {
@@ -1528,6 +1539,7 @@ export default function TrackerDashboard() {
 
     return await loadLivePositionsFromPositions(safeOrgId, hoursBack);
   }
+
 
   const fetchPositions = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
@@ -1629,6 +1641,7 @@ export default function TrackerDashboard() {
     [assignmentTrackers, timeWindowId, allowedAssignmentUserIds]
   );
 
+
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
       if (!safeOrgId) return;
@@ -1653,36 +1666,6 @@ export default function TrackerDashboard() {
       setGeofenceEvents([]);
     }
   }, []);
-  const fetchDashboardData = useCallback(
-    async (currentOrgId, options = { showSpinner: true }) => {
-      const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) {
-        console.warn("[tracker-dashboard] dashboard load skipped: org not resolved", currentOrgId);
-        return;
-      }
-
-  const reloadAllForCurrentOrg = useCallback(async (currentOrgId) => {
-    const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) return;
-    await Promise.all([
-      fetchAssignments(currentOrgId),
-      fetchPersonalCatalog(currentOrgId),
-    ]);
-    await fetchGeofences(currentOrgId, assignments);
-    if (isHistoryRequested) {
-      await fetchPositions(currentOrgId, { showSpinner: true });
-    } else {
-      await fetchDashboardData(currentOrgId, { showSpinner: true });
-    }
-  }, [
-    assignments,
-    fetchAssignments,
-    fetchGeofences,
-    fetchPersonalCatalog,
-    fetchPositions,
-    isHistoryRequested,
-    loadLatestPositionsForDashboard,
-  ]);
 
   useEffect(() => {
     if (!resolvedOrgId || entitlementsLoading || isFree) return;
@@ -1757,7 +1740,7 @@ export default function TrackerDashboard() {
       isActive = false;
       clearInterval(intervalId);
     };
-  }, [resolvedOrgId, fetchDashboardData]);
+  }, [resolvedOrgId]);
 
   // Only map by user_id, no fallbacks
   const personalByUserId = useMemo(() => {
