@@ -47,31 +47,94 @@ function getTrackerTarget(search, fallbackOrgId = "") {
   return qs ? `/tracker-gps?${qs}` : "/tracker-gps";
 }
 
-async function ensureGeolocationPermissionByPrompt() {
+function decodeJwtSub(token) {
   try {
-    const state = await navigator.permissions.query({ name: "geolocation" });
+    if (!token) return null;
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
 
-    if (state.state === "granted") {
-      return { ok: true };
+    const payload = parts[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+
+    const padding = (4 - (payload.length % 4 || 4)) % 4;
+    const normalized = payload + "=".repeat(padding);
+    const decoded = JSON.parse(atob(normalized));
+
+    return decoded?.sub || null;
+  } catch {
+    return null;
+  }
+}
+
+function requestCurrentPositionOnce() {
+  return new Promise((resolve, reject) => {
+    if (!navigator?.geolocation) {
+      reject(new Error("Geolocation API not available"));
+      return;
     }
 
-    if (state.state === "denied") {
-      return {
-        ok: false,
-        message:
-          "La ubicación está bloqueada. Debes habilitarla manualmente.",
-      };
-    }
-
-    await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject);
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 60000,
     });
+  });
+}
 
-    return { ok: true };
+function getGeoErrorMessage(error) {
+  const code = error?.code;
+  const raw = String(error?.message || "").toLowerCase();
+
+  if (code === 1 || raw.includes("permission")) {
+    return "La ubicación está bloqueada para este sitio. Debes habilitarla manualmente para continuar.";
+  }
+
+  if (code === 2) {
+    return "No se pudo obtener la ubicación. Activa el GPS y vuelve a intentar.";
+  }
+
+  if (code === 3 || raw.includes("timeout")) {
+    return "La ubicación tardó demasiado. Intenta de nuevo con mejor señal GPS.";
+  }
+
+  return "No se pudo obtener permiso de ubicación.";
+}
+
+async function getPermissionState() {
+  try {
+    if (!navigator?.permissions?.query) return "unknown";
+    const result = await navigator.permissions.query({ name: "geolocation" });
+    return result?.state || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+async function ensureGeolocationPermissionByPrompt() {
+  const state = await getPermissionState();
+
+  if (state === "granted") {
+    return { ok: true, permissionState: "granted" };
+  }
+
+  if (state === "denied") {
+    return {
+      ok: false,
+      permissionState: "denied",
+      message:
+        "La ubicación está bloqueada para este sitio. En Chrome: Ajustes del sitio → Ubicación → Permitir.",
+    };
+  }
+
+  try {
+    await requestCurrentPositionOnce();
+    return { ok: true, permissionState: "prompt_or_unknown" };
   } catch (error) {
     return {
       ok: false,
-      message: "No se pudo obtener la ubicación.",
+      permissionState: state,
+      message: getGeoErrorMessage(error),
     };
   }
 }
@@ -86,55 +149,94 @@ export default function TrackerInviteStart() {
   const [submitting, setSubmitting] = useState(false);
 
   const { inviteToken, orgId } = getInviteParams();
-  const authToken = inviteToken || window.runtimeInviteToken || null;
+
+  const authToken =
+    inviteToken ||
+    window.runtimeInviteToken ||
+    window.token ||
+    null;
 
   const isAndroid = useMemo(
-    () => /Android/i.test(navigator.userAgent || ""),
-    []
+    () => /Android/i.test(String(navigator.userAgent || "")),
+    [],
   );
 
   const isInAppBrowser = useMemo(() => {
-    const ua = (navigator.userAgent || "").toLowerCase();
+    const ua = String(navigator.userAgent || "").toLowerCase();
     return (
       ua.includes("wv") ||
       ua.includes("gmail") ||
       ua.includes("gsa") ||
       ua.includes("fbav") ||
-      ua.includes("instagram")
+      ua.includes("instagram") ||
+      ua.includes("line")
     );
   }, []);
 
   const targetPath = useMemo(
     () => getTrackerTarget(location.search, orgId),
-    [location.search, orgId]
+    [location.search, orgId],
   );
 
-  async function handleAccept(e) {
-    e.preventDefault();
+  async function persistTrackerSessionFromResponse(data) {
+    const runtimeToken = data?.tracker_runtime_token || null;
+    const resolvedTrackerUserId =
+      data?.tracker_user_id || decodeJwtSub(runtimeToken);
+    const resolvedOrgId = data?.org_id || orgId || null;
 
-    if (!consent) {
-      setAcceptError("Debes aceptar el consentimiento.");
-      return;
+    if (runtimeToken) {
+      localStorage.setItem("tracker_runtime_token", runtimeToken);
+      sessionStorage.setItem("tracker_runtime_token", runtimeToken);
+
+      localStorage.setItem("tracker_access_token", runtimeToken);
+      sessionStorage.setItem("tracker_access_token", runtimeToken);
     }
 
+    if (resolvedTrackerUserId) {
+      localStorage.setItem("tracker_user_id", resolvedTrackerUserId);
+      sessionStorage.setItem("tracker_user_id", resolvedTrackerUserId);
+      localStorage.setItem("user_id", resolvedTrackerUserId);
+      sessionStorage.setItem("user_id", resolvedTrackerUserId);
+    }
+
+    if (resolvedOrgId) {
+      localStorage.setItem("tracker_org_id", resolvedOrgId);
+      sessionStorage.setItem("tracker_org_id", resolvedOrgId);
+      localStorage.setItem("org_id", resolvedOrgId);
+      sessionStorage.setItem("org_id", resolvedOrgId);
+    }
+
+    if (data?.invite_id) {
+      localStorage.setItem("tracker_invite_id", data.invite_id);
+      sessionStorage.setItem("tracker_invite_id", data.invite_id);
+    }
+
+    if (typeof window !== "undefined") {
+      if (runtimeToken) {
+        window.runtimeInviteToken = runtimeToken;
+      }
+      if (resolvedTrackerUserId) {
+        window.trackerUserId = resolvedTrackerUserId;
+      }
+      if (resolvedOrgId) {
+        window.orgId = resolvedOrgId;
+      }
+    }
+  }
+
+  async function acceptInviteAndContinue() {
     if (!authToken) {
+      setStatus("missing_invite_token");
       setAcceptError("Invite token faltante.");
       return;
     }
 
     try {
       setSubmitting(true);
-      setStatus("requesting_geo");
+      setAcceptError("");
+      setStatus("accepting");
 
-      const geo = await ensureGeolocationPermissionByPrompt();
-
-      if (!geo.ok) {
-        setStatus("geo_permission_required");
-        setAcceptError(geo.message);
-        return;
-      }
-
-      const res = await fetch("/api/accept-tracker-invite", {
+      const response = await fetch("/api/accept-tracker-invite", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -146,30 +248,107 @@ export default function TrackerInviteStart() {
         }),
       });
 
-      const data = await res.json();
+      const data = await response.json().catch(() => ({}));
 
-      if (!res.ok || !data.ok) {
-        throw new Error(data?.message || "Error aceptando invite");
-      }
-
-      if (data.tracker_runtime_token) {
-        localStorage.setItem(
-          "tracker_runtime_token",
-          data.tracker_runtime_token
+      if (!response.ok || !data?.ok) {
+        throw new Error(
+          data?.message ||
+            data?.code ||
+            data?.error ||
+            "accept_tracker_invite_failed",
         );
       }
 
-      navigate(data.redirectTo || targetPath, { replace: true });
+      await persistTrackerSessionFromResponse(data);
 
-    } catch (err) {
-      setAcceptError(err.message);
+      setStatus(data?.idempotent ? "already_accepted" : "accepted");
+
+      const redirectTo =
+        typeof data?.redirectTo === "string" && data.redirectTo
+          ? data.redirectTo
+          : targetPath;
+
+      navigate(redirectTo, { replace: true });
+    } catch (error) {
+      console.error("[tracker-invite] accept failed", error);
+      setStatus("accept_failed");
+      setAcceptError(error?.message || "accept_tracker_invite_failed");
     } finally {
       setSubmitting(false);
     }
   }
 
+  async function startPermissionStep(e) {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
+    if (!consent) {
+      setStatus("consent_required");
+      setAcceptError("Debes aceptar el consentimiento antes de continuar.");
+      return;
+    }
+
+    if (!authToken) {
+      setStatus("missing_invite_token");
+      setAcceptError("Invite token faltante.");
+      return;
+    }
+
+    try {
+      setAcceptError("");
+      setStatus("checking_geo_permission");
+
+      const permissionState = await getPermissionState();
+
+      if (permissionState === "granted") {
+        await acceptInviteAndContinue();
+        return;
+      }
+
+      if (permissionState === "denied") {
+        setStatus("geo_permission_required");
+        setAcceptError(
+          "La ubicación está bloqueada para este sitio. Debes habilitarla manualmente para continuar.",
+        );
+        return;
+      }
+
+      setStatus("geo_permission_step");
+    } catch (error) {
+      console.error("[tracker-invite] permission step failed", error);
+      setStatus("geo_permission_step");
+    }
+  }
+
+  async function handleGrantLocation() {
+    try {
+      setSubmitting(true);
+      setAcceptError("");
+      setStatus("requesting_geo_permission");
+
+      const geo = await ensureGeolocationPermissionByPrompt();
+
+      if (!geo.ok) {
+        setStatus("geo_permission_required");
+        setAcceptError(geo.message);
+        return;
+      }
+
+      await acceptInviteAndContinue();
+    } catch (error) {
+      console.error("[tracker-invite] handleGrantLocation failed", error);
+      setStatus("geo_permission_required");
+      setAcceptError("No se pudo obtener la ubicación.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function retryGeolocation() {
+    await handleGrantLocation();
+  }
+
   function openApp() {
-    // 🔥 clave: usar mismo URL HTTPS (App Links)
     window.location.href = window.location.href;
   }
 
@@ -178,69 +357,152 @@ export default function TrackerInviteStart() {
       "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
   }
 
+  const showPermissionCard =
+    status === "geo_permission_step" ||
+    status === "requesting_geo_permission";
+
+  const showBlockedCard = status === "geo_permission_required";
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
       <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-xl">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Permiso de ubicación
+        </h1>
 
-        <h1 className="text-xl font-semibold">Permiso de ubicación</h1>
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 leading-6">
+          <p>
+            Esta invitación necesita tu ubicación para iniciar el tracker y
+            validar recorridos y geocercas.
+          </p>
+          <p className="mt-2">
+            Primero aceptas el aviso. Después verás una pantalla para permitir
+            la ubicación. Solo necesitas tocar <strong>Permitir</strong>.
+          </p>
+        </div>
 
-        <label className="mt-4 flex gap-2 text-sm">
+        <label className="mt-4 flex items-start gap-3 text-sm text-slate-700">
           <input
             type="checkbox"
             checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
+            onChange={(e) => {
+              setConsent(e.target.checked);
+              if (e.target.checked) {
+                setAcceptError("");
+                if (
+                  status === "consent_required" ||
+                  status === "accept_failed"
+                ) {
+                  setStatus("ready");
+                }
+              }
+            }}
+            className="mt-1"
           />
-          Acepto el seguimiento de ubicación
+          <span>Acepto el seguimiento de ubicación</span>
         </label>
 
         <button
-          onClick={handleAccept}
+          type="button"
+          onClick={startPermissionStep}
           disabled={submitting}
-          className="w-full mt-4 bg-black text-white py-3 rounded-xl"
+          className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
         >
-          {submitting ? "Procesando..." : "Aceptar y continuar"}
+          {submitting && status === "accepting"
+            ? "Procesando..."
+            : "Aceptar y continuar"}
         </button>
 
-        {status === "geo_permission_required" && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+        {showPermissionCard && (
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <p className="text-blue-800 font-semibold">
+              Permitir el uso de ubicación
+            </p>
 
-            <p className="text-red-700 font-medium">
-              Necesitamos tu ubicación
+            <p className="mt-2 text-sm text-blue-700">
+              En el siguiente paso aparecerá el permiso del sistema. Toca
+              <strong> Permitir</strong> para continuar.
             </p>
 
             <button
-              onClick={handleAccept}
-              className="w-full mt-2 bg-black text-white py-2 rounded-lg"
+              type="button"
+              onClick={handleGrantLocation}
+              disabled={submitting}
+              className="w-full mt-3 rounded-lg bg-black text-white py-3 font-medium disabled:opacity-60"
+            >
+              {submitting && status === "requesting_geo_permission"
+                ? "Solicitando permiso..."
+                : "Permitir el uso de ubicación"}
+            </button>
+
+            <p className="mt-3 text-xs text-blue-700">
+              Si el navegador muestra el permiso, solo confirma y el tracker
+              continuará automáticamente.
+            </p>
+          </div>
+        )}
+
+        {showBlockedCard && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+            <p className="text-red-700 font-semibold">
+              Necesitamos tu ubicación para continuar
+            </p>
+
+            <p className="mt-2 text-sm text-red-600">
+              La ubicación está bloqueada o el navegador no pudo mostrar el
+              permiso. Debes habilitarla manualmente para seguir.
+            </p>
+
+            {acceptError ? (
+              <p className="mt-2 text-sm text-red-600">{acceptError}</p>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={retryGeolocation}
+              className="w-full mt-3 rounded-lg bg-black text-white py-3 font-medium"
             >
               Reintentar permisos
             </button>
 
-            {isAndroid && (
+            {isAndroid ? (
               <>
                 <button
+                  type="button"
                   onClick={openApp}
-                  className="w-full mt-2 border py-2 rounded-lg"
+                  className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
                   Abrir app
                 </button>
 
                 <button
+                  type="button"
                   onClick={openPlayStore}
-                  className="w-full mt-2 border py-2 rounded-lg"
+                  className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
                   Instalar app
                 </button>
               </>
-            )}
+            ) : null}
 
-            {isInAppBrowser && (
-              <p className="text-xs mt-2 text-red-500">
-                Estás dentro de Gmail/WhatsApp. Usa "Abrir app".
+            {isInAppBrowser ? (
+              <p className="mt-3 text-xs text-red-500">
+                Estás dentro de Gmail o WhatsApp. Usa <strong>Abrir app</strong>
+                .
               </p>
-            )}
+            ) : null}
 
+            <div className="mt-3 rounded-lg border border-red-100 bg-white/70 p-3 text-xs text-red-700">
+              Chrome → Configuración del sitio → Ubicación → Permitir
+            </div>
           </div>
         )}
+
+        {!showPermissionCard && !showBlockedCard && acceptError ? (
+          <div className="mt-3 text-sm text-red-600">{acceptError}</div>
+        ) : null}
+
+        <p className="mt-4 text-xs text-slate-500">Estado: {status}</p>
       </div>
     </div>
   );
