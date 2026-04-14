@@ -5,7 +5,7 @@ export const config = {
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
-const RUNTIME_SESSION_HOURS = 24 * 7; // 7 días
+const RUNTIME_SESSION_HOURS = 24 * 7;
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -49,257 +49,156 @@ async function resolveTrackerUserId(supabase, invite) {
   const emailNorm = String(invite?.email_norm || "").trim().toLowerCase();
   const rawEmail = String(invite?.email || "").trim();
 
-  if (!orgId) {
-    return {
-      trackerUserId: null,
-      error: "Invite missing org_id",
-    };
-  }
-
-  let personalQuery = supabase
+  let query = supabase
     .from("personal")
-    .select("id,user_id,email,email_norm,org_id,activo,activo_bool,vigente,is_deleted")
+    .select("user_id")
     .eq("org_id", orgId)
     .limit(1);
 
   if (emailNorm) {
-    personalQuery = personalQuery.eq("email_norm", emailNorm);
-  } else if (rawEmail) {
-    personalQuery = personalQuery.eq("email", rawEmail);
+    query = query.eq("email_norm", emailNorm);
   } else {
-    return {
-      trackerUserId: null,
-      error: "Invite missing email/email_norm",
-    };
+    query = query.eq("email", rawEmail);
   }
 
-  const { data, error } = await personalQuery.maybeSingle();
+  const { data, error } = await query.maybeSingle();
 
-  if (error) {
-    return {
-      trackerUserId: null,
-      error: error.message,
-    };
+  if (error || !data?.user_id) {
+    return { trackerUserId: null, error: "tracker_user_not_found" };
   }
 
-  if (!data?.id) {
-    return {
-      trackerUserId: null,
-      error: "Tracker person not found for invite",
-    };
-  }
-
-  if (!data?.user_id) {
-    return {
-      trackerUserId: null,
-      error: "personal.user_id missing for tracker",
-    };
-  }
-
-  return {
-    trackerUserId: String(data.user_id).trim(),
-    error: null,
-  };
+  return { trackerUserId: data.user_id, error: null };
 }
 
 async function rotateRuntimeSession(supabase, { orgId, trackerUserId }) {
   const plainToken = randomToken();
   const tokenHash = sha256Hex(plainToken);
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + RUNTIME_SESSION_HOURS * 60 * 60 * 1000).toISOString();
-  const nowIso = now.toISOString();
 
-  const { error: deactivateError } = await supabase
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const expiresAt = new Date(
+    now.getTime() + RUNTIME_SESSION_HOURS * 3600 * 1000
+  ).toISOString();
+
+  await supabase
     .from("tracker_runtime_sessions")
     .update({ active: false })
     .eq("org_id", orgId)
     .eq("tracker_user_id", trackerUserId)
     .eq("active", true);
 
-  if (deactivateError) {
-    return {
-      ok: false,
-      error: deactivateError.message,
-      token: null,
-    };
-  }
-
-  const insertPayload = {
-    org_id: orgId,
-    tracker_user_id: trackerUserId,
-    access_token_hash: tokenHash,
-    active: true,
-    expires_at: expiresAt,
-    last_seen_at: nowIso,
-  };
-
-  const { data: sessionRow, error: insertError } = await supabase
+  const { data, error } = await supabase
     .from("tracker_runtime_sessions")
-    .insert([insertPayload])
-    .select("id, org_id, tracker_user_id, active, expires_at")
+    .insert([
+      {
+        org_id: orgId,
+        tracker_user_id: trackerUserId,
+        access_token_hash: tokenHash,
+        active: true,
+        expires_at: expiresAt,
+        last_seen_at: nowIso,
+      },
+    ])
+    .select()
     .single();
 
-  if (insertError || !sessionRow) {
-    return {
-      ok: false,
-      error: insertError?.message || "Failed to create tracker runtime session",
-      token: null,
-    };
+  if (error || !data) {
+    return { ok: false };
   }
 
-  return {
-    ok: true,
-    error: null,
-    token: plainToken,
-    session: sessionRow,
-  };
+  return { ok: true, token: plainToken };
 }
 
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({
-        ok: false,
-        code: 405,
-        message: "Method not allowed",
-      });
+      return res.status(405).json({ ok: false });
     }
 
     const inviteToken = extractBearerToken(req);
-    const body = typeof req.body === "object" && req.body ? req.body : {};
-    const orgIdFromBody = String(body.org_id || body.orgId || "").trim();
-
     if (!inviteToken) {
-      return res.status(401).json({
-        ok: false,
-        code: 401,
-        message: "Missing authorization header",
-      });
+      return res.status(401).json({ ok: false });
     }
 
-    const inviteTokenHash = sha256Hex(inviteToken);
     const supabase = getSupabase();
+    const tokenHash = sha256Hex(inviteToken);
 
-    const { data: invite, error: inviteError } = await supabase
+    const { data: invite } = await supabase
       .from("tracker_invites")
       .select("*")
-      .eq("invite_token_hash", inviteTokenHash)
+      .eq("invite_token_hash", tokenHash)
       .maybeSingle();
 
-    if (inviteError) {
-      return res.status(500).json({
-        ok: false,
-        code: 500,
-        message: inviteError.message,
-      });
-    }
-
     if (!invite) {
-      return res.status(404).json({
-        ok: false,
-        code: 404,
-        message: "Invite not found",
-      });
+      return res.status(404).json({ ok: false, message: "Invite not found" });
     }
 
-    if (orgIdFromBody && String(invite.org_id || "") !== orgIdFromBody) {
-      return res.status(409).json({
-        ok: false,
-        code: 409,
-        message: "Invite org mismatch",
-      });
-    }
+    const alreadyAccepted = !!invite.accepted_at;
 
-    if (!invite.is_active) {
+    // 🔥 FIX CLAVE
+    if (!invite.is_active && !alreadyAccepted) {
       return res.status(409).json({
         ok: false,
-        code: 409,
         message: "Invite inactive",
       });
     }
 
-    if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) {
+    if (
+      invite.expires_at &&
+      new Date(invite.expires_at) < new Date() &&
+      !alreadyAccepted
+    ) {
       return res.status(410).json({
         ok: false,
-        code: 410,
         message: "Invite expired",
       });
     }
 
-    const trackerResolution = await resolveTrackerUserId(supabase, invite);
+    const { trackerUserId, error } = await resolveTrackerUserId(
+      supabase,
+      invite
+    );
 
-    if (trackerResolution.error || !trackerResolution.trackerUserId) {
+    if (!trackerUserId) {
       return res.status(409).json({
         ok: false,
-        code: 409,
-        message: trackerResolution.error || "Tracker user could not be resolved",
+        message: error,
       });
     }
 
-    const trackerUserId = trackerResolution.trackerUserId;
     const nowIso = new Date().toISOString();
-    const alreadyAccepted = !!invite.accepted_at;
 
     if (!alreadyAccepted) {
-      const { error: updateError } = await supabase
+      await supabase
         .from("tracker_invites")
         .update({
           accepted_at: nowIso,
           used_at: nowIso,
         })
-        .eq("id", invite.id)
-        .is("accepted_at", null);
-
-      if (updateError) {
-        return res.status(500).json({
-          ok: false,
-          code: 500,
-          message: updateError.message,
-        });
-      }
+        .eq("id", invite.id);
     }
 
-    const { data: acceptedInvite, error: rereadError } = await supabase
-      .from("tracker_invites")
-      .select("*")
-      .eq("id", invite.id)
-      .maybeSingle();
-
-    if (rereadError || !acceptedInvite) {
-      return res.status(500).json({
-        ok: false,
-        code: 500,
-        message: rereadError?.message || "Failed to re-read accepted invite",
-      });
-    }
-
-    const runtimeResult = await rotateRuntimeSession(supabase, {
-      orgId: acceptedInvite.org_id,
+    const runtime = await rotateRuntimeSession(supabase, {
+      orgId: invite.org_id,
       trackerUserId,
     });
 
-    if (!runtimeResult.ok || !runtimeResult.token) {
-      return res.status(500).json({
-        ok: false,
-        code: 500,
-        message: runtimeResult.error || "Failed to create tracker runtime session",
-      });
+    if (!runtime.ok) {
+      return res.status(500).json({ ok: false });
     }
 
     return res.status(200).json({
       ok: true,
       idempotent: alreadyAccepted,
-      tracker_runtime_token: runtimeResult.token,
+      tracker_runtime_token: runtime.token,
       tracker_user_id: trackerUserId,
-      org_id: acceptedInvite.org_id,
-      invite_id: acceptedInvite.id,
-      redirectTo: `/tracker-gps?org_id=${encodeURIComponent(acceptedInvite.org_id)}`,
+      org_id: invite.org_id,
+      invite_id: invite.id,
     });
-  } catch (error) {
+  } catch (e) {
     return res.status(500).json({
       ok: false,
-      code: 500,
-      message: String(error?.message || error),
+      message: String(e?.message || e),
     });
   }
 }
