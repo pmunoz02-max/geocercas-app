@@ -10,7 +10,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing Supabase env vars for send-position");
 }
 
-const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
@@ -18,6 +20,14 @@ function sha256Hex(value) {
 
 function isFiniteNumber(value) {
   return Number.isFinite(Number(value));
+}
+
+function todayUtcDateString() {
+  const d = new Date();
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export default async function handler(req, res) {
@@ -52,6 +62,13 @@ export default async function handler(req, res) {
       battery,
       is_mock,
       timestamp,
+      recorded_at,
+      device_recorded_at,
+      source,
+      permissions_ok,
+      battery_optimized,
+      background_allowed,
+      service_running,
     } = body || {};
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -69,6 +86,7 @@ export default async function handler(req, res) {
 
     const tokenHash = sha256Hex(token);
     const nowIso = new Date().toISOString();
+    const todayUtc = todayUtcDateString();
 
     console.log("[send-position] runtime lookup start", {
       org_id,
@@ -103,13 +121,12 @@ export default async function handler(req, res) {
 
     const tracker_user_id = runtimeSession.tracker_user_id;
 
-    const { data: assignmentRow, error: assignmentError } = await adminClient
+    const { data: assignmentRows, error: assignmentError } = await adminClient
       .from("tracker_assignments")
       .select("id, tracker_user_id, org_id, active, start_date, end_date")
       .eq("tracker_user_id", tracker_user_id)
       .eq("org_id", org_id)
-      .eq("active", true)
-      .maybeSingle();
+      .eq("active", true);
 
     if (assignmentError) {
       console.error("[send-position] assignment lookup error", assignmentError);
@@ -120,7 +137,15 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!assignmentRow) {
+    const validAssignment = (assignmentRows || []).find((row) => {
+      const start = row?.start_date ? String(row.start_date).slice(0, 10) : null;
+      const end = row?.end_date ? String(row.end_date).slice(0, 10) : null;
+      const startOk = !start || start <= todayUtc;
+      const endOk = !end || end >= todayUtc;
+      return startOk && endOk;
+    });
+
+    if (!validAssignment) {
       console.warn("[send-position] tracker not assigned", {
         org_id,
         tracker_user_id,
@@ -131,7 +156,16 @@ export default async function handler(req, res) {
       });
     }
 
-    const recordedAt = timestamp || nowIso;
+    const recordedAt =
+      recorded_at ||
+      device_recorded_at ||
+      timestamp ||
+      nowIso;
+
+    const runtimeSource =
+      typeof source === "string" && source.trim()
+        ? source.trim()
+        : "tracker_runtime";
 
     const positionPayload = {
       org_id,
@@ -143,7 +177,7 @@ export default async function handler(req, res) {
       heading: heading ?? null,
       battery: battery ?? null,
       is_mock: is_mock ?? false,
-      source: "tracker_runtime",
+      source: runtimeSource,
       recorded_at: recordedAt,
     };
 
@@ -177,7 +211,7 @@ export default async function handler(req, res) {
       lng: Number(lng),
       accuracy: accuracy ?? null,
       ts: recordedAt,
-      source: "tracker_runtime",
+      source: runtimeSource,
       battery: battery ?? null,
       is_mock: is_mock ?? false,
       speed: speed ?? null,
@@ -198,6 +232,35 @@ export default async function handler(req, res) {
         error: "tracker_latest_upsert_failed",
         detail: latestError?.message || "no upsert result",
       });
+    }
+
+    const { error: healthError } = await adminClient
+      .from("tracker_health")
+      .upsert(
+        [
+          {
+            org_id,
+            tracker_user_id,
+            status: "active",
+            last_position_at: recordedAt,
+            last_seen_at: recordedAt,
+            updated_at: nowIso,
+            permissions_ok:
+              permissions_ok === undefined ? true : !!permissions_ok,
+            battery_optimized:
+              battery_optimized === undefined ? false : !!battery_optimized,
+            background_allowed:
+              background_allowed === undefined ? true : !!background_allowed,
+            service_running:
+              service_running === undefined ? true : !!service_running,
+            source: runtimeSource,
+          },
+        ],
+        { onConflict: "org_id,tracker_user_id" }
+      );
+
+    if (healthError) {
+      console.warn("[send-position] tracker_health upsert warning", healthError);
     }
 
     const { error: touchError } = await adminClient

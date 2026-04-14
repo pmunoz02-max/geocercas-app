@@ -5,8 +5,14 @@ export const config = {
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
+const RUNTIME_SESSION_HOURS = 24 * 7; // 7 días
+
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function randomToken() {
+  return crypto.randomBytes(32).toString("hex");
 }
 
 function getSupabase() {
@@ -96,6 +102,59 @@ async function resolveTrackerUserId(supabase, invite) {
   };
 }
 
+async function rotateRuntimeSession(supabase, { orgId, trackerUserId }) {
+  const plainToken = randomToken();
+  const tokenHash = sha256Hex(plainToken);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + RUNTIME_SESSION_HOURS * 60 * 60 * 1000).toISOString();
+  const nowIso = now.toISOString();
+
+  const { error: deactivateError } = await supabase
+    .from("tracker_runtime_sessions")
+    .update({ active: false })
+    .eq("org_id", orgId)
+    .eq("tracker_user_id", trackerUserId)
+    .eq("active", true);
+
+  if (deactivateError) {
+    return {
+      ok: false,
+      error: deactivateError.message,
+      token: null,
+    };
+  }
+
+  const insertPayload = {
+    org_id: orgId,
+    tracker_user_id: trackerUserId,
+    access_token_hash: tokenHash,
+    active: true,
+    expires_at: expiresAt,
+    last_seen_at: nowIso,
+  };
+
+  const { data: sessionRow, error: insertError } = await supabase
+    .from("tracker_runtime_sessions")
+    .insert([insertPayload])
+    .select("id, org_id, tracker_user_id, active, expires_at")
+    .single();
+
+  if (insertError || !sessionRow) {
+    return {
+      ok: false,
+      error: insertError?.message || "Failed to create tracker runtime session",
+      token: null,
+    };
+  }
+
+  return {
+    ok: true,
+    error: null,
+    token: plainToken,
+    session: sessionRow,
+  };
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -178,36 +237,26 @@ export default async function handler(req, res) {
     }
 
     const trackerUserId = trackerResolution.trackerUserId;
-
-    if (invite.accepted_at) {
-      return res.status(200).json({
-        ok: true,
-        idempotent: true,
-        tracker_runtime_token: inviteToken,
-        tracker_user_id: trackerUserId,
-        org_id: invite.org_id,
-        invite_id: invite.id,
-        redirectTo: `/tracker-gps?org_id=${encodeURIComponent(invite.org_id)}`,
-      });
-    }
-
     const nowIso = new Date().toISOString();
+    const alreadyAccepted = !!invite.accepted_at;
 
-    const { error: updateError } = await supabase
-      .from("tracker_invites")
-      .update({
-        accepted_at: nowIso,
-        used_at: nowIso,
-      })
-      .eq("id", invite.id)
-      .is("accepted_at", null);
+    if (!alreadyAccepted) {
+      const { error: updateError } = await supabase
+        .from("tracker_invites")
+        .update({
+          accepted_at: nowIso,
+          used_at: nowIso,
+        })
+        .eq("id", invite.id)
+        .is("accepted_at", null);
 
-    if (updateError) {
-      return res.status(500).json({
-        ok: false,
-        code: 500,
-        message: updateError.message,
-      });
+      if (updateError) {
+        return res.status(500).json({
+          ok: false,
+          code: 500,
+          message: updateError.message,
+        });
+      }
     }
 
     const { data: acceptedInvite, error: rereadError } = await supabase
@@ -224,10 +273,23 @@ export default async function handler(req, res) {
       });
     }
 
+    const runtimeResult = await rotateRuntimeSession(supabase, {
+      orgId: acceptedInvite.org_id,
+      trackerUserId,
+    });
+
+    if (!runtimeResult.ok || !runtimeResult.token) {
+      return res.status(500).json({
+        ok: false,
+        code: 500,
+        message: runtimeResult.error || "Failed to create tracker runtime session",
+      });
+    }
+
     return res.status(200).json({
       ok: true,
-      idempotent: false,
-      tracker_runtime_token: inviteToken,
+      idempotent: alreadyAccepted,
+      tracker_runtime_token: runtimeResult.token,
       tracker_user_id: trackerUserId,
       org_id: acceptedInvite.org_id,
       invite_id: acceptedInvite.id,
