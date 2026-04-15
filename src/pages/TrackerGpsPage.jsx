@@ -227,17 +227,49 @@ export default function TrackerGpsPage() {
 
     console.log("[TRACKER] JS tracking disabled, using native service only");
 
-    setMsg("Tracker activo (modo nativo)");
-    setDebugInfo((prev) => ({
-      ...prev,
-      hasRuntimeToken: true,
-      hasTrackerUserId: true,
-      hasOrgId: true,
-      nativeMode: true,
-      lastCheckAt: new Date().toISOString(),
-      lastError: null,
-    }));
-  }, [ready]);
+    try {
+      const bridge = typeof window !== "undefined" ? window.Android : null;
+
+      if (bridge?.setTrackerSession) {
+        console.log("[TRACKER] calling Android.setTrackerSession");
+        bridge.setTrackerSession(
+          runtimeSession.runtimeToken,
+          runtimeSession.trackerUserId,
+          runtimeSession.orgId,
+        );
+      } else {
+        console.warn("[TRACKER] Android.setTrackerSession not available");
+      }
+
+      if (bridge?.startTracking) {
+        console.log("[TRACKER] calling Android.startTracking");
+        bridge.startTracking();
+      } else if (bridge?.startService) {
+        console.log("[TRACKER] calling Android.startService");
+        bridge.startService();
+      } else {
+        console.warn("[TRACKER] Android.startTracking/startService not available");
+      }
+
+      setMsg("Tracker activo (modo nativo)");
+      setDebugInfo((prev) => ({
+        ...prev,
+        hasRuntimeToken: true,
+        hasTrackerUserId: true,
+        hasOrgId: true,
+        nativeMode: true,
+        lastCheckAt: new Date().toISOString(),
+        lastError: null,
+      }));
+    } catch (err) {
+      console.error("[TRACKER] native bootstrap failed", err);
+      setDebugInfo((prev) => ({
+        ...prev,
+        lastError: String(err?.message || err || "native bootstrap failed"),
+        lastCheckAt: new Date().toISOString(),
+      }));
+    }
+  }, [ready, runtimeSession]);
 
   return (
     <div style={{ padding: 16 }}>
