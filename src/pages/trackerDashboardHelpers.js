@@ -43,19 +43,8 @@ export function mapTrackerLatestRow(row) {
     accuracy: row.accuracy ?? null,
 
     // Usa cualquier campo válido de tiempo que pueda venir del backend
-    recorded_at:
-      row.ts ??
-      row.recorded_at ??
-      row.device_recorded_at ??
-      row.created_at ??
-      null,
-
-    ts:
-      row.ts ??
-      row.recorded_at ??
-      row.device_recorded_at ??
-      row.created_at ??
-      null,
+    recorded_at: row.ts || row.device_recorded_at || null,
+    ts: row.ts || row.device_recorded_at || null,
 
     device_recorded_at: row.device_recorded_at ?? null,
     created_at: row.created_at ?? null,

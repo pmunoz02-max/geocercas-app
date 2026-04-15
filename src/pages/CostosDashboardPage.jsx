@@ -1,8 +1,10 @@
 ﻿// src/pages/CostosDashboardPage.jsx
-// Dashboard de Costos — Versión PRO (roles centralizados + más métricas + export)
-// ✅ Alineado a AuthContext nuevo: espera authReady + orgsReady, usa currentOrg.id
-// ✅ FIX: activities por org_id (fallback legacy tenant_id)
-// ✅ FIX: manejo explícito de vista faltante v_costos_detalle
+// Dashboard de Costos — alineado con Reports.jsx por Camino A
+// Fuente canónica: /api/reportes?action=costs_hybrid
+// ✅ Usa costo_final como costo del dashboard
+// ✅ Mantiene agregación por persona / actividad / geocerca / moneda
+// ✅ Mantiene export CSV y PNG
+// ✅ Sigue respetando authReady + currentOrg.id
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../supabaseClient";
@@ -40,7 +42,7 @@ function normalizeGeofenceRow(g) {
 }
 
 /* -----------------------------------------
-   UTILIDADES (alineadas con CostosPage)
+   UTILIDADES
 ----------------------------------------- */
 
 function summarizeByCurrency(rows) {
@@ -69,24 +71,49 @@ function formatNumber(n, decimals = 2) {
   });
 }
 
-function buildDateRange(fromDateStr, toDateStr) {
-  let fromIso = null;
-  let toIsoExclusive = null;
+async function apiGet(url) {
+  const resp = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      "cache-control": "no-cache",
+      pragma: "no-cache",
+    },
+  });
 
-  if (fromDateStr) {
-    const d = new Date(fromDateStr + "T00:00:00");
-    if (!Number.isNaN(d.getTime())) fromIso = d.toISOString();
-  }
+  const json = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(json?.error || `HTTP ${resp.status}`);
+  return json;
+}
 
-  if (toDateStr) {
-    const d = new Date(toDateStr + "T00:00:00");
-    if (!Number.isNaN(d.getTime())) {
-      d.setDate(d.getDate() + 1);
-      toIsoExclusive = d.toISOString();
-    }
-  }
+function normalizeHybridCostRow(row) {
+  return {
+    ...row,
 
-  return { fromIso, toIsoExclusive };
+    personal_id: row.personal_id || "",
+    personal_nombre: row.personal_nombre || "SIN_DATO",
+
+    actividad_id: row.activity_id || row.actividad_id || "",
+    actividad_nombre:
+      row.activity_nombre || row.actividad_nombre || "SIN_DATO",
+
+    geocerca_id: row.geofence_id || row.geocerca_id || "",
+    geocerca_nombre:
+      row.geofence_nombre || row.geocerca_nombre || "SIN_DATO",
+
+    currency_code: row.currency_code || "N/A",
+    horas: Number(row.horas) || 0,
+
+    costo_base: Number(row.costo_base) || 0,
+    costo_final: Number(row.costo_final) || 0,
+
+    // Fuente de verdad del dashboard: costo_final
+    costo: Number(row.costo_final) || 0,
+
+    nivel_confianza: row.nivel_confianza || "SIN_EVIDENCIA",
+    estado_auditoria: row.estado_auditoria || "NO_AUDITABLE",
+    work_date: row.work_date || row.date || null,
+  };
 }
 
 /* -----------------------------------------
@@ -438,47 +465,44 @@ const CostosDashboardPage = () => {
     setMissingView(false);
 
     try {
-      const { fromIso, toIsoExclusive } = buildDateRange(fromDate, toDate);
-
-      let query = supabase
-        .from("v_costos_detalle")
-        .select("*")
-        .eq("org_id", currentOrg.id);
-
-      if (fromIso) query = query.gte("start_time", fromIso);
-      if (toIsoExclusive) query = query.lt("start_time", toIsoExclusive);
-      if (selectedPersonaId) query = query.eq("personal_id", selectedPersonaId);
-      if (selectedActividadId) query = query.eq("actividad_id", selectedActividadId);
-      if (selectedGeocercaId) query = query.eq("geocerca_id", selectedGeocercaId);
-
-      const { data, error: dataErr, status } = await query;
-
-      if (dataErr) {
-        if (status === 404) {
-          console.warn("[CostosDashboard] v_costos_detalle no existe");
-          setRows([]);
-          setMissingView(true);
-          setError(
-            t(
-              "dashboardCostos.errorViewMissing",
-              "Cost view is not available yet (v_costos_detalle)."
-            )
-          );
-          return;
-        }
-
-        throw dataErr;
+      if (fromDate && toDate && fromDate > toDate) {
+        setRows([]);
+        setError(
+          t(
+            "dashboardCostos.errorInvalidDateRange",
+            'The "From" date cannot be later than the "To" date.'
+          )
+        );
+        return;
       }
 
-      setRows(data || []);
+      const params = new URLSearchParams();
+      params.set("action", "costs_hybrid");
+
+      if (fromDate) params.set("start", fromDate);
+      if (toDate) params.set("end", toDate);
+
+      if (selectedGeocercaId) params.set("geocerca_ids", selectedGeocercaId);
+      if (selectedPersonaId) params.set("personal_ids", selectedPersonaId);
+      if (selectedActividadId) params.set("activity_ids", selectedActividadId);
+
+      params.set("limit", "5000");
+      params.set("offset", "0");
+
+      const json = await apiGet(`/api/reportes?${params.toString()}`);
+      const rawRows = Array.isArray(json?.data) ? json.data : [];
+      const normalizedRows = rawRows.map(normalizeHybridCostRow);
+
+      setRows(normalizedRows);
     } catch (e) {
       console.error("[CostosDashboard] fetchReport error:", e);
       setRows([]);
       setError(
-        t(
-          "dashboardCostos.errorLoadReport",
-          "Could not load cost dashboard."
-        )
+        e?.message ||
+          t(
+            "dashboardCostos.errorLoadReport",
+            "Could not load cost dashboard."
+          )
       );
     } finally {
       setLoading(false);

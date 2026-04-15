@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 function getInviteParams() {
@@ -131,9 +131,35 @@ export default function TrackerInviteStart() {
 
   const { inviteToken, orgId } = getInviteParams();
 
+  useEffect(() => {
+    if (inviteToken) {
+      localStorage.setItem("inviteToken", inviteToken);
+      sessionStorage.setItem("inviteToken", inviteToken);
+      console.log("[tracker] inviteToken saved", inviteToken);
+    } else {
+      console.warn("[tracker] inviteToken missing in URL");
+    }
+
+    if (orgId) {
+      localStorage.setItem("tracker_org_id", orgId);
+      sessionStorage.setItem("tracker_org_id", orgId);
+      console.log("[tracker] orgId saved", orgId);
+    } else {
+      console.warn("[tracker] orgId missing in URL");
+    }
+  }, [inviteToken, orgId]);
+
   const authToken =
     inviteToken ||
+    localStorage.getItem("inviteToken") ||
+    sessionStorage.getItem("inviteToken") ||
     (typeof window !== "undefined" ? window.runtimeInviteToken || null : null);
+
+  const resolvedOrgId =
+    orgId ||
+    localStorage.getItem("tracker_org_id") ||
+    sessionStorage.getItem("tracker_org_id") ||
+    (typeof window !== "undefined" ? window.orgId || null : null);
 
   const isAndroid = useMemo(
     () => /Android/i.test(String(navigator.userAgent || "")),
@@ -156,10 +182,13 @@ export default function TrackerInviteStart() {
   async function persistTrackerSessionFromResponse(data) {
     const runtimeToken = data?.tracker_runtime_token || null;
     const resolvedTrackerUserId = data?.tracker_user_id || null;
-    const resolvedOrgId = data?.org_id || orgId || null;
+    const persistedOrgId =
+      data?.org_id ||
+      resolvedOrgId ||
+      null;
     const inviteId = data?.invite_id || null;
 
-    if (!runtimeToken || !resolvedTrackerUserId || !resolvedOrgId) {
+    if (!runtimeToken || !resolvedTrackerUserId || !persistedOrgId) {
       throw new Error("accept_response_missing_runtime_fields");
     }
 
@@ -171,8 +200,8 @@ export default function TrackerInviteStart() {
     setStorageItem("tracker_user_id", resolvedTrackerUserId);
     setStorageItem("user_id", resolvedTrackerUserId);
 
-    setStorageItem("tracker_org_id", resolvedOrgId);
-    setStorageItem("org_id", resolvedOrgId);
+    setStorageItem("tracker_org_id", persistedOrgId);
+    setStorageItem("org_id", persistedOrgId);
 
     if (inviteId) {
       setStorageItem("tracker_invite_id", inviteId);
@@ -181,13 +210,20 @@ export default function TrackerInviteStart() {
     if (typeof window !== "undefined") {
       window.runtimeInviteToken = runtimeToken;
       window.trackerUserId = resolvedTrackerUserId;
-      window.orgId = resolvedOrgId;
+      window.orgId = persistedOrgId;
     }
+
+    console.log("[tracker] final session snapshot", {
+      tracker_runtime_token: localStorage.getItem("tracker_runtime_token"),
+      tracker_user_id: localStorage.getItem("tracker_user_id"),
+      tracker_org_id: localStorage.getItem("tracker_org_id"),
+      inviteToken: localStorage.getItem("inviteToken"),
+    });
 
     console.log("[TRACKER_RUNTIME_PERSISTED]", {
       hasRuntimeToken: !!runtimeToken,
       hasTrackerUserId: !!resolvedTrackerUserId,
-      hasOrgId: !!resolvedOrgId,
+      hasOrgId: !!persistedOrgId,
       inviteId: inviteId || null,
     });
   }
@@ -212,7 +248,7 @@ export default function TrackerInviteStart() {
         },
         body: JSON.stringify({
           inviteToken: authToken,
-          org_id: orgId || null,
+          org_id: resolvedOrgId || null,
         }),
       });
 
