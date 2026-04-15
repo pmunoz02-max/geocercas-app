@@ -1249,7 +1249,7 @@ export default function TrackerDashboard() {
 
     const { data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts, event, source, speed, heading, battery, is_mock, device_recorded_at, created_at")
+      .select("user_id, org_id, lat, lng, accuracy, ts, event, source, speed, heading, battery, is_mock, device_recorded_at")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
@@ -1266,26 +1266,14 @@ export default function TrackerDashboard() {
           .map((row) => {
             const mapped = mapTrackerLatestRow(row);
             if (!mapped) return null;
-
-            const canonicalRecordedAt =
-              row?.ts ??
-              row?.device_recorded_at ??
-              row?.recorded_at ??
-              row?.created_at ??
-              mapped?.recorded_at ??
-              mapped?.ts ??
-              null;
-
             return {
               ...mapped,
               user_id: row?.user_id ? String(row.user_id) : mapped.user_id,
               lat: row?.lat ?? mapped.lat,
               lng: row?.lng ?? mapped.lng,
               accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-              recorded_at: canonicalRecordedAt,
-              ts: canonicalRecordedAt,
-              device_recorded_at: row?.device_recorded_at ?? mapped?.device_recorded_at ?? null,
-              created_at: row?.created_at ?? mapped?.created_at ?? null,
+              recorded_at: row?.ts ?? mapped.recorded_at ?? null,
+              ts: row?.ts ?? mapped.ts ?? null,
               source: row?.source ?? mapped.source ?? null,
               speed: row?.speed ?? mapped.speed ?? null,
               heading: row?.heading ?? mapped.heading ?? null,
@@ -1296,10 +1284,8 @@ export default function TrackerDashboard() {
                 lat: row?.lat ?? mapped.lat,
                 lng: row?.lng ?? mapped.lng,
                 accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-                recorded_at: canonicalRecordedAt,
-                ts: canonicalRecordedAt,
-                device_recorded_at: row?.device_recorded_at ?? mapped?.device_recorded_at ?? null,
-                created_at: row?.created_at ?? mapped?.created_at ?? null,
+                recorded_at: row?.ts ?? mapped.recorded_at ?? null,
+                ts: row?.ts ?? mapped.ts ?? null,
                 source: row?.source ?? mapped.source ?? null,
                 speed: row?.speed ?? mapped.speed ?? null,
                 heading: row?.heading ?? mapped.heading ?? null,
@@ -1730,7 +1716,7 @@ export default function TrackerDashboard() {
 
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree || isHistoryRequested) return;
+    if (!resolvedOrgId) return;
 
     console.log("[dashboard] polling started", resolvedOrgId);
 
@@ -1745,11 +1731,13 @@ export default function TrackerDashboard() {
         await fetchDashboardData(resolvedOrgId, {
           showSpinner: false,
         });
+
       } catch (e) {
         console.warn("[dashboard] polling error", e);
       }
     };
 
+    // Ejecuta inmediatamente
     tick();
 
     const intervalId = setInterval(tick, 15000);
@@ -1759,7 +1747,7 @@ export default function TrackerDashboard() {
       isActive = false;
       clearInterval(intervalId);
     };
-  }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, fetchDashboardData]);
+  }, [resolvedOrgId]);
 
   // Only map by user_id, no fallbacks
   const personalByUserId = useMemo(() => {
