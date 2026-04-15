@@ -1,0 +1,11 @@
+# Watchdog Recovery Fix
+
+El watchdog detecta `stale updates` cuando `lastLocationUpdateAt` queda atrasado o cuando los location updates no arrancaron correctamente.
+
+La recuperación vuelve a registrar `requestLocationUpdates(...)` para reactivar el flujo nativo de ubicaciones.
+
+`lastLocationUpdateAt` ya no se actualiza dentro de `maybeRecoverLocationUpdates(...)`. Ese timestamp solo se marca como saludable cuando realmente entra `onLocationResult(...)` con un callback real del proveedor de ubicación.
+
+Esto evita falsos positivos donde el recovery parecía exitoso solo por re-registrar el request, aunque todavía no hubieran vuelto a llegar ubicaciones.
+
+Validado con pantalla apagada y caminata real de más de 15 minutos: el dashboard siguió actualizando automáticamente.
