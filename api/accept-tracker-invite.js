@@ -3,6 +3,7 @@ export const config = {
 };
 
 import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
 import { createClient } from "@supabase/supabase-js";
 
 const RUNTIME_SESSION_HOURS = 24 * 7;
@@ -13,6 +14,48 @@ function sha256Hex(value) {
 
 function randomToken() {
   return crypto.randomBytes(32).toString("hex");
+}
+
+function getTrackerRuntimeJwtSecret() {
+  const secret =
+    process.env.TRACKER_RUNTIME_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    "";
+
+  if (!secret) {
+    throw new Error("Missing tracker runtime JWT secret");
+  }
+
+  return secret;
+}
+
+function createRuntimeJwt({ trackerUserId, orgId, inviteId }) {
+  const secret = getTrackerRuntimeJwtSecret();
+  const expiresInSeconds = RUNTIME_SESSION_HOURS * 60 * 60;
+
+  const token = jwt.sign(
+    {
+      sub: String(trackerUserId),
+      org_id: String(orgId),
+      invite_id: inviteId ? String(inviteId) : null,
+      type: "tracker_runtime",
+    },
+    secret,
+    {
+      algorithm: "HS256",
+      expiresIn: expiresInSeconds,
+    }
+  );
+
+  const decoded = jwt.decode(token);
+
+  return {
+    token,
+    exp:
+      decoded && typeof decoded === "object" && decoded.exp
+        ? Number(decoded.exp)
+        : null,
+  };
 }
 
 function getSupabase() {
@@ -70,15 +113,24 @@ async function resolveTrackerUserId(supabase, invite) {
   return { trackerUserId: data.user_id, error: null };
 }
 
-async function rotateRuntimeSession(supabase, { orgId, trackerUserId }) {
-  const plainToken = randomToken();
+async function rotateRuntimeSession(supabase, { orgId, trackerUserId, inviteId }) {
+  const runtimeJwt = createRuntimeJwt({
+    trackerUserId,
+    orgId,
+    inviteId,
+  });
+
+  const plainToken = runtimeJwt.token;
   const tokenHash = sha256Hex(plainToken);
 
   const now = new Date();
   const nowIso = now.toISOString();
-  const expiresAt = new Date(
-    now.getTime() + RUNTIME_SESSION_HOURS * 3600 * 1000
-  ).toISOString();
+
+  const expiresAt = runtimeJwt.exp
+    ? new Date(runtimeJwt.exp * 1000).toISOString()
+    : new Date(
+        now.getTime() + RUNTIME_SESSION_HOURS * 3600 * 1000
+      ).toISOString();
 
   await supabase
     .from("tracker_runtime_sessions")
@@ -106,7 +158,11 @@ async function rotateRuntimeSession(supabase, { orgId, trackerUserId }) {
     return { ok: false };
   }
 
-  return { ok: true, token: plainToken };
+  return {
+    ok: true,
+    token: plainToken,
+    expires_at: expiresAt,
+  };
 }
 
 export default async function handler(req, res) {
@@ -181,6 +237,7 @@ export default async function handler(req, res) {
     const runtime = await rotateRuntimeSession(supabase, {
       orgId: invite.org_id,
       trackerUserId,
+      inviteId: invite.id,
     });
 
     if (!runtime.ok) {
@@ -194,6 +251,7 @@ export default async function handler(req, res) {
       tracker_user_id: trackerUserId,
       org_id: invite.org_id,
       invite_id: invite.id,
+      expires_at: runtime.expires_at,
     });
   } catch (e) {
     return res.status(500).json({
