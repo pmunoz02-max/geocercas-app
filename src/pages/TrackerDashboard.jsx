@@ -694,8 +694,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
   selectedTrackerPath,
   personalById,
   personalByUserId,
-  trackerMap,
-  getStatusLabel,
   tOr,
   selectedTrackerId,
 }) {
@@ -729,9 +727,9 @@ const TrackerLayers = React.memo(function TrackerLayers({
         : null;
 
     const status = String(live?.status || "offline");
-    const statusLabel = typeof getStatusLabel === "function" ? getStatusLabel(status) : status;
     const ageText = formatAgeShort(live?.ageSec ?? null);
 
+    const trackerName = getFriendlyTrackerName(item);
     return (
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div className="text-xs">
@@ -739,7 +737,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
           {item?.personalId && (
             <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(item.personalId)}</div>
           )}
-          <div><b>{tOr("trackerDashboard.tooltip.status", "Status")}</b>: {statusLabel}</div>
+          <div><b>{tOr("trackerDashboard.tooltip.status", "Status")}</b>: {status}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lastSeen", "Last seen")}</b>: {ageText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {latestTimeText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
@@ -792,34 +790,24 @@ const TrackerLayers = React.memo(function TrackerLayers({
   if (!latest) return null;
 
   const trackerId = getTrackerKey(latest);
-  const canonicalTracker = trackerMap?.get?.(String(trackerId)) || null;
-  const canonicalLatest = canonicalTracker?.latest || latest;
-
-  const latestLat = Number(canonicalLatest?.lat);
-  const latestLng = Number(canonicalLatest?.lng);
+  const latestLat = Number(latest?.lat);
+  const latestLng = Number(latest?.lng);
   if (!isValidLatLng(latestLat, latestLng)) return null;
 
-  const personalId = canonicalTracker?.personal_id || canonicalLatest?.personal_id || null;
-  const person =
-    canonicalTracker?.personal ||
-    (personalId ? personalById.get(String(personalId)) : null);
-  const byUser =
-    canonicalTracker?.profile ||
-    (canonicalLatest?.user_id ? personalByUserId.get(String(canonicalLatest.user_id)) : null);
+  const personalId = latest.personal_id || null;
+  const person = personalId ? personalById.get(String(personalId)) : null;
+  const byUser = latest.user_id ? personalByUserId.get(String(latest.user_id)) : null;
   const trackerLabel =
     getFriendlyTrackerName({
-      display_name: canonicalTracker?.display_name || canonicalLatest?.display_name,
-      name: canonicalTracker?.name || canonicalLatest?.name,
+      display_name: latest?.display_name,
+      name: latest?.name,
       personal: person,
       profile: byUser,
-      email: canonicalLatest?.email || person?.email || byUser?.email,
+      email: latest?.email || person?.email || byUser?.email,
       user_id: trackerId,
     });
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
-  const live =
-    canonicalTracker?.live ||
-    selectedTrackerPath?.live ||
-    getTrackerLiveStatus(canonicalLatest);
+  const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
   const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
 
   return (
@@ -834,15 +822,14 @@ const TrackerLayers = React.memo(function TrackerLayers({
       >
         {renderTrackerTooltip(
           {
-            display_name: canonicalTracker?.display_name || canonicalLatest?.display_name || trackerLabel,
-            name: canonicalTracker?.name || canonicalLatest?.name || trackerLabel,
+            display_name: latest?.display_name || trackerLabel,
+            name: latest?.name || trackerLabel,
             personal: person,
             profile: byUser,
-            email: canonicalLatest?.email || person?.email || byUser?.email,
+            email: latest?.email || person?.email || byUser?.email,
             user_id: trackerId,
-            personalId: personalId,
           },
-          canonicalLatest,
+          latest,
           latestLat,
           latestLng,
           live
@@ -1279,28 +1266,26 @@ export default function TrackerDashboard() {
           .map((row) => {
             const mapped = mapTrackerLatestRow(row);
             if (!mapped) return null;
+
+            const canonicalRecordedAt =
+              row?.ts ??
+              row?.device_recorded_at ??
+              row?.recorded_at ??
+              row?.created_at ??
+              mapped?.recorded_at ??
+              mapped?.ts ??
+              null;
+
             return {
               ...mapped,
               user_id: row?.user_id ? String(row.user_id) : mapped.user_id,
               lat: row?.lat ?? mapped.lat,
               lng: row?.lng ?? mapped.lng,
               accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-              recorded_at:
-                row?.ts ??
-                row?.recorded_at ??
-                row?.device_recorded_at ??
-                row?.created_at ??
-                mapped.recorded_at ??
-                null,
-              ts:
-                row?.ts ??
-                row?.recorded_at ??
-                row?.device_recorded_at ??
-                row?.created_at ??
-                mapped.ts ??
-                null,
-              device_recorded_at: row?.device_recorded_at ?? mapped.device_recorded_at ?? null,
-              created_at: row?.created_at ?? mapped.created_at ?? null,
+              recorded_at: canonicalRecordedAt,
+              ts: canonicalRecordedAt,
+              device_recorded_at: row?.device_recorded_at ?? mapped?.device_recorded_at ?? null,
+              created_at: row?.created_at ?? mapped?.created_at ?? null,
               source: row?.source ?? mapped.source ?? null,
               speed: row?.speed ?? mapped.speed ?? null,
               heading: row?.heading ?? mapped.heading ?? null,
@@ -1311,22 +1296,10 @@ export default function TrackerDashboard() {
                 lat: row?.lat ?? mapped.lat,
                 lng: row?.lng ?? mapped.lng,
                 accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-                recorded_at:
-                  row?.ts ??
-                  row?.recorded_at ??
-                  row?.device_recorded_at ??
-                  row?.created_at ??
-                  mapped.recorded_at ??
-                  null,
-                ts:
-                  row?.ts ??
-                  row?.recorded_at ??
-                  row?.device_recorded_at ??
-                  row?.created_at ??
-                  mapped.ts ??
-                  null,
-                device_recorded_at: row?.device_recorded_at ?? mapped.device_recorded_at ?? null,
-                created_at: row?.created_at ?? mapped.created_at ?? null,
+                recorded_at: canonicalRecordedAt,
+                ts: canonicalRecordedAt,
+                device_recorded_at: row?.device_recorded_at ?? mapped?.device_recorded_at ?? null,
+                created_at: row?.created_at ?? mapped?.created_at ?? null,
                 source: row?.source ?? mapped.source ?? null,
                 speed: row?.speed ?? mapped.speed ?? null,
                 heading: row?.heading ?? mapped.heading ?? null,
@@ -1415,29 +1388,6 @@ export default function TrackerDashboard() {
     return Array.from(latestByUser.values());
   }
 
-  function mergeLatestRowsByUser(...rowGroups) {
-    const merged = new Map();
-
-    for (const group of rowGroups) {
-      const rows = Array.isArray(group) ? group : [];
-      for (const row of rows) {
-        const userId = normalizeUuid(row?.user_id);
-        if (!userId) continue;
-
-        const previous = merged.get(String(userId));
-        const rowTs = getPositionTs(row);
-        const previousTs = getPositionTs(previous);
-
-        if (!previous || rowTs >= previousTs) {
-          merged.set(String(userId), row);
-        }
-      }
-    }
-
-    return Array.from(merged.values());
-  }
-
-
 
   const fetchDashboardData = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
@@ -1487,28 +1437,23 @@ export default function TrackerDashboard() {
 
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
-        let fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
 
         if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
           latestRows = latestRows.filter((row) =>
             allowedAssignmentUserIds.has(String(row?.user_id))
           );
-          fallbackRows = fallbackRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
         }
+
+        let source = "tracker_latest";
+        let finalRows = latestRows;
 
         console.log("[tracker-dashboard] allowedAssignmentUserIds:", allowedAssignmentUserIds);
         console.log("[tracker-dashboard] latestRows after filter:", latestRows);
-        console.log("[tracker-dashboard] fallbackRows after filter:", fallbackRows);
 
-        let finalRows = mergeLatestRowsByUser(latestRows, fallbackRows);
-        let source =
-          latestRows.length > 0 && fallbackRows.length > 0
-            ? "tracker_latest+positions"
-            : latestRows.length > 0
-            ? "tracker_latest"
-            : "positions";
+        if (latestRows.length === 0) {
+          finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
+          source = "positions";
+        }
 
         finalRows = (finalRows || []).filter((p) => {
           const lat = Number(p?.lat ?? p?.latest?.lat);
@@ -2576,8 +2521,6 @@ export default function TrackerDashboard() {
                     selectedTrackerPath={selectedTrackerPath}
                     personalById={personalById}
                     personalByUserId={personalByUserId}
-                    trackerMap={trackerMap}
-                    getStatusLabel={getStatusLabel}
                     tOr={tOr}
                     selectedTrackerId={selectedTrackerId}
                   />
