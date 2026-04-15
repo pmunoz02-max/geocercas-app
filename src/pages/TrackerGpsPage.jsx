@@ -241,34 +241,37 @@ export default function TrackerGpsPage() {
         orgId: !!orgId,
       });
 
-      if (bridge && runtimeToken && orgId) {
-        console.log("[TRACKER] calling AndroidBridge.saveSession");
-        bridge.saveSession(runtimeToken, orgId);
+      if (bridge && runtimeToken && trackerUserId && orgId) {
+        console.log("[TRACKER] calling AndroidBridge.saveTrackerSession");
+        bridge.saveTrackerSession(runtimeToken, trackerUserId, orgId);
 
-        if (trackerUserId && bridge?.setTrackerSession) {
-          console.log("[TRACKER] calling AndroidBridge.setTrackerSession");
-          bridge.setTrackerSession(runtimeToken, trackerUserId);
-        }
-
-        if (bridge?.startTracking) {
-          console.log("[TRACKER] calling AndroidBridge.startTracking");
-          bridge.startTracking();
+        if (bridge?.requestStartTracking) {
+          console.log("[TRACKER] calling AndroidBridge.requestStartTracking");
+          bridge.requestStartTracking();
         } else {
-          console.warn("[TRACKER] AndroidBridge.startTracking not available");
+          console.warn(
+            "[TRACKER] AndroidBridge.requestStartTracking not available",
+          );
         }
       } else {
-        console.warn("[TRACKER] missing required: runtimeToken or orgId", {
+        console.warn("[TRACKER] missing required tracker bootstrap fields", {
           hasRuntimeToken: !!runtimeToken,
+          hasTrackerUserId: !!trackerUserId,
           hasOrgId: !!orgId,
         });
       }
 
-      setMsg("Tracker activo (modo nativo)");
+      if (runtimeToken && trackerUserId && orgId) {
+        setMsg("Tracker activo (modo nativo)");
+      } else {
+        setMsg("Esperando sesión runtime válida...");
+      }
+
       setDebugInfo((prev) => ({
         ...prev,
-        hasRuntimeToken: true,
-        hasTrackerUserId: true,
-        hasOrgId: true,
+        hasRuntimeToken: !!runtimeToken,
+        hasTrackerUserId: !!trackerUserId,
+        hasOrgId: !!orgId,
         nativeMode: true,
         lastCheckAt: new Date().toISOString(),
         lastError: null,
