@@ -1249,7 +1249,15 @@ export default function TrackerDashboard() {
 
     const { data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts, event, source, speed, heading, battery, is_mock, device_recorded_at, created_at")
+      .select(`
+        user_id,
+        lat,
+        lng,
+        accuracy,
+        ts,
+        device_recorded_at,
+        source
+      `)
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
