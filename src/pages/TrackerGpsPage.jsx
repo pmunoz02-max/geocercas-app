@@ -228,27 +228,32 @@ export default function TrackerGpsPage() {
     console.log("[TRACKER] JS tracking disabled, using native service only");
 
     try {
-      const bridge = typeof window !== "undefined" ? window.Android : null;
+      const bridge = typeof window !== "undefined" ? window.AndroidBridge : null;
+
+      console.log("[TRACKER] bridge exists?", {
+        hasAndroidBridge: !!bridge,
+        bridgeType: typeof bridge,
+      });
 
       if (bridge?.setTrackerSession) {
-        console.log("[TRACKER] calling Android.setTrackerSession");
+        console.log("[TRACKER] calling AndroidBridge.setTrackerSession");
         bridge.setTrackerSession(
           runtimeSession.runtimeToken,
           runtimeSession.trackerUserId,
           runtimeSession.orgId,
         );
       } else {
-        console.warn("[TRACKER] Android.setTrackerSession not available");
+        console.warn("[TRACKER] AndroidBridge.setTrackerSession not available");
       }
 
       if (bridge?.startTracking) {
-        console.log("[TRACKER] calling Android.startTracking");
+        console.log("[TRACKER] calling AndroidBridge.startTracking");
         bridge.startTracking();
       } else if (bridge?.startService) {
-        console.log("[TRACKER] calling Android.startService");
+        console.log("[TRACKER] calling AndroidBridge.startService");
         bridge.startService();
       } else {
-        console.warn("[TRACKER] Android.startTracking/startService not available");
+        console.warn("[TRACKER] AndroidBridge.startTracking/startService not available");
       }
 
       setMsg("Tracker activo (modo nativo)");
