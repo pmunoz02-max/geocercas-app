@@ -841,7 +841,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
 
 export default function TrackerDashboard() {
   const { t } = useTranslation();
-  const { activeOrgId } = useAuth();
+  const { activeOrgId, refreshSession } = useAuth();
   const tOr = useCallback((key, fallback) => t(key, { defaultValue: fallback }), [t]);
   const getStatusLabel = (status) => {
     try {
@@ -1266,26 +1266,26 @@ export default function TrackerDashboard() {
           .map((row) => {
             const mapped = mapTrackerLatestRow(row);
             if (!mapped) return null;
-
-            const canonicalRecordedAt =
-              row?.ts ??
-              row?.device_recorded_at ??
-              row?.recorded_at ??
-              row?.created_at ??
-              mapped?.recorded_at ??
-              mapped?.ts ??
-              null;
-
             return {
               ...mapped,
               user_id: row?.user_id ? String(row.user_id) : mapped.user_id,
               lat: row?.lat ?? mapped.lat,
               lng: row?.lng ?? mapped.lng,
               accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-              recorded_at: canonicalRecordedAt,
-              ts: canonicalRecordedAt,
-              device_recorded_at: row?.device_recorded_at ?? mapped?.device_recorded_at ?? null,
-              created_at: row?.created_at ?? mapped?.created_at ?? null,
+              recorded_at:
+                row?.ts ??
+                row?.device_recorded_at ??
+                row?.created_at ??
+                mapped.recorded_at ??
+                null,
+              ts:
+                row?.ts ??
+                row?.device_recorded_at ??
+                row?.created_at ??
+                mapped.ts ??
+                null,
+              device_recorded_at: row?.device_recorded_at ?? mapped.device_recorded_at ?? null,
+              created_at: row?.created_at ?? mapped.created_at ?? null,
               source: row?.source ?? mapped.source ?? null,
               speed: row?.speed ?? mapped.speed ?? null,
               heading: row?.heading ?? mapped.heading ?? null,
@@ -1296,10 +1296,20 @@ export default function TrackerDashboard() {
                 lat: row?.lat ?? mapped.lat,
                 lng: row?.lng ?? mapped.lng,
                 accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-                recorded_at: canonicalRecordedAt,
-                ts: canonicalRecordedAt,
-                device_recorded_at: row?.device_recorded_at ?? mapped?.device_recorded_at ?? null,
-                created_at: row?.created_at ?? mapped?.created_at ?? null,
+                recorded_at:
+                  row?.ts ??
+                  row?.device_recorded_at ??
+                  row?.created_at ??
+                  mapped.recorded_at ??
+                  null,
+                ts:
+                  row?.ts ??
+                  row?.device_recorded_at ??
+                  row?.created_at ??
+                  mapped.ts ??
+                  null,
+                device_recorded_at: row?.device_recorded_at ?? mapped.device_recorded_at ?? null,
+                created_at: row?.created_at ?? mapped.created_at ?? null,
                 source: row?.source ?? mapped.source ?? null,
                 speed: row?.speed ?? mapped.speed ?? null,
                 heading: row?.heading ?? mapped.heading ?? null,
@@ -1752,7 +1762,7 @@ export default function TrackerDashboard() {
 
     tick();
 
-    const intervalId = setInterval(tick, 15000);
+    const intervalId = setInterval(tick, 10000);
 
     return () => {
       console.log("[dashboard] polling stopped");
@@ -2287,6 +2297,31 @@ export default function TrackerDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              onClick={() => refreshSession()}
+              className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
+                         border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+            >
+              {tOr("trackerDashboard.actions.refreshSessionOrg", "Refresh session org")}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!resolvedOrgId) return;
+                if (isHistoryRequested) fetchPositions(resolvedOrgId, { showSpinner: true });
+                else fetchDashboardData(resolvedOrgId, { showSpinner: true });
+              }}
+              className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
+                         hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              disabled={loading || !resolvedOrgId}
+            >
+              {loading
+                ? tOr("trackerDashboard.actions.loading", "Loading…")
+                : tOr("trackerDashboard.actions.refresh", "Refresh")}
+            </button>
+
+            <button
+              type="button"
               onClick={() => setFitSignal((x) => x + 1)}
               className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
                          border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
@@ -2545,10 +2580,11 @@ export default function TrackerDashboard() {
                     </thead>
                     <tbody>
                       {(trackersUi || []).map((t) => {
-                        const live = t?.live || getTrackerLiveStatus(t?.latest);
-                        const lat = Number(t?.latest?.lat);
-                        const lng = Number(t?.latest?.lng);
-                        const ts = getPositionTs(t?.latest);
+                        const latestRow = t?.latest || t;
+                        const live = t?.live || getTrackerLiveStatus(latestRow);
+                        const lat = Number(t?.latest?.lat ?? t?.lat);
+                        const lng = Number(t?.latest?.lng ?? t?.lng);
+                        const ts = getPositionTs(latestRow);
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-900">{getFriendlyTrackerName(t)}</td>
