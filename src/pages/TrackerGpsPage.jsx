@@ -109,7 +109,6 @@ export default function TrackerGpsPage() {
   const ready = useMemo(() => {
     return Boolean(
       runtimeSession.runtimeToken &&
-        runtimeSession.trackerUserId &&
         runtimeSession.orgId,
     );
   }, [runtimeSession]);
@@ -119,8 +118,8 @@ export default function TrackerGpsPage() {
     syncRuntimeSession(stored);
     setRuntimeSession(stored);
 
-    const hasCompleteSession = Boolean(
-      stored.runtimeToken && stored.trackerUserId && stored.orgId,
+    const hasBootstrapSession = Boolean(
+      stored.runtimeToken && stored.orgId,
     );
 
     setDebugInfo((prev) => ({
@@ -136,11 +135,11 @@ export default function TrackerGpsPage() {
       hasRuntimeToken: !!stored.runtimeToken,
       hasTrackerUserId: !!stored.trackerUserId,
       hasOrgId: !!stored.orgId,
-      ready: hasCompleteSession,
+      ready: hasBootstrapSession,
       nativeMode: true,
     });
 
-    if (hasCompleteSession) {
+    if (hasBootstrapSession) {
       setMsg("Tracker activo (modo nativo)");
     } else if (nextMsgWhenMissing) {
       setMsg(nextMsgWhenMissing);
@@ -187,7 +186,7 @@ export default function TrackerGpsPage() {
 
       const stored = readRuntimeSessionFromStorage();
       const hasSession =
-        !!stored.runtimeToken && !!stored.trackerUserId && !!stored.orgId;
+        !!stored.runtimeToken && !!stored.orgId;
 
       if (hasSession) {
         console.log("[TRACKER_POLL] runtime session detected");
@@ -197,7 +196,7 @@ export default function TrackerGpsPage() {
         setDebugInfo((prev) => ({
           ...prev,
           hasRuntimeToken: true,
-          hasTrackerUserId: true,
+          hasTrackerUserId: !!stored.trackerUserId,
           hasOrgId: true,
           nativeMode: true,
           lastCheckAt: new Date().toISOString(),
@@ -229,30 +228,39 @@ export default function TrackerGpsPage() {
 
     try {
       const bridge = typeof window !== "undefined" ? window.AndroidBridge : null;
+      const { runtimeToken, trackerUserId, orgId } = runtimeSession;
 
       console.log("[TRACKER] bridge exists?", {
         hasAndroidBridge: !!bridge,
         bridgeType: typeof bridge,
-        hasSaveTrackerSession: !!bridge?.saveTrackerSession,
-        hasRequestStartTracking: !!bridge?.requestStartTracking,
+        hasSaveSession: !!bridge?.saveSession,
+        hasSetTrackerSession: !!bridge?.setTrackerSession,
+        hasStartTracking: !!bridge?.startTracking,
+        runtimeToken: !!runtimeToken,
+        trackerUserId: !!trackerUserId,
+        orgId: !!orgId,
       });
 
-      if (bridge?.saveTrackerSession) {
-        console.log("[TRACKER] calling AndroidBridge.saveTrackerSession");
-        bridge.saveTrackerSession(
-          runtimeSession.runtimeToken,
-          runtimeSession.trackerUserId,
-          runtimeSession.orgId,
-        );
-      } else {
-        console.warn("[TRACKER] AndroidBridge.saveTrackerSession not available");
-      }
+      if (bridge && runtimeToken && orgId) {
+        console.log("[TRACKER] calling AndroidBridge.saveSession");
+        bridge.saveSession(runtimeToken, orgId);
 
-      if (bridge?.requestStartTracking) {
-        console.log("[TRACKER] calling AndroidBridge.requestStartTracking");
-        bridge.requestStartTracking();
+        if (trackerUserId && bridge?.setTrackerSession) {
+          console.log("[TRACKER] calling AndroidBridge.setTrackerSession");
+          bridge.setTrackerSession(runtimeToken, trackerUserId);
+        }
+
+        if (bridge?.startTracking) {
+          console.log("[TRACKER] calling AndroidBridge.startTracking");
+          bridge.startTracking();
+        } else {
+          console.warn("[TRACKER] AndroidBridge.startTracking not available");
+        }
       } else {
-        console.warn("[TRACKER] AndroidBridge.requestStartTracking not available");
+        console.warn("[TRACKER] missing required: runtimeToken or orgId", {
+          hasRuntimeToken: !!runtimeToken,
+          hasOrgId: !!orgId,
+        });
       }
 
       setMsg("Tracker activo (modo nativo)");
@@ -297,9 +305,12 @@ export default function TrackerGpsPage() {
           <div style={{ fontSize: 15, marginBottom: 8 }}>{msg}</div>
 
           <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Token runtime: <b>{runtimeSession.runtimeToken ? "sí" : "no"}</b> ·{" "}
-            Tracker user: <b>{runtimeSession.trackerUserId ? "sí" : "no"}</b> ·{" "}
-            Org: <b>{runtimeSession.orgId ? "sí" : "no"}</b>
+            <span style={{ fontWeight: 600 }}>Requerido:</span> Token runtime:{" "}
+            <b>{runtimeSession.runtimeToken ? "sí" : "no"}</b> · Org:{" "}
+            <b>{runtimeSession.orgId ? "sí" : "no"}</b>
+            <br />
+            <span style={{ fontWeight: 600, opacity: 0.7 }}>Informativo:</span> Tracker user:{" "}
+            <b>{runtimeSession.trackerUserId ? "sí" : "no"}</b>
           </div>
         </div>
       ) : (
@@ -331,11 +342,12 @@ export default function TrackerGpsPage() {
             Última verificación:{" "}
             <b>{debugInfo.lastCheckAt ? debugInfo.lastCheckAt : "sin verificar aún"}</b>
             <br />
-            Token runtime: <b>{debugInfo.hasRuntimeToken ? "OK" : "faltante"}</b>
+            <span style={{ fontWeight: 600 }}>Requerido:</span> Token runtime:{" "}
+            <b>{debugInfo.hasRuntimeToken ? "OK" : "faltante"}</b> · Org:{" "}
+            <b>{debugInfo.hasOrgId ? "OK" : "faltante"}</b>
             <br />
-            Tracker user: <b>{debugInfo.hasTrackerUserId ? "OK" : "faltante"}</b>
-            <br />
-            Org: <b>{debugInfo.hasOrgId ? "OK" : "faltante"}</b>
+            <span style={{ fontWeight: 600, opacity: 0.7 }}>Informativo:</span> Tracker user:{" "}
+            <b>{debugInfo.hasTrackerUserId ? "OK" : "faltante"}</b>
             <br />
             Último error: <b>{debugInfo.lastError || "ninguno"}</b>
           </div>
