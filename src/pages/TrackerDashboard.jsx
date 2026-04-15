@@ -1810,7 +1810,22 @@ export default function TrackerDashboard() {
     const latestByUserId = new Map();
     (positions || []).forEach((row) => {
       const uid = normalizeUuid(row?.user_id);
-      if (uid) latestByUserId.set(String(uid), row);
+      if (!uid) return;
+
+      const key = String(uid);
+      const current = latestByUserId.get(key);
+
+      if (!current) {
+        latestByUserId.set(key, row);
+        return;
+      }
+
+      const currentTs = getPositionTs(current);
+      const nextTs = getPositionTs(row);
+
+      if (nextTs >= currentTs) {
+        latestByUserId.set(key, row);
+      }
     });
 
     const allUserIds = new Set([
@@ -1857,10 +1872,45 @@ export default function TrackerDashboard() {
         user_id ||
         "(sin nombre)";
 
+      const latestRow = latest && Object.keys(latest).length > 0
+        ? latest
+        : {
+            user_id,
+            lat: assignment?.lat ?? null,
+            lng: assignment?.lng ?? null,
+            recorded_at:
+              assignment?.recorded_at ??
+              assignment?.ts ??
+              assignment?.device_recorded_at ??
+              assignment?.created_at ??
+              null,
+            ts:
+              assignment?.ts ??
+              assignment?.recorded_at ??
+              assignment?.device_recorded_at ??
+              assignment?.created_at ??
+              null,
+            source: assignment?.source ?? null,
+          };
+
       const merged = {
         ...assignment,
         ...latest,
-        latest,
+        latest: latestRow,
+        lat: latestRow?.lat ?? latest?.lat ?? assignment?.lat ?? null,
+        lng: latestRow?.lng ?? latest?.lng ?? assignment?.lng ?? null,
+        recorded_at:
+          latestRow?.recorded_at ??
+          latest?.recorded_at ??
+          latest?.ts ??
+          latest?.device_recorded_at ??
+          null,
+        ts:
+          latestRow?.ts ??
+          latest?.ts ??
+          latest?.recorded_at ??
+          latest?.device_recorded_at ??
+          null,
         personal: resolvedPersonal,
         profile: latestProfile,
         personal_id: personalId,
@@ -2582,8 +2632,8 @@ export default function TrackerDashboard() {
                       {(trackersUi || []).map((t) => {
                         const latestRow = t?.latest || t;
                         const live = t?.live || getTrackerLiveStatus(latestRow);
-                        const lat = Number(t?.latest?.lat ?? t?.lat);
-                        const lng = Number(t?.latest?.lng ?? t?.lng);
+                        const lat = Number(latestRow?.lat ?? t?.lat);
+                        const lng = Number(latestRow?.lng ?? t?.lng);
                         const ts = getPositionTs(latestRow);
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
