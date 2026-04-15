@@ -1540,6 +1540,26 @@ export default function TrackerDashboard() {
 
         console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
 
+        console.log("[dashboard] latestRows raw:", latestRows);
+        console.log("[dashboard] fallbackRows raw:", fallbackRows);
+        console.log("[dashboard] finalRows raw:", finalRows);
+        console.log(
+          "[dashboard] finalRows summary:",
+          (finalRows || []).map((r) => ({
+            user_id: r?.user_id,
+            lat: r?.lat,
+            lng: r?.lng,
+            recorded_at: r?.recorded_at,
+            ts: r?.ts,
+            latest_lat: r?.latest?.lat,
+            latest_lng: r?.latest?.lng,
+            latest_recorded_at: r?.latest?.recorded_at,
+            latest_ts: r?.latest?.ts,
+            source: r?.source,
+            latest_source: r?.latest?.source,
+          }))
+        );
+
         setPositions(finalRows);
         setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
       } finally {
