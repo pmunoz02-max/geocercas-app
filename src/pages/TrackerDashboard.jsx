@@ -1872,45 +1872,46 @@ export default function TrackerDashboard() {
         user_id ||
         "(sin nombre)";
 
-      const latestRow = latest && Object.keys(latest).length > 0
+      const hasUsableLatest =
+        latest &&
+        Object.keys(latest).length > 0 &&
+        (
+          isValidLatLng(Number(latest?.lat), Number(latest?.lng)) ||
+          getPositionTs(latest) > 0
+        );
+
+      const latestRow = hasUsableLatest
         ? latest
-        : {
-            user_id,
-            lat: assignment?.lat ?? null,
-            lng: assignment?.lng ?? null,
-            recorded_at:
-              assignment?.recorded_at ??
-              assignment?.ts ??
-              assignment?.device_recorded_at ??
-              assignment?.created_at ??
-              null,
-            ts:
-              assignment?.ts ??
-              assignment?.recorded_at ??
-              assignment?.device_recorded_at ??
-              assignment?.created_at ??
-              null,
-            source: assignment?.source ?? null,
-          };
+        : null;
 
       const merged = {
         ...assignment,
         ...latest,
         latest: latestRow,
-        lat: latestRow?.lat ?? latest?.lat ?? assignment?.lat ?? null,
-        lng: latestRow?.lng ?? latest?.lng ?? assignment?.lng ?? null,
-        recorded_at:
-          latestRow?.recorded_at ??
-          latest?.recorded_at ??
-          latest?.ts ??
-          latest?.device_recorded_at ??
-          null,
-        ts:
-          latestRow?.ts ??
-          latest?.ts ??
-          latest?.recorded_at ??
-          latest?.device_recorded_at ??
-          null,
+        lat: hasUsableLatest
+          ? Number(latest?.lat)
+          : null,
+        lng: hasUsableLatest
+          ? Number(latest?.lng)
+          : null,
+        recorded_at: hasUsableLatest
+          ? (
+              latest?.recorded_at ??
+              latest?.ts ??
+              latest?.device_recorded_at ??
+              latest?.created_at ??
+              null
+            )
+          : null,
+        ts: hasUsableLatest
+          ? (
+              latest?.ts ??
+              latest?.recorded_at ??
+              latest?.device_recorded_at ??
+              latest?.created_at ??
+              null
+            )
+          : null,
         personal: resolvedPersonal,
         profile: latestProfile,
         personal_id: personalId,
@@ -2630,17 +2631,22 @@ export default function TrackerDashboard() {
                     </thead>
                     <tbody>
                       {(trackersUi || []).map((t) => {
-                        const latestRow = t?.latest || t;
-                        const live = t?.live || getTrackerLiveStatus(latestRow);
-                        const lat = Number(latestRow?.lat ?? t?.lat);
-                        const lng = Number(latestRow?.lng ?? t?.lng);
-                        const ts = getPositionTs(latestRow);
+                        const latestRow = t?.latest || null;
+                        const live = t?.live || getTrackerLiveStatus(latestRow || t);
+
+                        const rawLat = latestRow?.lat;
+                        const rawLng = latestRow?.lng;
+                        const hasCoords = isValidLatLng(Number(rawLat), Number(rawLng));
+
+                        const lat = hasCoords ? Number(rawLat) : null;
+                        const lng = hasCoords ? Number(rawLng) : null;
+                        const ts = getPositionTs(latestRow || t);
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-900">{getFriendlyTrackerName(t)}</td>
                             <td className="px-4 py-2 text-gray-700">{getStatusLabel(live?.status)}</td>
                             <td className="px-4 py-2 text-gray-700">
-                              {Number.isFinite(lat) && Number.isFinite(lng)
+                              {lat !== null && lng !== null
                                 ? `${lat.toFixed(6)}, ${lng.toFixed(6)}`
                                 : "—"}
                             </td>
