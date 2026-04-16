@@ -113,6 +113,7 @@
       "asignaciones": "Asignaciones",
       "dashboard": "Panel de costos",
       "dashboardCostos": "Panel de costos",
+      "panelCostos": "Panel de costos",
       "geocerca": "Geocerca",
       "geocercas": "Geocercas",
       "home": "Inicio",
@@ -121,7 +122,9 @@
       "invitarTracker": "Invitar tracker",
       "nuevaGeocerca": "Geocerca",
       "personal": "Personal",
+      "pricing": "Pricing",
       "reportes": "Reportes",
+      "billing": "Billing",
       "tracker": "Tracker"
     },
     "title": "App Geocercas"
@@ -172,6 +175,7 @@
     "form": {
       "activityLabel": "Actividad",
       "activityPlaceholder": "Selecciona una actividad",
+      "select": "Select",
       "buttonCancel": "Cancelar",
       "buttonCreate": "Crear asignación",
       "buttonUpdate": "Actualizar asignación",
@@ -246,11 +250,6 @@
       "all": "todos",
       "active": "activa",
       "inactive": "inactiva"
-    },
-    "form": {
-      "select": "Select",
-      "statusActive": "Active",
-      "statusInactive": "Inactive"
     }
   },
   "auth": {
