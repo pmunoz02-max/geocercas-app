@@ -8,10 +8,13 @@
   },
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/i18n-translate.mjs",
     "build": "vite build",
     "preview": "vite preview --host",
     "i18n:audit": "node scripts/i18n-audit.mjs",
-    "i18n:validate": "node scripts/i18n-validate.mjs"
+    "i18n:sync": "node scripts/i18n-sync.mjs --mode=sync",
+    "i18n:validate": "node scripts/i18n-validate.mjs",
+    "i18n:translate": "node scripts/i18n-translate.mjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
