@@ -22,32 +22,6 @@ function readUrlLang() {
   }
 }
 
-function readStoredLang() {
-  try {
-    if (typeof localStorage === "undefined") return null;
-    return normalizeLang(localStorage.getItem("app_lang"));
-  } catch {
-    return null;
-  }
-}
-
-function readNavigatorLang() {
-  try {
-    if (typeof navigator === "undefined") return null;
-    return normalizeLang(navigator.language);
-  } catch {
-    return null;
-  }
-}
-
-function persistLang(code) {
-  try {
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem("app_lang", code);
-    }
-  } catch {}
-}
-
 function setHtmlLang(code) {
   try {
     if (typeof document !== "undefined") {
@@ -64,23 +38,17 @@ function getLangFromUrl() {
 
 function logI18n(stage, extra = {}) {
   const urlLang = getLangFromUrl();
-  const storedLang = localStorage.getItem("app_lang");
   console.log(`[i18n][${stage}]`, {
     urlLang,
-    storedLang,
     currentI18nLang: i18n.language,
     resolvedLanguage: i18n.resolvedLanguage,
     ...extra,
   });
 }
 
-const initialLang =
-  normalizeLang(getLangFromUrl()) ||
-  normalizeLang(readStoredLang()) ||
-  "es";
+const initialLang = readUrlLang() || "es";
 logI18n("before-init", { initialLang });
 
-persistLang(initialLang);
 setHtmlLang(initialLang);
 
 i18n.use(initReactI18next).init({
@@ -118,24 +86,11 @@ i18n.use(initReactI18next).init({
   returnNull: false,
 });
 
-setTimeout(() => {
-  const urlLang = readUrlLang();
-  const finalLang = normalizeLang(urlLang || i18n.language) || "es";
-
-  logI18n("post-init-lock", { finalLang });
-
-  if (i18n.resolvedLanguage !== finalLang) {
-    i18n.changeLanguage(finalLang);
-  }
-}, 0);
-
 i18n.on("languageChanged", (lng) => {
-  logI18n("languageChanged", { changedTo: lng, stack: new Error().stack });
-  localStorage.setItem("app_lang", lng);
   const code = normalizeLang(lng);
   if (!code) return;
-  persistLang(code);
   setHtmlLang(code);
+  logI18n("languageChanged", { changedTo: code });
 });
 
 i18n.on("initialized", (opts) => {

@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 
+const SUPPORTED = new Set(["es", "en", "fr"]);
+
 export default function MainNav({ role }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -11,6 +13,16 @@ export default function MainNav({ role }) {
   const currentLang = String(i18n?.resolvedLanguage || i18n?.language || "es")
     .toLowerCase()
     .slice(0, 2);
+
+  function changeLang(code) {
+    if (!SUPPORTED.has(code)) return;
+
+    const normalized = String(code).toLowerCase().slice(0, 2);
+    const url = new URL(window.location.href);
+    url.searchParams.set("lang", normalized);
+
+    window.location.assign(url.toString());
+  }
 
   const isAdmin = useMemo(() => {
     const r = (role || "").toLowerCase();
@@ -77,7 +89,12 @@ export default function MainNav({ role }) {
             <button
               key={lang.code}
               type="button"
-              onClick={() => i18n.changeLanguage(lang.code)}
+              onClick={() => {
+                if (!SUPPORTED.has(lang.code)) return;
+                if (lang.code === currentLang) return;
+
+                changeLang(lang.code);
+              }}
               className={`inline-flex items-center justify-center px-2.5 py-1.5 rounded-full text-xs border transition ${
                 isActive
                   ? "font-bold bg-slate-900 text-white border-slate-900"

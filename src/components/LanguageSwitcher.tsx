@@ -12,22 +12,14 @@ const SUPPORTED = new Set(["es", "en", "fr"]);
 export default function LanguageSwitcher() {
   const { i18n, t } = useTranslation();
 
-  async function changeLang(code: string) {
+  function changeLang(code: string) {
     if (!SUPPORTED.has(code)) return;
 
-    try {
-      localStorage.setItem("app_lang", code);
-    } catch {}
+    const normalized = String(code).toLowerCase().slice(0, 2);
+    const url = new URL(window.location.href);
+    url.searchParams.set("lang", normalized);
 
-    await i18n.changeLanguage(code);
-
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("lang", code);
-      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
-    } catch {
-      window.history.replaceState(null, "", `?lang=${code}`);
-    }
+    window.location.assign(url.toString());
   }
 
   const current = String(i18n.resolvedLanguage || i18n.language || "es")
@@ -46,14 +38,11 @@ export default function LanguageSwitcher() {
           <button
             key={lang.code}
             type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-
+            onClick={() => {
               if (!SUPPORTED.has(lang.code)) return;
               if (lang.code === current) return;
 
-              void changeLang(lang.code);
+              changeLang(lang.code);
             }}
             className={
               "px-2 py-1 rounded-full border transition select-none cursor-pointer pointer-events-auto " +
