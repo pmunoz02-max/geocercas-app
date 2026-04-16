@@ -286,10 +286,12 @@ export default function Inicio() {
         <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <h2 className="text-lg font-semibold text-slate-900">
-            {t("inicio.billing.managePlan")}
+            {t("inicio.billing.managePlan", { defaultValue: "Administrar plan" })}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            {t("inicio.billing.managePlanBody")}
+            {t("inicio.billing.managePlanBody", {
+              defaultValue: "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
+            })}
           </p>
           <button
             type="button"
@@ -304,10 +306,12 @@ export default function Inicio() {
               transition
             "
           >
-            {t("inicio.billing.goToBilling")}
+            {t("inicio.billing.goToBilling", { defaultValue: "Ir a Billing" })}
           </button>
           <div className="mt-3 text-xs text-slate-500">
-            {t("inicio.billing.previewNote")}
+            {t("inicio.billing.previewNote", {
+              defaultValue: "Nota: PREVIEW/TEST. No afecta producción.",
+            })}
           </div>
         </div>
       </div>
