@@ -6,9 +6,8 @@ import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
 
-function HelpCard({ title, description, to }) {
+function HelpCard({ title, description, cta, to }) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
   return (
     <div
       onClick={() => navigate(to)}
@@ -27,7 +26,7 @@ function HelpCard({ title, description, to }) {
       <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <div className="mt-4 text-sm font-medium text-blue-700">
-        {t("home.open", { defaultValue: "Abrir →" })}
+        {cta}
       </div>
     </div>
   );
@@ -40,6 +39,36 @@ export default function Inicio() {
   const { loading, ready, user, role, currentOrgId, authenticated } = useAuth();
 
   const [signingOut, setSigningOut] = useState(false);
+
+  const helpCards = useMemo(
+    () => [
+      {
+        title: t("dashboard.help.quickGuide.title"),
+        description: t("dashboard.help.quickGuide.desc"),
+        cta: t("common.openArrow"),
+        to: "/help/instructions",
+      },
+      {
+        title: t("dashboard.help.faq.title"),
+        description: t("dashboard.help.faq.desc"),
+        cta: t("common.openArrow"),
+        to: "/help/faq",
+      },
+      {
+        title: t("dashboard.help.support.title"),
+        description: t("dashboard.help.support.desc"),
+        cta: t("common.openArrow"),
+        to: "/help/support",
+      },
+      {
+        title: t("dashboard.help.updates.title"),
+        description: t("dashboard.help.updates.desc"),
+        cta: t("common.openArrow"),
+        to: "/help/changelog",
+      },
+    ],
+    [t, i18n.language]
+  );
 
   async function onLogout() {
     try {
@@ -77,7 +106,7 @@ export default function Inicio() {
   if (loading || !ready) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        {t("home.loadingPermissions", { defaultValue: "Resolviendo permisos…" })}
+        {t("home.loadingPermissions")}
       </div>
     );
   }
@@ -92,7 +121,7 @@ export default function Inicio() {
           </h1>
 
           <p className="mt-2 text-slate-600">
-            {t("home.loginToContinue", { defaultValue: "Inicia sesión para continuar." })}
+            {t("home.loginToContinue")}
           </p>
 
           <div className="mt-5 flex flex-col sm:flex-row gap-3">
@@ -110,7 +139,7 @@ export default function Inicio() {
               onClick={() => navigate("/login")}
               type="button"
             >
-              {t("home.goToLogin", { defaultValue: "Iniciar sesión" })}
+              {t("home.goToLogin")}
             </button>
 
             <button
@@ -126,7 +155,7 @@ export default function Inicio() {
               onClick={() => navigate("/help/instructions")}
               type="button"
             >
-              {t("home.quickStart", { defaultValue: "Ver guía rápida" })}
+              {t("home.quickStart")}
             </button>
           </div>
         </div>
@@ -144,7 +173,7 @@ export default function Inicio() {
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
           <div className="flex items-start justify-between gap-3">
             <h1 className="text-xl font-semibold text-slate-900">
-              {t("home.missingContextTitle", { defaultValue: "Sesión iniciada, pero falta contexto" })}
+              {t("home.missingContextTitle")}
             </h1>
 
             <button
@@ -169,23 +198,21 @@ export default function Inicio() {
 
           <p className="text-sm text-slate-600">
             {t("home.missingContextBody", {
-              defaultValue:
-                "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
-              email: user.email,
+              correo: user.email,
             })}
           </p>
 
           <div className="text-sm text-slate-700 space-y-1">
             <div>
-              <b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}
+              <b>{t("dashboard.email")}:</b> {user.email}
             </div>
             <div>
-              <b>{t("home.labels.organization", { defaultValue: "Organización:" })}</b>{" "}
-              {t("home.orgNotResolved", { defaultValue: "(no resuelta)" })}
+              <b>{t("home.labels.organization")}</b>{" "}
+              {t("home.orgNotResolved")}
             </div>
             <div>
-              <b>{t("home.labels.role", { defaultValue: "Rol:" })}</b>{" "}
-              {t("home.roleEmpty", { defaultValue: "(vacío)" })}
+              <b>{t("home.labels.role")}</b>{" "}
+              {t("home.roleEmpty")}
             </div>
           </div>
 
@@ -195,7 +222,7 @@ export default function Inicio() {
               onClick={() => window.location.reload()}
               type="button"
             >
-              {t("home.retry", { defaultValue: "Reintentar" })}
+              {t("home.retry")}
             </button>
           </div>
         </div>
@@ -220,10 +247,10 @@ export default function Inicio() {
 
             <div className="mt-4 text-sm text-slate-700 space-y-1">
               <div>
-                <b>{t("home.labels.email", { defaultValue: "Email:" })}</b> {user.email}
+                <b>{t("dashboard.email")}:</b> {user.email}
               </div>
               <div>
-                <b>{t("home.labels.orgId", { defaultValue: "Organización ID:" })}</b>{" "}
+                <b>{t("dashboard.organizationId")}:</b>{" "}
                 <span className="font-mono">{currentOrgId}</span>
               </div>
             </div>
@@ -242,7 +269,7 @@ export default function Inicio() {
               onClick={() => navigate("/dashboard")}
               type="button"
             >
-              {t("home.goDashboard", { defaultValue: "Ir al dashboard" })}
+              {t("home.goDashboard")}
             </button>
 
             <button
@@ -286,12 +313,10 @@ export default function Inicio() {
         <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <h2 className="text-lg font-semibold text-slate-900">
-            {t("inicio.billing.managePlan", { defaultValue: "Administrar plan" })}
+            {t("inicio.billing.managePlan")}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            {t("inicio.billing.managePlanBody", {
-              defaultValue: "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
-            })}
+            {t("inicio.billing.managePlanBody")}
           </p>
           <button
             type="button"
@@ -306,12 +331,10 @@ export default function Inicio() {
               transition
             "
           >
-            {t("inicio.billing.goToBilling", { defaultValue: "Ir a Billing" })}
+            {t("inicio.billing.goToBilling")}
           </button>
           <div className="mt-3 text-xs text-slate-500">
-            {t("inicio.billing.previewNote", {
-              defaultValue: "Nota: PREVIEW/TEST. No afecta producción.",
-            })}
+            {t("inicio.billing.previewNote")}
           </div>
         </div>
       </div>
@@ -323,29 +346,15 @@ export default function Inicio() {
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <HelpCard
-            title={t("home.help.quick", { defaultValue: "Guía rápida" })}
-            description={t("home.help.quickDesc", { defaultValue: "Aprende cómo usar la app paso a paso." })}
-            to="/help/instructions"
-          />
-
-          <HelpCard
-            title={t("home.help.faq", { defaultValue: "Preguntas frecuentes" })}
-            description={t("home.help.faqDesc", { defaultValue: "Respuestas a las dudas más comunes." })}
-            to="/help/faq"
-          />
-
-          <HelpCard
-            title={t("home.help.support", { defaultValue: "Soporte" })}
-            description={t("home.help.supportDesc", { defaultValue: "¿Tienes un problema o consulta? Contáctanos." })}
-            to="/help/support"
-          />
-
-          <HelpCard
-            title={t("home.help.news", { defaultValue: "Novedades" })}
-            description={t("home.help.newsDesc", { defaultValue: "Cambios, mejoras y actualizaciones recientes." })}
-            to="/help/changelog"
-          />
+          {helpCards.map((card) => (
+            <HelpCard
+              key={card.to}
+              title={card.title}
+              description={card.description}
+              cta={card.cta}
+              to={card.to}
+            />
+          ))}
         </div>
       </div>
     </div>

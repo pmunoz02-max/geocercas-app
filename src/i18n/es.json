@@ -405,6 +405,7 @@
     "zoom": "Zoom",
     "refresh": "Actualizar",
     "ok": "OK",
+    "openArrow": "Abrir →",
     "debug": "Depuración",
     "pagination": {
       "pageOf": "Página {{page}} de {{total}}",
@@ -420,8 +421,28 @@
   "dashboard": {
     "welcome": "Bienvenido a App Geocercas",
     "sessionAs": "Sesión iniciada como {{role}}",
+    "email": "Correo",
+    "organizationId": "Organización ID",
     "deleteAccount": "Eliminar cuenta",
     "helpCenter": "Centro de ayuda",
+    "help": {
+      "quickGuide": {
+        "title": "Guía rápida",
+        "desc": "Aprende cómo usar la app paso a paso."
+      },
+      "faq": {
+        "title": "Preguntas frecuentes",
+        "desc": "Respuestas a las dudas más comunes."
+      },
+      "support": {
+        "title": "Soporte",
+        "desc": "¿Tienes un problema o consulta? Contáctanos."
+      },
+      "updates": {
+        "title": "Novedades",
+        "desc": "Cambios, mejoras y actualizaciones recientes."
+      }
+    },
     "adminPanel": {
       "title": "Panel de Administración",
       "description": "Gestione usuarios, roles y organizaciones desde aquí.",
@@ -890,6 +911,7 @@
   },
   "home": {
     "goToLogin": "Ir a iniciar sesión",
+    "quickStart": "Ver guía rápida",
     "goDashboard": "Ir al panel",
     "deleteAccount": "Eliminar cuenta",
     "help": {
