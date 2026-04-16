@@ -780,10 +780,30 @@
       "viewResult": "Ver resultado"
     },
     "support": {
-      "emailLabel": "Correo de soporte",
-      "notConfigured": "El contacto de soporte aún no está configurado.",
-      "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
-      "title": "Soporte"
+      "breadcrumb": "Help Center / Support",
+      "calendlyLabel": "Calendly",
+      "title": "Support",
+      "subtitle": "Contact us for technical support, billing questions, or training.",
+      "goHome": "Go to Home",
+      "emailLabel": "Support email",
+      "whatsappLabel": "WhatsApp",
+      "viewFaq": "View FAQ",
+      "faqLink": "Frequently asked questions",
+      "notConfigured": "Support contact is not configured yet.",
+      "commonProblems": {
+        "title": "Common problems",
+        "subtitle": "If something is not working, review these quick solutions before contacting support.",
+        "items": [
+          {
+            "title": "I can’t accept the invitation",
+            "desc": "Open the most recent link you received. If it expired or shows an error, ask for a new invitation."
+          },
+          {
+            "title": "The link does not work",
+            "desc": "Copy it completely into your phone browser or open it directly from the original message."
+          }
+        ]
+      }
     },
     "onboarding": {
       "title": "Primeros pasos",

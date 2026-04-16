@@ -780,9 +780,29 @@
       "viewResult": "Ver resultado"
     },
     "support": {
+      "breadcrumb": "Centro de Ayuda / Soporte",
+      "calendlyLabel": "Calendly",
       "emailLabel": "Correo de soporte",
+      "goHome": "Ir a Inicio",
+      "whatsappLabel": "WhatsApp",
+      "viewFaq": "Ver FAQ",
+      "faqLink": "Preguntas frecuentes",
       "notConfigured": "El contacto de soporte aún no está configurado.",
       "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
+      "commonProblems": {
+        "title": "Problemas comunes",
+        "subtitle": "Si algo no funciona, revisa estas soluciones rápidas antes de contactar soporte.",
+        "items": [
+          {
+            "title": "No puedo aceptar la invitación",
+            "desc": "Abre el enlace más reciente que te enviaron. Si ya venció o aparece error, pide una nueva invitación."
+          },
+          {
+            "title": "El enlace no funciona",
+            "desc": "Cópialo completo en tu navegador del teléfono o ábrelo directamente desde el mensaje original."
+          }
+        ]
+      },
       "title": "Soporte"
     },
     "onboarding": {
