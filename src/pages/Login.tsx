@@ -432,14 +432,14 @@ export default function Login() {
                     type="button"
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-slate-200 hover:bg-white/[0.08]"
                     onClick={() => setShowPassword((v) => !v)}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-label={showPassword ? t("login.hidePassword", { defaultValue: "Hide password" }) : t("login.showPassword", { defaultValue: "Show password" })}
                   >
                     {showPassword ? "🙈" : "👁"}
                   </button>
                 </div>
 
                 <div className="text-xs text-slate-400">
-                  Tip: en Preview y Producción la contraseña es distinta (Supabase distinto).
+                  {t("login.passwordTip", { defaultValue: "Tip: en Preview y Producción la contraseña es distinta (Supabase distinto)." })}
                 </div>
               </div>
             )}
