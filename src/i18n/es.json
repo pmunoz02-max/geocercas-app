@@ -580,89 +580,66 @@
       "title": "Preguntas frecuentes"
     },
     "instructions": {
-      "bestPractice1Body": "Nombra geocercas y actividades de forma que tu equipo las reconozca al instante (Finca, Lote, Bloque, Tarea).",
-      "bestPractice1Title": "Nombres claros",
-      "bestPractice2Body": "Valida el flujo completo con una persona y una geocerca antes de crear decenas de registros.",
-      "bestPractice2Title": "Empieza pequeño y escala",
-      "bestPractice3Body": "Cierra o desactiva asignaciones antiguas para que el tracker siga solo el plan vigente.",
-      "bestPractice3Title": "Mantén asignaciones al día",
-      "bestPractice4Body": "Usa una frecuencia razonable. Una frecuencia muy alta consume más batería y datos móviles.",
-      "bestPractice4Title": "Batería y precisión",
+      "bestPractice1Body": "Usa siempre el mismo teléfono para evitar cortes en el seguimiento.",
+      "bestPractice1Title": "Usa tu teléfono principal",
+      "bestPractice2Body": "Mantén batería suficiente o conecta el cargador durante jornadas largas.",
+      "bestPractice2Title": "Cuida la batería",
+      "bestPractice3Body": "No cierres sesión ni desactives ubicación mientras estés en ruta.",
+      "bestPractice3Title": "Mantén la sesión activa",
+      "bestPractice4Body": "Si algo no carga, vuelve a abrir el enlace de invitación más reciente.",
+      "bestPractice4Title": "Reabre el enlace si falla",
       "jumpToSteps": "Ir a pasos",
-      "recommendationBody": "Empieza con 1 geocerca y 1 tracker. Cuando el flujo funcione, escala a más zonas y personas.",
+      "recommendationBody": "Antes de salir, revisa que veas el estado \"Seguimiento activo\" en tu pantalla.",
       "recommendationTitle": "Recomendación",
       "resultBullets": [
-        "Al menos 1 geocerca guardada y visible en el mapa",
-        "Personal registrado y listo para asignaciones",
-        "Actividades con moneda y tarifa por hora configurada",
-        "Asignaciones activas (persona + actividad + geocerca)",
-        "Puntos GPS visibles en Tracker / Dashboard de tracking",
-        "Reportes y dashboard de costos listos para exportar y analizar"
+        "Tu invitación fue aceptada correctamente.",
+        "Concediste permisos de ubicación en el teléfono.",
+        "Ves el estado \"Seguimiento activo\".",
+        "Mantienes internet y ubicación habilitadas.",
+        "Si no funciona, puedes pedir una nueva invitación o contactar soporte."
       ],
-      "resultIntro": "Al completar los pasos, tu organización debería tener lo siguiente:",
-      "resultTitle": "Qué deberías ver",
+      "resultIntro": "Al finalizar, deberías tener todo listo para compartir ubicación sin problemas:",
+      "resultTitle": "Qué debes confirmar",
       "steps": [
         {
           "bullets": [
-            "Usa el selector de organización para elegir dónde vas a trabajar.",
-            "Si eres Propietario, puedes administrar varias organizaciones."
+            "Te llegará un enlace por correo o mensaje desde tu organización."
           ],
-          "title": "Selecciona tu organización"
+          "title": "Recibe tu invitación"
         },
         {
           "bullets": [
-            "Ve a Geocerca y dibuja el área en el mapa.",
-            "Pon un nombre claro (Finca A, Lote 3, Planta 1, etc.).",
-            "Guarda y verifica que aparezca en Geocercas."
+            "Ábrelo en el mismo teléfono que usarás para el tracker."
           ],
-          "title": "Crea tu primera geocerca"
+          "title": "Abre el enlace en tu teléfono"
         },
         {
           "bullets": [
-            "Ve a Personal y crea los registros de las personas que trabajarán.",
-            "Usa un correo válido si los vas a invitar como trackers."
+            "Cuando se soliciten, permite los permisos de ubicación."
           ],
-          "title": "Registra tu personal"
+          "title": "Acepta permisos de ubicación"
         },
         {
           "bullets": [
-            "Ve a Actividades y define tareas (Cosecha, Riego, Mantenimiento…).",
-            "Configura moneda y tarifa por hora para calcular costos y reportes."
+            "Ese estado indica que tu ubicación se está compartiendo correctamente."
           ],
-          "title": "Crea actividades y tarifas"
+          "title": "Confirma que aparece \"Seguimiento activo\""
         },
         {
           "bullets": [
-            "Ve a Asignaciones y vincula: Persona + Actividad + Geocerca.",
-            "Define inicio/fin y estado Activa.",
-            "Configura frecuencia (mínimo 5 minutos)."
+            "Durante tu jornada, mantén encendidas la conexión y la ubicación."
           ],
-          "title": "Crea asignaciones"
-        },
-        {
-          "bullets": [
-            "Ve a Invitar tracker y envía invitación por correo.",
-            "El invitado puede entrar con Link mágico desde el móvil.",
-            "Al iniciar, el tracker enviará puntos GPS según la asignación."
-          ],
-          "title": "Invita trackers (teléfonos de campo)"
-        },
-        {
-          "bullets": [
-            "Abre Reportes para filtrar por geocerca/persona/actividad y descargar CSV.",
-            "Abre Dashboard Costos para ver KPIs y gráficos."
-          ],
-          "title": "Revisa reportes y dashboard"
+          "title": "Mantén conexión y ubicación habilitadas"
         }
       ],
-      "stepsSubtitle": "Una secuencia práctica que funciona para la mayoría de organizaciones.",
+      "stepsSubtitle": "Sigue esta secuencia simple para activar el tracker en pocos minutos.",
       "stepsTitle": "Paso a paso",
-      "subtitle": "Sigue estos pasos para configurar tu organización, crear geocercas, asignar personal y empezar a trackear.",
+      "subtitle": "Activa tu tracker con pasos simples y mensajes claros, sin configuración técnica.",
       "tipsTitle": "Buenas prácticas",
-      "title": "Guía rápida de configuración",
+      "title": "Guía rápida del tracker",
       "tocResult": "Resultado esperado",
       "tocSteps": "Pasos",
-      "tocSubtitle": "Usa estos accesos para navegar la guía.",
+      "tocSubtitle": "Usa estos accesos para avanzar rápido.",
       "tocTips": "Buenas prácticas",
       "tocTitle": "Tabla de contenido",
       "viewResult": "Ver resultado"
@@ -768,6 +745,31 @@
               "q": "¿Qué hago si estoy en la organización incorrecta?",
               "a": "Asegúrate de usar el enlace de invitación correcto o vuelve a ingresar con la cuenta indicada."
             }
+          ]
+        }
+      ]
+    },
+    "changelog": {
+      "title": "Historial de cambios",
+      "subtitle": "Mejoras y actualizaciones recientes de la aplicación.",
+      "items": [
+        {
+          "version": "v1.2.0",
+          "date": "2026-04",
+          "changes": [
+            "Mejora en el flujo de invitación de trackers",
+            "Seguimiento más estable y confiable",
+            "Nueva interfaz más clara y consistente",
+            "Corrección de errores en activación de tracking"
+          ]
+        },
+        {
+          "version": "v1.1.0",
+          "date": "2026-03",
+          "changes": [
+            "Sistema de geocercas mejorado",
+            "Optimización de rendimiento",
+            "Mejoras en login y manejo de sesión"
           ]
         }
       ]

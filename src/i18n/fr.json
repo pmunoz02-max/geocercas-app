@@ -697,6 +697,31 @@
       "sections": [],
       "subtitle": "Informations sur le profil, les sessions, les permissions et l'administration du compte.",
       "title": "Compte"
+    },
+    "changelog": {
+      "title": "Historial de cambios",
+      "subtitle": "Mejoras y actualizaciones recientes de la aplicación.",
+      "items": [
+        {
+          "version": "v1.2.0",
+          "date": "2026-04",
+          "changes": [
+            "Mejora en el flujo de invitación de trackers",
+            "Seguimiento más estable y confiable",
+            "Nueva interfaz más clara y consistente",
+            "Corrección de errores en activación de tracking"
+          ]
+        },
+        {
+          "version": "v1.1.0",
+          "date": "2026-03",
+          "changes": [
+            "Sistema de geocercas mejorado",
+            "Optimización de rendimiento",
+            "Mejoras en login y manejo de sesión"
+          ]
+        }
+      ]
     }
   },
   "home": {
