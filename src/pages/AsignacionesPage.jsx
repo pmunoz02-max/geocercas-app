@@ -407,7 +407,7 @@ export default function AsignacionesPage() {
               value={selectedPersonId}
               onChange={(e) => setSelectedPersonId(e.target.value)}
             >
-              <option value="">Seleccionar</option>
+              <option value="">{t('asignaciones.form.select')}</option>
               {personasDisponibles.map((p) => {
                 const id = p?.id ?? p?.personal_id ?? null;
                 if (!id) return null;
@@ -429,7 +429,7 @@ export default function AsignacionesPage() {
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
             >
-              <option value="">Seleccionar</option>
+              <option value="">{t('asignaciones.form.select')}</option>
               {geofenceOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
@@ -447,7 +447,7 @@ export default function AsignacionesPage() {
               value={selectedActivityId}
               onChange={(e) => setSelectedActivityId(e.target.value)}
             >
-              <option value="">Seleccionar</option>
+              <option value="">{t('asignaciones.form.select')}</option>
               {actividades.map((a) => (
                 <option key={a.id} value={a.id}>
                   {actividadLabel(a)}
@@ -524,8 +524,8 @@ export default function AsignacionesPage() {
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
-                <option value="active">Activa</option>
-                <option value="inactive">Inactiva</option>
+                <option value="active">{t('asignaciones.form.statusActive')}</option>
+                <option value="inactive">{t('asignaciones.form.statusInactive')}</option>
               </select>
             </div>
 

@@ -28,6 +28,12 @@ function humanize(s) {
 
 function fallbackFromPath(path, t) {
   const p = String(path || "").split("/").filter(Boolean).pop() || "";
+  if (p) {
+    const key = `app.tabs.${p}`;
+    const translated = safeText(t(key, { defaultValue: "" })).trim();
+    if (translated && translated !== key) return translated;
+  }
+
   const h = humanize(p);
   return h || t("common.actions.loading", { defaultValue: "Tab" }); // fallback neutro
 }
@@ -43,9 +49,6 @@ function resolveLabel(t, tab) {
     const hk = humanize(cleaned).trim();
     if (hk) return hk;
   }
-
-  const direct = safeText(tab?.label).trim();
-  if (direct) return direct;
 
   return "";
 }

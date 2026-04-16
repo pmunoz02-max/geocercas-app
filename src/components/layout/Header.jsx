@@ -1,6 +1,7 @@
 // src/components/layout/Header.jsx
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 // Fallback inline styles (garantiza legibilidad aun sin Tailwind)
 const baseStyle = {
@@ -41,6 +42,7 @@ function LinkItem({ to, children }) {
 }
 
 export default function Header() {
+  const { t } = useTranslation();
   return (
     <header className="w-full bg-slate-900 text-white" style={{ background: '#0f172a', color: '#e5e7eb' }}>
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between" style={{ maxWidth: '80rem', padding: '12px 16px' }}>
@@ -53,10 +55,10 @@ export default function Header() {
 
         {/* Navegación */}
         <nav className="flex items-center gap-2" style={{ display: 'flex', alignItems: 'center' }}>
-          <LinkItem to="/geocercas">Geocercas</LinkItem>
-          <LinkItem to="/personal">Personal</LinkItem>
-          <LinkItem to="/asignaciones">Asignaciones</LinkItem>
-          <LinkItem to="/tracker">Tracker</LinkItem>
+          <LinkItem to="/geocercas">{t('app.tabs.geocercas')}</LinkItem>
+          <LinkItem to="/personal">{t('app.tabs.personal')}</LinkItem>
+          <LinkItem to="/asignaciones">{t('app.tabs.asignaciones')}</LinkItem>
+          <LinkItem to="/tracker">{t('app.tabs.tracker')}</LinkItem>
         </nav>
       </div>
     </header>

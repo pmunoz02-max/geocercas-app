@@ -1,5 +1,6 @@
 // src/pages/Admin/AdminTools.jsx
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 /**
  * Panel de herramientas de administrador
@@ -23,13 +24,14 @@ const tools = [
 ];
 
 export default function AdminTools() {
+  const { t } = useTranslation();
+
   return (
     <main style={styles.wrapper} aria-labelledby="admin-title">
       <header style={styles.header}>
-        <h1 id="admin-title" style={styles.h1}>Herramientas de administrador</h1>
+        <h1 id="admin-title" style={styles.h1}>{t("dashboard.adminTools.title")}</h1>
         <p style={styles.lead}>
-          Selecciona un módulo para administrar tu app. Este panel está protegido para usuarios con rol
-          <em> owner</em> o <em>admin</em>.
+          {t("dashboard.adminTools.protectedPanel")}
         </p>
       </header>
 

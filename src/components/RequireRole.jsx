@@ -1,11 +1,13 @@
 // /src/components/RequireRole.jsx
 import { Navigate } from "react-router-dom";
+import { useTranslation } from 'react-i18next';
 import { useProfile } from "@/hooks/useProfile";
 
 export default function RequireRole({ allow = ["admin"], children }) {
+  const { t } = useTranslation();
   const { profile, loading } = useProfile();
 
-  if (loading) return <div className="p-6">Cargando…</div>;
+  if (loading) return <div className="p-6">{t('common.actions.loading')}</div>;
   if (!profile) return <Navigate to="/login" replace />;
 
   const role = profile.roleSlug; // 'admin' | 'owner' | 'tracker' | null

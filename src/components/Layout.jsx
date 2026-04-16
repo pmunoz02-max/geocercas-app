@@ -1,9 +1,11 @@
 ﻿// src/components/Layout.jsx
 import { Outlet, Link } from "react-router-dom";
+import { useTranslation } from 'react-i18next';
 import MainNav from "@/components/MainNav";
 import { useAuth } from "@/context/auth.js";
 
 export default function Layout() {
+  const { t } = useTranslation();
   const { user, loading, currentOrg, currentRole, isAppRoot } = useAuth();
 
   const roleLabel = isAppRoot
@@ -36,7 +38,7 @@ export default function Layout() {
               <MainNav role={isAppRoot ? "root" : currentRole} />
             </div>
           ) : (
-            <div className="text-sm text-slate-600">No autenticado</div>
+            <div className="text-sm text-slate-600">            {t('common.fallbacks.noAuth')}</div>
           )}
         </div>
       </header>

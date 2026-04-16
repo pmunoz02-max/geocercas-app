@@ -1,8 +1,10 @@
 // src/pages/orgs/NewOrg.jsx
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 export default function NewOrg() {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const navigate = useNavigate();
@@ -16,30 +18,30 @@ export default function NewOrg() {
 
   return (
     <div style={{ padding: 16 }}>
-      <h2>Nueva organización</h2>
+      <h2>{t('orgs.newTitle')}</h2>
       <form onSubmit={onSubmit} style={{ maxWidth: 420 }}>
-        <label>Nombre</label>
+        <label>{t('orgs.form.name')}</label>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej. Finca Principal"
+          placeholder={t('orgs.form.namePlaceholder')}
           required
           style={{ display: "block", width: "100%", margin: "8px 0 16px" }}
         />
 
-        <label>Slug (opcional)</label>
+        <label>{t('orgs.form.slugOptional')}</label>
         <input
           type="text"
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
-          placeholder="ej. mi-finca-principal"
+          placeholder={t('orgs.form.slugPlaceholder')}
           style={{ display: "block", width: "100%", margin: "8px 0 16px" }}
         />
 
-        <button type="submit">Crear</button>
+        <button type="submit">{t('orgs.form.create')}</button>
         <Link to="/orgs" style={{ marginLeft: 12 }}>
-          <button type="button">Cancelar</button>
+          <button type="button">{t('common.actions.cancel')}</button>
         </Link>
       </form>
     </div>

@@ -42,33 +42,33 @@ export default function Landing() {
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-sky-400" />
-              <h3 className="text-base font-semibold text-slate-100">Supervisión de personal</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.feature1Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Visualiza quién está en ruta, quién llegó y quién salió de un área operativa.
+                {t('landing.feature1Body')}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-indigo-400" />
-              <h3 className="text-base font-semibold text-slate-100">Control por zonas</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.feature2Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Define geocercas para sedes, rutas, clientes o áreas sensibles y recibe contexto visual inmediato.
+                {t('landing.feature2Body')}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-              <h3 className="text-base font-semibold text-slate-100">Eventos de entrada y salida</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.feature3Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Convierte posiciones GPS en eventos fáciles de revisar para operación, auditoría y seguimiento.
+                {t('landing.feature3Body')}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
-              <h3 className="text-base font-semibold text-slate-100">Listo para equipos en campo</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.feature4Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Úsalo en operaciones comerciales, técnicas, logísticas o de supervisión territorial.
+                {t('landing.feature4Body')}
               </p>
             </article>
           </div>
@@ -87,33 +87,33 @@ export default function Landing() {
           <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-sky-400" />
-              <h3 className="text-base font-semibold text-slate-100">Seguridad privada</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.useCase1Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Controla rondas de guardias, entradas a zonas restringidas y supervisión de turnos.
+                {t('landing.useCase1Body')}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-indigo-400" />
-              <h3 className="text-base font-semibold text-slate-100">Equipos comerciales</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.useCase2Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Verifica visitas a clientes, cobertura territorial y actividad de vendedores.
+                {t('landing.useCase2Body')}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-              <h3 className="text-base font-semibold text-slate-100">Operaciones técnicas</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.useCase3Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Supervisa técnicos en campo y valida entradas y salidas en zonas de trabajo.
+                {t('landing.useCase3Body')}
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
               <p className="mb-3 inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
-              <h3 className="text-base font-semibold text-slate-100">Logística urbana</h3>
+              <h3 className="text-base font-semibold text-slate-100">{t('landing.useCase4Title')}</h3>
               <p className="mt-2 text-sm leading-relaxed text-slate-300">
-                Monitorea movimientos dentro de zonas operativas y detecta eventos automáticamente.
+                {t('landing.useCase4Body')}
               </p>
             </article>
           </div>

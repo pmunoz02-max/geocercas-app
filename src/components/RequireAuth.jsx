@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { supabase } from "@/lib/supabaseClient.js";
 
 export default function RequireAuth() {
+  const { t } = useTranslation();
   const [checking, setChecking] = useState(true);
   const [hasSession, setHasSession] = useState(false);
   const location = useLocation();
@@ -19,7 +21,7 @@ export default function RequireAuth() {
     return () => { mounted = false; };
   }, []);
 
-  if (checking) return <div style={{ padding: 16 }}>Cargando…</div>;
+  if (checking) return <div style={{ padding: 16 }}>{t('common.actions.loading')}</div>;
   if (!hasSession) {
     // Guarda a dónde quería ir para mandarlo de regreso tras login
     return <Navigate to="/login" replace state={{ from: location }} />;

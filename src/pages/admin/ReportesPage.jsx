@@ -1,16 +1,18 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 export default function ReportesPage() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen p-6 md:p-10">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Reportes</h2>
+        <h2 className="text-2xl font-bold">{t('dashboard.adminReportes.title')}</h2>
         <Link
           to="/admin"
           className="rounded-lg border px-4 py-2 hover:bg-gray-50"
         >
-          ← Volver
+          ← {t('common.actions.back')}
         </Link>
       </div>
 

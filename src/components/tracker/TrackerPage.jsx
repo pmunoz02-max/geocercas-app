@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import TrackerMap from './TrackerMap';
 import { supabase } from '../../supabaseClient';
 
 export default function TrackerPage() {
+  const { t } = useTranslation();
   const [trackers, setTrackers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,9 +59,9 @@ export default function TrackerPage() {
       {/* SIDEBAR */}
       <aside className="w-80 border-r p-4 space-y-4 bg-slate-50">
 
-        <h2 className="text-xl font-semibold">Tracker GPS</h2>
+        <h2 className="text-xl font-semibold">{t('tracker.page.title')}</h2>
 
-        {loading && <div>Cargando...</div>}
+        {loading && <div>{t('common.actions.loading')}</div>}
         {error && <div className="text-red-600">{error}</div>}
 
         <div className="space-y-2 text-sm">

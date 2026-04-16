@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { fetchGeocercaById } from "../../services/geocercas";
 
 // Si usas Leaflet/React-Leaflet, importa lo que necesites aquí:
 // import { GeoJSON, useMap } from "react-leaflet";
 
 export default function VerGeocerca() {
+  const { t } = useTranslation();
   const { id } = useParams(); // asume ruta tipo /geocercas/:id (puede ser UUID o id_text)
   const [loading, setLoading] = useState(true);
   const [geocerca, setGeocerca] = useState(null);
@@ -35,13 +37,13 @@ export default function VerGeocerca() {
     };
   }, [id]);
 
-  if (loading) return <div>Cargando geocerca…</div>;
+  if (loading) return <div>{t('geocercas.loadingGeofence')}</div>;
   if (!geocerca) return <div>No se encontraron datos.</div>;
 
   // Render mínimo de verificación
   return (
     <div className="space-y-2">
-      <h2 className="text-xl font-semibold">Geocerca</h2>
+      <h2 className="text-xl font-semibold">{t('geocercas.panelTitle')}</h2>
       <div><b>ID:</b> {geocerca.id}</div>
       <div><b>ID texto:</b> {geocerca.id_text}</div>
       <div><b>Nombre:</b> {geocerca.name}</div>

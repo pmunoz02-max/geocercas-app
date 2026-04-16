@@ -1,15 +1,17 @@
 // src/components/tracker/AttendancePanel.jsx
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export default function AttendancePanel({ positions = [] }) {
+  const { t } = useTranslation();
   return (
     <div className="w-full overflow-auto border rounded-xl p-3">
       <table className="min-w-full text-sm">
         <thead>
           <tr className="text-left border-b">
-            <th className="py-2 pr-3">Usuario</th>
-            <th className="py-2 pr-3">Lat</th>
-            <th className="py-2 pr-3">Lng</th>
+            <th className="py-2 pr-3">{t('tracker.attendance.columns.user')}</th>
+            <th className="py-2 pr-3">{t('geocercas.lat')}</th>
+            <th className="py-2 pr-3">{t('geocercas.lng')}</th>
             <th className="py-2 pr-3">Accuracy (m)</th>
             <th className="py-2 pr-3">Timestamp</th>
           </tr>
