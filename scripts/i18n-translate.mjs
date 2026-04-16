@@ -22,6 +22,7 @@ const targets = [
 
 const PLACEHOLDER_REGEX = /\{\{\s*[^{}]+\s*\}\}|\{[^{}]+\}|%s|:[A-Za-z_][A-Za-z0-9_]*/g;
 const CHUNK_SIZE = 50;
+const FORCE_I18N_TRANSLATE = String(process.env.FORCE_I18N_TRANSLATE || "").toLowerCase() === "true";
 
 const DEEPL_API_KEY = process.env.DEEPL_API_KEY;
 const DEEPL_API_URL = process.env.DEEPL_API_URL;
@@ -222,13 +223,51 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function isSameStructure(a, b) {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!isSameStructure(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  if (a && typeof a === "object" || b && typeof b === "object") {
+    if (!(a && typeof a === "object") || !(b && typeof b === "object")) return false;
+    const aKeys = Object.keys(a).sort();
+    const bKeys = Object.keys(b).sort();
+    if (aKeys.length !== bKeys.length) return false;
+    for (let i = 0; i < aKeys.length; i++) {
+      if (aKeys[i] !== bKeys[i]) return false;
+    }
+    for (const key of aKeys) {
+      if (!isSameStructure(a[key], b[key])) return false;
+    }
+    return true;
+  }
+
+  return typeof a === typeof b;
+}
+
+function localeNeedsTranslation(es, targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    return true;
+  }
+
+  try {
+    const target = readJson(targetPath);
+    return !isSameStructure(es, target);
+  } catch {
+    return true;
+  }
+}
+
 function writeJson(filePath, data) {
   fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
 
 async function main() {
-  assertDeepLConfig();
-
   if (!fs.existsSync(esPath)) {
     console.error(`[i18n-translate] Source file not found: ${esPath}`);
     process.exit(1);
@@ -236,11 +275,30 @@ async function main() {
 
   const es = readJson(esPath);
   const persistentCache = loadPersistentCache();
+  const pending = targets.map((target) => ({
+    ...target,
+    needsTranslation: FORCE_I18N_TRANSLATE || localeNeedsTranslation(es, target.filePath),
+  }));
 
-  for (const target of targets) {
+  if (!FORCE_I18N_TRANSLATE && pending.every((target) => !target.needsTranslation)) {
+    console.log("[i18n-translate] Skip mode: en/fr already match es.json structure. Set FORCE_I18N_TRANSLATE=true to force regeneration.");
+  }
+
+  if (pending.some((target) => target.needsTranslation)) {
+    assertDeepLConfig();
+  }
+
+  for (const target of pending) {
+    if (!target.needsTranslation) {
+      console.log(`[i18n-translate] Skipped ${target.locale}.json (structure already matches es.json)`);
+      console.log(
+        `[i18n-translate] Summary ${target.locale}: cache_hits=0, cache_misses=0, batches_sent=0, fallback_count=0, cache_file=${cachePath}`
+      );
+      continue;
+    }
+
     const { output, metrics } = await translateLocale(es, target.targetLang, persistentCache);
-    const translated = output;
-    writeJson(target.filePath, translated);
+    writeJson(target.filePath, output);
     savePersistentCache(persistentCache);
     console.log(`[i18n-translate] Generated ${target.locale}.json`);
     console.log(
