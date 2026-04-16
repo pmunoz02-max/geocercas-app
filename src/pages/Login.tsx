@@ -348,7 +348,9 @@ export default function Login() {
                   PREVIEW
                 </span>
               </div>
-              <LanguageSwitcher />
+              <div className="relative z-50">
+                <LanguageSwitcher />
+              </div>
             </div>
           </div>
 
