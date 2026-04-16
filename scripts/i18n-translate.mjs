@@ -6,8 +6,11 @@ import dotenv from "dotenv";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.join(__dirname, "..");
+const localEnvPath = path.join(projectRoot, ".env.local");
 
-dotenv.config({ path: path.join(projectRoot, ".env.local") });
+if (fs.existsSync(localEnvPath)) {
+  dotenv.config({ path: localEnvPath });
+}
 
 const i18nDir = path.join(projectRoot, "src/i18n");
 const esPath = path.join(i18nDir, "es.json");
@@ -20,12 +23,12 @@ const targets = [
 const PLACEHOLDER_REGEX = /\{\{\s*[^{}]+\s*\}\}|\{[^{}]+\}|%s|:[A-Za-z_][A-Za-z0-9_]*/g;
 const CHUNK_SIZE = 50;
 
-const deeplApiKey = process.env.DEEPL_API_KEY || "";
-const deeplApiUrl = process.env.DEEPL_API_URL || "";
+const DEEPL_API_KEY = process.env.DEEPL_API_KEY;
+const DEEPL_API_URL = process.env.DEEPL_API_URL;
 
 function assertDeepLConfig() {
-  if (!deeplApiKey || !deeplApiUrl) {
-    console.error("[i18n-translate] Missing DEEPL_API_KEY or DEEPL_API_URL in .env.local");
+  if (!DEEPL_API_KEY || !DEEPL_API_URL) {
+    console.error("[i18n-translate] Missing DEEPL_API_KEY or DEEPL_API_URL in process.env");
     process.exit(1);
   }
 }
@@ -103,10 +106,10 @@ function getLocaleCache(cache, targetLang) {
 // Send one chunk to DeepL; on any failure return originals for that chunk
 async function translateBatch(texts, targetLang) {
   try {
-    const response = await fetch(deeplApiUrl, {
+    const response = await fetch(DEEPL_API_URL, {
       method: "POST",
       headers: {
-        "Authorization": `DeepL-Auth-Key ${deeplApiKey}`,
+        "Authorization": `DeepL-Auth-Key ${DEEPL_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
