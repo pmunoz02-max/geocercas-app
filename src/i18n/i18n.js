@@ -7,7 +7,7 @@ import en from "./en.json";
 import fr from "./fr.json";
 
 /**
- * i18n BLINDADO – App Geocercas
+ * i18n ESTABLE – App Geocercas
  *
  * Prioridad de idioma:
  * 1) ?lang=es|en|fr
@@ -70,7 +70,7 @@ function persistLang(code) {
 }
 
 /* =========================
-   Resolución inicial
+   Resolución inicial (SIN detector automático)
 ========================= */
 
 const initialLang =
@@ -107,12 +107,6 @@ i18n.use(initReactI18next).init({
   load: "languageOnly",
   nonExplicitSupportedLngs: true,
 
-  detection: {
-    order: ["querystring", "localStorage", "navigator"],
-    lookupQuerystring: "lang",
-    caches: ["localStorage"],
-  },
-
   interpolation: {
     escapeValue: false,
   },
@@ -125,9 +119,7 @@ i18n.use(initReactI18next).init({
 
   missingKeyHandler: function (lng, ns, key) {
     if (import.meta.env.DEV) {
-      console.warn(
-        `[i18n missing] lang=${lng} key=${key}`
-      );
+      console.warn(`[i18n missing] lang=${lng} key=${key}`);
     }
   },
 
@@ -136,7 +128,7 @@ i18n.use(initReactI18next).init({
 });
 
 /* =========================
-   Sync permanente con URL (?lang=)
+   Sync con URL (?lang=)
 ========================= */
 
 function syncFromUrl() {
@@ -150,14 +142,10 @@ function syncFromUrl() {
     if (urlLang === current) return;
 
     i18n.changeLanguage(urlLang);
-    persistLang(urlLang);
-    setHtmlLang(urlLang);
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
-// Al cargar
+// Inicial
 syncFromUrl();
 
 // Back / forward
@@ -165,9 +153,7 @@ try {
   if (typeof window !== "undefined") {
     window.addEventListener("popstate", syncFromUrl);
   }
-} catch {
-  // ignore
-}
+} catch {}
 
 // Hook pushState / replaceState
 try {
@@ -187,9 +173,7 @@ try {
       return ret;
     };
   }
-} catch {
-  // ignore
-}
+} catch {}
 
 /* =========================
    Persistencia al cambiar idioma
@@ -202,6 +186,10 @@ i18n.on("languageChanged", (lng) => {
   persistLang(code);
   setHtmlLang(code);
 });
+
+/* =========================
+   Debug fallback (DEV)
+========================= */
 
 if (import.meta.env.DEV) {
   const originalT = i18n.t.bind(i18n);
