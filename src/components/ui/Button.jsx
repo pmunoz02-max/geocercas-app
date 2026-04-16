@@ -5,14 +5,15 @@ export default function Button({
   loading = false,
   onClick,
   style = {},
+  fullWidth = true,
 }) {
   const baseStyle = {
-    width: "100%",
+    width: fullWidth ? "100%" : "auto",
     padding: "12px 16px",
     borderRadius: 12,
     fontSize: 15,
     fontWeight: 600,
-    border: "none",
+    border: "1px solid transparent",
     cursor: disabled || loading ? "not-allowed" : "pointer",
     display: "inline-flex",
     alignItems: "center",
@@ -26,19 +27,30 @@ export default function Button({
     primary: {
       background: "#2563eb",
       color: "#ffffff",
+      borderColor: "#2563eb",
     },
     secondary: {
       background: "#f3f4f6",
       color: "#111827",
+      borderColor: "#e5e7eb",
     },
     success: {
       background: "#16a34a",
       color: "#ffffff",
+      borderColor: "#16a34a",
     },
     danger: {
       background: "#dc2626",
       color: "#ffffff",
+      borderColor: "#dc2626",
     },
+  };
+
+  const hoverStyles = {
+    primary: "#1d4ed8",
+    secondary: "#e5e7eb",
+    success: "#15803d",
+    danger: "#b91c1c",
   };
 
   return (
@@ -48,6 +60,16 @@ export default function Button({
         ...baseStyle,
         ...variants[variant],
         ...style,
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled && !loading) {
+          e.currentTarget.style.background = hoverStyles[variant];
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!disabled && !loading) {
+          e.currentTarget.style.background = variants[variant].background;
+        }
       }}
     >
       {loading ? "Cargando..." : children}
