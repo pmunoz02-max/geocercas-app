@@ -9,31 +9,6 @@ const LANGS = [
 
 const SUPPORTED = new Set(["es", "en", "fr"]);
 
-function buildHref(code: string) {
-  try {
-    if (typeof window === "undefined") return `?lang=${code}`;
-    const url = new URL(window.location.href);
-    url.searchParams.set("lang", code);
-    return url.pathname + url.search + url.hash;
-  } catch {
-    return `?lang=${code}`;
-  }
-}
-
-function setHtmlLang(code: string) {
-  try {
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = code;
-    }
-  } catch {}
-}
-
-function persistLang(code: string) {
-  try {
-    localStorage.setItem("app_lang", code);
-  } catch {}
-}
-
 function setUrlLang(code: string) {
   try {
     const url = new URL(window.location.href);
@@ -70,23 +45,16 @@ export default function LanguageSwitcher() {
     };
   }, [i18n]);
 
-  const handle = async (e: React.MouseEvent<HTMLAnchorElement>, code: string) => {
+  const handle = async (code: string) => {
     try {
       if (!SUPPORTED.has(code)) return;
       if (code === current) return;
 
-      e.preventDefault();
-      e.stopPropagation();
-
-      // 1. CAMBIAR IDIOMA PRIMERO
       await i18n.changeLanguage(code);
-
-      // 2. LUEGO persistir y URL
-      persistLang(code);
-      setHtmlLang(code);
       setUrlLang(code);
-    } catch {
-      // fallback: navegación normal
+      setCurrent(code);
+    } catch (error) {
+      console.error("Language switch failed:", error);
     }
   };
 
@@ -96,10 +64,10 @@ export default function LanguageSwitcher() {
         const active = current === lang.code;
 
         return (
-          <a
+          <button
             key={lang.code}
-            href={buildHref(lang.code)}
-            onClick={(e) => handle(e, lang.code)}
+            type="button"
+            onClick={() => handle(lang.code)}
             className={
               "px-2 py-1 rounded-full border transition select-none cursor-pointer pointer-events-auto " +
               (active
@@ -119,7 +87,7 @@ export default function LanguageSwitcher() {
             )}
           >
             {lang.label}
-          </a>
+          </button>
         );
       })}
     </div>
