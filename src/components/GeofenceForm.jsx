@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { supabase } from "../supabaseClient";
+import Button from "./ui/Button";
 
 /* ====================== UTILIDADES ====================== */
 const fmt = (latlngs) => latlngs.map((p) => `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`).join("\n");
@@ -48,10 +49,12 @@ export default function GeofenceForm() {
   const [hover, setHover] = useState({ lat: null, lng: null });
   const [selectedVertices, setSelectedVertices] = useState([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [feedback, setFeedback] = useState({ type: "", message: "" });
 
   const handleGuardar = async () => {
     try {
       setGuardando(true);
+      setFeedback({ type: "", message: "" });
 
       const pts = textoCoords.trim()
         ? parseTextarea(textoCoords)
@@ -70,13 +73,19 @@ export default function GeofenceForm() {
 
       if (error) throw error;
 
-      window.alert(tt("geofenceForm.messages.saved", "Geofence saved successfully."));
+      setFeedback({
+        type: "success",
+        message: tt("geofenceForm.messages.saved", "Geofence saved successfully."),
+      });
       setNombre("");
       setTextoCoords("");
       setSelectedVertices([]);
       setRefreshKey((k) => k + 1);
     } catch (err) {
-      window.alert(tt("geofenceForm.messages.errorPrefix", "Could not save geofence. Please try again."));
+      setFeedback({
+        type: "error",
+        message: tt("geofenceForm.messages.errorPrefix", "Could not save geofence. Please try again."),
+      });
       console.error(err);
     } finally {
       setGuardando(false);
@@ -85,45 +94,55 @@ export default function GeofenceForm() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
-      <div className="p-3 sm:p-4 border rounded-md">
-        <h2 className="font-bold !text-base sm:!text-lg mb-2">
-          {tt("geofenceForm.title", "New geofence")}
-        </h2>
+      <div className="app-card p-5 flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
+          <h2 className="font-bold !text-base sm:!text-lg">
+            {tt("geofenceForm.title", "New geofence")}
+          </h2>
 
-        <label className="!text-xs sm:!text-sm">{tt("geofenceForm.fields.name", "Name")}</label>
-        <input
-          className="w-full border rounded !px-3 !py-2 !text-xs sm:!px-2 sm:!py-1 sm:!text-sm mb-3"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          placeholder={tt("geofenceForm.fields.namePlaceholder", "E.g. Field 1")}
-        />
+          <label className="text-sm font-medium">{tt("geofenceForm.fields.name", "Name")}</label>
+          <input
+            className="w-full rounded-md px-3 py-2"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            placeholder={tt("geofenceForm.fields.namePlaceholder", "E.g. Field 1")}
+          />
 
-        <label className="!text-xs sm:!text-sm">
-          {tt("geofenceForm.fields.coordinates", "Coordinates")} (<code>lat,lng</code> {tt("geofenceForm.fields.onePerLine", "per line")})
-        </label>
-        <textarea
-          className="w-full border rounded !px-3 !py-2 !text-xs sm:!px-2 sm:!py-1 sm:!text-sm h-32 sm:h-40 mb-2"
-          value={textoCoords}
-          onChange={(e) => setTextoCoords(e.target.value)}
-          placeholder="-0.1807, -78.4678"
-        />
+          <label className="text-sm font-medium">
+            {tt("geofenceForm.fields.coordinates", "Coordinates")} (<code>lat,lng</code> {tt("geofenceForm.fields.onePerLine", "per line")})
+          </label>
+          <textarea
+            className="w-full border rounded !px-3 !py-2 !text-xs sm:!px-2 sm:!py-1 sm:!text-sm h-32 sm:h-40"
+            value={textoCoords}
+            onChange={(e) => setTextoCoords(e.target.value)}
+            placeholder="-0.1807, -78.4678"
+          />
 
-        <button
-          onClick={handleGuardar}
-          disabled={guardando}
-          className="bg-blue-600 text-white rounded w-full !px-3 !py-2 !text-xs sm:!px-3 sm:!py-2 sm:!text-sm disabled:opacity-60"
-        >
-          {guardando
-            ? tt("geofenceForm.actions.saving", "Saving...")
-            : tt("geofenceForm.actions.save", "Save geofence")}
-        </button>
+          <Button
+            variant="primary"
+            onClick={handleGuardar}
+            disabled={guardando}
+          >
+            {guardando
+              ? tt("geofenceForm.actions.saving", "Saving...")
+              : tt("geofenceForm.actions.save", "Save geofence")}
+          </Button>
 
-        <p className="!text-[11px] sm:!text-xs text-gray-500 mt-2">
-          {tt(
-            "geofenceForm.hints.mapSelection",
-            "Draw or select on the map; if the box is empty, that polygon will be used."
+          {feedback.type === "error" && (
+            <div className="banner banner-error">{feedback.message}</div>
           )}
-        </p>
+
+          {feedback.type === "success" && (
+            <div className="banner banner-success">{feedback.message}</div>
+          )}
+
+          <p className="!text-[11px] sm:!text-xs text-gray-500">
+            {tt(
+              "geofenceForm.hints.mapSelection",
+              "Draw or select on the map; if the box is empty, that polygon will be used."
+            )}
+          </p>
+        </div>
       </div>
 
       <div className="md:col-span-2 border rounded-md overflow-hidden relative h-[58svh] md:h-[520px]">
@@ -153,6 +172,7 @@ export default function GeofenceForm() {
               setSelectedVertices(latlngs);
               setTextoCoords(fmt(latlngs));
             }}
+            onFeedback={setFeedback}
             refreshKey={refreshKey}
             tt={tt}
           />
@@ -163,7 +183,7 @@ export default function GeofenceForm() {
 }
 
 /* ====================== CONTROLADOR DEL MAPA ====================== */
-function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
+function GeofenceController({ setHover, onVerticesChange, onFeedback, refreshKey, tt }) {
   const map = useMap();
   const groupRef = useRef(null);
 
@@ -245,9 +265,15 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
         upsertLayerEvents(layer);
 
         onVerticesChange?.(latlngs);
-        window.alert(tt("geofenceForm.messages.created", "Geofence created successfully."));
+        onFeedback?.({
+          type: "success",
+          message: tt("geofenceForm.messages.created", "Geofence created successfully."),
+        });
       } catch (err) {
-        window.alert(tt("geofenceForm.messages.createError", "Could not create geofence. Please try again."));
+        onFeedback?.({
+          type: "error",
+          message: tt("geofenceForm.messages.createError", "Could not create geofence. Please try again."),
+        });
         try {
           map.removeLayer(layer);
         } catch {}
@@ -270,9 +296,15 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
           if (error) throw error;
           onVerticesChange?.(u.latlngs);
         }
-        window.alert(tt("geofenceForm.messages.updated", "Geofence(s) updated successfully."));
+        onFeedback?.({
+          type: "success",
+          message: tt("geofenceForm.messages.updated", "Geofence(s) updated successfully."),
+        });
       } catch (err) {
-        window.alert(tt("geofenceForm.messages.updateError", "Could not update geofence. Please try again."));
+        onFeedback?.({
+          type: "error",
+          message: tt("geofenceForm.messages.updateError", "Could not update geofence. Please try again."),
+        });
         console.error(err);
       }
     };
@@ -287,9 +319,15 @@ function GeofenceController({ setHover, onVerticesChange, refreshKey, tt }) {
       try {
         const { error } = await supabase.from("geocercas").delete().in("id", ids);
         if (error) throw error;
-        window.alert(tt("geofenceForm.messages.deleted", "Geofence(s) deleted successfully."));
+        onFeedback?.({
+          type: "success",
+          message: tt("geofenceForm.messages.deleted", "Geofence(s) deleted successfully."),
+        });
       } catch (err) {
-        window.alert(tt("geofenceForm.messages.deleteError", "Could not delete geofence. Please try again."));
+        onFeedback?.({
+          type: "error",
+          message: tt("geofenceForm.messages.deleteError", "Could not delete geofence. Please try again."),
+        });
         console.error(err);
       }
     };
