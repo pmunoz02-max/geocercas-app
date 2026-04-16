@@ -672,6 +672,31 @@
       "notConfigured": "El contacto de soporte aún no está configurado.",
       "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
       "title": "Soporte"
+    },
+    "onboarding": {
+      "sections": [],
+      "subtitle": "Guías para activar tu organización, invitar usuarios y dejar el flujo operativo listo.",
+      "title": "Onboarding"
+    },
+    "tracker": {
+      "sections": [],
+      "subtitle": "Documentación del uso del tracker, envío de ubicación y operación en campo.",
+      "title": "Tracker"
+    },
+    "troubleshooting": {
+      "sections": [],
+      "subtitle": "Pasos de diagnóstico para resolver problemas frecuentes de acceso, tracking y sincronización.",
+      "title": "Solución de problemas"
+    },
+    "geofences": {
+      "sections": [],
+      "subtitle": "Buenas prácticas para crear, validar y mantener geocercas confiables.",
+      "title": "Geocercas"
+    },
+    "account": {
+      "sections": [],
+      "subtitle": "Información sobre perfil, sesiones, permisos y administración de cuenta.",
+      "title": "Cuenta"
     }
   },
   "home": {
