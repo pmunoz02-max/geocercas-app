@@ -9,23 +9,26 @@ const LANGS = [
 
 const SUPPORTED = new Set(["es", "en", "fr"]);
 
-function goToLang(code: string) {
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("lang", code);
+export default function LanguageSwitcher() {
+  const { i18n, t } = useTranslation();
+
+  async function changeLang(code: string) {
+    if (!SUPPORTED.has(code)) return;
 
     try {
       localStorage.setItem("app_lang", code);
     } catch {}
 
-    window.location.href = url.pathname + url.search + url.hash;
-  } catch {
-    window.location.href = `?lang=${code}`;
-  }
-}
+    await i18n.changeLanguage(code);
 
-export default function LanguageSwitcher() {
-  const { i18n, t } = useTranslation();
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lang", code);
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch {
+      window.history.replaceState(null, "", `?lang=${code}`);
+    }
+  }
 
   const current = String(i18n.resolvedLanguage || i18n.language || "es")
     .toLowerCase()
@@ -50,7 +53,7 @@ export default function LanguageSwitcher() {
               if (!SUPPORTED.has(lang.code)) return;
               if (lang.code === current) return;
 
-              goToLang(lang.code);
+              void changeLang(lang.code);
             }}
             className={
               "px-2 py-1 rounded-full border transition select-none cursor-pointer pointer-events-auto " +
