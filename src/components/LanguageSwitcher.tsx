@@ -9,12 +9,19 @@ const LANGS = [
 
 const SUPPORTED = new Set(["es", "en", "fr"]);
 
-function setUrlLang(code: string) {
+function goToLang(code: string) {
   try {
     const url = new URL(window.location.href);
     url.searchParams.set("lang", code);
-    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
-  } catch {}
+
+    try {
+      localStorage.setItem("app_lang", code);
+    } catch {}
+
+    window.location.href = url.pathname + url.search + url.hash;
+  } catch {
+    window.location.href = `?lang=${code}`;
+  }
 }
 
 export default function LanguageSwitcher() {
@@ -26,18 +33,6 @@ export default function LanguageSwitcher() {
 
   const tr = (key: string, fallback: string, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
-
-  const handle = async (code: string) => {
-    if (!SUPPORTED.has(code)) return;
-    if (code === current) return;
-
-    try {
-      await i18n.changeLanguage(code);
-      setUrlLang(code);
-    } catch (error) {
-      console.error("[LANG_SWITCH] failed", error);
-    }
-  };
 
   return (
     <div className="flex items-center gap-2 text-xs sm:text-sm relative z-[9999] pointer-events-auto">
@@ -51,7 +46,11 @@ export default function LanguageSwitcher() {
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              void handle(lang.code);
+
+              if (!SUPPORTED.has(lang.code)) return;
+              if (lang.code === current) return;
+
+              goToLang(lang.code);
             }}
             className={
               "px-2 py-1 rounded-full border transition select-none cursor-pointer pointer-events-auto " +
