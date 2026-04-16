@@ -111,8 +111,8 @@
       "actividades": "Actividades",
       "admins": "Administrador",
       "asignaciones": "Asignaciones",
-      "dashboard": "Dashboard Costos",
-      "dashboardCostos": "Dashboard Costos",
+      "dashboard": "Panel de costos",
+      "dashboardCostos": "Panel de costos",
       "geocerca": "Geocerca",
       "geocercas": "Geocercas",
       "home": "Inicio",
@@ -243,7 +243,7 @@
     }
   },
   "auth": {
-    "backToLogin": "Volver al login",
+    "backToLogin": "Volver a iniciar sesión",
     "errorTitle": "No se pudo autenticar",
     "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
     "processing": "Autenticando…",
@@ -253,7 +253,7 @@
       "subtitle": "Crea tu cuenta con Magic Link o usa Google.",
       "labels": {
         "fullName": "Nombre completo (opcional)",
-        "email": "Email"
+        "email": "Correo"
       },
       "placeholders": {
         "fullName": "Tu nombre",
@@ -264,7 +264,7 @@
         "create": "Crear cuenta con Magic Link"
       },
       "errors": {
-        "invalidEmail": "Ingresa un email válido.",
+        "invalidEmail": "Ingresa un correo válido.",
         "mustAcceptTerms": "Debes aceptar los Términos y la Política de Privacidad.",
         "sendFailed": "No se pudo enviar el Magic Link: {{message}}",
         "unknown": "Error desconocido{{#if message}}: {{message}}{{/if}}",
@@ -290,7 +290,7 @@
   "authInvite": {
     "continue": "Continuar",
     "expiredOrUsed": "La invitación es inválida, ya expiró o fue utilizada.",
-    "goToLogin": "Ir al login",
+    "goToLogin": "Ir a iniciar sesión",
     "notInviteLink": "Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
     "processing": "Validando invitación…",
     "timeout": "La validación de la invitación tardó demasiado. Intenta nuevamente.",
@@ -313,7 +313,7 @@
     "createOrganization": "Crear organización",
     "fallbacks": {
       "noAuth": "No autenticado",
-      "noEmail": "Sin email",
+      "noEmail": "Sin correo",
       "noOrg": "Sin organización"
     },
     "language": {
@@ -360,7 +360,7 @@
       "costByPerson": "Costo por persona",
       "hoursByDay": "Horas por día"
     },
-    "errorLoad": "Error al cargar el dashboard de costos.",
+    "errorLoad": "Error al cargar el panel de costos.",
     "filters": {
       "apply": "Aplicar",
       "clear": "Limpiar",
@@ -368,7 +368,7 @@
       "dateToLabel": "Hasta"
     },
     "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
-    "title": "Dashboard de costos"
+    "title": "panel de costos"
   },
   "dashboardCostos": {
     "chartDimension": "Dimensión",
@@ -393,7 +393,7 @@
     "dimensionFecha": "Fecha",
     "dimensionGeocerca": "Geocerca",
     "dimensionPersona": "Persona",
-    "errorLoad": "Error al cargar el dashboard de costos.",
+    "errorLoad": "Error al cargar el panel de costos.",
     "exportChartButton": "Exportar gráfico",
     "exportDataButton": "Exportar datos",
     "filtersActivity": "Actividad",
@@ -417,15 +417,15 @@
     "tableEmpty": "No hay datos para mostrar",
     "tableNoResults": "No hay datos para los filtros actuales.",
     "tableTitle": "Detalle para la dimensión seleccionada",
-    "title": "Dashboard de costos"
+    "title": "panel de costos"
   },
   "forgot": {
-    "back": "Volver a Login",
+    "back": "Volver a iniciar sesión",
     "email": "Correo",
     "emailPh": "tu@correo.com",
     "errorEmail": "Ingresa un correo válido.",
     "errorGeneric": "No se pudo enviar el correo.",
-    "noteDesc": "El enlace entrará por /auth/callback y te enviará a /reset-password para crear la nueva contraseña.",
+    "noteDesc": "El enlace entrará por /auth/callback y te enviará a /reset-contraseña para crear la nueva contraseña.",
     "noteTitle": "Nota",
     "send": "Enviar enlace",
     "sending": "Enviando…",
@@ -494,7 +494,7 @@
       "limitReached": "Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
       "limitReachedTitle": "Has alcanzado el límite de geocercas de tu plan.",
       "limitReachedBody": "Para crear más geocercas, actualiza tu organización a PRO.",
-      "freeHint": "Plan FREE activo. Cuando alcances el límite, podrás hacer upgrade a PRO desde aquí.",
+      "freeHint": "Plan FREE activo. Cuando alcances el límite, podrás hacer mejora de plan a PRO desde aquí.",
       "activePaidHint": "Tu organización tiene un plan con mayor capacidad habilitada."
     }
   },
@@ -542,7 +542,7 @@
               "q": "¿Funciona con señal débil?"
             }
           ],
-          "title": "Tracking"
+          "title": "seguimiento"
         },
         {
           "items": [
@@ -555,7 +555,7 @@
               "q": "¿Puedo exportar a Excel?"
             },
             {
-              "a": "Sí. Usa los filtros en Reportes y Dashboard Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas.",
+              "a": "Sí. Usa los filtros en Reportes y panel Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas.",
               "q": "¿Puedo filtrar por geocerca, persona, actividad y rango de fechas?"
             }
           ],
@@ -564,7 +564,7 @@
         {
           "items": [
             {
-              "a": "Solo los puntos necesarios para tracking y validación por geocerca. El acceso está controlado por roles y organización.",
+              "a": "Solo los puntos necesarios para seguimiento y validación por geocerca. El acceso está controlado por roles y organización.",
               "q": "¿Qué datos de ubicación se guardan?"
             },
             {
@@ -576,7 +576,7 @@
         }
       ],
       "seeQuickGuide": "Ver guía rápida",
-      "subtitle": "Respuestas rápidas sobre invitaciones, roles, tracking, reportes y privacidad de datos.",
+      "subtitle": "Respuestas rápidas sobre invitaciones, roles, seguimiento, reportes y privacidad de datos.",
       "title": "Preguntas frecuentes"
     },
     "instructions": {
@@ -760,7 +760,7 @@
             "Mejora en el flujo de invitación de trackers",
             "Seguimiento más estable y confiable",
             "Nueva interfaz más clara y consistente",
-            "Corrección de errores en activación de tracking"
+            "Corrección de errores en activación de seguimiento"
           ]
         },
         {
@@ -769,15 +769,15 @@
           "changes": [
             "Sistema de geocercas mejorado",
             "Optimización de rendimiento",
-            "Mejoras en login y manejo de sesión"
+            "Mejoras en inicio de sesión y manejo de sesión"
           ]
         }
       ]
     }
   },
   "home": {
-    "goToLogin": "Ir a Login",
-    "goDashboard": "Ir al dashboard",
+    "goToLogin": "Ir a iniciar sesión",
+    "goDashboard": "Ir al panel",
     "deleteAccount": "Eliminar cuenta",
     "help": {
       "faq": "Preguntas frecuentes",
@@ -791,14 +791,14 @@
       "title": "Centro de ayuda"
     },
     "labels": {
-      "email": "Email:",
+      "email": "Correo:",
       "organization": "Organización:",
       "orgId": "Organización ID:",
       "role": "Rol:"
     },
     "loadingPermissions": "Resolviendo permisos…",
     "loginToContinue": "Inicia sesión para continuar.",
-    "missingContextBody": "La sesión existe ({{email}}), pero aún no se pudo determinar tu rol u organización activa.",
+    "missingContextBody": "La sesión existe ({{correo}}), pero aún no se pudo determinar tu rol u organización activa.",
     "missingContextTitle": "Sesión iniciada, pero falta contexto",
     "open": "Abrir →",
     "orgNotResolved": "(no resuelta)",
@@ -952,11 +952,11 @@
     },
     "messages": {
       "createdWithoutEmail": "Se creó el acceso del tracker sin enviar correo electrónico.",
-      "genericProcessed": "La invitación para {{email}} se procesó correctamente.",
-      "invited": "Se ha enviado una invitación a {{email}} para unirse como tracker en {{orgName}}.",
+      "genericProcessed": "La invitación para {{correo}} se procesó correctamente.",
+      "invited": "Se ha enviado una invitación a {{correo}} para unirse como tracker en {{orgName}}.",
       "linkOnlyNoLink": "La invitación fue creada, pero no se recibió un enlace público.",
       "linkOnlyWithLink": "La invitación fue creada. Usa este enlace para compartir el acceso: {{link}}.",
-      "magiclinkSent": "Se envió un link mágico de acceso a {{email}}.",
+      "magiclinkSent": "Se envió un link mágico de acceso a {{correo}}.",
       "notOk": "No se pudo completar la invitación. Revisa el correo e inténtalo de nuevo.",
       "serverProblem": "Hubo un problema al contactar al servidor de invitaciones.",
       "unexpectedError": "Error inesperado al procesar la invitación."
@@ -984,36 +984,36 @@
     "bulletPersonalTitle": "Personal",
     "ctaLogin": "Ir al panel de control",
     "ctaMagic": "Entrar con link mágico",
-    "email": "Email",
+    "email": "Correo",
     "footerFaq": "Preguntas frecuentes",
     "footerPrivacy": "Privacidad",
     "footerSupport": "Soporte",
     "footerTerms": "Términos",
-    "goPanel": "Go to dashboard",
+    "goPanel": "Ir al panel",
     "goToDashboard": "Ir al panel",
     "heroBadge": "Control inteligente de campo",
     "heroSubtitle": "App Geocercas te permite asignar personas a zonas, registrar actividades y calcular costos en tiempo real.",
-    "heroTitle": "Manage your staff with smart geofences anywhere in the world",
+    "heroTitle": "Gestiona tu personal con geocercas inteligentes en cualquier parte del mundo",
     "heroTitleHighlight": "con geocercas inteligentes",
     "heroTitlePrefix": "Controla a tu personal",
     "heroTitleSuffix": "en cualquier parte del mundo",
-    "invalidEmail": "Invalid email.",
+    "invalidEmail": "Correo no válido.",
     "livePanelLabel": "Panel en vivo",
     "livePanelTitle": "Operaciones en tiempo real",
     "demoLiveLabel": "Demo en vivo",
     "demoOperationsAreaLabel": "Area de operaciones",
     "demoLoop10sLabel": "Loop 10s",
-    "login": "Sign in",
+    "login": "Iniciar sesión",
     "loginButton": "Entrar",
     "logout": "Salir",
-    "magicEnter": "Sign in with magic link",
-    "magicLinkError": "Could not send the link. Please try again.",
-    "magicLinkSent": "We sent you an access link. Check your email.",
-    "magicNote": "Important: access works only with the real Magic Link.",
+    "magicEnter": "Iniciar sesión con enlace mágico",
+    "magicLinkError": "No se pudo enviar el enlace. Inténtalo de nuevo.",
+    "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
+    "magicNote": "Importante: el acceso funciona solo con el enlace mágico real.",
     "multiOrgBody": "Administra varias empresas o proyectos desde una sola cuenta, con roles y permisos separados.",
     "multiOrgTitle": "Multi organización",
     "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
-    "quickAccessDesc": "If you prefer, you can sign in using a Magic Link (no password).",
+    "quickAccessDesc": "Si lo prefieres, puedes iniciar sesión usando un enlace mágico (sin contraseña).",
     "quickAccessTitle": "Quick access",
     "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
     "rightsReserved": "Todos los derechos reservados",
@@ -1026,8 +1026,8 @@
   "login": {
     "advancedOptions": "Opciones avanzadas",
     "back": "Back",
-    "badge": "(LOGIN-V31 NO-JS)",
-    "email": "Email",
+    "badge": "(inicio de sesión-V31 NO-JS)",
+    "email": "Correo",
     "emailLabel": "Correo electrónico",
     "emailPlaceholder": "tucorreo@ejemplo.com",
     "errorInvalidCredentials": "Credenciales inválidas.",
@@ -1045,7 +1045,7 @@
     "forgotPassword": "¿Olvidaste tu contraseña?",
     "forgotPasswordAlt": "¿Prefieres restablecer tu contraseña? (enviar correo)",
     "goToDashboard": "Ir al panel",
-    "info": "Stable WebView/TWA login: native submit (no JS events), anti rate-limit by design.",
+    "info": "Stable WebView/TWA inicio de sesión: native submit (no JS events), anti rate-limit by design.",
     "infoMagicLinkSent": "Hemos enviado un link mágico a tu correo.",
     "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa la bandeja de entrada.",
     "loadingSession": "Cargando tu sesión…",
@@ -1056,11 +1056,11 @@
     "magicLinkSent": "Hemos enviado un link mágico a tu correo.",
     "magicLinkTitle": "Entrar con link mágico",
     "magicSubmitting": "Enviando enlace…",
-    "modeDesc": "If login is correct, the server redirects to /auth/callback with tokens.",
+    "modeDesc": "Si el inicio de sesión es correcto, el servidor redirige a /auth/callback con tokens.",
     "modeMagic": "Link mágico",
     "modePassword": "Contraseña",
     "modeTitle": "Mode: NO-JS (native form submit)",
-    "password": "Password",
+    "password": "Contraseña",
     "passwordLabel": "Contraseña",
     "passwordLoginButton": "Entrar con contraseña",
     "passwordPlaceholder": "Ingresa tu contraseña",
@@ -1091,7 +1091,7 @@
     "errorDelete": "No se pudo eliminar el registro.",
     "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
     "errorLoad": "Error al cargar el personal.",
-    "errorMissingEmail": "El email es requerido.",
+    "errorMissingEmail": "El correo es requerido.",
     "errorMissingName": "El nombre es requerido.",
     "errorMissingUser": "No se pudo obtener el usuario autenticado.",
     "errorMustSelectForDelete": "Debes seleccionar un registro para eliminarlo.",
@@ -1119,7 +1119,7 @@
     "pillReadOnly": "Solo lectura",
     "processing": "Procesando…",
     "roleLabel": "Rol:",
-    "searchPlaceholder": "Buscar por nombre, apellido, email o teléfono…",
+    "searchPlaceholder": "Buscar por nombre, apellido, correo o teléfono…",
     "table": {
       "columns": {
         "active": "Activo",
@@ -1237,7 +1237,7 @@
     "saving": "Guardando…",
     "subtitle": "Crea una nueva contraseña para tu cuenta.",
     "success": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
-    "tip": "Tip: vuelve a /login, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace.",
+    "tip": "Tip: vuelve a /inicio de sesión, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace.",
     "title": "Restablecer contraseña",
     "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
     "updateFailed": "No se pudo actualizar la contraseña. Intenta nuevamente.",
@@ -1290,7 +1290,7 @@
     "legend": "Leyenda"
   },
   "trackerDashboard": {
-    "title": "Tracker Dashboard",
+    "title": "Panel de seguimiento",
     "timeWindows": {
       "1h": "1 hora",
       "6h": "6 horas",
@@ -1321,18 +1321,18 @@
       "validatingPlan": "Validando plan de la organización...",
       "planValidationFailed": "No se pudo validar el plan de la organización.",
       "moduleUnavailable": "Este módulo no está disponible en el plan actual de la organización.",
-      "requiresPro": "El dashboard de tracking requiere PRO o superior.",
-      "upgradeHint": "Haz upgrade para visualizar posiciones, rutas y geocercas desde este panel.",
-      "upgradeOrgPrompt": "Actualiza esta organización para habilitar Tracker Dashboard.",
+      "requiresPro": "El panel de seguimiento requiere PRO o superior.",
+      "upgradeHint": "Haz mejora de plan para visualizar posiciones, rutas y geocercas desde este panel.",
+      "upgradeOrgPrompt": "Actualiza esta organización para habilitar Tracker panel.",
       "resolvingActiveOrg": "Resolviendo organización activa…"
     },
     "messages": {
       "loadAssignmentsError": "Error cargando asignaciones (tracker_assignments).",
-      "loadGeofencesError": "Error al cargar geocercas (geofences).",
+      "loadGeofencesError": "Error al cargar geocercas.",
       "loadPositionsError": "Error al cargar posiciones.",
       "noActiveAssignments": "No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).",
       "noActiveGeofencesForAssignments": "Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org ({{orgId}}).",
-      "fallbackGeofenceShown": "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el dashboard vacío.",
+      "fallbackGeofenceShown": "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el panel vacío.",
       "noActiveGeofencesForOrg": "No hay geocercas activas disponibles para esta org ({{orgId}}).",
       "noVisibleGeofences": "No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).",
       "orgResolveError": "Error resolviendo org"
@@ -1445,7 +1445,7 @@
       "unlimited": "Ilimitadas"
     },
     "actions": {
-      "goToBilling": "Ir a Billing",
+      "goToBilling": "Ir a Facturación",
       "contactSales": "Contactar ventas"
     },
     "page": {
@@ -1471,7 +1471,7 @@
         "validateFlow": "Ideal para empezar y validar el flujo base",
         "upToTrackers": "Hasta {{count}} tracker",
         "geofenceLimits": "Geocercas con límite por plan",
-        "billingAndUpgrade": "Acceso a Billing y futura ruta de upgrade",
+        "billingAndUpgrade": "Acceso a Facturación y futura ruta de mejora de plan",
         "backendEnforcement": "Backend sigue aplicando enforcement real"
       }
     },
@@ -1481,7 +1481,7 @@
       "price": "Stripe TEST",
       "description": "Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
       "higherPlanMessage": "Tu organización ya tiene un plan superior o distinto de Free.",
-      "reviewBillingMessage": "Revisa Billing para administrarlo.",
+      "reviewBillingMessage": "Revisa Facturación para administrarlo.",
       "features": {
         "upToTrackers": "Hasta {{count}} trackers por organización",
         "upToGeofences": "Hasta {{count}} geocercas",
@@ -1506,7 +1506,7 @@
     "notes": {
       "title": "Notas de esta fase",
       "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
-      "proCheckout": "El upgrade a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
+      "proCheckout": "El mejora de plan a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
       "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
     }
   },
@@ -1522,7 +1522,7 @@
       "viewPlans": "Ver planes"
     },
     "labels": {
-      "email": "Email",
+      "email": "Correo",
       "orgId": "ID de organización"
     },
     "planState": {
@@ -1599,7 +1599,7 @@
     "table": {
       "day": "Día",
       "person": "Persona",
-      "email": "Email",
+      "email": "Correo",
       "geofence": "Geocerca",
       "activity": "Actividad",
       "assignment": "Asignación",
@@ -1761,7 +1761,7 @@
       "usersTitle": "Usuarios",
       "noUsers": "No hay usuarios registrados.",
       "table": {
-        "email": "Email",
+        "email": "Correo",
         "name": "Nombre",
         "role": "Rol",
         "date": "Fecha",
@@ -1771,12 +1771,12 @@
       "magicLink": "Magic Link",
       "deleteButton": "Eliminar",
       "assignButton": "Asignar",
-      "confirmDelete": "¿Eliminar/suspender a {{email}}?",
-      "inviteSuccess": "Invitación enviada a {{email}}",
-      "assignSuccess": "Rol \"{{role}}\" asignado a {{email}}",
-      "magicLinkSentInvite": "Invitación enviada a {{email}}",
-      "magicLinkSentLink": "Magic link enviado a {{email}}",
-      "deleteSuccess": "Usuario {{email}} eliminado/suspendido"
+      "confirmDelete": "¿Eliminar/suspender a {{correo}}?",
+      "inviteSuccess": "Invitación enviada a {{correo}}",
+      "assignSuccess": "Rol \"{{role}}\" asignado a {{correo}}",
+      "magicLinkSentInvite": "Invitación enviada a {{correo}}",
+      "magicLinkSentLink": "Enlace mágico enviado a {{correo}}",
+      "deleteSuccess": "Usuario {{correo}} eliminado/suspendido"
     },
     "geofences": {
       "errors": {
