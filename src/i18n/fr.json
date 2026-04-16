@@ -672,6 +672,31 @@
       "notConfigured": "Le contact d'assistance n'est pas encore configuré.",
       "subtitle": "Contactez-nous pour une assistance technique, des questions de facturation ou une formation.",
       "title": "Soutien"
+    },
+    "onboarding": {
+      "sections": [],
+      "subtitle": "Guides pour activer votre organisation, inviter des utilisateurs et préparer le flux opérationnel.",
+      "title": "Onboarding"
+    },
+    "tracker": {
+      "sections": [],
+      "subtitle": "Documentation sur l'utilisation du tracker, l'envoi de localisation et l'opération sur le terrain.",
+      "title": "Tracker"
+    },
+    "troubleshooting": {
+      "sections": [],
+      "subtitle": "Étapes de diagnostic pour résoudre les problèmes fréquents d'accès, de suivi et de synchronisation.",
+      "title": "Dépannage"
+    },
+    "geofences": {
+      "sections": [],
+      "subtitle": "Bonnes pratiques pour créer, valider et maintenir des géofences fiables.",
+      "title": "Géofences"
+    },
+    "account": {
+      "sections": [],
+      "subtitle": "Informations sur le profil, les sessions, les permissions et l'administration du compte.",
+      "title": "Compte"
     }
   },
   "home": {

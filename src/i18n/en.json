@@ -672,6 +672,31 @@
       "notConfigured": "The support contact is not yet configured.",
       "subtitle": "Contact us for technical support, billing questions or training.",
       "title": "Support"
+    },
+    "onboarding": {
+      "sections": [],
+      "subtitle": "Guides to activate your organization, invite users, and get the operational flow ready.",
+      "title": "Onboarding"
+    },
+    "tracker": {
+      "sections": [],
+      "subtitle": "Documentation for tracker usage, location sending, and field operation.",
+      "title": "Tracker"
+    },
+    "troubleshooting": {
+      "sections": [],
+      "subtitle": "Diagnostic steps to resolve common access, tracking, and sync issues.",
+      "title": "Troubleshooting"
+    },
+    "geofences": {
+      "sections": [],
+      "subtitle": "Best practices to create, validate, and maintain reliable geofences.",
+      "title": "Geofences"
+    },
+    "account": {
+      "sections": [],
+      "subtitle": "Information about profile, sessions, permissions, and account administration.",
+      "title": "Account"
     }
   },
   "home": {

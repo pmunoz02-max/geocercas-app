@@ -674,29 +674,103 @@
       "title": "Soporte"
     },
     "onboarding": {
-      "sections": [],
-      "subtitle": "Guías para activar tu organización, invitar usuarios y dejar el flujo operativo listo.",
-      "title": "Onboarding"
+      "title": "Primeros pasos",
+      "subtitle": "Cómo comenzar a usar el tracker por primera vez.",
+      "sections": [
+        {
+          "title": "Invitación y acceso",
+          "items": [
+            {
+              "q": "¿Cómo empiezo a usar el tracker?",
+              "a": "Recibirás un enlace de invitación. Solo debes abrirlo desde tu teléfono y seguir los pasos."
+            },
+            {
+              "q": "¿Necesito instalar algo?",
+              "a": "No. Solo abre el enlace y acepta los permisos cuando se te soliciten."
+            }
+          ]
+        }
+      ]
     },
     "tracker": {
-      "sections": [],
-      "subtitle": "Documentación del uso del tracker, envío de ubicación y operación en campo.",
-      "title": "Tracker"
+      "title": "Seguimiento de ubicación",
+      "subtitle": "Qué significa que el seguimiento esté activo.",
+      "sections": [
+        {
+          "title": "Estado del seguimiento",
+          "items": [
+            {
+              "q": "¿Qué significa 'Seguimiento activo'?",
+              "a": "Significa que tu ubicación se está compartiendo correctamente."
+            },
+            {
+              "q": "¿Debo dejar la app abierta?",
+              "a": "No siempre. Mientras tu dispositivo tenga permisos y conexión, el seguimiento puede continuar."
+            }
+          ]
+        }
+      ]
     },
     "troubleshooting": {
-      "sections": [],
-      "subtitle": "Pasos de diagnóstico para resolver problemas frecuentes de acceso, tracking y sincronización.",
-      "title": "Solución de problemas"
+      "title": "Problemas frecuentes",
+      "subtitle": "Soluciones rápidas para los casos más comunes.",
+      "sections": [
+        {
+          "title": "Invitación y permisos",
+          "items": [
+            {
+              "q": "No puedo aceptar la invitación",
+              "a": "Asegúrate de abrir el enlace más reciente. Si sigue fallando, solicita una nueva invitación."
+            },
+            {
+              "q": "El enlace indica que está inactivo",
+              "a": "Eso puede ocurrir si abriste un enlace anterior. Usa el último enlace recibido."
+            },
+            {
+              "q": "No se inicia el seguimiento",
+              "a": "Verifica que aceptaste los permisos de ubicación en tu dispositivo."
+            }
+          ]
+        }
+      ]
     },
     "geofences": {
-      "sections": [],
-      "subtitle": "Buenas prácticas para crear, validar y mantener geocercas confiables.",
-      "title": "Geocercas"
+      "title": "Geocercas",
+      "subtitle": "Qué son y cómo funcionan dentro del seguimiento.",
+      "sections": [
+        {
+          "title": "Conceptos básicos",
+          "items": [
+            {
+              "q": "¿Qué es una geocerca?",
+              "a": "Es una zona definida en el mapa para registrar entradas, salidas o presencia."
+            },
+            {
+              "q": "¿Tengo que hacer algo como tracker?",
+              "a": "No. El sistema registra automáticamente tu actividad cuando corresponde."
+            }
+          ]
+        }
+      ]
     },
     "account": {
-      "sections": [],
-      "subtitle": "Información sobre perfil, sesiones, permisos y administración de cuenta.",
-      "title": "Cuenta"
+      "title": "Cuenta y acceso",
+      "subtitle": "Preguntas sobre inicio de sesión y acceso a la organización.",
+      "sections": [
+        {
+          "title": "Acceso",
+          "items": [
+            {
+              "q": "¿Cómo inicio sesión?",
+              "a": "Usa tu correo y contraseña desde la pantalla de inicio."
+            },
+            {
+              "q": "¿Qué hago si estoy en la organización incorrecta?",
+              "a": "Asegúrate de usar el enlace de invitación correcto o vuelve a ingresar con la cuenta indicada."
+            }
+          ]
+        }
+      ]
     }
   },
   "home": {
