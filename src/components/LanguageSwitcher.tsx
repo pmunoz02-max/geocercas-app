@@ -70,7 +70,7 @@ export default function LanguageSwitcher() {
     };
   }, [i18n]);
 
-  const handle = (e: React.MouseEvent<HTMLAnchorElement>, code: string) => {
+  const handle = async (e: React.MouseEvent<HTMLAnchorElement>, code: string) => {
     try {
       if (!SUPPORTED.has(code)) return;
       if (code === current) return;
@@ -78,14 +78,15 @@ export default function LanguageSwitcher() {
       e.preventDefault();
       e.stopPropagation();
 
+      // 1. CAMBIAR IDIOMA PRIMERO
+      await i18n.changeLanguage(code);
+
+      // 2. LUEGO persistir y URL
       persistLang(code);
       setHtmlLang(code);
       setUrlLang(code);
-
-      Promise.resolve(i18n.changeLanguage(code)).catch(() => {});
-      setCurrent(code);
     } catch {
-      // Si algo falla, deja navegación normal
+      // fallback: navegación normal
     }
   };
 
