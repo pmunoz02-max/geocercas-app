@@ -1,5 +1,6 @@
 ﻿// src/components/GeoMap.jsx
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { MapContainer, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -218,6 +219,7 @@ export default function GeoMap({
   onEditFeature,
   onDeleteFeature,
 }) {
+  const { t } = useTranslation();
   const { currentOrg } = useAuth() || {};
   const orgId = orgIdProp ?? currentOrg?.id ?? null;
 
@@ -307,8 +309,8 @@ export default function GeoMap({
     if (!map || !fg) return;
 
     const requireWritableContext = () => {
-      if (!canEdit) return { ok: false, msg: "No tienes permisos para editar." };
-      if (!orgId) return { ok: false, msg: "Selecciona una organizaciÃ³n primero." };
+      if (!canEdit) return { ok: false, msg: t("geocercas.errors.noEditPermission") };
+      if (!orgId) return { ok: false, msg: t("geocercas.errors.selectOrganizationFirst") };
       return { ok: true };
     };
 

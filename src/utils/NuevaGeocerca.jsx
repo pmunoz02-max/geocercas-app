@@ -1,5 +1,6 @@
 // src/components/NuevaGeocerca.jsx
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { MapContainer, TileLayer, FeatureGroup } from 'react-leaflet';
 import { EditControl } from 'react-leaflet-draw';
 import 'leaflet/dist/leaflet.css';
@@ -9,7 +10,8 @@ import supabase from '../lib/supabaseClient';
 import { crearGeocerca } from '../services/geocercas';
 
 export default function NuevaGeocerca() {
-  const [nombre, setNombre] = useState('Casa');
+  const { t } = useTranslation();
+  const [nombre, setNombre] = useState(() => t('geocercas.create.defaultName'));
   const [textoCoords, setTextoCoords] = useState(''); // líneas "lat, lng"
   const [guardando, setGuardando] = useState(false);
 
@@ -54,7 +56,7 @@ export default function NuevaGeocerca() {
       const geometriaInput = txt.length > 0 ? txt : drawnLatLngsRef.current;
 
       if (!geometriaInput || (Array.isArray(geometriaInput) && geometriaInput.length < 3)) {
-        alert('Agrega coordenadas (texto "lat, lng" por línea) o dibuja un polígono en el mapa.');
+        alert(t('geocercas.create.missingGeometry'));
         return;
       }
 
@@ -65,13 +67,13 @@ export default function NuevaGeocerca() {
       // 3) Guardar (el servicio normaliza a GeoJSON Polygon válido)
       await crearGeocerca({ nombre: (nombre || '').trim(), geometria: geometriaInput }, ownerId);
 
-      alert('Geocerca guardada ✅');
+      alert(t('geocercas.savedOk'));
       setTextoCoords('');
       drawnLatLngsRef.current = null;
       // limpia visualmente el mapa
       if (fgRef.current) fgRef.current.clearLayers();
     } catch (e) {
-      alert(`No se pudo guardar la geocerca.\n${e?.message || e}`);
+      alert(`${t('geocercas.errorSave')}\n${e?.message || e}`);
     } finally {
       setGuardando(false);
     }
@@ -80,18 +82,18 @@ export default function NuevaGeocerca() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
       <div>
-        <h2 className="font-bold text-xl mb-3">Nueva Geocerca</h2>
+        <h2 className="font-bold text-xl mb-3">{t('geocercas.titleNew')}</h2>
 
-        <label className="block text-sm font-medium mb-1">Nombre</label>
+        <label className="block text-sm font-medium mb-1">{t('geocercas.create.nameLabel')}</label>
         <input
           className="w-full border rounded px-3 py-2 mb-3"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          placeholder="Nombre de la geocerca"
+          placeholder={t('geocercas.placeholderName')}
         />
 
         <label className="block text-sm font-medium mb-1">
-          Coordenadas <span className="font-normal">(lat, lng) por línea</span>
+          {t('geocercas.create.coordsLabel')} <span className="font-normal">{t('geocercas.create.coordsHint')}</span>
         </label>
         <textarea
           className="w-full border rounded px-3 py-2 h-48 font-mono text-sm"
@@ -108,11 +110,11 @@ export default function NuevaGeocerca() {
           onClick={onGuardar}
           disabled={guardando}
         >
-          {guardando ? 'Guardando…' : 'Guardar Geocerca'}
+          {guardando ? t('common.actions.loading') : t('geocercas.buttonSave')}
         </button>
 
         <p className="text-xs text-gray-500 mt-2">
-          Si el cuadro queda vacío, **se usará el polígono dibujado** en el mapa.
+          {t('geocercas.create.polygonFallback')}
         </p>
       </div>
 

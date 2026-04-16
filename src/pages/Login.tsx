@@ -189,7 +189,13 @@ export default function Login() {
     const status = e2?.status ? ` (HTTP ${e2.status})` : "";
     const hint =
       /invalid login credentials/i.test(m)
-        ? " — Si nunca creaste contraseña en ESTE entorno, usa “Restablecer contraseña” para crearla y luego entra con contraseña."
+        ? t("login.hints.useResetPassword", {
+            defaultValue:
+              " — If you never created a password in this environment, use \"{{resetTitle}}\" to create it and then sign in with password.",
+            resetTitle: t("resetPassword.title", {
+              defaultValue: "Reset password",
+            }),
+          })
         : "";
     return `${m}${code}${status}${hint}`.trim() || t("login.errors.unknown");
   }
@@ -332,10 +338,10 @@ export default function Login() {
             {t("landing.heroSubtitle")}
           </p>
           <p className="mt-2 text-xs text-yellow-300">
-            LANG DEBUG: {String((window && window.location && window.location.search) || "")}
+            {t("login.debug.lang", { defaultValue: "LANG DEBUG" })}: {String((window && window.location && window.location.search) || "")}
           </p>
           <p className="mt-1 text-xs text-cyan-300">
-            I18N DEBUG: {String(i18n.resolvedLanguage || i18n.language || "none")}
+            {t("login.debug.i18n", { defaultValue: "I18N DEBUG" })}: {String(i18n.resolvedLanguage || i18n.language || "none")}
           </p>
         </div>
 
@@ -351,7 +357,7 @@ export default function Login() {
             <div className="flex items-center gap-3">
               <div className="hidden sm:block text-xs text-slate-400">
                 <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
-                  PREVIEW
+                  {t("login.previewBadge", { defaultValue: "PREVIEW" })}
                 </span>
               </div>
               <div className="relative z-50">
@@ -450,7 +456,7 @@ export default function Login() {
               </summary>
               <div className="mt-3 space-y-2">
                 <label className="block text-sm font-medium text-slate-200">
-                  {goToNextLabel} (next)
+                  {goToNextLabel} {t("login.nextSuffix", { defaultValue: "(next)" })}
                 </label>
                 <input
                   className={inputClass}
@@ -480,7 +486,7 @@ export default function Login() {
             <summary className="cursor-pointer select-none">{debugLabel}</summary>
             <div className="mt-2 space-y-2">
               <div>
-                Supabase:{" "}
+                {t("login.debug.supabase", { defaultValue: "Supabase" })}:{" "}
                 <span className="break-all text-slate-300">{supabaseUrlHost}</span>
               </div>
               <div>

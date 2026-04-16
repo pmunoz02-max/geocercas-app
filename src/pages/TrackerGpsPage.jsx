@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 function getStorageItem(key) {
   try {
@@ -86,7 +87,8 @@ function syncRuntimeSession(session) {
 }
 
 export default function TrackerGpsPage() {
-  const [msg, setMsg] = useState("Iniciando seguimiento...");
+  const { t } = useTranslation();
+  const [msg, setMsg] = useState(() => t("tracker.gps.messageStarting"));
   const [runtimeSession, setRuntimeSession] = useState(() => {
     const initial = readRuntimeSessionFromStorage();
     syncRuntimeSession(initial);
@@ -140,7 +142,7 @@ export default function TrackerGpsPage() {
     });
 
     if (hasBootstrapSession) {
-      setMsg("Seguimiento activo");
+      setMsg(t("tracker.gps.messageActive"));
     } else if (nextMsgWhenMissing) {
       setMsg(nextMsgWhenMissing);
     }
@@ -151,17 +153,17 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     disposedRef.current = false;
 
-    const stored = refreshRuntimeSessionState("Preparando seguimiento...");
+    const stored = refreshRuntimeSessionState(t("tracker.gps.messagePreparing"));
 
     if (!stored.runtimeToken || !stored.trackerUserId || !stored.orgId) {
       bootstrapTimerRef.current = window.setTimeout(() => {
         if (disposedRef.current) return;
         const latest = refreshRuntimeSessionState(
-          "Preparando seguimiento...",
+          t("tracker.gps.messagePreparing"),
         );
 
         if (!latest.runtimeToken || !latest.trackerUserId || !latest.orgId) {
-          setMsg("Preparando seguimiento...");
+          setMsg(t("tracker.gps.messagePreparing"));
         }
       }, 300);
     }
@@ -192,7 +194,7 @@ export default function TrackerGpsPage() {
         console.log("[TRACKER_POLL] runtime session detected");
         syncRuntimeSession(stored);
         setRuntimeSession(stored);
-        setMsg("Seguimiento activo");
+        setMsg(t("tracker.gps.messageActive"));
         setDebugInfo((prev) => ({
           ...prev,
           hasRuntimeToken: true,
@@ -262,9 +264,9 @@ export default function TrackerGpsPage() {
       }
 
       if (runtimeToken && trackerUserId && orgId) {
-        setMsg("Seguimiento activo");
+        setMsg(t("tracker.gps.messageActive"));
       } else {
-        setMsg("Preparando seguimiento...");
+        setMsg(t("tracker.gps.messagePreparing"));
       }
 
       setDebugInfo((prev) => ({
@@ -362,24 +364,24 @@ export default function TrackerGpsPage() {
         </div>
 
         <div style={titleStyle}>
-          {ready ? "Seguimiento activo" : "Iniciando seguimiento"}
+          {ready ? t("tracker.gps.titleActive") : t("tracker.gps.titleStarting")}
         </div>
 
         <div style={subtitleStyle}>
           {ready
-            ? "Tu ubicación se está compartiendo correctamente."
-            : "Estamos preparando tu sesión para comenzar el seguimiento."}
+            ? t("tracker.gps.subtitleActive")
+            : t("tracker.gps.subtitleStarting")}
         </div>
 
         <div style={badgeStyle(ready)}>
-          <span>{ready ? "Activo" : "Inicializando"}</span>
+          <span>{ready ? t("tracker.gps.badgeActive") : t("tracker.gps.badgeInitializing")}</span>
         </div>
 
         {!!msg && (
           <div style={noteStyle}>
             {ready
-              ? "Estado actualizado correctamente."
-              : "Esto puede tomar unos segundos."}
+              ? t("tracker.gps.noteUpdated")
+              : t("tracker.gps.noteWait")}
           </div>
         )}
       </div>

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 export default function Button({
   children,
   variant = "primary",
@@ -7,6 +9,7 @@ export default function Button({
   style = {},
   fullWidth = true,
 }) {
+  const { t } = useTranslation();
   const baseStyle = {
     width: fullWidth ? "100%" : "auto",
     padding: "12px 16px",
@@ -72,7 +75,7 @@ export default function Button({
         }
       }}
     >
-      {loading ? "Cargando..." : children}
+      {loading ? t("common.actions.loading") : children}
     </button>
   );
 }

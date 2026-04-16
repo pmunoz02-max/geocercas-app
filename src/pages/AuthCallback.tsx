@@ -1,6 +1,7 @@
 // src/pages/AuthCallback.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
 
@@ -49,7 +50,7 @@ async function bootstrapCookie(
   }
 }
 
-function normalizeAuthErrorMessage(raw: string) {
+function normalizeAuthErrorMessage(raw: string, t: (key: string, options?: any) => string) {
   const msg = String(raw || "").trim();
   const low = msg.toLowerCase();
 
@@ -61,13 +62,12 @@ function normalizeAuthErrorMessage(raw: string) {
     low.includes("token has expired")
   ) {
     return {
-      title: "El enlace de acceso ya no es válido",
-      detail:
-        "Esto pasa si el enlace expiró o si fue abierto o escaneado antes, por ejemplo por una previsualización del correo o si se abrió dos veces.",
+      title: t("auth.callback.invalidLinkTitle"),
+      detail: t("auth.callback.invalidLinkDetail"),
       tips: [
-        "Usa el correo más reciente y ábrelo solo una vez.",
-        "Evita abrirlo dentro de un navegador interno del correo. Si puedes, usa Abrir en Chrome.",
-        "Si vuelve a fallar, pide al Owner que reenvíe la invitación.",
+        t("auth.callback.invalidLinkTipLatest"),
+        t("auth.callback.invalidLinkTipBrowser"),
+        t("auth.callback.invalidLinkTipOwner"),
       ],
     };
   }
@@ -77,18 +77,17 @@ function normalizeAuthErrorMessage(raw: string) {
     low.includes("could not establish session")
   ) {
     return {
-      title: "No se pudo completar el login",
-      detail:
-        "No se pudo establecer la sesión desde el callback. Esto suele ocurrir si el enlace fue consumido, expiró o fue procesado con el cliente incorrecto.",
+      title: t("auth.callback.loginFailedTitle"),
+      detail: t("auth.callback.loginFailedDetail"),
       tips: [
-        "Reintenta con un enlace nuevo.",
-        "Abre el enlace en el mismo dispositivo donde lo recibiste.",
+        t("auth.callback.loginFailedTipRetry"),
+        t("auth.callback.loginFailedTipDevice"),
       ],
     };
   }
 
   return {
-    title: "No se pudo completar el login",
+    title: t("auth.callback.loginFailedTitle"),
     detail: msg,
     tips: [] as string[],
   };
@@ -119,7 +118,8 @@ async function waitForSession(authClient: typeof supabase | typeof supabaseTrack
 
 export default function AuthCallback() {
   const location = useLocation();
-  const [status, setStatus] = useState<string>("Procesando autenticación…");
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<string>(t("auth.processing"));
   const [error, setError] = useState<string | null>(null);
   const [errorMeta, setErrorMeta] = useState<{
     title: string;
@@ -169,7 +169,7 @@ export default function AuthCallback() {
         const type = normalizeOtpType(getQueryParam(location.search, "type"));
 
         if (token_hash) {
-          setStatus("Confirmando sesión…");
+          setStatus(t("auth.callback.confirmingSession"));
           const { error: vErr } = await authClient.auth.verifyOtp({
             type: type as any,
             token_hash,
@@ -179,7 +179,7 @@ export default function AuthCallback() {
           const code = getQueryParam(location.search, "code");
 
           if (code) {
-            setStatus("Intercambiando código…");
+            setStatus(t("auth.callback.exchangingCode"));
             const { error: exErr } = await authClient.auth.exchangeCodeForSession(code);
             if (exErr) throw exErr;
           } else {
@@ -187,7 +187,7 @@ export default function AuthCallback() {
             const refresh_token = hp.refresh_token || "";
 
             if (access_token && refresh_token) {
-              setStatus("Restaurando sesión…");
+              setStatus(t("auth.callback.restoringSession"));
               const { error: ssErr } = await authClient.auth.setSession({
                 access_token,
                 refresh_token,
@@ -200,7 +200,7 @@ export default function AuthCallback() {
         const session = await waitForSession(authClient);
 
         if (!session?.access_token || !session?.refresh_token) {
-          throw new Error("No se pudo establecer sesión desde el callback.");
+          throw new Error(t("auth.callback.noSessionFromCallback"));
         }
 
         if (isTrackerFlow) {
@@ -210,7 +210,7 @@ export default function AuthCallback() {
             sessionStorage.setItem("tracker_active", "1");
           } catch {}
         } else {
-          setStatus("Creando cookies seguras…");
+          setStatus(t("auth.callback.creatingSecureCookies"));
           await bootstrapCookie(
             session.access_token,
             session.refresh_token,
@@ -220,7 +220,7 @@ export default function AuthCallback() {
 
         if (!alive) return;
 
-        setStatus("Redirigiendo…");
+        setStatus(t("auth.callback.redirecting"));
 
         try {
           const cleanUrl = `${window.location.pathname}${window.location.search}`;
@@ -232,12 +232,12 @@ export default function AuthCallback() {
         if (!alive) return;
 
         const raw = e?.message || String(e);
-        const meta = normalizeAuthErrorMessage(raw);
+        const meta = normalizeAuthErrorMessage(raw, t);
 
         console.error("[AUTH CALLBACK] failed:", raw);
         setError(raw);
         setErrorMeta(meta);
-        setStatus(meta.title || "No se pudo completar el login.");
+        setStatus(meta.title || t("auth.callback.loginFailedTitle"));
       }
     })();
 
@@ -253,7 +253,7 @@ export default function AuthCallback() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-6">
       <div className="max-w-md w-full rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-        <div className="text-lg font-semibold">Auth Callback</div>
+        <div className="text-lg font-semibold">{t("auth.callback.title")}</div>
         <div className="mt-2 text-sm opacity-80 whitespace-pre-line">{status}</div>
 
         <div className="mt-4 text-xs opacity-60 break-all">

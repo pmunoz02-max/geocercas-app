@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 function getInviteParams() {
   const url = new URL(window.location.href);
@@ -64,23 +65,23 @@ function requestCurrentPositionOnce() {
   });
 }
 
-function getGeoErrorMessage(error) {
+function getGeoErrorMessage(error, t) {
   const code = error?.code;
   const raw = String(error?.message || "").toLowerCase();
 
   if (code === 1 || raw.includes("permission")) {
-    return "La ubicación está bloqueada para este sitio. Debes habilitarla manualmente para continuar.";
+    return t("tracker.invite.errors.blockedSite");
   }
 
   if (code === 2) {
-    return "No se pudo obtener la ubicación. Activa el GPS y vuelve a intentar.";
+    return t("tracker.invite.errors.locationUnavailable");
   }
 
   if (code === 3 || raw.includes("timeout")) {
-    return "La ubicación tardó demasiado. Intenta de nuevo con mejor señal GPS.";
+    return t("tracker.invite.errors.locationTimeout");
   }
 
-  return "No se pudo obtener permiso de ubicación.";
+  return t("tracker.invite.errors.permissionFailed");
 }
 
 async function getPermissionState() {
@@ -93,7 +94,7 @@ async function getPermissionState() {
   }
 }
 
-async function ensureGeolocationPermissionByPrompt() {
+async function ensureGeolocationPermissionByPrompt(t) {
   const state = await getPermissionState();
 
   if (state === "granted") {
@@ -104,8 +105,7 @@ async function ensureGeolocationPermissionByPrompt() {
     return {
       ok: false,
       permissionState: "denied",
-      message:
-        "La ubicación está bloqueada para este sitio. En Chrome: Ajustes del sitio → Ubicación → Permitir.",
+      message: t("tracker.invite.errors.blockedChrome"),
     };
   }
 
@@ -116,13 +116,14 @@ async function ensureGeolocationPermissionByPrompt() {
     return {
       ok: false,
       permissionState: state,
-      message: getGeoErrorMessage(error),
+      message: getGeoErrorMessage(error, t),
     };
   }
 }
 
 export default function TrackerInviteStart() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [acceptError, setAcceptError] = useState("");
   const [status, setStatus] = useState("ready");
@@ -227,7 +228,7 @@ export default function TrackerInviteStart() {
   async function acceptInviteAndContinue() {
     if (!authToken) {
       setStatus("missing_invite_token");
-      setAcceptError("Invite token faltante.");
+      setAcceptError(t("tracker.invite.errors.missingToken"));
       return;
     }
 
@@ -285,13 +286,13 @@ export default function TrackerInviteStart() {
 
     if (!consent) {
       setStatus("consent_required");
-      setAcceptError("Debes aceptar el consentimiento antes de continuar.");
+      setAcceptError(t("tracker.invite.errors.consentRequired"));
       return;
     }
 
     if (!authToken) {
       setStatus("missing_invite_token");
-      setAcceptError("Invite token faltante.");
+      setAcceptError(t("tracker.invite.errors.missingToken"));
       return;
     }
 
@@ -308,9 +309,7 @@ export default function TrackerInviteStart() {
 
       if (permissionState === "denied") {
         setStatus("geo_permission_required");
-        setAcceptError(
-          "La ubicación está bloqueada para este sitio. Debes habilitarla manualmente para continuar.",
-        );
+        setAcceptError(t("tracker.invite.errors.blockedSite"));
         return;
       }
 
@@ -327,7 +326,7 @@ export default function TrackerInviteStart() {
       setAcceptError("");
       setStatus("requesting_geo_permission");
 
-      const geo = await ensureGeolocationPermissionByPrompt();
+      const geo = await ensureGeolocationPermissionByPrompt(t);
 
       if (!geo.ok) {
         setStatus("geo_permission_required");
@@ -339,7 +338,7 @@ export default function TrackerInviteStart() {
     } catch (error) {
       console.error("[tracker-invite] handleGrantLocation failed", error);
       setStatus("geo_permission_required");
-      setAcceptError("No se pudo obtener la ubicación.");
+      setAcceptError(t("tracker.invite.errors.locationUnavailableShort"));
     } finally {
       setSubmitting(false);
     }
@@ -368,17 +367,15 @@ export default function TrackerInviteStart() {
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
       <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-xl">
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-          Permiso de ubicación
+          {t("tracker.invite.title")}
         </h1>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 leading-6">
           <p>
-            Esta invitación necesita tu ubicación para iniciar el tracker y
-            validar recorridos y geocercas.
+            {t("tracker.invite.intro")}
           </p>
           <p className="mt-2">
-            Primero aceptas el aviso. Después verás una pantalla para permitir
-            la ubicación. Solo necesitas tocar <strong>Permitir</strong>.
+            {t("tracker.invite.introStep.before")} <strong>{t("tracker.invite.introStep.allow")}</strong>{t("tracker.invite.introStep.after")}
           </p>
         </div>
 
@@ -400,7 +397,7 @@ export default function TrackerInviteStart() {
             }}
             className="mt-1"
           />
-          <span>Acepto el seguimiento de ubicación</span>
+          <span>{t("tracker.invite.consentLabel")}</span>
         </label>
 
         {!showPermissionCard && !showBlockedCard && (
@@ -411,20 +408,21 @@ export default function TrackerInviteStart() {
             className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
           >
             {submitting && status === "accepting"
-              ? "Procesando..."
-              : "Aceptar y continuar"}
+              ? t("tracker.invite.processing")
+              : t("tracker.invite.acceptContinue")}
           </button>
         )}
 
         {showPermissionCard && (
           <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
             <p className="text-blue-800 font-semibold">
-              Permitir el uso de ubicación
+              {t("tracker.invite.permissionCardTitle")}
             </p>
 
             <p className="mt-2 text-sm text-blue-700">
-              En el siguiente paso aparecerá el permiso del sistema. Toca
-              <strong> Permitir</strong> para continuar.
+              {t("tracker.invite.permissionCardBody.before")}
+              <strong> {t("tracker.invite.introStep.allow")}</strong>
+              {t("tracker.invite.permissionCardBody.after")}
             </p>
 
             <button
@@ -434,13 +432,12 @@ export default function TrackerInviteStart() {
               className="w-full mt-3 rounded-lg bg-black text-white py-3 font-medium disabled:opacity-60"
             >
               {submitting && status === "requesting_geo_permission"
-                ? "Solicitando permiso..."
-                : "Permitir el uso de ubicación"}
+                ? t("tracker.invite.requestingPermission")
+                : t("tracker.invite.permissionAction")}
             </button>
 
             <p className="mt-3 text-xs text-blue-700">
-              Si el navegador muestra el permiso, solo confirma y el tracker
-              continuará automáticamente.
+              {t("tracker.invite.permissionAutoContinue")}
             </p>
           </div>
         )}
@@ -448,12 +445,11 @@ export default function TrackerInviteStart() {
         {showBlockedCard && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
             <p className="text-red-700 font-semibold">
-              Necesitamos tu ubicación para continuar
+              {t("tracker.invite.blockedTitle")}
             </p>
 
             <p className="mt-2 text-sm text-red-600">
-              La ubicación está bloqueada o el navegador no pudo mostrar el
-              permiso. Debes habilitarla manualmente para seguir.
+              {t("tracker.invite.blockedBody")}
             </p>
 
             {acceptError ? (
@@ -465,7 +461,7 @@ export default function TrackerInviteStart() {
               onClick={retryGeolocation}
               className="w-full mt-3 rounded-lg bg-black text-white py-3 font-medium"
             >
-              Reintentar permisos
+              {t("common.actions.retry")}
             </button>
 
             {isAndroid ? (
@@ -475,7 +471,7 @@ export default function TrackerInviteStart() {
                   onClick={openApp}
                   className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
-                  Abrir app
+                  {t("common.actions.openApp")}
                 </button>
 
                 <button
@@ -483,19 +479,19 @@ export default function TrackerInviteStart() {
                   onClick={openPlayStore}
                   className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
-                  Instalar app
+                  {t("common.actions.installApp")}
                 </button>
               </>
             ) : null}
 
             {isInAppBrowser ? (
               <p className="mt-3 text-xs text-red-500">
-                Estás dentro de Gmail o WhatsApp. Usa <strong>Abrir app</strong>.
+                {t("tracker.invite.inAppBrowserHint.before")} <strong>{t("common.actions.openApp")}</strong>.
               </p>
             ) : null}
 
             <div className="mt-3 rounded-lg border border-red-100 bg-white/70 p-3 text-xs text-red-700">
-              Chrome → Configuración del sitio → Ubicación → Permitir
+              {t("tracker.invite.chromePath")}
             </div>
           </div>
         )}
@@ -504,7 +500,7 @@ export default function TrackerInviteStart() {
           <div className="mt-3 text-sm text-red-600">{acceptError}</div>
         ) : null}
 
-        <p className="mt-4 text-xs text-slate-500">Estado: {status}</p>
+        <p className="mt-4 text-xs text-slate-500">{t("tracker.invite.statusLabel")}: {status}</p>
       </div>
     </div>
   );

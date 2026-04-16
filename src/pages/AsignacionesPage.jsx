@@ -197,17 +197,17 @@ export default function AsignacionesPage() {
     setEndTimeError("");
 
     if (!activeOrgId) {
-      setError("No hay organización activa.");
+      setError(t("asignaciones.error.noActiveOrg"));
       return;
     }
 
     if (!resolvedSelectedPersonId) {
-      setError("Debe seleccionar una persona válida.");
+      setError(t("asignaciones.error.invalidPerson"));
       return;
     }
 
     if (!resolvedSelectedTrackerUserId) {
-      setError("La persona seleccionada no tiene user_id. No se puede vincular como tracker.");
+      setError(t("asignaciones.error.personMissingUserId"));
       return;
     }
 
@@ -228,7 +228,7 @@ export default function AsignacionesPage() {
 
     if (endTime && startTime && new Date(endTime) < new Date(startTime)) {
       const msg =
-        "La fecha/hora de fin no puede ser anterior a la fecha/hora de inicio.";
+        t("asignaciones.error.endBeforeStart");
       setEndTimeError(msg);
       setError(msg);
       return;
@@ -236,7 +236,7 @@ export default function AsignacionesPage() {
 
     const parsedFreqMin = Number(freqMin);
     if (!Number.isFinite(parsedFreqMin) || parsedFreqMin <= 0) {
-      setError("La frecuencia debe ser mayor que 0.");
+      setError(t("asignaciones.error.invalidFrequency"));
       return;
     }
 
@@ -267,8 +267,8 @@ export default function AsignacionesPage() {
 
       setSuccess(
         editingId
-          ? "Asignación actualizada correctamente."
-          : "Asignación guardada correctamente."
+          ? t("asignaciones.banner.updated")
+          : t("asignaciones.messages.createSuccess")
       );
 
       setSelectedPersonId("");
@@ -285,8 +285,8 @@ export default function AsignacionesPage() {
       setError(
         e2?.message ||
           (editingId
-            ? "Error al actualizar asignación."
-            : "Error al guardar asignación.")
+            ? t("asignaciones.error.update")
+            : t("asignaciones.error.save"))
       );
     } finally {
       setSaving(false);

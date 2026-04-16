@@ -134,19 +134,25 @@
       "edit": "Editar"
     },
     "banner": {
-      "created": "Asignación creada correctamente.",
-      "deleted": "Asignación eliminada.",
-      "updated": "Asignación actualizada."
+      "created": "Affectation créée avec succès.",
+      "deleted": "Affectation supprimée.",
+      "updated": "Affectation mise à jour."
     },
     "error": {
-      "delete": "No se pudo eliminar la asignación.",
-      "load": "Error al cargar las asignaciones.",
-      "missingActivity": "Debe seleccionar una actividad.",
-      "missingEnd": "Debe ingresar fecha/hora de fin.",
-      "missingGeofence": "Debe seleccionar una geocerca.",
-      "missingPerson": "Debe seleccionar una persona.",
-      "missingStart": "Debe ingresar fecha/hora de inicio.",
-      "save": "No se pudo guardar la asignación."
+      "delete": "Impossible de supprimer l'affectation.",
+      "endBeforeStart": "La date/heure de fin ne peut pas être antérieure à la date/heure de début.",
+      "invalidFrequency": "La fréquence doit être supérieure à 0.",
+      "invalidPerson": "Vous devez sélectionner une personne valide.",
+      "load": "Erreur lors du chargement des affectations.",
+      "missingActivity": "Vous devez sélectionner une activité.",
+      "missingEnd": "Vous devez saisir la date/heure de fin.",
+      "missingGeofence": "Vous devez sélectionner une zone.",
+      "missingPerson": "Vous devez sélectionner une personne.",
+      "missingStart": "Vous devez saisir la date/heure de début.",
+      "noActiveOrg": "Il n'y a pas d'organisation active.",
+      "personMissingUserId": "La personne sélectionnée n'a pas de user_id. Impossible de la lier comme tracker.",
+      "save": "Impossible d'enregistrer l'affectation.",
+      "update": "Erreur lors de la mise à jour de l'affectation."
     },
     "filters": {
       "refresh": "Refrescar",
@@ -207,7 +213,7 @@
       "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
       "confirmDelete": "¿Seguro que deseas eliminar esta asignación?",
       "createGenericError": "No se pudo crear la asignación.",
-      "createSuccess": "Asignación creada correctamente.",
+      "createSuccess": "Affectation créée avec succès.",
       "deleteError": "No se pudo eliminar la asignación.",
       "deleteSuccess": "Asignación eliminada correctamente.",
       "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
@@ -243,11 +249,45 @@
     }
   },
   "auth": {
-    "backToLogin": "Volver a iniciar sesión",
-    "errorTitle": "No se pudo autenticar",
-    "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
-    "processing": "Autenticando…",
-    "timeout": "La autenticación tardó demasiado. Intenta nuevamente.",
+    "backToLogin": "Retour à la connexion",
+    "errorTitle": "Échec de l'authentification",
+    "invalidOrExpiredLink": "Le lien est invalide, a expiré ou a déjà été utilisé.",
+    "processing": "Authentification en cours...",
+    "timeout": "L'authentification a pris trop de temps. Réessayez.",
+    "selection": {
+      "title": "Sélectionner une organisation",
+      "loading": "Chargement des organisations associées à votre utilisateur...",
+      "invalidSessionTitle": "Session invalide",
+      "invalidSessionBody": "Il n'y a pas de session active. Reconnectez-vous.",
+      "noOrganizationsBody": "Vous vous êtes connecté avec succès, mais nous n'avons trouvé aucune organisation associée à votre utilisateur.",
+      "noOrganizationsHelp": "Contactez l'administrateur pour qu'il vous attribue une organisation, ou créez-en une nouvelle depuis le panneau d'administration.",
+      "subtitle": "Vous vous êtes connecté avec succès. Choisissez maintenant l'organisation avec laquelle vous souhaitez travailler.",
+      "noName": "(sans nom)",
+      "code": "Code : {{code}}",
+      "noCode": "Aucun code défini"
+    },
+    "requireOrg": {
+      "loading": "Chargement de votre session et de l'organisation actuelle...",
+      "resolvingOrganization": "Résolution de votre organisation..."
+    },
+    "callback": {
+      "title": "Auth Callback",
+      "invalidLinkTitle": "Le lien d'accès n'est plus valide",
+      "invalidLinkDetail": "Cela se produit si le lien a expiré, ou s'il a été ouvert ou scanné auparavant, par exemple par un aperçu d'email ou s'il a été ouvert deux fois.",
+      "invalidLinkTipLatest": "Utilisez l'email le plus récent et ouvrez-le une seule fois.",
+      "invalidLinkTipBrowser": "Évitez de l'ouvrir dans le navigateur intégré de l'email. Si possible, utilisez Ouvrir dans Chrome.",
+      "invalidLinkTipOwner": "Si cela échoue encore, demandez au propriétaire de renvoyer l'invitation.",
+      "loginFailedTitle": "Impossible de terminer la connexion",
+      "loginFailedDetail": "La session n'a pas pu être établie depuis le callback. Cela arrive généralement si le lien a déjà été consommé, a expiré, ou a été traité avec un client incorrect.",
+      "loginFailedTipRetry": "Réessayez avec un nouveau lien.",
+      "loginFailedTipDevice": "Ouvrez le lien sur le même appareil où vous l'avez reçu.",
+      "confirmingSession": "Confirmation de la session...",
+      "exchangingCode": "Échange du code...",
+      "restoringSession": "Restauration de la session...",
+      "noSessionFromCallback": "Impossible d'établir la session depuis le callback.",
+      "creatingSecureCookies": "Création de cookies sécurisés...",
+      "redirecting": "Redirection..."
+    },
     "signup": {
       "title": "Crear cuenta",
       "subtitle": "Crea tu cuenta con Magic Link o usa Google.",
@@ -296,6 +336,22 @@
     "timeout": "La validación de la invitación tardó demasiado. Intenta nuevamente.",
     "title": "Has sido invitado"
   },
+  "accountPage": {
+    "title": "Compte",
+    "loading": "Chargement du compte...",
+    "noActiveSession": "Il n'y a pas de session active",
+    "sessionStatus": "État de la session",
+    "user": "Utilisateur",
+    "currentOrganization": "Organisation actuelle",
+    "role": "Rôle",
+    "noSignOutAction": "Aucune action de déconnexion n'est disponible dans le contexte d'authentification actuel."
+  },
+  "errors": {
+    "notAuthorized": {
+      "title": "Accès refusé",
+      "body": "Vous n'avez pas l'autorisation d'accéder à cette section. Contactez l'administrateur si vous pensez qu'il s'agit d'une erreur."
+    }
+  },
   "common": {
     "actions": {
       "back": "Retour",
@@ -303,10 +359,13 @@
       "close": "Fermer",
       "delete": "Supprimer",
       "edit": "Modifier",
+      "installApp": "Installer l'application",
       "loading": "Chargement...",
       "no": "No",
       "logout": "Se déconnecter",
+      "openApp": "Ouvrir l'application",
       "processing": "Déconnexion...",
+      "retry": "Réessayer",
       "save": "Enregistrer",
       "yes": "Oui"
     },
@@ -341,6 +400,13 @@
     "separator": "—",
     "zoom": "Zoom",
     "refresh": "Actualiser",
+    "ok": "OK",
+    "debug": "Débogage",
+    "pagination": {
+      "pageOf": "Page {{page}} sur {{total}}",
+      "prev": "Préc.",
+      "next": "Suiv."
+    },
     "states": {
       "pending": "En attente",
       "visible": "Visible",
@@ -438,7 +504,7 @@
     "buttonClearCanvas": "Limpiar mapa",
     "buttonDeleteSelected": "Eliminar seleccionadas",
     "buttonDrawByCoords": "Dibujar por coordenadas",
-    "buttonSave": "Guardar geocerca",
+    "buttonSave": "Enregistrer la zone",
     "buttonShowAll": "Mostrar todas",
     "buttonShowOnMap": "Mostrar en mapa",
     "buttonShowSelected": "Mostrar seleccionadas",
@@ -471,13 +537,13 @@
     "pageSubtitle": "Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
     "pageTitle": "Geocercas",
     "panelTitle": "Geocercas",
-    "placeholderName": "Nombre de la geocerca",
+    "placeholderName": "Nom de la zone",
     "pointsLabel": "Pts",
-    "savedOk": "Geocerca guardada correctamente.",
+    "savedOk": "Zone enregistrée avec succès.",
     "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
-    "titleNew": "Nueva geocerca",
+    "titleNew": "Nouvelle zone",
     "coordsReady": "Figura creada desde coordenadas.",
-    "errorSave": "No se pudo guardar la geocerca. Intenta nuevamente.",
+    "errorSave": "Impossible d'enregistrer la zone. Réessayez.",
     "deleteError": "No se pudo eliminar. Intenta nuevamente.",
     "errorLoad": "No se pudo cargar la geocerca.",
     "showManyOk": "Mostrando {{count}} geocercas.",
@@ -485,6 +551,18 @@
     "planAvailableTitle": "Disponibles",
     "draftYes": "sí",
     "draftNo": "no",
+    "create": {
+      "defaultName": "Maison",
+      "nameLabel": "Nom",
+      "coordsLabel": "Coordonnées",
+      "coordsHint": "(lat, lng) par ligne",
+      "missingGeometry": "Ajoutez des coordonnées (texte \"lat, lng\" par ligne) ou dessinez un polygone sur la carte.",
+      "polygonFallback": "Si le champ reste vide, le polygone dessiné sur la carte sera utilisé."
+    },
+    "errors": {
+      "noEditPermission": "Vous n'avez pas l'autorisation de modifier.",
+      "selectOrganizationFirst": "Sélectionnez d'abord une organisation."
+    },
     "plan": {
       "loading": "Cargando plan...",
       "error": "No se pudieron cargar los límites del plan.",
@@ -1033,6 +1111,11 @@
     "advancedOptions": "Options avancées",
     "back": "Retour",
     "badge": "(connexion-V31 NO-JS)",
+    "debug": {
+      "lang": "LANG DEBUG",
+      "i18n": "I18N DEBUG",
+      "supabase": "Supabase"
+    },
     "email": "E-mail",
     "emailLabel": "E-mail",
     "emailPlaceholder": "votre.email@exemple.com",
@@ -1044,6 +1127,7 @@
     "errorResetPassword": "Impossible d'envoyer l'e-mail de récupération.",
     "errorResetPasswordUnexpected": "Erreur inattendue lors de l'envoi de l'e-mail de récupération.",
     "errors": {
+      "bootstrapFailed": "Bootstrap a échoué (HTTP {{status}}). {{details}}",
       "invalidEmail": "Saisissez une adresse e-mail valide.",
       "unknown": "Une erreur est survenue lors de la connexion."
     },
@@ -1051,9 +1135,14 @@
     "forgotPassword": "Mot de passe oublié ?",
     "forgotPasswordAlt": "Vous préférez réinitialiser votre mot de passe ? (envoyer un e-mail)",
     "goToDashboard": "Aller au tableau de bord",
+    "goToNext": "Aller à",
+    "hidePassword": "Masquer le mot de passe",
     "info": "Connexion WebView/TWA stable : envoi natif (pas d'événements JS), anti rate-limit par conception.",
     "infoMagicLinkSent": "Nous avons envoyé un lien magique à votre e-mail.",
     "infoResetPasswordSent": "Nous vous avons envoyé un e-mail pour réinitialiser votre mot de passe. Vérifiez votre boîte de réception.",
+    "hints": {
+      "useResetPassword": " — Si vous n'avez jamais créé de mot de passe dans cet environnement, utilisez \"{{resetTitle}}\" pour le créer puis connectez-vous avec le mot de passe."
+    },
     "loadingSession": "Chargement de votre session…",
     "magicButton": "Envoyer un lien magique",
     "magicDescription": "Nous enverrons un lien sécurisé à votre e-mail pour vous connecter sans mot de passe.",
@@ -1065,12 +1154,19 @@
     "modeDesc": "Si la connexion réussit, le serveur redirige vers /auth/callback avec des jetons.",
     "modeMagic": "Lien magique",
     "modePassword": "Mot de passe",
+    "modeReset": "Réinitialiser",
     "modeTitle": "Mode : NO-JS (envoi natif du formulaire)",
+    "nextHint": "Utile pour les tests en PREVIEW. En production, vous ne le changez normalement pas.",
+    "nextSuffix": "(next)",
     "password": "Mot de passe",
     "passwordLabel": "Mot de passe",
     "passwordLoginButton": "Se connecter avec mot de passe",
     "passwordPlaceholder": "Saisissez votre mot de passe",
+    "passwordTip": "Astuce : en Preview et en Production, le mot de passe est différent (Supabase différent).",
+    "previewBadge": "PREVIEW",
     "sessionActive": "Vous avez déjà une session active.",
+    "sessionStarted": "✅ Session démarrée. Entrée en cours…",
+    "showPassword": "Afficher le mot de passe",
     "submit": "Se connecter",
     "submitting": "Connexion en cours…",
     "subtitle": "Accédez à votre compte App Geocercas",
@@ -1088,15 +1184,15 @@
     "bannerSelected": "Registro seleccionado.",
     "bannerUpdated": "Personal actualizado correctamente.",
     "buttonDelete": "Eliminar",
-    "buttonEdit": "Editar",
+    "buttonEdit": "Modifier",
     "buttonFullList": "Ver todo",
     "buttonNew": "Nuevo",
-    "buttonRefresh": "Actualizar",
+    "buttonRefresh": "Actualiser",
     "buttonSave": "Guardar",
-    "confirmDelete": "¿Está seguro que desea eliminar este registro? (soft delete)",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer cet enregistrement ? (suppression logique)",
     "errorDelete": "No se pudo eliminar el registro.",
     "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
-    "errorLoad": "Error al cargar el personal.",
+    "errorLoad": "Erreur lors du chargement du personnel.",
     "errorMissingEmail": "El correo es requerido.",
     "errorMissingName": "El nombre es requerido.",
     "errorMissingUser": "No se pudo obtener el usuario autenticado.",
@@ -1118,22 +1214,22 @@
     "formTitleEdit": "Editar personal",
     "formTitleNew": "Nuevo personal",
     "no": "No",
-    "onlyActive": "Solo activos",
+    "onlyActive": "Seulement actifs",
     "orgFallback": "Sin organización",
     "orgInfoLabel": "Organización:",
     "pillCanEdit": "Editable",
     "pillReadOnly": "Solo lectura",
-    "processing": "Procesando…",
+    "processing": "Traitement en cours...",
     "roleLabel": "Rol:",
-    "searchPlaceholder": "Buscar por nombre, apellido, correo o teléfono…",
+    "searchPlaceholder": "Rechercher par prénom, nom, email ou téléphone...",
     "table": {
       "columns": {
-        "active": "Activo",
-        "email": "Correo",
+        "active": "Actif",
+        "email": "Email",
         "end": "Fin",
-        "firstName": "Nombre",
+        "firstName": "Prénom",
         "lastName": "Apellido",
-        "phone": "Teléfono",
+        "phone": "Téléphone",
         "start": "Inicio"
       },
       "loading": "Cargando…",
@@ -1146,6 +1242,12 @@
     "tableNoResults": "No se encontraron resultados.",
     "tablePhone": "Teléfono",
     "title": "Personal",
+    "noActiveSession": "Il n'y a pas de session active",
+    "legacyTable": {
+      "actions": "Actions",
+      "softDelete": "Supprimer (soft)",
+      "todoEdit": "TODO : Modifier"
+    },
     "yes": "Sí"
   },
   "reportes": {
@@ -1250,6 +1352,65 @@
     "updateUnexpected": "Error inesperado al actualizar la contraseña."
   },
   "tracker": {
+    "panel": {
+      "title": "Panneau du tracker",
+      "statusActive": "Actif",
+      "statusInactive": "Aucune activité",
+      "lastUpdateRecent": "Dernière mise à jour récente"
+    },
+    "gps": {
+      "messageStarting": "Démarrage du suivi...",
+      "messagePreparing": "Préparation du suivi...",
+      "messageActive": "Suivi actif",
+      "titleActive": "Suivi actif",
+      "titleStarting": "Démarrage du suivi",
+      "subtitleActive": "Votre position est partagée correctement.",
+      "subtitleStarting": "Nous préparons votre session pour commencer le suivi.",
+      "badgeActive": "Actif",
+      "badgeInitializing": "Initialisation",
+      "noteUpdated": "Statut mis à jour correctement.",
+      "noteWait": "Cela peut prendre quelques secondes."
+    },
+    "invite": {
+      "title": "Autorisation de localisation",
+      "intro": "Cette invitation a besoin de votre position pour démarrer le tracker et valider les trajets et géorepérages.",
+      "introStep": {
+        "before": "Vous acceptez d'abord l'avis. Ensuite, vous verrez un écran pour autoriser la localisation. Il vous suffit d'appuyer sur",
+        "allow": "Autoriser",
+        "after": "."
+      },
+      "consentLabel": "J'accepte le suivi de localisation",
+      "acceptContinue": "Accepter et continuer",
+      "processing": "Traitement en cours...",
+      "permissionCardTitle": "Autoriser l'utilisation de la localisation",
+      "permissionCardBody": {
+        "before": "À l'étape suivante, l'autorisation du système apparaîtra. Appuyez sur",
+        "after": "pour continuer."
+      },
+      "permissionAction": "Autoriser l'utilisation de la localisation",
+      "requestingPermission": "Demande d'autorisation...",
+      "permissionAutoContinue": "Si le navigateur affiche l'autorisation, confirmez simplement et le tracker continuera automatiquement.",
+      "blockedTitle": "Nous avons besoin de votre position pour continuer",
+      "blockedBody": "La localisation est bloquée ou le navigateur n'a pas pu afficher l'autorisation. Vous devez l'activer manuellement pour continuer.",
+      "inAppBrowserHint": {
+        "before": "Vous êtes dans Gmail ou WhatsApp. Utilisez"
+      },
+      "chromePath": "Chrome → Paramètres du site → Localisation → Autoriser",
+      "statusLabel": "Statut",
+      "errors": {
+        "missingToken": "Jeton d'invitation manquant.",
+        "consentRequired": "Vous devez accepter le consentement avant de continuer.",
+        "blockedSite": "La localisation est bloquée pour ce site. Vous devez l'activer manuellement pour continuer.",
+        "locationUnavailable": "Impossible d'obtenir la position. Activez le GPS et réessayez.",
+        "locationTimeout": "La localisation a pris trop de temps. Réessayez avec un meilleur signal GPS.",
+        "permissionFailed": "Impossible d'obtenir l'autorisation de localisation.",
+        "blockedChrome": "La localisation est bloquée pour ce site. Dans Chrome : Paramètres du site → Localisation → Autoriser.",
+        "locationUnavailableShort": "Impossible d'obtenir la position."
+      }
+    },
+    "history": {
+      "traceLabel": "Trace"
+    },
     "controls": {
       "centerOnUser": "Centrar en mi posición",
       "refresh": "Refrescar posiciones",
@@ -1553,6 +1714,20 @@
     "messages": {
       "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
       "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
+    },
+    "upgrade": {
+      "priceLabel": "29 $US/mois · Paddle (Preview)",
+      "orgIdLabel": "ID org",
+      "notResolved": "(non résolue)",
+      "organizationInputLabel": "ID de l'organisation (org_id)",
+      "organizationInputPlaceholder": "Ex. ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
+      "organizationInputHelp": "Si l'ID n'est pas détecté automatiquement, collez ici l'UUID de l'organisation.",
+      "subscribe": "M'abonner à PRO",
+      "processing": "Traitement en cours...",
+      "noticeTitle": "Avis",
+      "errors": {
+        "invalidOrgId": "ID d'organisation invalide. Copiez l'ID de l'organisation (UUID) et collez-le ici."
+      }
     },
     "compareBeforeUpgrade": {
       "title": "¿Quieres comparar antes de actualizar?",

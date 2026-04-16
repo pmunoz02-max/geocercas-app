@@ -1,8 +1,9 @@
 ﻿import React, { useEffect, useRef } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 
-function FullScreenLoader({ text = "Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦" }) {
+function FullScreenLoader({ text }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
       <div className="px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm text-white/70">
@@ -22,6 +23,7 @@ function FullScreenLoader({ text = "Cargando tu sesiÃ³n y organizaciÃ³n actu
  * - Si no hay org -> redirect onboarding
  */
 export default function RequireOrg({ children }) {
+  const { t } = useTranslation();
   const {
     loading,
     ready,
@@ -55,7 +57,7 @@ export default function RequireOrg({ children }) {
       });
       initLoggedRef.current = true;
     }
-    return <FullScreenLoader />;
+    return <FullScreenLoader text={t("auth.requireOrg.loading")} />;
   }
 
   // 2) Sin sesiÃ³n -> login
@@ -73,7 +75,7 @@ export default function RequireOrg({ children }) {
       });
       orgHydrationLoggedRef.current = true;
     }
-    return <FullScreenLoader text="Resolviendo tu organizaciÃ³nâ€¦" />;
+    return <FullScreenLoader text={t("auth.requireOrg.resolvingOrganization")} />;
   }
 
   // 4) Logueado pero sin organizaciones -> onboarding

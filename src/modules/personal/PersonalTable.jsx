@@ -1,8 +1,10 @@
 // src/modules/personal/PersonalTable.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { listPersonal, deletePersonal } from "../../lib/personalApi.js";
 import { useAuth } from "@/auth/AuthProvider.jsx";
 export default function PersonalTable() {
+  const { t } = useTranslation();
   const { loading: authLoading, user, session } = useAuth();
 
   const [q, setQ] = useState("");
@@ -13,7 +15,7 @@ export default function PersonalTable() {
 
   async function fetchRows() {
     if (!session || !user) {
-      setErrorMsg("No hay sesión activa");
+      setErrorMsg(t("personal.noActiveSession"));
       setRows([]);
       setLoading(false);
       return;
@@ -25,7 +27,7 @@ export default function PersonalTable() {
       onlyActive,       // <- si es false, trae TODO
       limit: 500,
     });
-    if (error) setErrorMsg(error.message || "Error al cargar personal");
+    if (error) setErrorMsg(error.message || t("personal.errorLoad"));
     // defensa: evitar filas null
     setRows(Array.isArray(data) ? data.filter(Boolean) : []);
     setLoading(false);
@@ -49,17 +51,17 @@ export default function PersonalTable() {
 
   const onDelete = async (row) => {
     if (!row?.id) return;
-    if (!window.confirm("¿Eliminar (soft) este registro?")) return;
+    if (!window.confirm(t("personal.confirmDelete"))) return;
     const { error } = await deletePersonal(row.id);
     if (error) {
-      setErrorMsg(error.message || "No se pudo eliminar.");
+      setErrorMsg(error.message || t("personal.errorDelete"));
     } else {
       fetchRows();
     }
   };
 
   if (authLoading) {
-    return <div className="p-6 text-gray-500">Cargando…</div>;
+    return <div className="p-6 text-gray-500">{t("common.actions.loading")}</div>;
   }
 
   return (
@@ -69,7 +71,7 @@ export default function PersonalTable() {
         <input
           type="text"
           className="border rounded-md px-3 py-2 text-sm w-72"
-          placeholder="Buscar nombre, apellido o email…"
+          placeholder={t("personal.searchPlaceholder")}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -79,14 +81,14 @@ export default function PersonalTable() {
             checked={onlyActive}
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
-          Mostrar solo activos
+          {t("personal.onlyActive")}
         </label>
         <button
           className="px-3 py-2 rounded-md bg-gray-900 text-white text-sm"
           onClick={fetchRows}
           disabled={loading}
         >
-          {loading ? "Actualizando…" : "Actualizar"}
+          {loading ? t("personal.processing") : t("personal.buttonRefresh")}
         </button>
       </div>
 
@@ -101,18 +103,18 @@ export default function PersonalTable() {
         <table className="min-w-full text-sm border-separate border-spacing-y-2">
           <thead>
             <tr className="text-left text-gray-600">
-              <th className="px-3">Nombre</th>
-              <th className="px-3">Email</th>
-              <th className="px-3">Teléfono</th>
-              <th className="px-3">Activo</th>
-              <th className="px-3">Acciones</th>
+              <th className="px-3">{t("personal.table.columns.firstName")}</th>
+              <th className="px-3">{t("personal.table.columns.email")}</th>
+              <th className="px-3">{t("personal.table.columns.phone")}</th>
+              <th className="px-3">{t("personal.table.columns.active")}</th>
+              <th className="px-3">{t("personal.legacyTable.actions")}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td className="px-3 py-6 text-center text-gray-500" colSpan={5}>
-                  Cargando…
+                  {t("common.actions.loading")}
                 </td>
               </tr>
             ) : filtered.length ? (
@@ -127,22 +129,22 @@ export default function PersonalTable() {
                   <td className="px-3 py-2">{r?.telefono || "—"}</td>
                   <td className="px-3 py-2">
                     <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-gray-100">
-                      {r?.activo_bool ? "sí" : "no"}
+                      {r?.activo_bool ? t("common.actions.yes") : t("common.actions.no")}
                     </span>
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-2">
                       <button
                         className="px-2 py-1 rounded-md bg-sky-600 text-white"
-                        onClick={() => alert("TODO: Editar")}
+                        onClick={() => alert(t("personal.legacyTable.todoEdit"))}
                       >
-                        Editar
+                        {t("personal.buttonEdit")}
                       </button>
                       <button
                         className="px-2 py-1 rounded-md bg-rose-600 text-white"
                         onClick={() => onDelete(r)}
                       >
-                        Eliminar (soft)
+                        {t("personal.legacyTable.softDelete")}
                       </button>
                     </div>
                   </td>
@@ -151,7 +153,7 @@ export default function PersonalTable() {
             ) : (
               <tr>
                 <td className="px-3 py-6 text-center text-gray-500" colSpan={5}>
-                  Sin resultados
+                  {t("common.noResults")}
                 </td>
               </tr>
             )}
@@ -161,9 +163,9 @@ export default function PersonalTable() {
 
       {/* Paginación placeholder (si la necesitas luego) */}
       <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
-        <span>Página 1 de 1</span>
-        <button className="px-2 py-1 rounded bg-gray-200" disabled>Prev</button>
-        <button className="px-2 py-1 rounded bg-gray-200" disabled>Next</button>
+        <span>{t("common.pagination.pageOf", { page: 1, total: 1 })}</span>
+        <button className="px-2 py-1 rounded bg-gray-200" disabled>{t("common.pagination.prev")}</button>
+        <button className="px-2 py-1 rounded bg-gray-200" disabled>{t("common.pagination.next")}</button>
       </div>
     </div>
   );

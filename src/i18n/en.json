@@ -134,19 +134,25 @@
       "edit": "Editar"
     },
     "banner": {
-      "created": "Asignación creada correctamente.",
-      "deleted": "Asignación eliminada.",
-      "updated": "Asignación actualizada."
+      "created": "Assignment created successfully.",
+      "deleted": "Assignment deleted.",
+      "updated": "Assignment updated."
     },
     "error": {
-      "delete": "No se pudo eliminar la asignación.",
-      "load": "Error al cargar las asignaciones.",
-      "missingActivity": "Debe seleccionar una actividad.",
-      "missingEnd": "Debe ingresar fecha/hora de fin.",
-      "missingGeofence": "Debe seleccionar una geocerca.",
-      "missingPerson": "Debe seleccionar una persona.",
-      "missingStart": "Debe ingresar fecha/hora de inicio.",
-      "save": "No se pudo guardar la asignación."
+      "delete": "Could not delete the assignment.",
+      "endBeforeStart": "The end date/time cannot be earlier than the start date/time.",
+      "invalidFrequency": "Frequency must be greater than 0.",
+      "invalidPerson": "You must select a valid person.",
+      "load": "Error loading assignments.",
+      "missingActivity": "You must select an activity.",
+      "missingEnd": "You must enter an end date/time.",
+      "missingGeofence": "You must select a geofence.",
+      "missingPerson": "You must select a person.",
+      "missingStart": "You must enter a start date/time.",
+      "noActiveOrg": "There is no active organization.",
+      "personMissingUserId": "The selected person does not have a user_id. It cannot be linked as a tracker.",
+      "save": "Could not save the assignment.",
+      "update": "Error updating assignment."
     },
     "filters": {
       "refresh": "Refrescar",
@@ -207,7 +213,7 @@
       "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
       "confirmDelete": "¿Seguro que deseas eliminar esta asignación?",
       "createGenericError": "No se pudo crear la asignación.",
-      "createSuccess": "Asignación creada correctamente.",
+      "createSuccess": "Assignment created successfully.",
       "deleteError": "No se pudo eliminar la asignación.",
       "deleteSuccess": "Asignación eliminada correctamente.",
       "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
@@ -243,11 +249,45 @@
     }
   },
   "auth": {
-    "backToLogin": "Volver a iniciar sesión",
-    "errorTitle": "No se pudo autenticar",
-    "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
-    "processing": "Autenticando…",
-    "timeout": "La autenticación tardó demasiado. Intenta nuevamente.",
+    "backToLogin": "Back to sign in",
+    "errorTitle": "Authentication failed",
+    "invalidOrExpiredLink": "The link is invalid, has expired, or was already used.",
+    "processing": "Authenticating...",
+    "timeout": "Authentication took too long. Try again.",
+    "selection": {
+      "title": "Select organization",
+      "loading": "Loading organizations linked to your user...",
+      "invalidSessionTitle": "Invalid session",
+      "invalidSessionBody": "There is no active session. Sign in again.",
+      "noOrganizationsBody": "You signed in successfully, but we could not find organizations linked to your user.",
+      "noOrganizationsHelp": "Contact the administrator so they can assign you an organization, or create a new one from the admin panel.",
+      "subtitle": "You signed in successfully. Now choose the organization you want to work with right now.",
+      "noName": "(no name)",
+      "code": "Code: {{code}}",
+      "noCode": "No code defined"
+    },
+    "requireOrg": {
+      "loading": "Loading your session and current organization...",
+      "resolvingOrganization": "Resolving your organization..."
+    },
+    "callback": {
+      "title": "Auth Callback",
+      "invalidLinkTitle": "The access link is no longer valid",
+      "invalidLinkDetail": "This happens if the link expired or if it was opened or scanned before, for example by an email preview or if it was opened twice.",
+      "invalidLinkTipLatest": "Use the most recent email and open it only once.",
+      "invalidLinkTipBrowser": "Avoid opening it inside an in-app email browser. If possible, use Open in Chrome.",
+      "invalidLinkTipOwner": "If it fails again, ask the Owner to resend the invite.",
+      "loginFailedTitle": "Could not complete sign in",
+      "loginFailedDetail": "The session could not be established from the callback. This usually happens if the link was consumed, expired, or processed with the wrong client.",
+      "loginFailedTipRetry": "Try again with a new link.",
+      "loginFailedTipDevice": "Open the link on the same device where you received it.",
+      "confirmingSession": "Confirming session...",
+      "exchangingCode": "Exchanging code...",
+      "restoringSession": "Restoring session...",
+      "noSessionFromCallback": "Could not establish session from the callback.",
+      "creatingSecureCookies": "Creating secure cookies...",
+      "redirecting": "Redirecting..."
+    },
     "signup": {
       "title": "Crear cuenta",
       "subtitle": "Crea tu cuenta con Magic Link o usa Google.",
@@ -296,6 +336,22 @@
     "timeout": "La validación de la invitación tardó demasiado. Intenta nuevamente.",
     "title": "Has sido invitado"
   },
+  "accountPage": {
+    "title": "Account",
+    "loading": "Loading account...",
+    "noActiveSession": "There is no active session",
+    "sessionStatus": "Session status",
+    "user": "User",
+    "currentOrganization": "Current organization",
+    "role": "Role",
+    "noSignOutAction": "There is no sign-out action available in the current auth context."
+  },
+  "errors": {
+    "notAuthorized": {
+      "title": "Access denied",
+      "body": "You do not have permission to access this section. Contact the administrator if you think this is an error."
+    }
+  },
   "common": {
     "actions": {
       "back": "Back",
@@ -303,10 +359,13 @@
       "close": "Close",
       "delete": "Delete",
       "edit": "Edit",
+      "installApp": "Install app",
       "loading": "Loading...",
       "no": "No",
       "logout": "Log out",
+      "openApp": "Open app",
       "processing": "Signing out...",
+      "retry": "Retry",
       "save": "Save",
       "yes": "Yes"
     },
@@ -341,6 +400,13 @@
     "separator": "—",
     "zoom": "Zoom",
     "refresh": "Refresh",
+    "ok": "OK",
+    "debug": "Debug",
+    "pagination": {
+      "pageOf": "Page {{page}} of {{total}}",
+      "prev": "Prev",
+      "next": "Next"
+    },
     "states": {
       "pending": "Pending",
       "visible": "Visible",
@@ -438,7 +504,7 @@
     "buttonClearCanvas": "Limpiar mapa",
     "buttonDeleteSelected": "Eliminar seleccionadas",
     "buttonDrawByCoords": "Dibujar por coordenadas",
-    "buttonSave": "Guardar geocerca",
+    "buttonSave": "Save geofence",
     "buttonShowAll": "Mostrar todas",
     "buttonShowOnMap": "Mostrar en mapa",
     "buttonShowSelected": "Mostrar seleccionadas",
@@ -471,13 +537,13 @@
     "pageSubtitle": "Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
     "pageTitle": "Geocercas",
     "panelTitle": "Geocercas",
-    "placeholderName": "Nombre de la geocerca",
+    "placeholderName": "Geofence name",
     "pointsLabel": "Pts",
-    "savedOk": "Geocerca guardada correctamente.",
+    "savedOk": "Geofence saved successfully.",
     "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
-    "titleNew": "Nueva geocerca",
+    "titleNew": "New geofence",
     "coordsReady": "Figura creada desde coordenadas.",
-    "errorSave": "No se pudo guardar la geocerca. Intenta nuevamente.",
+    "errorSave": "Could not save the geofence. Try again.",
     "deleteError": "No se pudo eliminar. Intenta nuevamente.",
     "errorLoad": "No se pudo cargar la geocerca.",
     "showManyOk": "Mostrando {{count}} geocercas.",
@@ -485,6 +551,18 @@
     "planAvailableTitle": "Disponibles",
     "draftYes": "sí",
     "draftNo": "no",
+    "create": {
+      "defaultName": "Home",
+      "nameLabel": "Name",
+      "coordsLabel": "Coordinates",
+      "coordsHint": "(lat, lng) per line",
+      "missingGeometry": "Add coordinates (text \"lat, lng\" per line) or draw a polygon on the map.",
+      "polygonFallback": "If the box is left empty, the polygon drawn on the map will be used."
+    },
+    "errors": {
+      "noEditPermission": "You do not have permission to edit.",
+      "selectOrganizationFirst": "Select an organization first."
+    },
     "plan": {
       "loading": "Cargando plan...",
       "error": "No se pudieron cargar los límites del plan.",
@@ -1033,6 +1111,11 @@
     "advancedOptions": "Advanced options",
     "back": "Back",
     "badge": "(login-V31 NO-JS)",
+    "debug": {
+      "lang": "LANG DEBUG",
+      "i18n": "I18N DEBUG",
+      "supabase": "Supabase"
+    },
     "email": "Email",
     "emailLabel": "Email",
     "emailPlaceholder": "your.email@example.com",
@@ -1044,6 +1127,7 @@
     "errorResetPassword": "Could not send the recovery email.",
     "errorResetPasswordUnexpected": "Unexpected error sending the recovery email.",
     "errors": {
+      "bootstrapFailed": "Bootstrap failed (HTTP {{status}}). {{details}}",
       "invalidEmail": "Enter a valid email address.",
       "unknown": "An error occurred while signing in."
     },
@@ -1051,9 +1135,14 @@
     "forgotPassword": "Forgot your password?",
     "forgotPasswordAlt": "Prefer to reset your password? (send email)",
     "goToDashboard": "Go to dashboard",
+    "goToNext": "Go to",
+    "hidePassword": "Hide password",
     "info": "Stable WebView/TWA login: native submit (no JS events), anti rate-limit by design.",
     "infoMagicLinkSent": "We sent a magic link to your email.",
     "infoResetPasswordSent": "We sent you an email to reset your password. Check your inbox.",
+    "hints": {
+      "useResetPassword": " — If you never created a password in this environment, use \"{{resetTitle}}\" to create it and then sign in with password."
+    },
     "loadingSession": "Loading your session...",
     "magicButton": "Send magic link",
     "magicDescription": "We'll send a secure link to your email so you can sign in without a password.",
@@ -1065,12 +1154,19 @@
     "modeDesc": "If sign-in succeeds, the server redirects to /auth/callback with tokens.",
     "modeMagic": "Magic link",
     "modePassword": "Password",
+    "modeReset": "Reset",
     "modeTitle": "Mode: NO-JS (native form submit)",
+    "nextHint": "Useful for tests in PREVIEW. In production you normally do not change it.",
+    "nextSuffix": "(next)",
     "password": "Password",
     "passwordLabel": "Password",
     "passwordLoginButton": "Sign in with password",
     "passwordPlaceholder": "Enter your password",
+    "passwordTip": "Tip: in Preview and Production the password is different (different Supabase).",
+    "previewBadge": "PREVIEW",
     "sessionActive": "You already have an active session.",
+    "sessionStarted": "✅ Session started. Entering...",
+    "showPassword": "Show password",
     "submit": "Sign in",
     "submitting": "Signing in...",
     "subtitle": "Access your App Geocercas account",
@@ -1088,15 +1184,15 @@
     "bannerSelected": "Registro seleccionado.",
     "bannerUpdated": "Personal actualizado correctamente.",
     "buttonDelete": "Eliminar",
-    "buttonEdit": "Editar",
+    "buttonEdit": "Edit",
     "buttonFullList": "Ver todo",
     "buttonNew": "Nuevo",
-    "buttonRefresh": "Actualizar",
+    "buttonRefresh": "Refresh",
     "buttonSave": "Guardar",
-    "confirmDelete": "¿Está seguro que desea eliminar este registro? (soft delete)",
+    "confirmDelete": "Are you sure you want to delete this record? (soft delete)",
     "errorDelete": "No se pudo eliminar el registro.",
     "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
-    "errorLoad": "Error al cargar el personal.",
+    "errorLoad": "Could not load personnel.",
     "errorMissingEmail": "El correo es requerido.",
     "errorMissingName": "El nombre es requerido.",
     "errorMissingUser": "No se pudo obtener el usuario autenticado.",
@@ -1118,22 +1214,22 @@
     "formTitleEdit": "Editar personal",
     "formTitleNew": "Nuevo personal",
     "no": "No",
-    "onlyActive": "Solo activos",
+    "onlyActive": "Only active",
     "orgFallback": "Sin organización",
     "orgInfoLabel": "Organización:",
     "pillCanEdit": "Editable",
     "pillReadOnly": "Solo lectura",
-    "processing": "Procesando…",
+    "processing": "Processing...",
     "roleLabel": "Rol:",
-    "searchPlaceholder": "Buscar por nombre, apellido, correo o teléfono…",
+    "searchPlaceholder": "Search by name, last name, email, or phone...",
     "table": {
       "columns": {
-        "active": "Activo",
-        "email": "Correo",
+        "active": "Active",
+        "email": "Email",
         "end": "Fin",
-        "firstName": "Nombre",
+        "firstName": "Name",
         "lastName": "Apellido",
-        "phone": "Teléfono",
+        "phone": "Phone",
         "start": "Inicio"
       },
       "loading": "Cargando…",
@@ -1146,6 +1242,12 @@
     "tableNoResults": "No se encontraron resultados.",
     "tablePhone": "Teléfono",
     "title": "Personal",
+    "noActiveSession": "There is no active session",
+    "legacyTable": {
+      "actions": "Actions",
+      "softDelete": "Delete (soft)",
+      "todoEdit": "TODO: Edit"
+    },
     "yes": "Sí"
   },
   "reportes": {
@@ -1250,6 +1352,65 @@
     "updateUnexpected": "Error inesperado al actualizar la contraseña."
   },
   "tracker": {
+    "panel": {
+      "title": "Tracker panel",
+      "statusActive": "Active",
+      "statusInactive": "No activity",
+      "lastUpdateRecent": "Recent last update"
+    },
+    "gps": {
+      "messageStarting": "Starting tracking...",
+      "messagePreparing": "Preparing tracking...",
+      "messageActive": "Tracking active",
+      "titleActive": "Tracking active",
+      "titleStarting": "Starting tracking",
+      "subtitleActive": "Your location is being shared correctly.",
+      "subtitleStarting": "We are preparing your session to start tracking.",
+      "badgeActive": "Active",
+      "badgeInitializing": "Initializing",
+      "noteUpdated": "Status updated correctly.",
+      "noteWait": "This may take a few seconds."
+    },
+    "invite": {
+      "title": "Location permission",
+      "intro": "This invite needs your location to start the tracker and validate routes and geofences.",
+      "introStep": {
+        "before": "First you accept the notice. Then you will see a screen to allow location. You only need to tap",
+        "allow": "Allow",
+        "after": "."
+      },
+      "consentLabel": "I accept location tracking",
+      "acceptContinue": "Accept and continue",
+      "processing": "Processing...",
+      "permissionCardTitle": "Allow location usage",
+      "permissionCardBody": {
+        "before": "In the next step the system permission will appear. Tap",
+        "after": "to continue."
+      },
+      "permissionAction": "Allow location usage",
+      "requestingPermission": "Requesting permission...",
+      "permissionAutoContinue": "If the browser shows the permission, just confirm and the tracker will continue automatically.",
+      "blockedTitle": "We need your location to continue",
+      "blockedBody": "Location is blocked or the browser could not show the permission. You must enable it manually to continue.",
+      "inAppBrowserHint": {
+        "before": "You are inside Gmail or WhatsApp. Use"
+      },
+      "chromePath": "Chrome → Site settings → Location → Allow",
+      "statusLabel": "Status",
+      "errors": {
+        "missingToken": "Missing invite token.",
+        "consentRequired": "You must accept consent before continuing.",
+        "blockedSite": "Location is blocked for this site. You must enable it manually to continue.",
+        "locationUnavailable": "Could not get location. Enable GPS and try again.",
+        "locationTimeout": "Location took too long. Try again with a better GPS signal.",
+        "permissionFailed": "Could not get location permission.",
+        "blockedChrome": "Location is blocked for this site. In Chrome: Site settings → Location → Allow.",
+        "locationUnavailableShort": "Could not get location."
+      }
+    },
+    "history": {
+      "traceLabel": "Trace"
+    },
     "controls": {
       "centerOnUser": "Centrar en mi posición",
       "refresh": "Refrescar posiciones",
@@ -1553,6 +1714,20 @@
     "messages": {
       "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
       "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
+    },
+    "upgrade": {
+      "priceLabel": "USD $29/month · Paddle (Preview)",
+      "orgIdLabel": "Org ID",
+      "notResolved": "(not resolved)",
+      "organizationInputLabel": "Organization ID (org_id)",
+      "organizationInputPlaceholder": "E.g. ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
+      "organizationInputHelp": "If it is not detected automatically, paste the organization UUID here.",
+      "subscribe": "Subscribe to PRO",
+      "processing": "Processing...",
+      "noticeTitle": "Notice",
+      "errors": {
+        "invalidOrgId": "Invalid Org ID. Copy the Organization ID (UUID) and paste it here."
+      }
     },
     "compareBeforeUpgrade": {
       "title": "¿Quieres comparar antes de actualizar?",

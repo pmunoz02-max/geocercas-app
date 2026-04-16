@@ -15,10 +15,12 @@
 
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 
 function SeleccionarOrganizacion() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const {
     user,
     loading,       // loading global del AuthContext (sesiÃ³n + datos)
@@ -96,10 +98,10 @@ function SeleccionarOrganizacion() {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold mb-2">
-          Seleccionar organizaciÃ³n
+          {t("auth.selection.title")}
         </h1>
         <p className="text-gray-600 text-sm">
-          Cargando organizaciones asociadas a tu usuarioâ€¦
+          {t("auth.selection.loading")}
         </p>
       </div>
     );
@@ -108,9 +110,9 @@ function SeleccionarOrganizacion() {
   if (!user) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">SesiÃ³n no vÃ¡lida</h1>
+        <h1 className="text-2xl font-semibold mb-2">{t("auth.selection.invalidSessionTitle")}</h1>
         <p className="text-gray-600 text-sm">
-          No hay sesiÃ³n activa. Inicia sesiÃ³n nuevamente.
+          {t("auth.selection.invalidSessionBody")}
         </p>
       </div>
     );
@@ -122,15 +124,13 @@ function SeleccionarOrganizacion() {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <h1 className="text-2xl font-semibold mb-2">
-          Seleccionar organizaciÃ³n
+          {t("auth.selection.title")}
         </h1>
         <p className="text-gray-600 text-sm mb-4">
-          Has iniciado sesiÃ³n correctamente, pero no encontramos
-          organizaciones asociadas a tu usuario.
+          {t("auth.selection.noOrganizationsBody")}
         </p>
         <div className="border border-yellow-300 bg-yellow-50 text-yellow-800 rounded px-4 py-3 text-sm">
-          Contacta al administrador para que te asigne una organizaciÃ³n
-          o crea una nueva desde el panel de administraciÃ³n.
+          {t("auth.selection.noOrganizationsHelp")}
         </div>
       </div>
     );
@@ -143,10 +143,9 @@ function SeleccionarOrganizacion() {
   // Mostramos la lista para que el usuario escoja.
   return (
     <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-2">Seleccionar organizaciÃ³n</h1>
+      <h1 className="text-2xl font-semibold mb-2">{t("auth.selection.title")}</h1>
       <p className="text-gray-600 text-sm mb-4">
-        Has iniciado sesiÃ³n correctamente. Ahora elige la organizaciÃ³n con la
-        que deseas trabajar en este momento.
+        {t("auth.selection.subtitle")}
       </p>
 
       <div className="space-y-3 mt-3">
@@ -158,9 +157,9 @@ function SeleccionarOrganizacion() {
             className="w-full text-left border rounded px-4 py-3 hover:bg-slate-50 transition flex items-center justify-between"
           >
             <div>
-              <div className="font-medium">{org.name || "(sin nombre)"}</div>
+              <div className="font-medium">{org.name || t("auth.selection.noName")}</div>
               <div className="text-xs text-gray-500">
-                {org.code ? `CÃ³digo: ${org.code}` : "Sin cÃ³digo definido"}
+                {org.code ? t("auth.selection.code", { code: org.code }) : t("auth.selection.noCode")}
               </div>
             </div>
             {org.role && (

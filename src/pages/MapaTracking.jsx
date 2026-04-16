@@ -1,5 +1,6 @@
 // src/pages/MapaTracking.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { supabase } from "../lib/supabaseClient";
@@ -35,6 +36,7 @@ function colorForUser(userId) {
 }
 
 export default function MapaTracking() {
+  const { t } = useTranslation();
   const [latest, setLatest] = useState([]);     // [{user_id, lat, lng, accuracy, ts}]
   const [tracks, setTracks] = useState({});     // { user_id: [{lat,lng,ts}, ...] }
   const [windowMin, setWindowMin] = useState(30);
@@ -115,14 +117,14 @@ export default function MapaTracking() {
     <div style={{ height: "calc(100vh - 64px)" }}>
       {/* Controles */}
       <div style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 8px 0 8px" }}>
-        <label>Rastro: </label>
+        <label>{t("tracker.history.traceLabel")}: </label>
         <select value={windowMin} onChange={(e) => setWindowMin(parseInt(e.target.value, 10))}>
           <option value={15}>15 min</option>
           <option value={30}>30 min</option>
           <option value={60}>60 min</option>
         </select>
-        <button onClick={() => { loadLatest(); loadTracks(windowMin); }}>Refrescar</button>
-        {loading && <span style={{ fontSize: 12, opacity: 0.7 }}>Cargando…</span>}
+        <button onClick={() => { loadLatest(); loadTracks(windowMin); }}>{t("common.actions.refresh")}</button>
+        {loading && <span style={{ fontSize: 12, opacity: 0.7 }}>{t("common.actions.loading")}</span>}
       </div>
 
       <MapContainer

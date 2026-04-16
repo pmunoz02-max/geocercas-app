@@ -1,6 +1,7 @@
 ﻿// src/components/AuthGuard.jsx
 import React, { useRef } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuthSafe } from "@/auth/AuthProvider.jsx";
 import { isTrackerGpsPath } from "@/lib/trackerFlow";
 
@@ -10,6 +11,7 @@ console.log("[TG AUTHGUARD MARKER]", window.__TG_AUTHGUARD_MARKER);
 
 export default function AuthGuard({ children }) {
   const location = useLocation();
+  const { t } = useTranslation();
 
   // BYPASS: Allow tracker routes to skip all auth checks
   if (
@@ -48,7 +50,7 @@ export default function AuthGuard({ children }) {
     console.log("[AuthGuard] Still loading or not initialized", { loading, initialized, user });
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-sm text-slate-500">Cargando...</div>
+        <div className="text-sm text-slate-500">{t("common.actions.loading")}</div>
       </div>
     );
   }

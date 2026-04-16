@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 
 type Props = {
@@ -20,6 +21,7 @@ export default function UpgradeToProButton({
   plan = "PRO",
   onStarted,
 }: Props) {
+  const { t } = useTranslation();
   const [orgInput, setOrgInput] = useState<string>(
     () => localStorage.getItem("gc_active_org_id") || ""
   );
@@ -41,7 +43,7 @@ export default function UpgradeToProButton({
     setMsg(null);
 
     if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
-      setMsg("Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí.");
+      setMsg(t("billing.upgrade.errors.invalidOrgId"));
       return;
     }
 
@@ -115,30 +117,30 @@ export default function UpgradeToProButton({
         <div>
           <div className="text-lg font-bold text-slate-900">Geocercas PRO</div>
           <div className="text-sm text-slate-700">
-            USD $29/mes · Paddle (Preview)
+            {t("billing.upgrade.priceLabel")}
           </div>
         </div>
 
         <div className="text-sm text-slate-800">
-          <b>Org ID:</b>{" "}
+          <b>{t("billing.upgrade.orgIdLabel")}:</b>{" "}
           <span className="font-mono break-all text-slate-900">
-            {resolvedOrgId || "(no resuelta)"}
+            {resolvedOrgId || t("billing.upgrade.notResolved")}
           </span>
         </div>
 
         {!orgId && (
           <div className="flex flex-col gap-2">
             <label className="text-sm font-medium text-slate-900">
-              Organization ID (org_id)
+              {t("billing.upgrade.organizationInputLabel")}
             </label>
             <input
               value={orgInput}
               onChange={(e) => setOrgInput(e.target.value)}
-              placeholder="Ej: ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a"
+              placeholder={t("billing.upgrade.organizationInputPlaceholder")}
               className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
             />
             <div className="text-xs text-slate-600">
-              Si no se detecta automáticamente, pega aquí el UUID de la organización.
+              {t("billing.upgrade.organizationInputHelp")}
             </div>
           </div>
         )}
@@ -149,12 +151,12 @@ export default function UpgradeToProButton({
           disabled={disabled}
           className="rounded-xl bg-slate-900 px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? "Procesando..." : "Suscribirme a PRO"}
+          {isLoading ? t("billing.upgrade.processing") : t("billing.upgrade.subscribe")}
         </button>
 
         {msg && (
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <div className="font-semibold">Aviso</div>
+            <div className="font-semibold">{t("billing.upgrade.noticeTitle")}</div>
             <div className="mt-1 whitespace-pre-wrap break-words">{msg}</div>
           </div>
         )}
