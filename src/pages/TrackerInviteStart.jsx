@@ -149,11 +149,7 @@ export default function TrackerInviteStart() {
     }
   }, [inviteToken, orgId]);
 
-  const authToken =
-    inviteToken ||
-    localStorage.getItem("inviteToken") ||
-    sessionStorage.getItem("inviteToken") ||
-    (typeof window !== "undefined" ? window.runtimeInviteToken || null : null);
+  const authToken = inviteToken || null;
 
   const resolvedOrgId =
     orgId ||
@@ -239,6 +235,12 @@ export default function TrackerInviteStart() {
       setSubmitting(true);
       setAcceptError("");
       setStatus("accepting");
+
+      // Limpiar storage para evitar contaminación futura
+      localStorage.removeItem("inviteToken");
+      sessionStorage.removeItem("inviteToken");
+
+      console.log("inviteToken usado:", authToken);
 
       const response = await fetch("/api/accept-tracker-invite", {
         method: "POST",
