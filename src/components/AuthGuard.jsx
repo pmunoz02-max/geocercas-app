@@ -45,15 +45,10 @@ export default function AuthGuard({ children }) {
   const { loading, initialized, user } = auth;
 
   if (!initialized || loading) {
-    // Show visible debug info while loading
     console.log("[AuthGuard] Still loading or not initialized", { loading, initialized, user });
     return (
-      <div style={{ padding: 16, color: '#fff', background: '#222', fontSize: 14 }}>
-        <b>[AuthGuard] Loading…</b>
-        <div>loading: {String(loading)}</div>
-        <div>initialized: {String(initialized)}</div>
-        <div>user: {user ? JSON.stringify(user) : "null"}</div>
-        <div>location: {location.pathname}</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-sm text-slate-500">Cargando...</div>
       </div>
     );
   }
