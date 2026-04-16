@@ -155,26 +155,6 @@ try {
   }
 } catch {}
 
-// Hook pushState / replaceState
-try {
-  if (typeof window !== "undefined" && window.history) {
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-
-    window.history.pushState = function (...args) {
-      const ret = originalPushState.apply(window.history, args);
-      syncFromUrl();
-      return ret;
-    };
-
-    window.history.replaceState = function (...args) {
-      const ret = originalReplaceState.apply(window.history, args);
-      syncFromUrl();
-      return ret;
-    };
-  }
-} catch {}
-
 /* =========================
    Persistencia al cambiar idioma
 ========================= */
