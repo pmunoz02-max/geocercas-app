@@ -373,6 +373,7 @@
       "save": "Enregistrer",
       "yes": "Oui"
     },
+    "back": "Retour",
     "createOrganization": "Créer une organisation",
     "fallbacks": {
       "noAuth": "Non authentifié",
@@ -884,8 +885,30 @@
       ]
     },
     "changelog": {
-      "title": "Historial de cambios",
-      "subtitle": "Mejoras y actualizaciones recientes de la aplicación.",
+      "breadcrumb": "Centre d’aide / Journal des modifications",
+      "back": "Retour",
+      "title": "Journal des modifications",
+      "subtitle": "Améliorations récentes et mises à jour de l’application.",
+      "goHome": "Aller à l’accueil",
+      "releases": [
+        {
+          "version": "v1.2.0 · 2026-04",
+          "items": [
+            "Amélioration du flux d’invitation des trackers",
+            "Suivi plus stable et plus fiable",
+            "Interface plus claire et plus cohérente",
+            "Correction d’erreurs lors de l’activation du suivi"
+          ]
+        },
+        {
+          "version": "v1.1.0 · 2026-03",
+          "items": [
+            "Système de géofences amélioré",
+            "Optimisation des performances",
+            "Améliorations de la connexion et de la gestion de session"
+          ]
+        }
+      ],
       "items": [
         {
           "version": "v1.2.0",

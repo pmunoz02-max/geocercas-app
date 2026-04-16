@@ -373,6 +373,7 @@
       "save": "Guardar",
       "yes": "Sí"
     },
+    "back": "Volver",
     "createOrganization": "Crear organización",
     "fallbacks": {
       "noAuth": "No autenticado",
@@ -884,8 +885,30 @@
       ]
     },
     "changelog": {
+      "breadcrumb": "Centro de Ayuda / Historial de cambios",
+      "back": "Volver",
       "title": "Historial de cambios",
       "subtitle": "Mejoras y actualizaciones recientes de la aplicación.",
+      "goHome": "Ir a Inicio",
+      "releases": [
+        {
+          "version": "v1.2.0 · 2026-04",
+          "items": [
+            "Mejora en el flujo de invitación de trackers",
+            "Seguimiento más estable y confiable",
+            "Nueva interfaz más clara y consistente",
+            "Corrección de errores en activación de seguimiento"
+          ]
+        },
+        {
+          "version": "v1.1.0 · 2026-03",
+          "items": [
+            "Sistema de geocercas mejorado",
+            "Optimización de rendimiento",
+            "Mejoras en inicio de sesión y manejo de sesión"
+          ]
+        }
+      ],
       "items": [
         {
           "version": "v1.2.0",

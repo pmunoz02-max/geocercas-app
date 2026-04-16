@@ -373,6 +373,7 @@
       "save": "Save",
       "yes": "Yes"
     },
+    "back": "Back",
     "createOrganization": "Create organization",
     "fallbacks": {
       "noAuth": "Not authenticated",
@@ -884,8 +885,30 @@
       ]
     },
     "changelog": {
-      "title": "Historial de cambios",
-      "subtitle": "Mejoras y actualizaciones recientes de la aplicación.",
+      "breadcrumb": "Help Center / Changelog",
+      "back": "Back",
+      "title": "Changelog",
+      "subtitle": "Recent improvements and application updates.",
+      "goHome": "Go to Home",
+      "releases": [
+        {
+          "version": "v1.2.0 · 2026-04",
+          "items": [
+            "Improved tracker invitation flow",
+            "More stable and reliable tracking",
+            "Clearer and more consistent interface",
+            "Bug fixes for tracking activation"
+          ]
+        },
+        {
+          "version": "v1.1.0 · 2026-03",
+          "items": [
+            "Improved geofence system",
+            "Performance optimization",
+            "Login and session handling improvements"
+          ]
+        }
+      ],
       "items": [
         {
           "version": "v1.2.0",

@@ -6,10 +6,8 @@ export default function ChangelogPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
-  const versions = t("help.changelog.items", {
-    returnObjects: true,
-    defaultValue: [],
-  });
+  const releasesRaw = t("help.changelog.releases", { returnObjects: true });
+  const versions = Array.isArray(releasesRaw) ? releasesRaw : [];
 
   const badgeLabel = (type) => {
     if (type === "feature") return t("help.changelog.badges.feature");
@@ -24,7 +22,7 @@ export default function ChangelogPage() {
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <div className="text-xs text-slate-500">
-            {t("help.common.breadcrumb")} / {t("help.changelog.title")}
+            {t("help.changelog.breadcrumb")}
           </div>
           <h1 className="mt-1 text-2xl font-semibold">
             {t("help.changelog.title")}
@@ -39,13 +37,13 @@ export default function ChangelogPage() {
             onClick={() => navigate(-1)}
             className="rounded-xl border px-3 py-2 text-sm"
           >
-            {t("help.common.back")}
+            {t("help.changelog.back")}
           </button>
           <button
             onClick={() => navigate("/inicio")}
             className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white"
           >
-            {t("help.common.goHome")}
+            {t("help.changelog.goHome")}
           </button>
         </div>
       </div>
@@ -58,11 +56,11 @@ export default function ChangelogPage() {
             className="rounded-2xl border bg-white p-4 shadow-sm"
           >
             <div className="mb-3 text-sm text-slate-500">
-              {v.version} · {v.date}
+              {v.date ? `${v.version} · ${v.date}` : v.version}
             </div>
 
             <div className="space-y-4">
-              {(v.changes || []).map((c, ci) => {
+              {(Array.isArray(v?.changes) ? v.changes : (v?.items || [])).map((c, ci) => {
                 const isSimple = typeof c === "string";
 
                 if (isSimple) {
