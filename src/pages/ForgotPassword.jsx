@@ -99,7 +99,9 @@ export default function ForgotPassword() {
           <Link to={`/login?next=${encodeURIComponent(next)}`} className={linkClass}>
             {t("forgot.back", { defaultValue: "Back to Login" })}
           </Link>
-          <LanguageSwitcher />
+          <div className="relative z-50">
+            <LanguageSwitcher />
+          </div>
         </div>
 
         <div className="bg-slate-900/70 p-10 rounded-[2.25rem] border border-slate-800 shadow-2xl">

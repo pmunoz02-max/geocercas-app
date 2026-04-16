@@ -978,7 +978,7 @@
     "badge": "(LOGIN-V31 NO-JS)",
     "email": "Email",
     "emailLabel": "E-mail address",
-    "emailPlaceholder": "tucorreo@ejemplo.com",
+    "emailPlaceholder": "your.email@example.com",
     "errorInvalidCredentials": "Invalid credentials.",
     "errorMagicLink": "The magic link could not be sent.",
     "errorMagicLinkUnexpected": "Unexpected error when sending the magic link.",

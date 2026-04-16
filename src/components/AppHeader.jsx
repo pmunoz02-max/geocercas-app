@@ -78,7 +78,9 @@ export default function AppHeader() {
         </Link>
 
         <div className="flex items-center gap-3 text-xs">
-          <LanguageSwitcher />
+          <div className="relative z-50">
+            <LanguageSwitcher />
+          </div>
 
           {isLogged ? (
             <>

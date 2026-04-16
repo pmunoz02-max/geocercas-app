@@ -161,7 +161,9 @@ export default function Landing() {
                   {t("landing.brandName")}
                 </h1>
 
-                <LanguageSwitcher />
+                <div className="relative z-50">
+                  <LanguageSwitcher />
+                </div>
               </div>
 
               {/* Antes decía "Bienvenido..." hardcodeado */}
