@@ -107,6 +107,12 @@ i18n.use(initReactI18next).init({
   load: "languageOnly",
   nonExplicitSupportedLngs: true,
 
+  detection: {
+    order: ["querystring", "localStorage", "navigator"],
+    lookupQuerystring: "lang",
+    caches: ["localStorage"],
+  },
+
   interpolation: {
     escapeValue: false,
   },

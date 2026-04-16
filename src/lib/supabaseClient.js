@@ -82,6 +82,9 @@ const RAW_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const SUPABASE_URL = normUrl(RAW_SUPABASE_URL);
 export const SUPABASE_ANON_KEY = String(RAW_SUPABASE_ANON_KEY || "").trim();
+const HAS_REQUIRED_SUPABASE_ENV = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const SAFE_SUPABASE_URL = SUPABASE_URL || "https://invalid.supabase.co";
+const SAFE_SUPABASE_ANON_KEY = SUPABASE_ANON_KEY || "invalid-anon-key";
 
 // TEMP DEBUG
 console.info("[SUPABASE ENV DEBUG]", {
@@ -90,15 +93,15 @@ console.info("[SUPABASE ENV DEBUG]", {
   anonLength: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.length : 0,
 });
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  throw new Error("[supabaseClient] Faltan VITE_SUPABASE_URL o VITE_SUPABASE_ANON_KEY en el build.");
+if (!HAS_REQUIRED_SUPABASE_ENV) {
+  console.warn("[supabaseClient] Missing env vars");
 }
 
-if (!isSupabaseUrl(SUPABASE_URL)) {
+if (HAS_REQUIRED_SUPABASE_ENV && !isSupabaseUrl(SUPABASE_URL)) {
   throw new Error(`[supabaseClient] Supabase URL inválida: ${SUPABASE_URL}`);
 }
 
-const currentRef = projectRefFromUrl(SUPABASE_URL);
+const currentRef = projectRefFromUrl(SAFE_SUPABASE_URL);
 const envKind = detectEnvKind();
 const EXPECTED_PROJECT_REF = expectedRefByHostname(currentRef);
 
@@ -130,7 +133,9 @@ function assertRefSafety() {
   throw new Error(message);
 }
 
-assertRefSafety();
+if (HAS_REQUIRED_SUPABASE_ENV) {
+  assertRefSafety();
+}
 
 // ✅ Token en memoria (para adjuntar Bearer si hace falta)
 let __memoryAccessToken = null;
@@ -163,7 +168,7 @@ const wrappedFetch = async (url, options = {}) => {
 const browserStorage =
   typeof window !== "undefined" && window?.localStorage ? window.localStorage : undefined;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(SAFE_SUPABASE_URL, SAFE_SUPABASE_ANON_KEY, {
   auth: {
     flowType: "pkce",
     detectSessionInUrl: false,
