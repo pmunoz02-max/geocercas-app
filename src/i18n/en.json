@@ -305,7 +305,7 @@
       "edit": "Editar",
       "loading": "Cargando...",
       "no": "No",
-      "logout": "Cerrar sesión",
+      "logout": "Log out",
       "processing": "Saliendo...",
       "save": "Guardar",
       "yes": "Sí"
@@ -777,16 +777,16 @@
   },
   "home": {
     "goToLogin": "Ir a iniciar sesión",
-    "goDashboard": "Ir al panel",
+    "goDashboard": "Go to dashboard",
     "deleteAccount": "Eliminar cuenta",
     "help": {
       "faq": "Preguntas frecuentes",
       "faqDesc": "Respuestas a las dudas más comunes.",
       "news": "Novedades",
       "newsDesc": "Cambios, mejoras y actualizaciones recientes.",
-      "quick": "Guía rápida",
+      "quick": "Quick guide",
       "quickDesc": "Aprende cómo usar la app paso a paso.",
-      "support": "Soporte",
+      "support": "Support",
       "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
       "title": "Centro de ayuda"
     },
@@ -906,10 +906,10 @@
       "withRole": "con el rol"
     },
     "billing": {
-      "managePlan": "Administrar plan",
-      "managePlanBody": "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
-      "goToBilling": "Ir a Billing",
-      "previewNote": "Nota: PREVIEW/TEST. No afecta producción."
+      "managePlan": "Manage plan",
+      "managePlanBody": "You can go to the Billing page to view and manage your subscription.",
+      "goToBilling": "Go to Billing",
+      "previewNote": "Note: PREVIEW/TEST. Does not affect production."
     }
   },
   "inviteTracker": {
