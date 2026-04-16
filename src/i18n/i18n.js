@@ -94,7 +94,14 @@ i18n.use(initReactI18next).init({
   },
 
   lng: initialLang,
-  fallbackLng: "es",
+
+  fallbackLng: (code) => {
+    const lang = String(code || "es").toLowerCase().slice(0, 2);
+
+    if (lang === "fr") return ["fr", "en", "es"];
+    if (lang === "en") return ["en", "es"];
+    return ["es"];
+  },
 
   supportedLngs: SUPPORTED,
   load: "languageOnly",
@@ -106,6 +113,16 @@ i18n.use(initReactI18next).init({
 
   react: {
     useSuspense: false,
+  },
+
+  saveMissing: true,
+
+  missingKeyHandler: function (lng, ns, key) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        `[i18n missing] lang=${lng} key=${key}`
+      );
+    }
   },
 
   returnEmptyString: false,
@@ -179,5 +196,28 @@ i18n.on("languageChanged", (lng) => {
   persistLang(code);
   setHtmlLang(code);
 });
+
+if (import.meta.env.DEV) {
+  const originalT = i18n.t.bind(i18n);
+
+  i18n.t = function (key, options = {}) {
+    const result = originalT(key, options);
+
+    const lang = i18n.language;
+    const fallbackChain = i18n.options.fallbackLng(lang);
+
+    for (const fallbackLang of fallbackChain) {
+      const exists = i18n.exists(key, { lng: fallbackLang });
+      if (exists && fallbackLang !== lang) {
+        console.warn(
+          `[i18n fallback] ${lang} -> ${fallbackLang} | key: ${key}`
+        );
+        break;
+      }
+    }
+
+    return result;
+  };
+}
 
 export default i18n;
