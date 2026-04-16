@@ -128,34 +128,6 @@ i18n.use(initReactI18next).init({
 });
 
 /* =========================
-   Sync con URL (?lang=)
-========================= */
-
-function syncFromUrl() {
-  try {
-    if (typeof window === "undefined") return;
-
-    const urlLang = readUrlLang();
-    if (!urlLang) return;
-
-    const current = String(i18n.language || "es").toLowerCase().slice(0, 2);
-    if (urlLang === current) return;
-
-    i18n.changeLanguage(urlLang);
-  } catch {}
-}
-
-// Inicial
-syncFromUrl();
-
-// Back / forward
-try {
-  if (typeof window !== "undefined") {
-    window.addEventListener("popstate", syncFromUrl);
-  }
-} catch {}
-
-/* =========================
    Persistencia al cambiar idioma
 ========================= */
 
