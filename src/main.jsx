@@ -10,11 +10,9 @@ import "./index.css";
 import App from "./App.jsx";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <I18nextProvider i18n={i18n}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </I18nextProvider>
-  </React.StrictMode>
+  <I18nextProvider i18n={i18n}>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </I18nextProvider>
 );
