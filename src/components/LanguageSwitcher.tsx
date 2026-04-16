@@ -45,16 +45,48 @@ export default function LanguageSwitcher() {
     };
   }, [i18n]);
 
+  useEffect(() => {
+    const onChanged = (lng: unknown) => {
+      console.log("[LANG_SWITCH] languageChanged event", lng);
+    };
+
+    i18n?.on?.("languageChanged", onChanged);
+    return () => {
+      i18n?.off?.("languageChanged", onChanged);
+    };
+  }, [i18n]);
+
   const handle = async (code: string) => {
     try {
-      if (!SUPPORTED.has(code)) return;
-      if (code === current) return;
+      console.log("[LANG_SWITCH] click", {
+        code,
+        current,
+        i18nLanguage: i18n.language,
+        resolvedLanguage: i18n.resolvedLanguage,
+      });
+
+      if (!SUPPORTED.has(code)) {
+        console.warn("[LANG_SWITCH] unsupported", code);
+        return;
+      }
+
+      if (code === current) {
+        console.warn("[LANG_SWITCH] already current", code);
+        return;
+      }
 
       await i18n.changeLanguage(code);
+
+      console.log("[LANG_SWITCH] changed", {
+        code,
+        i18nLanguage: i18n.language,
+        resolvedLanguage: i18n.resolvedLanguage,
+      });
+
       setUrlLang(code);
       setCurrent(code);
     } catch (error) {
-      console.error("Language switch failed:", error);
+      console.error("[LANG_SWITCH] failed", error);
     }
   };
 
