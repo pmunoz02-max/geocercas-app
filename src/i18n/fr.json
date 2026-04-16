@@ -904,6 +904,12 @@
       "orgIdLabel": "ID de organización:",
       "userLabel": "Usuario:",
       "withRole": "con el rol"
+    },
+    "billing": {
+      "managePlan": "Administrar plan",
+      "managePlanBody": "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
+      "goToBilling": "Ir a Billing",
+      "previewNote": "Nota: PREVIEW/TEST. No afecta producción."
     }
   },
   "inviteTracker": {
