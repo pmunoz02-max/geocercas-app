@@ -246,6 +246,11 @@
       "all": "todos",
       "active": "activa",
       "inactive": "inactiva"
+    },
+    "form": {
+      "select": "Sélectionner",
+      "statusActive": "Active",
+      "statusInactive": "Inactive"
     }
   },
   "auth": {
@@ -414,6 +419,36 @@
     }
   },
   "dashboard": {
+    "welcome": "Bienvenue sur App Geocercas",
+    "sessionAs": "Connecté en tant que {{role}}",
+    "deleteAccount": "Supprimer le compte",
+    "helpCenter": "Centre d'aide",
+    "adminPanel": {
+      "title": "Panneau d'administration",
+      "description": "Gérez les utilisateurs, les rôles et les organisations depuis ici.",
+      "sections": {
+        "users": "Utilisateurs",
+        "roles": "Rôles",
+        "organizations": "Organisations"
+      },
+      "columns": {
+        "name": "Nom",
+        "email": "Email",
+        "role": "Rôle",
+        "createdAt": "Date de création",
+        "description": "Description"
+      }
+    },
+    "adminTools": {
+      "title": "Outils d'administration",
+      "protectedPanel": "Sélectionnez un module pour administrer votre application. Ce panneau est réservé aux utilisateurs ayant le rôle owner ou admin."
+    },
+    "administracion": {
+      "title": "Administration"
+    },
+    "adminReportes": {
+      "title": "Rapports"
+    },
     "cards": {
       "totalCost": "Costo total",
       "totalGeofences": "Geocercas",
@@ -527,6 +562,7 @@
     "lat": "Lat",
     "lng": "Lng",
     "loadingDataset": "Cargando dataset...",
+    "loadingGeofence": "Chargement de la géofence…",
     "modalDraw": "Draw",
     "modalHintRule": "1 point = small square | 2 points = rectangle | 3+ = polygon",
     "modalInstruction": "Format:",
@@ -1105,7 +1141,23 @@
     "sendMagic": "Send magic link",
     "statusOnline": "Sistema en línea",
     "support": "Support",
-    "zonesActive": "Zonas activas"
+    "zonesActive": "Zonas activas",
+    "feature1Title": "Supervision du personnel",
+    "feature1Body": "Visualisez qui est en route, qui est arrivé et qui a quitté une zone opérationnelle.",
+    "feature2Title": "Contrôle par zones",
+    "feature2Body": "Définissez des géofences pour des sièges, itinéraires, clients ou zones sensibles et obtenez un contexte visuel immédiat.",
+    "feature3Title": "Événements d'entrée et de sortie",
+    "feature3Body": "Convertissez les positions GPS en événements faciles à examiner pour l'opération, l'audit et le suivi.",
+    "feature4Title": "Prêt pour les équipes terrain",
+    "feature4Body": "Utilisez-le dans des opérations commerciales, techniques, logistiques ou de supervision territoriale.",
+    "useCase1Title": "Sécurité privée",
+    "useCase1Body": "Contrôlez les rondes de gardiens, les entrées dans les zones restreintes et la supervision des équipes.",
+    "useCase2Title": "Équipes commerciales",
+    "useCase2Body": "Vérifiez les visites clients, la couverture territoriale et l'activité des vendeurs.",
+    "useCase3Title": "Opérations techniques",
+    "useCase3Body": "Supervisez les techniciens de terrain et validez les entrées et sorties dans les zones de travail.",
+    "useCase4Title": "Logistique urbaine",
+    "useCase4Body": "Surveillez les mouvements dans les zones opérationnelles et détectez les événements automatiquement."
   },
   "login": {
     "advancedOptions": "Options avancées",
@@ -1172,6 +1224,19 @@
     "subtitle": "Accédez à votre compte App Geocercas",
     "title": "Se connecter",
     "userNotAuthorized": "Cet e-mail n'est pas autorisé. Demandez une invitation à l'administrateur."
+  },
+  "orgs": {
+    "title": "Organisations",
+    "myTitle": "Mes organisations",
+    "createNew": "Créer une nouvelle organisation",
+    "newTitle": "Nouvelle organisation",
+    "form": {
+      "name": "Nom",
+      "slugOptional": "Slug (facultatif)",
+      "namePlaceholder": "Ex. Ferme principale",
+      "slugPlaceholder": "ex. ferme-principale",
+      "create": "Créer"
+    }
   },
   "personal": {
     "bannerCreated": "Personal creado exitosamente.",
@@ -1352,6 +1417,21 @@
     "updateUnexpected": "Error inesperado al actualizar la contraseña."
   },
   "tracker": {
+    "page": {
+      "title": "Tracker GPS"
+    },
+    "attendance": {
+      "title": "Journal de présences",
+      "noRecords": "Aucun enregistrement",
+      "checkIn": "✅ Entrée",
+      "checkOut": "🚪 Sortie",
+      "columns": {
+        "user": "Utilisateur",
+        "geofence": "Géofence",
+        "event": "Événement",
+        "datetime": "Date et heure"
+      }
+    },
     "panel": {
       "title": "Panneau du tracker",
       "statusActive": "Actif",
@@ -1678,6 +1758,12 @@
     }
   },
   "billing": {
+    "cancel": {
+      "title": "Paiement annulé",
+      "subtitle": "Aucun paiement n'a été effectué.",
+      "backToBilling": "Retour à la facturation",
+      "goHome": "Aller à l'accueil"
+    },
     "title": "Facturación",
     "authRequired": "Inicia sesión para administrar tu plan.",
     "previewNotice": {

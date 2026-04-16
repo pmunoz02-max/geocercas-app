@@ -246,6 +246,11 @@
       "all": "todos",
       "active": "activa",
       "inactive": "inactiva"
+    },
+    "form": {
+      "select": "Seleccionar",
+      "statusActive": "Activa",
+      "statusInactive": "Inactiva"
     }
   },
   "auth": {
@@ -414,6 +419,36 @@
     }
   },
   "dashboard": {
+    "welcome": "Bienvenido a App Geocercas",
+    "sessionAs": "Sesión iniciada como {{role}}",
+    "deleteAccount": "Eliminar cuenta",
+    "helpCenter": "Centro de ayuda",
+    "adminPanel": {
+      "title": "Panel de Administración",
+      "description": "Gestione usuarios, roles y organizaciones desde aquí.",
+      "sections": {
+        "users": "Usuarios",
+        "roles": "Roles",
+        "organizations": "Organizaciones"
+      },
+      "columns": {
+        "name": "Nombre",
+        "email": "Email",
+        "role": "Rol",
+        "createdAt": "Fecha Creación",
+        "description": "Descripción"
+      }
+    },
+    "adminTools": {
+      "title": "Herramientas de administrador",
+      "protectedPanel": "Selecciona un módulo para administrar tu app. Este panel está protegido para usuarios con rol owner o admin."
+    },
+    "administracion": {
+      "title": "Administración"
+    },
+    "adminReportes": {
+      "title": "Reportes"
+    },
     "cards": {
       "totalCost": "Costo total",
       "totalGeofences": "Geocercas",
@@ -527,6 +562,7 @@
     "lat": "Lat",
     "lng": "Lng",
     "loadingDataset": "Cargando dataset...",
+    "loadingGeofence": "Cargando geocerca…",
     "modalDraw": "Draw",
     "modalHintRule": "1 point = small square | 2 points = rectangle | 3+ = polygon",
     "modalInstruction": "Format:",
@@ -1105,7 +1141,23 @@
     "sendMagic": "Send magic link",
     "statusOnline": "Sistema en línea",
     "support": "Support",
-    "zonesActive": "Zonas activas"
+    "zonesActive": "Zonas activas",
+    "feature1Title": "Supervisión de personal",
+    "feature1Body": "Visualiza quién está en ruta, quién llegó y quién salió de un área operativa.",
+    "feature2Title": "Control por zonas",
+    "feature2Body": "Define geocercas para sedes, rutas, clientes o áreas sensibles y recibe contexto visual inmediato.",
+    "feature3Title": "Eventos de entrada y salida",
+    "feature3Body": "Convierte posiciones GPS en eventos fáciles de revisar para operación, auditoría y seguimiento.",
+    "feature4Title": "Listo para equipos en campo",
+    "feature4Body": "Úsalo en operaciones comerciales, técnicas, logísticas o de supervisión territorial.",
+    "useCase1Title": "Seguridad privada",
+    "useCase1Body": "Controla rondas de guardias, entradas a zonas restringidas y supervisión de turnos.",
+    "useCase2Title": "Equipos comerciales",
+    "useCase2Body": "Verifica visitas a clientes, cobertura territorial y actividad de vendedores.",
+    "useCase3Title": "Operaciones técnicas",
+    "useCase3Body": "Supervisa técnicos en campo y valida entradas y salidas en zonas de trabajo.",
+    "useCase4Title": "Logística urbana",
+    "useCase4Body": "Monitorea movimientos dentro de zonas operativas y detecta eventos automáticamente."
   },
   "login": {
     "advancedOptions": "Opciones avanzadas",
@@ -1172,6 +1224,19 @@
     "subtitle": "Accede a tu cuenta de App Geocercas",
     "title": "Iniciar sesión",
     "userNotAuthorized": "Este correo no está autorizado. Solicita una invitación al administrador."
+  },
+  "orgs": {
+    "title": "Organizaciones",
+    "myTitle": "Mis Organizaciones",
+    "createNew": "Crear nueva organización",
+    "newTitle": "Nueva organización",
+    "form": {
+      "name": "Nombre",
+      "slugOptional": "Slug (opcional)",
+      "namePlaceholder": "Ej. Finca Principal",
+      "slugPlaceholder": "ej. mi-finca-principal",
+      "create": "Crear"
+    }
   },
   "personal": {
     "bannerCreated": "Personal creado exitosamente.",
@@ -1352,6 +1417,21 @@
     "updateUnexpected": "Error inesperado al actualizar la contraseña."
   },
   "tracker": {
+    "page": {
+      "title": "Tracker GPS"
+    },
+    "attendance": {
+      "title": "Registro de asistencias",
+      "noRecords": "Sin registros",
+      "checkIn": "✅ Entrada",
+      "checkOut": "🚪 Salida",
+      "columns": {
+        "user": "Usuario",
+        "geofence": "Geocerca",
+        "event": "Evento",
+        "datetime": "Fecha y hora"
+      }
+    },
     "panel": {
       "title": "Panel del tracker",
       "statusActive": "Activo",
@@ -1678,6 +1758,12 @@
     }
   },
   "billing": {
+    "cancel": {
+      "title": "Checkout cancelado",
+      "subtitle": "No se realizó ningún cobro.",
+      "backToBilling": "Volver a Billing",
+      "goHome": "Ir a Inicio"
+    },
     "title": "Facturación",
     "authRequired": "Inicia sesión para administrar tu plan.",
     "previewNotice": {

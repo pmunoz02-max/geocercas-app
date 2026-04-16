@@ -88,7 +88,7 @@ export default function Inicio() {
       <div className="min-h-[60vh] flex items-center justify-center px-6">
         <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <h1 className="text-xl font-semibold text-slate-900">
-            {t("home.loginTitle", { defaultValue: "Bienvenido" })}
+            {t("dashboard.welcome")}
           </h1>
 
           <p className="mt-2 text-slate-600">
@@ -211,11 +211,11 @@ export default function Inicio() {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">
-              {t("home.welcome", { defaultValue: "Bienvenido a App Geocercas" })}
+              {t("dashboard.welcome")}
             </h1>
 
             <p className="text-slate-600 mt-2">
-              {t("home.sessionAs", { defaultValue: "Sesión iniciada como" })} <b>{roleLower}</b>
+              {t("dashboard.sessionAs", { role: roleLower })}
             </p>
 
             <div className="mt-4 text-sm text-slate-700 space-y-1">
@@ -257,7 +257,7 @@ export default function Inicio() {
               onClick={() => navigate("/settings/delete-account")}
               type="button"
             >
-              {t("home.deleteAccount", { defaultValue: "Eliminar cuenta" })}
+              {t("dashboard.deleteAccount")}
             </button>
 
             <button
@@ -319,7 +319,7 @@ export default function Inicio() {
       {/* Centro de ayuda */}
       <div>
         <h2 className="text-xl font-semibold text-slate-900 mb-4">
-          {t("home.help.title", { defaultValue: "Centro de ayuda" })}
+          {t("dashboard.helpCenter")}
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

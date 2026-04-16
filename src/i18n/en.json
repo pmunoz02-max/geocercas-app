@@ -246,6 +246,11 @@
       "all": "todos",
       "active": "activa",
       "inactive": "inactiva"
+    },
+    "form": {
+      "select": "Select",
+      "statusActive": "Active",
+      "statusInactive": "Inactive"
     }
   },
   "auth": {
@@ -414,6 +419,36 @@
     }
   },
   "dashboard": {
+    "welcome": "Welcome to App Geocercas",
+    "sessionAs": "Signed in as {{role}}",
+    "deleteAccount": "Delete account",
+    "helpCenter": "Help center",
+    "adminPanel": {
+      "title": "Admin Panel",
+      "description": "Manage users, roles and organizations from here.",
+      "sections": {
+        "users": "Users",
+        "roles": "Roles",
+        "organizations": "Organizations"
+      },
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "createdAt": "Created At",
+        "description": "Description"
+      }
+    },
+    "adminTools": {
+      "title": "Administrator tools",
+      "protectedPanel": "Select a module to manage your app. This panel is restricted to users with owner or admin role."
+    },
+    "administracion": {
+      "title": "Administration"
+    },
+    "adminReportes": {
+      "title": "Reports"
+    },
     "cards": {
       "totalCost": "Costo total",
       "totalGeofences": "Geocercas",
@@ -527,6 +562,7 @@
     "lat": "Lat",
     "lng": "Lng",
     "loadingDataset": "Cargando dataset...",
+    "loadingGeofence": "Loading geofence…",
     "modalDraw": "Draw",
     "modalHintRule": "1 point = small square | 2 points = rectangle | 3+ = polygon",
     "modalInstruction": "Format:",
@@ -1105,7 +1141,23 @@
     "sendMagic": "Send magic link",
     "statusOnline": "Sistema en línea",
     "support": "Support",
-    "zonesActive": "Zonas activas"
+    "zonesActive": "Zonas activas",
+    "feature1Title": "Personnel monitoring",
+    "feature1Body": "See who is on route, who arrived and who left an operational area.",
+    "feature2Title": "Zone control",
+    "feature2Body": "Define geofences for offices, routes, clients or sensitive areas and get immediate visual context.",
+    "feature3Title": "Entry and exit events",
+    "feature3Body": "Turn GPS positions into easy-to-review events for operations, auditing and tracking.",
+    "feature4Title": "Ready for field teams",
+    "feature4Body": "Use it in commercial, technical, logistics or territorial supervision operations.",
+    "useCase1Title": "Private security",
+    "useCase1Body": "Monitor guard rounds, entries to restricted areas and shift supervision.",
+    "useCase2Title": "Commercial teams",
+    "useCase2Body": "Verify customer visits, territorial coverage and sales activity.",
+    "useCase3Title": "Technical operations",
+    "useCase3Body": "Supervise field technicians and validate entry and exit in work zones.",
+    "useCase4Title": "Urban logistics",
+    "useCase4Body": "Monitor movements within operational zones and detect events automatically."
   },
   "login": {
     "advancedOptions": "Advanced options",
@@ -1172,6 +1224,19 @@
     "subtitle": "Access your App Geocercas account",
     "title": "Sign in",
     "userNotAuthorized": "This email is not authorized. Request an invite from the administrator."
+  },
+  "orgs": {
+    "title": "Organizations",
+    "myTitle": "My Organizations",
+    "createNew": "Create new organization",
+    "newTitle": "New organization",
+    "form": {
+      "name": "Name",
+      "slugOptional": "Slug (optional)",
+      "namePlaceholder": "E.g. Main Farm",
+      "slugPlaceholder": "e.g. main-farm",
+      "create": "Create"
+    }
   },
   "personal": {
     "bannerCreated": "Personal creado exitosamente.",
@@ -1352,6 +1417,21 @@
     "updateUnexpected": "Error inesperado al actualizar la contraseña."
   },
   "tracker": {
+    "page": {
+      "title": "GPS Tracker"
+    },
+    "attendance": {
+      "title": "Attendance log",
+      "noRecords": "No records",
+      "checkIn": "✅ Check in",
+      "checkOut": "🚪 Check out",
+      "columns": {
+        "user": "User",
+        "geofence": "Geofence",
+        "event": "Event",
+        "datetime": "Date and time"
+      }
+    },
     "panel": {
       "title": "Tracker panel",
       "statusActive": "Active",
@@ -1678,6 +1758,12 @@
     }
   },
   "billing": {
+    "cancel": {
+      "title": "Checkout cancelled",
+      "subtitle": "No charge was made.",
+      "backToBilling": "Back to Billing",
+      "goHome": "Go to Home"
+    },
     "title": "Facturación",
     "authRequired": "Inicia sesión para administrar tu plan.",
     "previewNotice": {
