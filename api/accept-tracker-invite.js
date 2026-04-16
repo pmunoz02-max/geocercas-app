@@ -29,7 +29,7 @@ function getTrackerRuntimeJwtSecret() {
   return secret;
 }
 
-function createRuntimeJwt({ trackerUserId, orgId, inviteId }) {
+function createRuntimeJwt({ trackerUserId, orgId, inviteId, frequencyMinutes }) {
   const secret = getTrackerRuntimeJwtSecret();
   const expiresInSeconds = RUNTIME_SESSION_HOURS * 60 * 60;
 
@@ -39,6 +39,7 @@ function createRuntimeJwt({ trackerUserId, orgId, inviteId }) {
       org_id: String(orgId),
       invite_id: inviteId ? String(inviteId) : null,
       type: "tracker_runtime",
+      frequency_minutes: frequencyMinutes,
     },
     secret,
     {
@@ -113,11 +114,12 @@ async function resolveTrackerUserId(supabase, invite) {
   return { trackerUserId: data.user_id, error: null };
 }
 
-async function rotateRuntimeSession(supabase, { orgId, trackerUserId, inviteId }) {
+async function rotateRuntimeSession(supabase, { orgId, trackerUserId, inviteId, frequencyMinutes }) {
   const runtimeJwt = createRuntimeJwt({
     trackerUserId,
     orgId,
     inviteId,
+    frequencyMinutes,
   });
 
   const plainToken = runtimeJwt.token;
@@ -191,12 +193,29 @@ export default async function handler(req, res) {
 
     const alreadyAccepted = !!invite.accepted_at;
 
-    // 🔥 FIX CLAVE
     if (!invite.is_active && !alreadyAccepted) {
-      return res.status(409).json({
-        ok: false,
-        message: "Invite inactive",
-      });
+      console.log("[invite] inactive, trying fallback");
+
+      const { data: latest } = await supabase
+        .from("tracker_invites")
+        .select("*")
+        .eq("email_norm", invite.email_norm)
+        .eq("org_id", invite.org_id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latest) {
+        console.log("[invite] fallback success", latest.id);
+        invite = latest;
+      } else {
+        console.log("[invite] fallback failed");
+        return res.status(409).json({
+          ok: false,
+          message: "Invite inactive",
+        });
+      }
     }
 
     if (
@@ -234,10 +253,37 @@ export default async function handler(req, res) {
         .eq("id", invite.id);
     }
 
+    const { data: assignments } = await supabase
+      .from("tracker_assignments")
+      .select("frequency_minutes, start_date, end_date, created_at")
+      .eq("org_id", invite.org_id)
+      .eq("tracker_user_id", trackerUserId)
+      .eq("active", true)
+      .order("start_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    const assignment = (assignments || []).find((a) => {
+      const startOk =
+        !a.start_date || new Date(a.start_date) <= new Date(nowIso);
+
+      const endOk =
+        !a.end_date || new Date(a.end_date) >= new Date(nowIso);
+
+      return startOk && endOk;
+    });
+
+    const rawFrequencyMinutes = Number(assignment?.frequency_minutes);
+    const frequencyMinutes =
+      Number.isFinite(rawFrequencyMinutes) && rawFrequencyMinutes >= 1
+        ? Math.floor(rawFrequencyMinutes)
+        : 1;
+
     const runtime = await rotateRuntimeSession(supabase, {
       orgId: invite.org_id,
       trackerUserId,
       inviteId: invite.id,
+      frequencyMinutes,
     });
 
     if (!runtime.ok) {
@@ -251,6 +297,7 @@ export default async function handler(req, res) {
       tracker_user_id: trackerUserId,
       org_id: invite.org_id,
       invite_id: invite.id,
+      frequency_minutes: frequencyMinutes,
       expires_at: runtime.expires_at,
     });
   } catch (e) {
