@@ -13,6 +13,57 @@ export default function SupportPage() {
     return { email, whatsapp, calendly };
   }, []);
 
+  const commonIssues = useMemo(
+    () => [
+      {
+        title: t("help.support.commonIssues.invite.title", {
+          defaultValue: "No puedo aceptar la invitación",
+        }),
+        body: t("help.support.commonIssues.invite.body", {
+          defaultValue:
+            "Abre el enlace más reciente que te enviaron. Si ya venció o aparece error, pide una nueva invitación.",
+        }),
+      },
+      {
+        title: t("help.support.commonIssues.link.title", {
+          defaultValue: "El enlace no funciona",
+        }),
+        body: t("help.support.commonIssues.link.body", {
+          defaultValue:
+            "Cópialo completo en tu navegador del teléfono o ábrelo directamente desde el mensaje original.",
+        }),
+      },
+      {
+        title: t("help.support.commonIssues.tracking.title", {
+          defaultValue: "No veo seguimiento activo",
+        }),
+        body: t("help.support.commonIssues.tracking.body", {
+          defaultValue:
+            "Revisa que tengas internet, sesión iniciada y una asignación activa. Luego vuelve a abrir el tracker.",
+        }),
+      },
+      {
+        title: t("help.support.commonIssues.permissions.title", {
+          defaultValue: "Permisos de ubicación desactivados",
+        }),
+        body: t("help.support.commonIssues.permissions.body", {
+          defaultValue:
+            "En ajustes del teléfono, habilita ubicación para la app y vuelve a intentarlo.",
+        }),
+      },
+      {
+        title: t("help.support.commonIssues.account.title", {
+          defaultValue: "Estoy en la cuenta u organización incorrecta",
+        }),
+        body: t("help.support.commonIssues.account.body", {
+          defaultValue:
+            "Cierra sesión e ingresa con el correo correcto. Si aplica, usa el enlace de invitación de la organización correcta.",
+        }),
+      },
+    ],
+    [t]
+  );
+
   return (
     <div className="mx-auto w-full max-w-6xl p-4 md:p-6">
       {/* Header */}
@@ -112,6 +163,27 @@ export default function SupportPage() {
           >
             {t("help.faq.title")}
           </button>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <h2 className="text-lg font-semibold text-slate-900">
+          {t("help.support.commonIssues.title", { defaultValue: "Problemas comunes" })}
+        </h2>
+        <p className="mt-1 text-sm text-slate-600">
+          {t("help.support.commonIssues.subtitle", {
+            defaultValue:
+              "Si algo no funciona, revisa estas soluciones rápidas antes de contactar soporte.",
+          })}
+        </p>
+
+        <div className="mt-4 space-y-3">
+          {commonIssues.map((issue) => (
+            <div key={issue.title} className="rounded-xl border border-slate-200 p-4">
+              <div className="text-sm font-semibold text-slate-900">{issue.title}</div>
+              <div className="mt-1 text-sm text-slate-600">{issue.body}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
