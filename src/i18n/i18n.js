@@ -56,11 +56,29 @@ function setHtmlLang(code) {
   } catch {}
 }
 
+function getLangFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const lang = params.get("lang");
+  return SUPPORTED.includes(lang) ? lang : null;
+}
+
+function logI18n(stage, extra = {}) {
+  const urlLang = getLangFromUrl();
+  const storedLang = localStorage.getItem("app_lang");
+  console.log(`[i18n][${stage}]`, {
+    urlLang,
+    storedLang,
+    currentI18nLang: i18n.language,
+    resolvedLanguage: i18n.resolvedLanguage,
+    ...extra,
+  });
+}
+
 const initialLang =
-  readUrlLang() ||
-  readStoredLang() ||
-  readNavigatorLang() ||
+  normalizeLang(getLangFromUrl()) ||
+  normalizeLang(readStoredLang()) ||
   "es";
+logI18n("before-init", { initialLang });
 
 persistLang(initialLang);
 setHtmlLang(initialLang);
@@ -74,12 +92,7 @@ i18n.use(initReactI18next).init({
 
   lng: initialLang,
 
-  fallbackLng: (code) => {
-    const lang = normalizeLang(code) || "es";
-    if (lang === "fr") return ["fr", "en", "es"];
-    if (lang === "en") return ["en", "es"];
-    return ["es"];
-  },
+  fallbackLng: "es",
 
   supportedLngs: SUPPORTED,
   load: "languageOnly",
@@ -105,11 +118,28 @@ i18n.use(initReactI18next).init({
   returnNull: false,
 });
 
+setTimeout(() => {
+  const urlLang = readUrlLang();
+  const finalLang = normalizeLang(urlLang || i18n.language) || "es";
+
+  logI18n("post-init-lock", { finalLang });
+
+  if (i18n.resolvedLanguage !== finalLang) {
+    i18n.changeLanguage(finalLang);
+  }
+}, 0);
+
 i18n.on("languageChanged", (lng) => {
+  logI18n("languageChanged", { changedTo: lng, stack: new Error().stack });
+  localStorage.setItem("app_lang", lng);
   const code = normalizeLang(lng);
   if (!code) return;
   persistLang(code);
   setHtmlLang(code);
+});
+
+i18n.on("initialized", (opts) => {
+  logI18n("initialized", { opts });
 });
 
 if (import.meta.env.DEV) {
@@ -130,6 +160,20 @@ if (import.meta.env.DEV) {
 
     return result;
   };
+}
+
+export function applyLanguageSafely(nextLang) {
+  const safeLang = normalizeLang(nextLang) || "es";
+  const current = i18n.resolvedLanguage || i18n.language;
+
+  logI18n("applyLanguageSafely:start", { nextLang: safeLang, current });
+
+  if (current === safeLang) {
+    logI18n("applyLanguageSafely:skip", { reason: "same-language" });
+    return;
+  }
+
+  i18n.changeLanguage(safeLang);
 }
 
 export default i18n;
