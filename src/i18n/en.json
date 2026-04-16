@@ -432,7 +432,7 @@
     "subtitle": "Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
     "success": "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador.",
     "tip": "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
-    "title": "Restablecer contraseña"
+    "title": "Reset password"
   },
   "geocercas": {
     "buttonClearCanvas": "Limpiar mapa",
@@ -1244,7 +1244,7 @@
     "subtitle": "Crea una nueva contraseña para tu cuenta.",
     "success": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
     "tip": "Tip: vuelve a /inicio de sesión, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace.",
-    "title": "Restablecer contraseña",
+    "title": "Reset password",
     "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
     "updateFailed": "No se pudo actualizar la contraseña. Intenta nuevamente.",
     "updateUnexpected": "Error inesperado al actualizar la contraseña."
