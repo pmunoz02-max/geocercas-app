@@ -25,9 +25,9 @@ export default function Button({
 
   const variants = {
     primary: {
-      background: "#2563eb",
-      color: "#ffffff",
-      borderColor: "#2563eb",
+      background: "var(--primary)",
+      color: "var(--primary-fg)",
+      borderColor: "var(--primary)",
     },
     secondary: {
       background: "#f3f4f6",
@@ -35,22 +35,22 @@ export default function Button({
       borderColor: "#e5e7eb",
     },
     success: {
-      background: "#16a34a",
+      background: "var(--success)",
       color: "#ffffff",
-      borderColor: "#16a34a",
+      borderColor: "var(--success)",
     },
     danger: {
-      background: "#dc2626",
+      background: "var(--danger)",
       color: "#ffffff",
-      borderColor: "#dc2626",
+      borderColor: "var(--danger)",
     },
   };
 
   const hoverStyles = {
-    primary: "#1d4ed8",
+    primary: "var(--primary-hover)",
     secondary: "#e5e7eb",
-    success: "#15803d",
-    danger: "#b91c1c",
+    success: "#059669",
+    danger: "#dc2626",
   };
 
   return (
