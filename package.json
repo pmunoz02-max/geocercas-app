@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host",
-    "i18n:audit": "node scripts/i18n-audit.mjs"
+    "i18n:audit": "node scripts/i18n-audit.mjs",
+    "i18n:validate": "node scripts/i18n-validate.mjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",

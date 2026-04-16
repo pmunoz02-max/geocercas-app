@@ -113,13 +113,13 @@
       "asignaciones": "Missions",
       "dashboard": "Coûts du tableau de bord",
       "dashboardCostos": "Coûts du tableau de bord",
-      "geocerca": "Géofence",
+      "geocerca": "Géo-clôture",
       "geocercas": "Géofencing",
       "home": "Accueil",
       "inicio": "Accueil",
       "invitar_tracker": "Suivi des invitations",
       "invitarTracker": "Suivi des invitations",
-      "nuevaGeocerca": "Géofence",
+      "nuevaGeocerca": "Géo-clôture",
       "personal": "Personnel",
       "reportes": "Rapports",
       "tracker": "Traceur"
@@ -174,7 +174,7 @@
       "endLabel": "Date/heure de fin",
       "endOptionalHint": "En option",
       "frequencyLabel": "Fréquence (minutes)",
-      "geofenceLabel": "Géofence",
+      "geofenceLabel": "Géo-clôture",
       "geofencePlaceholder": "Sélectionner une géofence",
       "newTitle": "Nouvelle affectation",
       "personLabel": "Personne",
@@ -197,9 +197,9 @@
       "savingActivity": "Économiser..",
       "cancelButton": "Annuler",
       "startDateLabel": "Date de début",
-      "startDatePlaceholder": "DD/MM/YYYY HH:MM ou 2025-11-13T09:11",
+      "startDatePlaceholder": "DD/MM/YYYY HH:MM o 2025-11-13T09:11",
       "endDateLabel": "Date de fin (facultatif)",
-      "endDatePlaceholder": "DD/MM/YYYYY HH:MM ou 2025-11-14T19:17",
+      "endDatePlaceholder": "DD/MM/YYYY HH:MM o 2025-11-14T19:17",
       "activityOptional": "(Facultatif) Sélectionnez..",
       "createButtonLabel": "Créer une affectation"
     },
@@ -215,7 +215,7 @@
       "loadError": "Erreur de chargement des affectations.",
       "loadingData": "Chargement des données d'affectation..",
       "noActivities": "Aucune activité n'a été créée. Créez au moins une activité pour pouvoir l'attribuer.",
-      "noPersonal": "Il n'y a pas de personnel dans cette organisation. Réactiver ou créer au moins une personne.",
+      "noPersonal": "Il n'y a pas de personnel actuellement dans cette organisation. Réactivez ou créez au moins une personne.",
       "overlapError": "La personne a déjà une mission active qui se chevauche dans cette plage de dates.",
       "saveGenericError": "Une erreur s'est produite lors de l'enregistrement de l'affectation.",
       "selectDates": "Vous devez saisir la date et l'heure de début et de fin.",
@@ -228,7 +228,7 @@
       "activity": "Activité",
       "end": "Fin",
       "frequency": "Fréquence (min)",
-      "geofence": "Géofence",
+      "geofence": "Géo-clôture",
       "noResults": "Il n'y a pas d'affectations enregistrées.",
       "person": "Personne",
       "start": "Accueil",
@@ -267,10 +267,10 @@
         "invalidEmail": "Veuillez saisir une adresse électronique valide.",
         "mustAcceptTerms": "Vous devez accepter les conditions et la politique de confidentialité.",
         "sendFailed": "Le lien magique n'a pas pu être envoyé : {{message}}",
-        "unknown": "Erreur inconnue{{#if message}} : {{message}}{{/if}}}",
+        "unknown": "Erreur inconnue{{#if message}} : {{message}}{{/if}}",
         "googleFailed": "Impossible de démarrer avec Google : {{message}}",
         "googleNoUrl": "Aucune URL de redirection n'a été obtenue de Google.",
-        "googleUnknown": "Erreur inconnue avec Google OAuth{{#if message}} : {{message}}{{/if}}}"
+        "googleUnknown": "Erreur inconnue avec Google OAuth{{#if message}} : {{message}}{{/if}}"
       },
       "messages": {
         "magicLinkSent": "Nous vous avons envoyé un lien magique. Vérifiez votre courrier électronique et ouvrez le lien pour confirmer votre compte."
@@ -306,7 +306,7 @@
       "loading": "Chargement...",
       "no": "Non",
       "logout": "Déconnexion",
-      "processing": "Partir...",
+      "processing": "Sortir...",
       "save": "Économiser",
       "yes": "Oui"
     },
@@ -337,7 +337,7 @@
     "edit": "Editer",
     "loading": "Chargement",
     "search": "Recherche",
-    "noResults": "Aucun résultat",
+    "noResults": "Pas de résultats",
     "separator": "-",
     "zoom": "Zoom",
     "refresh": "Mise à jour",
@@ -365,7 +365,7 @@
       "apply": "Appliquer",
       "clear": "Nettoyer",
       "dateFromLabel": "De",
-      "dateToLabel": "Pour"
+      "dateToLabel": "Vers"
     },
     "subtitle": "Visualiser les coûts agrégés par personne, activité et géofence.",
     "title": "Tableau de bord des coûts"
@@ -383,7 +383,7 @@
     "colCategoria": "Catégorie",
     "colCosto": "Coût",
     "colFecha": "Date",
-    "colGeocerca": "Géofence",
+    "colGeocerca": "Géo-clôture",
     "colHoras": "Heures",
     "colMoneda": "Monnaie",
     "colPersona": "Personne",
@@ -391,7 +391,7 @@
     "colTarifaPromedio": "Tarif moyen",
     "dimensionActividad": "Activité",
     "dimensionFecha": "Date",
-    "dimensionGeocerca": "Géofence",
+    "dimensionGeocerca": "Géo-clôture",
     "dimensionPersona": "Personne",
     "errorLoad": "Erreur de chargement du tableau de bord des coûts.",
     "exportChartButton": "Exporter le graphique",
@@ -401,10 +401,10 @@
     "filtersApply": "Appliquer les filtres",
     "filtersClear": "Nettoyer les filtres",
     "filtersFrom": "De",
-    "filtersGeofence": "Géofence",
+    "filtersGeofence": "Géo-clôture",
     "filtersPerson": "Personne",
     "filtersTitle": "Filtres",
-    "filtersTo": "Pour",
+    "filtersTo": "Vers",
     "kpiCurrencies": "Pièces de monnaie",
     "kpiRecords": "Registres",
     "kpiTotalCost": "Coût total",
@@ -633,7 +633,7 @@
         },
         {
           "bullets": [
-            "Allez dans Affectations et liez : Personne + Activité + Géo-barrière.",
+            "Allez dans Affectations et liez : Personne + Activité + Geo-fence.",
             "Définit le début/la fin et l'état actif.",
             "Régler la fréquence (minimum 5 minutes)."
           ],
@@ -661,7 +661,7 @@
       "tipsTitle": "Bonnes pratiques",
       "title": "Guide de configuration rapide",
       "tocResult": "Résultat attendu",
-      "tocSteps": "Les étapes",
+      "tocSteps": "Étapes",
       "tocSubtitle": "Utilisez ces raccourcis pour naviguer dans le guide.",
       "tocTips": "Bonnes pratiques",
       "tocTitle": "Table des matières",
@@ -771,7 +771,7 @@
         "badge": "Actualités",
         "body": "Examinez l'historique des modifications, des nouvelles fonctionnalités, des améliorations et des corrections apportées à la plateforme.",
         "cta": "Voir le journal des modifications",
-        "title": "Nouvelles / Changelog"
+        "title": "Actualités / Changelog"
       },
       "queEs": {
         "badge": "Informations",
@@ -813,7 +813,7 @@
       "emailInvalid": "Veuillez saisir une adresse électronique valide.",
       "emailRequired": "Vous devez saisir une adresse électronique.",
       "noOrg": "Une organisation active n'a pas pu être résolue pour cet utilisateur.",
-      "planBlocked": "Le plan actuel de l'organisation n'autorise pas les invitations de traqueurs.",
+      "planBlocked": "Le plan actuel de l'organisation n'autorise pas les invitations de trackers.",
       "notInOrg": "Votre utilisateur n'est pas lié à l'organisation active.",
       "inviteErrorPrefix": "Erreur dans l'envoi de l'invitation"
     },
@@ -847,7 +847,7 @@
       "requiresProTitle": "Plan PRO requis",
       "detectedPlan": "Plan détecté",
       "freeBlockedBody": "Les invitations à suivre ne sont pas disponibles dans le cadre du plan GRATUIT actuel.",
-      "upgradePrompt": "Passez cette organisation au niveau PRO pour permettre les invitations au suivi."
+      "upgradePrompt": "Passez cette organisation à la version PRO pour permettre les invitations au suivi."
     },
     "messages": {
       "createdWithoutEmail": "L'accès au tracker a été créé sans envoi de courrier électronique.",
@@ -864,7 +864,7 @@
     "orgFallback": "votre organisation",
     "selectPersonLabel": "Sélectionner une personne",
     "sendInvite": "Envoyer une invitation",
-    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez un courriel manuellement pour l'inviter à participer au suivi sur {{orgName}}.",
+    "subtitle": "Sélectionnez un membre de votre personnel ou saisissez manuellement son adresse électronique pour l'inviter à participer au suivi de {{orgName}}.",
     "title": "Suivi des invitations"
   },
   "landing": {
@@ -1047,7 +1047,7 @@
     "colActividad": "Activité",
     "colCosto": "Coût",
     "colFin": "Fin",
-    "colGeocerca": "Géofence",
+    "colGeocerca": "Géo-clôture",
     "colHoras": "Heures",
     "colInicio": "Accueil",
     "colMoneda": "Monnaie",
@@ -1056,7 +1056,7 @@
     "csvHeaderActividad": "Activité",
     "csvHeaderCosto": "Coût total",
     "csvHeaderFin": "Fin",
-    "csvHeaderGeocerca": "Géofence",
+    "csvHeaderGeocerca": "Géo-clôture",
     "csvHeaderHoras": "Heures",
     "csvHeaderInicio": "Accueil",
     "csvHeaderMoneda": "Monnaie",
@@ -1065,7 +1065,7 @@
     "csvHeaderTotal": "Coût total",
     "errorCsv": "Le fichier CSV n'a pas pu être généré.",
     "errorLabel": "Erreur :",
-    "errorLoad": "Erreur de téléchargement des rapports.",
+    "errorLoad": "Erreur de chargement des rapports.",
     "errorLoadFilters": "Erreur de chargement des filtres (personnes, activités, géofences).",
     "errorLoadReport": "Erreur de téléchargement du rapport de coûts.",
     "errorRangeInvalid": "La date \"Du\" ne peut être supérieure à la date \"Au\".",
@@ -1076,8 +1076,8 @@
       "apply": "Appliquer les filtres",
       "clear": "Nettoyer les filtres",
       "dateFromLabel": "De",
-      "dateToLabel": "Pour",
-      "geofenceLabel": "Géofence",
+      "dateToLabel": "Vers",
+      "geofenceLabel": "Géo-clôture",
       "personLabel": "Personne"
     },
     "filtersActivity": "Activité",
@@ -1085,12 +1085,12 @@
     "filtersApply": "Appliquer les filtres",
     "filtersClear": "Nettoyer les filtres",
     "filtersFrom": "De",
-    "filtersGeofence": "Géofence",
+    "filtersGeofence": "Géo-clôture",
     "filtersPerson": "Personne",
     "filtersTitle": "Filtres",
-    "filtersTo": "Pour",
+    "filtersTo": "Vers",
     "geofenceNoName": "Géofence sans nom",
-    "headerSubtitle": "Visualiser et exporter les coûts par personne, par activité et par géofence.",
+    "headerSubtitle": "Coûts de consultation et d'exportation par personne, activité et géofence.",
     "loadingReport": "Chargement du rapport..",
     "noAccessBody": "Vous n'avez pas le droit de consulter les rapports de coûts. Ce module n'est accessible qu'aux propriétaires et aux administrateurs.",
     "personNoName": "Personne anonyme",
@@ -1104,7 +1104,7 @@
       "activity": "Activité",
       "currency": "Monnaie",
       "end": "Fin",
-      "geofence": "Géofence",
+      "geofence": "Géo-clôture",
       "hours": "Heures",
       "noResults": "Aucun enregistrement n'a été trouvé pour les filtres sélectionnés.",
       "person": "Personne",
@@ -1145,13 +1145,13 @@
   "tracker": {
     "controls": {
       "centerOnUser": "Se concentrer sur ma position",
-      "refresh": "Positions rafraîchissantes",
+      "refresh": "Actualiser les positions",
       "showAll": "Afficher tout",
       "showInside": "Uniquement à l'intérieur des géofences"
     },
     "errorLoad": "Erreur de chargement des positions du tracker.",
     "legend": {
-      "geofence": "Géofence",
+      "geofence": "Géo-clôture",
       "insideFence": "A l'intérieur d'une géofence",
       "outsideFence": "En dehors de la géofence"
     },
@@ -1162,7 +1162,7 @@
     "subtitle": "Visualisez en temps réel l'emplacement des traceurs à l'intérieur de vos géofences.",
     "table": {
       "activity": "Activité",
-      "geofence": "Géofence",
+      "geofence": "Géo-clôture",
       "noResults": "Il n'y a pas de postes enregistrés.",
       "person": "Personne",
       "status": "État",
@@ -1268,7 +1268,7 @@
       "labelBase": "Géofencing",
       "labelNone": "Géofences : Aucune",
       "labelAll": "Geofences : Tous ({{count}})",
-      "labelSelected": "Geofences : {{count}}",
+      "labelSelected": "Géofences : {{count}}",
       "searchPlaceholder": "Recherche géofence..",
       "showAll": "Afficher tout",
       "hideAll": "Cacher tout",
@@ -1473,7 +1473,7 @@
       "clearSelections": "Effacer les sélections",
       "clearSelectionsTitle": "Effacer les sélections (n'efface pas les dates)",
       "from": "De",
-      "to": "Pour",
+      "to": "Vers",
       "generate": "Générer",
       "generating": "Générer..",
       "exportCsv": "Exporter CSV",
@@ -1485,7 +1485,7 @@
       "assignments": "Missions",
       "multi": "(multi)",
       "assignmentFallback": "l'allocation",
-      "assignmentNote": "Remarque : si vos affectations n'ont pas de staff_id, le tableau de concordance avec les drapeaux peut être vide."
+      "assignmentNote": "Remarque : si vos affectations n'ont pas de staff_id, il se peut que le passage pour piétons avec les marquages soit vide."
     },
     "results": {
       "title": "Résultats",
@@ -1499,7 +1499,7 @@
       "day": "Jour",
       "person": "Personne",
       "email": "Courriel",
-      "geofence": "Géofence",
+      "geofence": "Géo-clôture",
       "activity": "Activité",
       "assignment": "Affectation",
       "entry": "Entrée",
@@ -1536,7 +1536,7 @@
     "filters": {
       "trackerPerson": "Traceur / Personne",
       "activity": "Activité",
-      "startFrom": "Démarrer à partir de",
+      "startFrom": "Accueil de",
       "endUntil": "Fin jusqu'à",
       "allTrackers": "Tous",
       "allActivities": "Tous"
@@ -1631,7 +1631,7 @@
       "prompt": {
         "name": "Nom de la géofence :",
         "newName": "Nouveau nom (laissez le même si vous ne voulez pas changer) :",
-        "editCoords": "Modifier les coordonnées (lat,lng par ligne). Laisser en blanc pour conserver :"
+        "editCoords": "Editer les coordonnées (lat,lng par ligne). Laisser en blanc pour conserver :"
       },
       "manualForm": {
         "title": "Créer une géofence manuellement",
@@ -1776,7 +1776,7 @@
       "createError": "Erreur lors de la création d'une géofence",
       "updated": "La (les) géofence(s) a (ont) été correctement mise(s) à jour.",
       "updateError": "Erreur de mise à jour de la géofence",
-      "deleted": "Geofence(s) supprimé(s) correctement.",
+      "deleted": "La (les) géofence(s) a (ont) été correctement supprimée(s).",
       "deleteError": "Erreur lors de la suppression d'une géofence"
     }
   },

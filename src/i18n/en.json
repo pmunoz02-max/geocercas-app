@@ -140,7 +140,7 @@
     },
     "error": {
       "delete": "The assignment could not be deleted.",
-      "load": "Error while loading assignments.",
+      "load": "Error when loading assignments.",
       "missingActivity": "You must select an activity.",
       "missingEnd": "You must enter the end date/time.",
       "missingGeofence": "You must select a geofence.",
@@ -197,9 +197,9 @@
       "savingActivity": "Saving..",
       "cancelButton": "Cancel",
       "startDateLabel": "Start date",
-      "startDatePlaceholder": "DD/MM/YYYYY HH:MM or 2025-11-13T09:11 or 2025-11-13T09__PH_1__",
+      "startDatePlaceholder": "DD/MM/YYYYY HH:MM o 2025-11-13T09:11",
       "endDateLabel": "End date (optional)",
-      "endDatePlaceholder": "DD/MM/YYYYY HH:MM or 2025-11-14T19:17 or 2025-11-14T19__PH_1__",
+      "endDatePlaceholder": "DD/MM/YYYYYY HH:MM o 2025-11-14T19:17",
       "activityOptional": "(Optional) Select..",
       "createButtonLabel": "Create assignment"
     },
@@ -212,7 +212,7 @@
       "deleteSuccess": "Assignment successfully deleted.",
       "frequencyInvalidRange": "The frequency should be between 5 minutes and 12 hours.",
       "frequencyTooLow": "The minimum frequency allowed is 5 minutes.",
-      "loadError": "Error while loading assignments.",
+      "loadError": "Error when loading assignments.",
       "loadingData": "Loading assignment data..",
       "noActivities": "There are no activities created. Create at least one Activity to be able to assign.",
       "noPersonal": "There are no current staff in this organization. Reactivate or create at least one person.",
@@ -267,10 +267,10 @@
         "invalidEmail": "Enter a valid email address.",
         "mustAcceptTerms": "You must agree to the Terms and Privacy Policy.",
         "sendFailed": "Magic Link could not be sent: {{message}}",
-        "unknown": "Unknown error{{#if message}}: {{message}}{{/if}}}",
+        "unknown": "Unknown Error{{#if message}}: {{message}}{{/if}}",
         "googleFailed": "Could not start with Google: {{message}}",
         "googleNoUrl": "No redirect URL was obtained from Google.",
-        "googleUnknown": "Unknown error with Google OAuth{{#if message}}: {{message}}{{/if}}}"
+        "googleUnknown": "Unknown error with Google OAuth{{#if message}}: {{message}}{{/if}}"
       },
       "messages": {
         "magicLinkSent": "We sent you a Magic Link. Check your email and open the link to confirm your account."
@@ -547,11 +547,11 @@
         {
           "items": [
             {
-              "a": "Costs are calculated from the allocations (hours) and the hourly rate configured for each activity.",
+              "a": "Costs are calculated based on the allocations (hours) and the hourly rate configured for each activity.",
               "q": "how are costs calculated?"
             },
             {
-              "a": "Yes, the reports are exported as CSV, which you can open in Excel or Google Sheets.",
+              "a": "Yes, reports are exported as CSV, which you can open in Excel or Google Sheets.",
               "q": "can I export to Excel?"
             },
             {
@@ -855,7 +855,7 @@
       "invited": "An invitation has been sent to {{email}} to join as a tracker on {{orgName}}.",
       "linkOnlyNoLink": "The invitation was created, but no public link was received.",
       "linkOnlyWithLink": "The invitation was created. Use this link to share access: {{link}}.",
-      "magiclinkSent": "A magic link was sent to {{email}}.",
+      "magiclinkSent": "A magic access link was sent to {{email}}.",
       "notOk": "The invitation could not be completed. Please check your email and try again.",
       "serverProblem": "There was a problem contacting the invitation server.",
       "unexpectedError": "Unexpected error while processing the invitation."
@@ -942,7 +942,7 @@
     },
     "errorUnexpected": "Unexpected error when logging in.",
     "forgotPassword": "forgot your password?",
-    "forgotPasswordAlt": "would you prefer to reset your password (send email)?",
+    "forgotPasswordAlt": "would you prefer to reset your password (send mail)?",
     "goToDashboard": "Go to panel",
     "info": "Stable WebView/TWA login: native submit (no JS events), anti rate-limit by design.",
     "infoMagicLinkSent": "We have sent a magic link to your email.",
@@ -1065,7 +1065,7 @@
     "csvHeaderTotal": "Total_cost",
     "errorCsv": "CSV file could not be generated.",
     "errorLabel": "Error:",
-    "errorLoad": "Error when loading reports.",
+    "errorLoad": "Error loading reports.",
     "errorLoadFilters": "Error loading filters (people, activities, geofences).",
     "errorLoadReport": "Error when loading the cost report.",
     "errorRangeInvalid": "The \"From\" date cannot be greater than the \"To\" date.",
@@ -1090,7 +1090,7 @@
     "filtersTitle": "Filters",
     "filtersTo": "To",
     "geofenceNoName": "Unnamed geofence",
-    "headerSubtitle": "Query and export costs per person, activity and geofence.",
+    "headerSubtitle": "Consult and export costs per person, activity and geofence.",
     "loadingReport": "Loading report..",
     "noAccessBody": "You do not have permissions to view the cost reports. This module is available only for owners and administrators.",
     "personNoName": "Unnamed person",
@@ -1159,7 +1159,7 @@
       "offline": "No recent data",
       "online": "Online Tracker"
     },
-    "subtitle": "Visualize in real time the location of trackers within your geofences.",
+    "subtitle": "Visualize in real time the location of the trackers within your geofences.",
     "table": {
       "activity": "Activity",
       "geofence": "Geofence",
@@ -1267,8 +1267,8 @@
     "multiGeofence": {
       "labelBase": "Geofencing",
       "labelNone": "Geofences: None",
-      "labelAll": "Geofences: All ({{count}})",
-      "labelSelected": "Geofences: {{count}}",
+      "labelAll": "Geofencing: All ({{count}})",
+      "labelSelected": "Geofencing: {{count}}",
       "searchPlaceholder": "Search geofence..",
       "showAll": "Show all",
       "hideAll": "Hide all",
@@ -1369,7 +1369,7 @@
       "features": {
         "validateFlow": "Ideal for starting and validating the base flow",
         "upToTrackers": "Up to {{count}} tracker",
-        "geofenceLimits": "Geofencing with limit per plan",
+        "geofenceLimits": "Geofencing with per-plan boundary",
         "billingAndUpgrade": "Billing access and future upgrade path",
         "backendEnforcement": "Backend continues to apply real enforcement"
       }
@@ -1397,7 +1397,7 @@
       "features": {
         "salesOnboarding": "Commercial support and guided onboarding",
         "flexibleLimits": "Adjustable limits and conditions",
-        "multiTeamReady": "Prepared for multi-equipment operation",
+        "multiTeamReady": "Prepared for multiple equipment operation",
         "specialAgreements": "Commercial scaling and special agreements",
         "directSalesContact": "Direct contact with sales"
       }
@@ -1601,7 +1601,7 @@
         "geocercas": "Manage your organization's geofences",
         "geocercasV2": "Improved geofencing with new interface",
         "personal": "Manages field staff",
-        "reports": "Query reports and events"
+        "reports": "Reports and events"
       },
       "logout": "Log off"
     },
@@ -1655,7 +1655,7 @@
       "fullNameLabel": "Full name",
       "roleOwner": "OWNER",
       "inviteButton": "Invite",
-      "pendingInvitesTitle": "Invitations pending",
+      "pendingInvitesTitle": "Pending invitations",
       "noPending": "There are no invitations.",
       "usersTitle": "Users",
       "noUsers": "There are no registered users.",
@@ -1699,7 +1699,7 @@
         "deactivated": "✅ Deactivated",
         "deleted": "🗑️ Eliminated.",
         "updated": "✏️ Geofence updated.",
-        "mapEditActive": "edit on active map. Adjust vertices and press 'Save changes'.",
+        "mapEditActive": "edit on active map. Adjust vertices and click 'Save changes'.",
         "editCancelled": "Edition cancelled.",
         "changesSaved": "✅ Saved changes."
       },

@@ -1,34 +1,67 @@
-# Windows shortcuts
-*.lnk
-
-# accidental zips in src
-src/**/*.zip
-tools/_archive/
-
-# NEVER ignore api folder (Vercel functions)
-!api/
-!api/**
-
+# -----------------------------
 # Dependencies
+# -----------------------------
 node_modules/
-node_modules/**
+.pnp
+.pnp.js
 
-# Build output (Vite)
+# -----------------------------
+# Build outputs
+# -----------------------------
+.next/
+out/
 dist/
-dist/**
-.vite/
-.vite/**
-
-# Vercel (CRÍTICO: evita Build Output API prebuilt artifacts)
+build/
 .vercel/
-.vercel/**
-.vercel/output/
-.vercel/output/**
 
+# -----------------------------
 # Logs
+# -----------------------------
+logs/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-.vercel
+
+# -----------------------------
+# Environment variables
+# -----------------------------
+.env
+.env.*
 .env*.local
+
+# -----------------------------
+# OS / Editor files
+# -----------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# -----------------------------
+# TypeScript
+# -----------------------------
+*.tsbuildinfo
+
+# -----------------------------
+# i18n cache (IMPORTANT)
+# -----------------------------
+tmp/i18n-translate-cache.json
+
+# (Opcional: si usas más temporales en scripts)
+# tmp/
+
+# -----------------------------
+# Coverage / testing
+# -----------------------------
+coverage/
+.nyc_output/
+
+# -----------------------------
+# Misc
+# -----------------------------
+*.zip
+*.tar
+*.gz
+*.lnk
