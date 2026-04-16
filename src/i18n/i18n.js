@@ -6,28 +6,17 @@ import es from "./es.json";
 import en from "./en.json";
 import fr from "./fr.json";
 
-/**
- * i18n ESTABLE – App Geocercas
- *
- * Prioridad de idioma:
- * 1) ?lang=es|en|fr
- * 2) localStorage.app_lang
- * 3) navigator.language
- * 4) fallback: es
- */
-
 const SUPPORTED = ["es", "en", "fr"];
 
-/* =========================
-   Helpers
-========================= */
+function normalizeLang(value) {
+  const v = String(value || "").toLowerCase().slice(0, 2);
+  return SUPPORTED.includes(v) ? v : null;
+}
 
 function readUrlLang() {
   try {
     if (typeof window === "undefined") return null;
-    const url = new URL(window.location.href);
-    const v = (url.searchParams.get("lang") || "").toLowerCase().slice(0, 2);
-    return SUPPORTED.includes(v) ? v : null;
+    return normalizeLang(new URL(window.location.href).searchParams.get("lang"));
   } catch {
     return null;
   }
@@ -36,8 +25,7 @@ function readUrlLang() {
 function readStoredLang() {
   try {
     if (typeof localStorage === "undefined") return null;
-    const v = (localStorage.getItem("app_lang") || "").toLowerCase().slice(0, 2);
-    return SUPPORTED.includes(v) ? v : null;
+    return normalizeLang(localStorage.getItem("app_lang"));
   } catch {
     return null;
   }
@@ -46,19 +34,10 @@ function readStoredLang() {
 function readNavigatorLang() {
   try {
     if (typeof navigator === "undefined") return null;
-    const v = (navigator.language || "").toLowerCase().slice(0, 2);
-    return SUPPORTED.includes(v) ? v : null;
+    return normalizeLang(navigator.language);
   } catch {
     return null;
   }
-}
-
-function setHtmlLang(code) {
-  try {
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = code;
-    }
-  } catch {}
 }
 
 function persistLang(code) {
@@ -69,9 +48,13 @@ function persistLang(code) {
   } catch {}
 }
 
-/* =========================
-   Resolución inicial (SIN detector automático)
-========================= */
+function setHtmlLang(code) {
+  try {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = code;
+    }
+  } catch {}
+}
 
 const initialLang =
   readUrlLang() ||
@@ -81,10 +64,6 @@ const initialLang =
 
 persistLang(initialLang);
 setHtmlLang(initialLang);
-
-/* =========================
-   Init i18next
-========================= */
 
 i18n.use(initReactI18next).init({
   resources: {
@@ -96,8 +75,7 @@ i18n.use(initReactI18next).init({
   lng: initialLang,
 
   fallbackLng: (code) => {
-    const lang = String(code || "es").toLowerCase().slice(0, 2);
-
+    const lang = normalizeLang(code) || "es";
     if (lang === "fr") return ["fr", "en", "es"];
     if (lang === "en") return ["en", "es"];
     return ["es"];
@@ -117,7 +95,7 @@ i18n.use(initReactI18next).init({
 
   saveMissing: true,
 
-  missingKeyHandler: function (lng, ns, key) {
+  missingKeyHandler(lng, ns, key) {
     if (import.meta.env.DEV) {
       console.warn(`[i18n missing] lang=${lng} key=${key}`);
     }
@@ -127,37 +105,25 @@ i18n.use(initReactI18next).init({
   returnNull: false,
 });
 
-/* =========================
-   Persistencia al cambiar idioma
-========================= */
-
 i18n.on("languageChanged", (lng) => {
-  const code = String(lng || "es").toLowerCase().slice(0, 2);
-  if (!SUPPORTED.includes(code)) return;
-
+  const code = normalizeLang(lng);
+  if (!code) return;
   persistLang(code);
   setHtmlLang(code);
 });
-
-/* =========================
-   Debug fallback (DEV)
-========================= */
 
 if (import.meta.env.DEV) {
   const originalT = i18n.t.bind(i18n);
 
   i18n.t = function (key, options = {}) {
     const result = originalT(key, options);
-
-    const lang = i18n.language;
+    const lang = normalizeLang(i18n.language) || "es";
     const fallbackChain = i18n.options.fallbackLng(lang);
 
     for (const fallbackLang of fallbackChain) {
       const exists = i18n.exists(key, { lng: fallbackLang });
       if (exists && fallbackLang !== lang) {
-        console.warn(
-          `[i18n fallback] ${lang} -> ${fallbackLang} | key: ${key}`
-        );
+        console.warn(`[i18n fallback] ${lang} -> ${fallbackLang} | key: ${key}`);
         break;
       }
     }
