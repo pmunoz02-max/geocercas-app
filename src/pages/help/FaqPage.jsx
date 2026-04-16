@@ -38,9 +38,46 @@ export default function FaqPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const sections = useMemo(() => {
-    const arr = t("help.faq.sections", { returnObjects: true });
-    return Array.isArray(arr) ? arr : [];
+  const allSections = useMemo(() => {
+    const faqSections = t("help.faq.sections", { returnObjects: true });
+    const onboardingSections = t("help.onboarding.sections", { returnObjects: true });
+    const trackerSections = t("help.tracker.sections", { returnObjects: true });
+    const troubleshootingSections = t("help.troubleshooting.sections", { returnObjects: true });
+    const geofencesSections = t("help.geofences.sections", { returnObjects: true });
+    const accountSections = t("help.account.sections", { returnObjects: true });
+
+    return [
+      {
+        title: t("help.faq.title"),
+        subtitle: t("help.faq.subtitle"),
+        sections: faqSections,
+      },
+      {
+        title: t("help.onboarding.title"),
+        subtitle: t("help.onboarding.subtitle"),
+        sections: onboardingSections,
+      },
+      {
+        title: t("help.tracker.title"),
+        subtitle: t("help.tracker.subtitle"),
+        sections: trackerSections,
+      },
+      {
+        title: t("help.troubleshooting.title"),
+        subtitle: t("help.troubleshooting.subtitle"),
+        sections: troubleshootingSections,
+      },
+      {
+        title: t("help.geofences.title"),
+        subtitle: t("help.geofences.subtitle"),
+        sections: geofencesSections,
+      },
+      {
+        title: t("help.account.title"),
+        subtitle: t("help.account.subtitle"),
+        sections: accountSections,
+      },
+    ].filter((block) => Array.isArray(block.sections) && block.sections.length > 0);
   }, [t]);
 
   return (
@@ -88,12 +125,22 @@ export default function FaqPage() {
         </div>
 
         <div className="mt-6 space-y-6">
-          {sections.map((sec) => (
-            <div key={sec.title} className="space-y-3">
-              <div className="text-sm font-bold text-slate-800">{sec.title}</div>
-              <div className="space-y-3">
-                {(sec.items || []).map((it) => (
-                  <FaqItem key={it.q} q={it.q} a={it.a} />
+          {allSections.map((block) => (
+            <div key={block.title} className="space-y-3">
+              <div>
+                <div className="text-sm font-bold text-slate-800">{block.title}</div>
+                <div className="mt-1 text-sm text-slate-600">{block.subtitle}</div>
+              </div>
+              <div className="space-y-6">
+                {block.sections.map((sec) => (
+                  <div key={sec.title} className="space-y-3">
+                    <div className="text-sm font-bold text-slate-800">{sec.title}</div>
+                    <div className="space-y-3">
+                      {(sec.items || []).map((it) => (
+                        <FaqItem key={it.q} q={it.q} a={it.a} />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
