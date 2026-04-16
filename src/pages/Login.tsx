@@ -55,7 +55,7 @@ function sleep(ms: number) {
 export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const hasModeInUrl = useMemo(
     () => hasQueryParam(location.search, "mode"),
@@ -330,6 +330,12 @@ export default function Login() {
 
           <p className="mt-2 text-sm text-slate-300">
             {t("landing.heroSubtitle")}
+          </p>
+          <p className="mt-2 text-xs text-yellow-300">
+            LANG DEBUG: {String((window && window.location && window.location.search) || "")}
+          </p>
+          <p className="mt-1 text-xs text-cyan-300">
+            I18N DEBUG: {String(i18n.resolvedLanguage || i18n.language || "none")}
           </p>
         </div>
 
