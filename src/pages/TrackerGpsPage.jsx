@@ -86,7 +86,7 @@ function syncRuntimeSession(session) {
 }
 
 export default function TrackerGpsPage() {
-  const [msg, setMsg] = useState("Inicializando tracker...");
+  const [msg, setMsg] = useState("Iniciando seguimiento...");
   const [runtimeSession, setRuntimeSession] = useState(() => {
     const initial = readRuntimeSessionFromStorage();
     syncRuntimeSession(initial);
@@ -140,7 +140,7 @@ export default function TrackerGpsPage() {
     });
 
     if (hasBootstrapSession) {
-      setMsg("Tracker activo (modo nativo)");
+      setMsg("Seguimiento activo");
     } else if (nextMsgWhenMissing) {
       setMsg(nextMsgWhenMissing);
     }
@@ -151,17 +151,17 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     disposedRef.current = false;
 
-    const stored = refreshRuntimeSessionState("Esperando sesión runtime válida...");
+    const stored = refreshRuntimeSessionState("Preparando seguimiento...");
 
     if (!stored.runtimeToken || !stored.trackerUserId || !stored.orgId) {
       bootstrapTimerRef.current = window.setTimeout(() => {
         if (disposedRef.current) return;
         const latest = refreshRuntimeSessionState(
-          "Esperando sesión runtime válida...",
+          "Preparando seguimiento...",
         );
 
         if (!latest.runtimeToken || !latest.trackerUserId || !latest.orgId) {
-          setMsg("Esperando sesión runtime válida...");
+          setMsg("Preparando seguimiento...");
         }
       }, 300);
     }
@@ -192,7 +192,7 @@ export default function TrackerGpsPage() {
         console.log("[TRACKER_POLL] runtime session detected");
         syncRuntimeSession(stored);
         setRuntimeSession(stored);
-        setMsg("Tracker activo (modo nativo)");
+        setMsg("Seguimiento activo");
         setDebugInfo((prev) => ({
           ...prev,
           hasRuntimeToken: true,
@@ -262,9 +262,9 @@ export default function TrackerGpsPage() {
       }
 
       if (runtimeToken && trackerUserId && orgId) {
-        setMsg("Tracker activo (modo nativo)");
+        setMsg("Seguimiento activo");
       } else {
-        setMsg("Esperando sesión runtime válida...");
+        setMsg("Preparando seguimiento...");
       }
 
       setDebugInfo((prev) => ({
@@ -286,96 +286,103 @@ export default function TrackerGpsPage() {
     }
   }, [ready, runtimeSession]);
 
+  const pageStyle = {
+    minHeight: "100vh",
+    background: "#f5f7fb",
+    padding: "24px 16px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "flex-start",
+  };
+
+  const cardStyle = {
+    width: "100%",
+    maxWidth: 520,
+    background: "#ffffff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 16,
+    padding: 24,
+    marginTop: 24,
+    boxShadow: "0 6px 18px rgba(15, 23, 42, 0.06)",
+    textAlign: "center",
+  };
+
+  const iconStyle = (isReady) => ({
+    width: 56,
+    height: 56,
+    margin: "0 auto 16px",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 24,
+    background: isReady ? "#ecfdf3" : "#eff6ff",
+    border: isReady ? "1px solid #bbf7d0" : "1px solid #bfdbfe",
+  });
+
+  const titleStyle = {
+    fontSize: 22,
+    fontWeight: 700,
+    color: "#111827",
+    marginBottom: 8,
+  };
+
+  const subtitleStyle = {
+    fontSize: 15,
+    lineHeight: 1.5,
+    color: "#4b5563",
+    marginBottom: 16,
+  };
+
+  const badgeStyle = (isReady) => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "10px 14px",
+    borderRadius: 999,
+    fontSize: 14,
+    fontWeight: 600,
+    background: isReady ? "#ecfdf3" : "#eff6ff",
+    color: isReady ? "#166534" : "#1d4ed8",
+    border: isReady ? "1px solid #bbf7d0" : "1px solid #bfdbfe",
+  });
+
+  const noteStyle = {
+    marginTop: 16,
+    fontSize: 13,
+    color: "#6b7280",
+    lineHeight: 1.45,
+  };
+
   return (
-    <div style={{ padding: 16 }}>
-      {!ready ? (
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 760,
-            border: "1px solid #d0d7de",
-            borderRadius: 12,
-            padding: 20,
-            background: "#f8f9fb",
-            marginTop: 24,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-            Inicializando tracker...
-          </div>
-
-          <div style={{ fontSize: 15, marginBottom: 8 }}>{msg}</div>
-
-          <div style={{ fontSize: 13, opacity: 0.75 }}>
-            <span style={{ fontWeight: 600 }}>Requerido:</span> Token runtime:{" "}
-            <b>{runtimeSession.runtimeToken ? "sí" : "no"}</b> · Org:{" "}
-            <b>{runtimeSession.orgId ? "sí" : "no"}</b>
-            <br />
-            <span style={{ fontWeight: 600, opacity: 0.7 }}>Informativo:</span> Tracker user:{" "}
-            <b>{runtimeSession.trackerUserId ? "sí" : "no"}</b>
-          </div>
+    <div style={pageStyle}>
+      <div style={cardStyle}>
+        <div style={iconStyle(ready)}>
+          {ready ? "✅" : "📍"}
         </div>
-      ) : (
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 760,
-            border: "1px solid #d0d7de",
-            borderRadius: 12,
-            padding: 20,
-            background: "#f8f9fb",
-            marginTop: 24,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>
-            Tracker activo
-          </div>
 
-          <div style={{ fontSize: 15, marginBottom: 8 }}>
-            El tracking depende del servicio nativo Android.
-            <br />
-            Último estado: <b>{msg}</b>
-          </div>
-
-          <div style={{ fontSize: 13, opacity: 0.8, marginTop: 12 }}>
-            Modo: <b>nativo</b>
-            <br />
-            Última verificación:{" "}
-            <b>{debugInfo.lastCheckAt ? debugInfo.lastCheckAt : "sin verificar aún"}</b>
-            <br />
-            <span style={{ fontWeight: 600 }}>Requerido:</span> Token runtime:{" "}
-            <b>{debugInfo.hasRuntimeToken ? "OK" : "faltante"}</b> · Org:{" "}
-            <b>{debugInfo.hasOrgId ? "OK" : "faltante"}</b>
-            <br />
-            <span style={{ fontWeight: 600, opacity: 0.7 }}>Informativo:</span> Tracker user:{" "}
-            <b>{debugInfo.hasTrackerUserId ? "OK" : "faltante"}</b>
-            <br />
-            Último error: <b>{debugInfo.lastError || "ninguno"}</b>
-          </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              refreshRuntimeSessionState("Esperando sesión runtime válida...")
-            }
-            style={{
-              border: "none",
-              borderRadius: 10,
-              padding: "12px 16px",
-              fontSize: 15,
-              fontWeight: 600,
-              cursor: "pointer",
-              background: "#222",
-              color: "#fff",
-              marginTop: 12,
-            }}
-          >
-            Refrescar estado
-          </button>
+        <div style={titleStyle}>
+          {ready ? "Seguimiento activo" : "Iniciando seguimiento"}
         </div>
-      )}
+
+        <div style={subtitleStyle}>
+          {ready
+            ? "Tu ubicación se está compartiendo correctamente."
+            : "Estamos preparando tu sesión para comenzar el seguimiento."}
+        </div>
+
+        <div style={badgeStyle(ready)}>
+          <span>{ready ? "Activo" : "Inicializando"}</span>
+        </div>
+
+        {!!msg && (
+          <div style={noteStyle}>
+            {ready
+              ? "Estado actualizado correctamente."
+              : "Esto puede tomar unos segundos."}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
