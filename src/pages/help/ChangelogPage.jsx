@@ -62,22 +62,40 @@ export default function ChangelogPage() {
             </div>
 
             <div className="space-y-4">
-              {v.changes.map((c, ci) => (
-                <div key={ci}>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full border px-2 py-0.5 text-xs">
-                      {badgeLabel(c.type)}
-                    </span>
-                    <span className="font-semibold">{c.title}</span>
-                  </div>
+              {(v.changes || []).map((c, ci) => {
+                const isSimple = typeof c === "string";
 
-                  <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">
-                    {c.details.map((d, di) => (
-                      <li key={di}>{d}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                if (isSimple) {
+                  return (
+                    <ul key={ci} className="list-disc pl-5 text-sm text-slate-600">
+                      <li>{c}</li>
+                    </ul>
+                  );
+                }
+
+                const details = Array.isArray(c?.details) ? c.details : [];
+
+                return (
+                  <div key={ci}>
+                    <div className="flex items-center gap-2">
+                      {c?.type ? (
+                        <span className="rounded-full border px-2 py-0.5 text-xs">
+                          {badgeLabel(c.type)}
+                        </span>
+                      ) : null}
+                      <span className="font-semibold">{c?.title || ""}</span>
+                    </div>
+
+                    {details.length > 0 ? (
+                      <ul className="mt-2 list-disc pl-5 text-sm text-slate-600">
+                        {details.map((d, di) => (
+                          <li key={di}>{d}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}
