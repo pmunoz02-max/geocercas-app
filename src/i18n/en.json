@@ -959,37 +959,19 @@
     }
   },
   "home": {
-    "goToLogin": "Go to login",
-    "quickStart": "View quick guide",
     "goDashboard": "Go to dashboard",
     "deleteAccount": "Delete account",
     "help": {
-      "faq": "Frequently asked questions",
-      "faqDesc": "Answers to the most common questions.",
-      "news": "Updates",
-      "newsDesc": "Recent changes, improvements and updates.",
+      "title": "Help center",
       "quick": "Quick guide",
       "quickDesc": "Learn how to use the app step by step.",
+      "faq": "Frequently asked questions",
+      "faqDesc": "Answers to the most common questions.",
       "support": "Support",
       "supportDesc": "Do you have a problem or question? Contact us.",
-      "title": "Help center"
-    },
-    "labels": {
-      "email": "Email:",
-      "organization": "Organización:",
-      "orgId": "Organization ID:",
-      "role": "Rol:"
-    },
-    "loadingPermissions": "Resolving permissions...",
-    "loginToContinue": "Sign in to continue.",
-    "missingContextBody": "Session exists ({{correo}}), but your active role or organization could not be determined yet.",
-    "missingContextTitle": "Signed in, but context is missing",
-    "open": "Open →",
-    "orgNotResolved": "(no resuelta)",
-    "retry": "Retry",
-    "roleEmpty": "(vacío)",
-    "sessionAs": "Signed in as",
-    "welcome": "Welcome to App Geocercas"
+      "news": "Updates",
+      "newsDesc": "Recent changes, improvements and updates."
+    }
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",

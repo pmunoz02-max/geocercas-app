@@ -959,37 +959,19 @@
     }
   },
   "home": {
-    "goToLogin": "Aller à la connexion",
-    "quickStart": "Voir le guide rapide",
     "goDashboard": "Aller au tableau de bord",
     "deleteAccount": "Supprimer le compte",
     "help": {
+      "title": "Centre d'aide",
+      "quick": "Guide rapide",
+      "quickDesc": "Apprenez à utiliser l'application pas à pas.",
       "faq": "Questions fréquentes",
       "faqDesc": "Réponses aux questions les plus fréquentes.",
-      "news": "Nouveautés",
-      "newsDesc": "Changements, améliorations et mises à jour récentes.",
-      "quick": "Guide rapide",
-      "quickDesc": "Apprenez à utiliser l’application pas à pas.",
       "support": "Support",
       "supportDesc": "Vous avez un problème ou une question ? Contactez-nous.",
-      "title": "Centre d’aide"
-    },
-    "labels": {
-      "email": "E-mail :",
-      "organization": "Organización:",
-      "orgId": "ID de l’organisation :",
-      "role": "Rol:"
-    },
-    "loadingPermissions": "Resolviendo permisos…",
-    "loginToContinue": "Inicia sesión para continuar.",
-    "missingContextBody": "La sesión existe ({{correo}}), pero aún no se pudo determinar tu rol u organización activa.",
-    "missingContextTitle": "Sesión iniciada, pero falta contexto",
-    "open": "Ouvrir →",
-    "orgNotResolved": "(no resuelta)",
-    "retry": "Reintentar",
-    "roleEmpty": "(vacío)",
-    "sessionAs": "Connecté en tant que",
-    "welcome": "Bienvenue sur App Geocercas"
+      "news": "Nouveautés",
+      "newsDesc": "Changements, améliorations et mises à jour récentes."
+    }
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",
