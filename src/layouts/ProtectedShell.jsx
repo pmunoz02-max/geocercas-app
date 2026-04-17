@@ -33,7 +33,7 @@ function buildTabs({ role, isAppRoot, isAdmin }) {
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
-    { path: "/dashboard", labelKey: "app.tabs.dashboard" },
+    { path: "/dashboard", labelKey: "app.tabs.panelCostos" },
   ];
 
   if (isAdmin) {
