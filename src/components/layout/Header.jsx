@@ -3,6 +3,13 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
+const LANGS = [
+  { code: 'es', label: 'ES' },
+  { code: 'en', label: 'EN' },
+  { code: 'fr', label: 'FR' },
+];
+const SUPPORTED = new Set(['es', 'en', 'fr']);
+
 // Fallback inline styles (garantiza legibilidad aun sin Tailwind)
 const baseStyle = {
   textDecoration: 'none',
@@ -42,7 +49,21 @@ function LinkItem({ to, children }) {
 }
 
 export default function Header() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  function changeLang(code) {
+    if (!SUPPORTED.has(code)) return;
+
+    const normalized = String(code).toLowerCase().slice(0, 2);
+    const url = new URL(window.location.href);
+    url.searchParams.set('lang', normalized);
+    window.location.assign(url.toString());
+  }
+
+  const currentLang = String(i18n?.resolvedLanguage || i18n?.language || 'es')
+    .toLowerCase()
+    .slice(0, 2);
+
   return (
     <header className="w-full bg-slate-900 text-white" style={{ background: '#0f172a', color: '#e5e7eb' }}>
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between" style={{ maxWidth: '80rem', padding: '12px 16px' }}>
@@ -60,6 +81,34 @@ export default function Header() {
           <LinkItem to="/asignaciones">{t('app.tabs.asignaciones')}</LinkItem>
           <LinkItem to="/tracker">{t('app.tabs.tracker')}</LinkItem>
         </nav>
+
+        {/* Selector de idioma */}
+        <div className="flex items-center gap-2" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {LANGS.map((lang) => {
+            const isActive = currentLang === lang.code;
+            return (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => changeLang(lang.code)}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  borderRadius: '4px',
+                  border: `1px solid ${isActive ? '#10b981' : '#475569'}`,
+                  background: isActive ? '#10b981' : 'transparent',
+                  color: '#e5e7eb',
+                  cursor: 'pointer',
+                  transition: 'all 150ms',
+                }}
+                aria-pressed={isActive}
+              >
+                {lang.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </header>
   );
