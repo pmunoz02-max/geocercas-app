@@ -424,6 +424,9 @@
     "sessionAs": "Sesión iniciada como {{role}}",
     "email": "Correo",
     "organizationId": "Organización ID",
+    "goToDashboard": "Ir al panel",
+    "managePlan": "Administrar plan",
+    "subscribePro": "Suscribirme a PRO",
     "deleteAccount": "Eliminar cuenta",
     "helpCenter": "Centro de ayuda",
     "help": {

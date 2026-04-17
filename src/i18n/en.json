@@ -424,7 +424,10 @@
     "sessionAs": "Signed in as {{role}}",
     "email": "Email",
     "organizationId": "Organization ID",
+    "goToDashboard": "Go to dashboard",
     "deleteAccount": "Delete account",
+    "managePlan": "Manage plan",
+    "subscribePro": "Subscribe to PRO",
     "helpCenter": "Help center",
     "help": {
       "quickGuide": {

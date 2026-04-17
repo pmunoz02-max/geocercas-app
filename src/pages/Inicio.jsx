@@ -269,7 +269,7 @@ export default function Inicio() {
               onClick={() => navigate("/dashboard")}
               type="button"
             >
-              {t("home.goDashboard")}
+              {t("dashboard.goToDashboard")}
             </button>
 
             <button
@@ -313,7 +313,7 @@ export default function Inicio() {
         <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <h2 className="text-lg font-semibold text-slate-900">
-            {t("inicio.billing.managePlan")}
+            {t("dashboard.managePlan")}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
             {t("inicio.billing.managePlanBody")}
@@ -331,7 +331,7 @@ export default function Inicio() {
               transition
             "
           >
-            {t("inicio.billing.goToBilling")}
+            {t("dashboard.subscribePro")}
           </button>
           <div className="mt-3 text-xs text-slate-500">
             {t("inicio.billing.previewNote")}
@@ -339,7 +339,7 @@ export default function Inicio() {
         </div>
       </div>
 
-      {/* Centro de ayuda */}
+      {/* Help Center */}
       <div>
         <h2 className="text-xl font-semibold text-slate-900 mb-4">
           {t("dashboard.helpCenter")}

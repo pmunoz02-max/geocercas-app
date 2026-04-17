@@ -424,8 +424,11 @@
     "sessionAs": "Connecté en tant que {{role}}",
     "email": "E-mail",
     "organizationId": "ID de l’organisation",
+    "goToDashboard": "Aller au tableau de bord",
     "deleteAccount": "Supprimer le compte",
-    "helpCenter": "Centre d'aide",
+    "managePlan": "Gérer le plan",
+    "subscribePro": "S’abonner à PRO",
+    "helpCenter": "Centre d’aide",
     "help": {
       "quickGuide": {
         "title": "Guide rapide",
