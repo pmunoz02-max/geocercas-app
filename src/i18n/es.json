@@ -1886,7 +1886,6 @@
         "upToGeofences": "Hasta {{count}} geocercas",
         "trackerEnabled": "Módulo Tracker habilitado",
         "invitesEnabled": "Invitación de trackers habilitada",
-        "stripeSelfManaged": "Checkout y gestión de suscripción con Stripe (autoservicio)",
         "stripeSelfManaged": "Suscripción autogestionable con Stripe"
       }
     },

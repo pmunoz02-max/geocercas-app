@@ -1809,27 +1809,27 @@
   "pricing": {
     "accessDenied": "Vous n'avez pas l'autorisation de voir la monétisation de cette organisation.",
     "common": {
-      "currentPlan": "Plan actual",
-      "loading": "Cargando...",
+      "currentPlan": "Plan actuel",
+      "loading": "Chargement...",
       "notAvailable": "—",
-      "unlimited": "Ilimitadas"
+      "unlimited": "Illimité"
     },
     "actions": {
-      "goToBilling": "Ir a Facturación",
-      "contactSales": "Contactar ventas"
+      "goToBilling": "Aller à la facturation",
+      "contactSales": "Contacter les ventes"
     },
     "page": {
-      "title": "Planes y precios",
+      "title": "Plans et tarifs",
       "previewNotice": {
-        "prefix": "Esta pantalla trabaja en",
-        "previewTag": "PREVIEW",
-        "middle": "y reutiliza Stripe en modo",
+        "prefix": "Cet écran fonctionne en",
+        "previewTag": "APERÇU",
+        "middle": "et réutilise Stripe en mode",
         "testTag": "TEST",
-        "suffix": "No afecta producción."
+        "suffix": "Cela n'affecte pas la production."
       }
     },
     "summary": {
-      "detectedPlan": "Plan detectado",
+      "detectedPlan": "Plan détecté",
       "noCommercialData": "Aucune donnée commerciale",
       "status": "Statut",
       "trialUntil": "Essai jusqu'au",
@@ -1839,57 +1839,56 @@
         "enterprise": "ENTERPRISE"
       },
       "planCodeUnknown": "{{code}}",
-      "maxGeofences": "Máx. geocercas",
-      "maxTrackers": "Máx. trackers"
+      "maxGeofences": "Max. géoclôtures",
+      "maxTrackers": "Max. trackers"
     },
     "free": {
       "title": "Free",
-      "subtitle": "Para comenzar",
+      "subtitle": "Pour démarrer",
       "price": "$0",
-      "description": "Pensado para validar el uso inicial de la plataforma.",
-      "currentPlanMessage": "Ya estás usando el plan Free.",
+      "description": "Conçu pour valider l'utilisation initiale de la plateforme.",
+      "currentPlanMessage": "Vous êtes déjà sur le plan Free.",
       "features": {
-        "validateFlow": "Ideal para empezar y validar el flujo base",
-        "upToTrackers": "Hasta {{count}} tracker",
-        "geofenceLimits": "Geocercas con límite por plan",
-        "billingAndUpgrade": "Acceso a Facturación y futura ruta de mejora de plan",
-        "backendEnforcement": "Backend sigue aplicando enforcement real"
+        "validateFlow": "Idéal pour démarrer et valider le flux de base",
+        "upToTrackers": "Jusqu'à {{count}} tracker",
+        "geofenceLimits": "Géoclôtures avec limites par plan",
+        "billingAndUpgrade": "Accès à la facturation et chemin d'évolution de plan",
+        "backendEnforcement": "Le backend applique toujours une limitation réelle"
       }
     },
     "pro": {
       "title": "Pro",
-      "subtitle": "Operación SaaS activa",
+      "subtitle": "Opérations SaaS actives",
       "price": "Stripe TEST",
-      "description": "Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
-      "higherPlanMessage": "Tu organización ya tiene un plan superior o distinto de Free.",
-      "reviewBillingMessage": "Revisa Facturación para administrarlo.",
+      "description": "Plan recommandé pour activer le module Tracker et opérer avec un abonnement.",
+      "higherPlanMessage": "Votre organisation a déjà un plan supérieur ou différent de Free.",
+      "reviewBillingMessage": "Consultez la facturation pour le gérer.",
       "features": {
-        "upToTrackers": "Hasta {{count}} trackers por organización",
-        "upToGeofences": "Hasta {{count}} geocercas",
-        "trackerEnabled": "Módulo Tracker habilitado",
-        "invitesEnabled": "Invitación de trackers habilitada",
-        "stripeSelfManaged": "Checkout et gestion d'abonnement avec Stripe (en autonomie)",
-        "stripeSelfManaged": "Suscripción autogestionable con Stripe"
+        "upToTrackers": "Jusqu'à {{count}} trackers par organisation",
+        "upToGeofences": "Jusqu'à {{count}} géoclôtures",
+        "trackerEnabled": "Module Tracker activé",
+        "invitesEnabled": "Invitations de trackers activées",
+        "stripeSelfManaged": "Abonnement autogéré avec Stripe"
       }
     },
     "enterprise": {
       "title": "Enterprise",
-      "subtitle": "Venta asistida",
-      "price": "A medida",
-      "description": "Para organizaciones que requieren condiciones comerciales especiales.",
+      "subtitle": "Vente assistée",
+      "price": "Sur mesure",
+      "description": "Pour les organisations nécessitant des conditions commerciales spéciales.",
       "features": {
-        "salesOnboarding": "Atención comercial y onboarding guiado",
-        "flexibleLimits": "Límites y condiciones ajustables",
-        "multiTeamReady": "Preparado para operación con múltiples equipos",
-        "specialAgreements": "Escalamiento comercial y acuerdos especiales",
-        "directSalesContact": "Contacto directo con ventas"
+        "salesOnboarding": "Accompagnement commercial et onboarding guidé",
+        "flexibleLimits": "Limites et conditions ajustables",
+        "multiTeamReady": "Prêt pour une opération multi-équipes",
+        "specialAgreements": "Montée en charge commerciale et accords spéciaux",
+        "directSalesContact": "Contact direct avec les ventes"
       }
     },
     "notes": {
-      "title": "Notas de esta fase",
-      "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
-      "proCheckout": "El mejora de plan a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
-      "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
+      "title": "Notes pour cette phase",
+      "backendAuthority": "Le backend reste la vraie autorité pour l'état du plan. Cette page reflète uniquement le plan et affiche les actions commerciales disponibles.",
+      "proCheckout": "La mise à niveau vers Pro réutilise le flux Stripe Checkout existant. La gestion des abonnements réutilise le Stripe Customer Portal.",
+      "enterpriseSales": "Enterprise est présenté comme canal commercial, sans activer le checkout automatique."
     },
     "status": {
       "active": "Actif",
