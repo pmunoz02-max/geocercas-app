@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   createAsignacion,
   getAsignacionesBundle,
@@ -96,6 +97,7 @@ function extractBundle(result) {
 }
 
 export default function AsignacionesPage() {
+  const { t } = useTranslation();
   const { activeOrgId } = useAuth();
 
   const [personas, setPersonas] = useState([]);
