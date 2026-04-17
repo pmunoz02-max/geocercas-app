@@ -6,22 +6,26 @@ export default function InstructionsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const steps = useMemo(() => {
-    const arr = t("help.instructions.steps", { returnObjects: true });
-    return Array.isArray(arr) ? arr : [];
-  }, [t]);
+  const tocRaw = t("help.instructions.toc.items", { returnObjects: true });
+  const stepsRaw = t("help.instructions.steps.items", { returnObjects: true });
+
+  const toc = useMemo(() => (Array.isArray(tocRaw) ? tocRaw : []), [tocRaw]);
+
+  const steps = useMemo(() => (Array.isArray(stepsRaw) ? stepsRaw : []), [stepsRaw]);
 
   const resultBullets = useMemo(() => {
     const arr = t("help.instructions.resultBullets", { returnObjects: true });
     return Array.isArray(arr) ? arr : [];
   }, [t]);
 
+  const tocLinks = ["#pasos", "#tips", "#resultado", "#recomendacion"];
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700">
-            {t("help.common.quickGuideBadge")}
+            {t("help.instructions.badge")}
           </div>
 
           <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -39,7 +43,7 @@ export default function InstructionsPage() {
                 href="#pasos"
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
               >
-                {t("help.instructions.jumpToSteps")}
+                {t("help.instructions.goToSteps")}
               </a>
               <a
                 href="#resultado"
@@ -52,7 +56,7 @@ export default function InstructionsPage() {
                 onClick={() => navigate("/help/faq")}
                 className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
               >
-                {t("help.common.viewFaq")}
+                {t("help.instructions.viewFaq")}
               </button>
             </div>
           </div>
@@ -62,34 +66,25 @@ export default function InstructionsPage() {
           <div className="lg:col-span-1">
             <div className="sticky top-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-base font-bold text-slate-900">
-                {t("help.instructions.tocTitle")}
+                {t("help.instructions.toc.title")}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                {t("help.instructions.tocSubtitle")}
+                {t("help.instructions.toc.subtitle")}
               </p>
 
               <div className="mt-4 space-y-2">
-                <a
-                  className="block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                  href="#pasos"
-                >
-                  {t("help.instructions.tocSteps")}
-                </a>
-                <a
-                  className="block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                  href="#tips"
-                >
-                  {t("help.instructions.tocTips")}
-                </a>
-                <a
-                  className="block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-                  href="#resultado"
-                >
-                  {t("help.instructions.tocResult")}
-                </a>
+                {toc.map((item, idx) => (
+                  <a
+                    key={`${idx}-${item}`}
+                    className="block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                    href={tocLinks[idx] || "#pasos"}
+                  >
+                    {item}
+                  </a>
+                ))}
               </div>
 
-              <div className="mt-5 rounded-xl bg-slate-50 p-4">
+              <div id="recomendacion" className="mt-5 rounded-xl bg-slate-50 p-4">
                 <div className="text-xs font-bold text-slate-700">
                   {t("help.instructions.recommendationTitle")}
                 </div>
@@ -123,10 +118,10 @@ export default function InstructionsPage() {
               className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
             >
               <h2 className="text-xl font-extrabold text-slate-900">
-                {t("help.instructions.stepsTitle")}
+                {t("help.instructions.steps.title")}
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                {t("help.instructions.stepsSubtitle")}
+                {t("help.instructions.steps.subtitle")}
               </p>
 
               <div className="mt-5 space-y-4">
@@ -144,8 +139,8 @@ export default function InstructionsPage() {
                           {s.title}
                         </div>
                         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600">
-                          {(s.bullets || []).map((b) => (
-                            <li key={b}>{b}</li>
+                          {(s.items || []).map((line) => (
+                            <li key={line}>{line}</li>
                           ))}
                         </ul>
                       </div>

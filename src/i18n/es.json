@@ -727,6 +727,7 @@
       "seeQuickGuide": "Ver guía rápida"
     },
     "instructions": {
+      "badge": "Guía rápida",
       "bestPractice1Body": "Usa siempre el mismo teléfono para evitar cortes en el seguimiento.",
       "bestPractice1Title": "Usa tu teléfono principal",
       "bestPractice2Body": "Mantén batería suficiente o conecta el cargador durante jornadas largas.",
@@ -735,7 +736,7 @@
       "bestPractice3Title": "Mantén la sesión activa",
       "bestPractice4Body": "Si algo no carga, vuelve a abrir el enlace de invitación más reciente.",
       "bestPractice4Title": "Reabre el enlace si falla",
-      "jumpToSteps": "Ir a pasos",
+      "goToSteps": "Ir a pasos",
       "recommendationBody": "Antes de salir, revisa que veas el estado \"Seguimiento activo\" en tu pantalla.",
       "recommendationTitle": "Recomendación",
       "resultBullets": [
@@ -747,48 +748,56 @@
       ],
       "resultIntro": "Al finalizar, deberías tener todo listo para compartir ubicación sin problemas:",
       "resultTitle": "Qué debes confirmar",
-      "steps": [
-        {
-          "bullets": [
-            "Te llegará un enlace por correo o mensaje desde tu organización."
-          ],
-          "title": "Recibe tu invitación"
-        },
-        {
-          "bullets": [
-            "Ábrelo en el mismo teléfono que usarás para el tracker."
-          ],
-          "title": "Abre el enlace en tu teléfono"
-        },
-        {
-          "bullets": [
-            "Cuando se soliciten, permite los permisos de ubicación."
-          ],
-          "title": "Acepta permisos de ubicación"
-        },
-        {
-          "bullets": [
-            "Ese estado indica que tu ubicación se está compartiendo correctamente."
-          ],
-          "title": "Confirma que aparece \"Seguimiento activo\""
-        },
-        {
-          "bullets": [
-            "Durante tu jornada, mantén encendidas la conexión y la ubicación."
-          ],
-          "title": "Mantén conexión y ubicación habilitadas"
-        }
-      ],
-      "stepsSubtitle": "Sigue esta secuencia simple para activar el tracker en pocos minutos.",
-      "stepsTitle": "Paso a paso",
+      "steps": {
+        "title": "Paso a paso",
+        "subtitle": "Sigue esta secuencia simple para activar el tracker en pocos minutos.",
+        "items": [
+          {
+            "title": "Recibe tu invitación",
+            "items": [
+              "Te llegará un enlace por correo o mensaje desde tu organización."
+            ]
+          },
+          {
+            "title": "Abre el enlace en tu teléfono",
+            "items": [
+              "Ábrelo en el mismo teléfono que usarás para el tracker."
+            ]
+          },
+          {
+            "title": "Acepta permisos de ubicación",
+            "items": [
+              "Cuando se soliciten, permite los permisos de ubicación."
+            ]
+          },
+          {
+            "title": "Confirma que aparece \"Seguimiento activo\"",
+            "items": [
+              "Ese estado indica que tu ubicación se está compartiendo correctamente."
+            ]
+          },
+          {
+            "title": "Mantén conexión y ubicación habilitadas",
+            "items": [
+              "Durante tu jornada, mantén encendidas la conexión y la ubicación."
+            ]
+          }
+        ]
+      },
       "subtitle": "Activa tu tracker con pasos simples y mensajes claros, sin configuración técnica.",
       "tipsTitle": "Buenas prácticas",
       "title": "Guía rápida del tracker",
-      "tocResult": "Resultado esperado",
-      "tocSteps": "Pasos",
-      "tocSubtitle": "Usa estos accesos para avanzar rápido.",
-      "tocTips": "Buenas prácticas",
-      "tocTitle": "Tabla de contenido",
+      "toc": {
+        "title": "Tabla de contenido",
+        "subtitle": "Usa estos accesos para avanzar rápido.",
+        "items": [
+          "Pasos",
+          "Buenas prácticas",
+          "Resultado esperado",
+          "Recomendación"
+        ]
+      },
+      "viewFaq": "Ver FAQ",
       "viewResult": "Ver resultado"
     },
     "support": {

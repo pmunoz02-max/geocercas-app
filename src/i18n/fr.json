@@ -727,6 +727,7 @@
       "seeQuickGuide": "Ver guía rápida"
     },
     "instructions": {
+      "badge": "Guide rapide",
       "bestPractice1Body": "Usa siempre el mismo teléfono para evitar cortes en el seguimiento.",
       "bestPractice1Title": "Usa tu teléfono principal",
       "bestPractice2Body": "Mantén batería suficiente o conecta el cargador durante jornadas largas.",
@@ -735,7 +736,7 @@
       "bestPractice3Title": "Mantén la sesión activa",
       "bestPractice4Body": "Si algo no carga, vuelve a abrir el enlace de invitación más reciente.",
       "bestPractice4Title": "Reabre el enlace si falla",
-      "jumpToSteps": "Ir a pasos",
+      "goToSteps": "Aller aux étapes",
       "recommendationBody": "Antes de salir, revisa que veas el estado \"Seguimiento activo\" en tu pantalla.",
       "recommendationTitle": "Recomendación",
       "resultBullets": [
@@ -747,49 +748,39 @@
       ],
       "resultIntro": "Al finalizar, deberías tener todo listo para compartir ubicación sin problemas:",
       "resultTitle": "Qué debes confirmar",
-      "steps": [
-        {
-          "bullets": [
-            "Te llegará un enlace por correo o mensaje desde tu organización."
-          ],
-          "title": "Recibe tu invitación"
-        },
-        {
-          "bullets": [
-            "Ábrelo en el mismo teléfono que usarás para el tracker."
-          ],
-          "title": "Abre el enlace en tu teléfono"
-        },
-        {
-          "bullets": [
-            "Cuando se soliciten, permite los permisos de ubicación."
-          ],
-          "title": "Acepta permisos de ubicación"
-        },
-        {
-          "bullets": [
-            "Ese estado indica que tu ubicación se está compartiendo correctamente."
-          ],
-          "title": "Confirma que aparece \"Seguimiento activo\""
-        },
-        {
-          "bullets": [
-            "Durante tu jornada, mantén encendidas la conexión y la ubicación."
-          ],
-          "title": "Mantén conexión y ubicación habilitadas"
-        }
-      ],
-      "stepsSubtitle": "Sigue esta secuencia simple para activar el tracker en pocos minutos.",
-      "stepsTitle": "Paso a paso",
-      "subtitle": "Activa tu tracker con pasos simples y mensajes claros, sin configuración técnica.",
+      "steps": {
+        "title": "Étape par étape",
+        "subtitle": "Suivez cette séquence simple pour activer le tracker en quelques minutes.",
+        "items": [
+          {
+            "title": "Recevez votre invitation",
+            "items": [
+              "Vous recevrez un lien par e-mail ou message de votre organisation."
+            ]
+          },
+          {
+            "title": "Ouvrez le lien sur votre téléphone",
+            "items": [
+              "Ouvrez-le sur le même téléphone que vous utiliserez pour le tracker."
+            ]
+          }
+        ]
+      },
+      "subtitle": "Activez votre tracker avec des étapes simples et des messages clairs, sans configuration technique.",
       "tipsTitle": "Buenas prácticas",
-      "title": "Guía rápida del tracker",
-      "tocResult": "Resultado esperado",
-      "tocSteps": "Pasos",
-      "tocSubtitle": "Usa estos accesos para avanzar rápido.",
-      "tocTips": "Buenas prácticas",
-      "tocTitle": "Tabla de contenido",
-      "viewResult": "Ver resultado"
+      "title": "Guide rapide du tracker",
+      "toc": {
+        "title": "Table des matières",
+        "subtitle": "Utilisez ces accès pour avancer plus vite.",
+        "items": [
+          "Étapes",
+          "Bonnes pratiques",
+          "Résultat attendu",
+          "Recommandation"
+        ]
+      },
+      "viewFaq": "Voir la FAQ",
+      "viewResult": "Voir le résultat"
     },
     "support": {
       "breadcrumb": "Centre d’aide / Support",
