@@ -959,37 +959,37 @@
     }
   },
   "home": {
-    "goToLogin": "Ir a iniciar sesión",
+    "goToLogin": "Aller à la connexion",
     "quickStart": "Voir le guide rapide",
-    "goDashboard": "Ir al panel",
-    "deleteAccount": "Eliminar cuenta",
+    "goDashboard": "Aller au tableau de bord",
+    "deleteAccount": "Supprimer le compte",
     "help": {
-      "faq": "Preguntas frecuentes",
-      "faqDesc": "Respuestas a las dudas más comunes.",
-      "news": "Novedades",
-      "newsDesc": "Cambios, mejoras y actualizaciones recientes.",
-      "quick": "Guía rápida",
-      "quickDesc": "Aprende cómo usar la app paso a paso.",
-      "support": "Soporte",
-      "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
-      "title": "Centro de ayuda"
+      "faq": "Questions fréquentes",
+      "faqDesc": "Réponses aux questions les plus fréquentes.",
+      "news": "Nouveautés",
+      "newsDesc": "Changements, améliorations et mises à jour récentes.",
+      "quick": "Guide rapide",
+      "quickDesc": "Apprenez à utiliser l’application pas à pas.",
+      "support": "Support",
+      "supportDesc": "Vous avez un problème ou une question ? Contactez-nous.",
+      "title": "Centre d’aide"
     },
     "labels": {
-      "email": "Correo:",
+      "email": "E-mail :",
       "organization": "Organización:",
-      "orgId": "Organización ID:",
+      "orgId": "ID de l’organisation :",
       "role": "Rol:"
     },
     "loadingPermissions": "Resolviendo permisos…",
     "loginToContinue": "Inicia sesión para continuar.",
     "missingContextBody": "La sesión existe ({{correo}}), pero aún no se pudo determinar tu rol u organización activa.",
     "missingContextTitle": "Sesión iniciada, pero falta contexto",
-    "open": "Abrir →",
+    "open": "Ouvrir →",
     "orgNotResolved": "(no resuelta)",
     "retry": "Reintentar",
     "roleEmpty": "(vacío)",
-    "sessionAs": "Sesión iniciada como",
-    "welcome": "Bienvenido a App Geocercas"
+    "sessionAs": "Connecté en tant que",
+    "welcome": "Bienvenue sur App Geocercas"
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",
@@ -1090,10 +1090,10 @@
       "withRole": "con el rol"
     },
     "billing": {
-      "managePlan": "Administrar plan",
-      "managePlanBody": "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
-      "goToBilling": "Ir a Billing",
-      "previewNote": "Nota: PREVIEW/TEST. No afecta producción."
+      "managePlan": "Gérer le plan",
+      "managePlanBody": "Vous pouvez accéder à la page Billing pour voir et gérer votre abonnement.",
+      "goToBilling": "Aller à Billing",
+      "previewNote": "Note : PREVIEW/TEST. N’affecte pas la production."
     }
   },
   "inviteTracker": {

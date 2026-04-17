@@ -959,37 +959,37 @@
     }
   },
   "home": {
-    "goToLogin": "Ir a iniciar sesión",
+    "goToLogin": "Go to login",
     "quickStart": "View quick guide",
     "goDashboard": "Go to dashboard",
-    "deleteAccount": "Eliminar cuenta",
+    "deleteAccount": "Delete account",
     "help": {
-      "faq": "Preguntas frecuentes",
-      "faqDesc": "Respuestas a las dudas más comunes.",
-      "news": "Novedades",
-      "newsDesc": "Cambios, mejoras y actualizaciones recientes.",
+      "faq": "Frequently asked questions",
+      "faqDesc": "Answers to the most common questions.",
+      "news": "Updates",
+      "newsDesc": "Recent changes, improvements and updates.",
       "quick": "Quick guide",
-      "quickDesc": "Aprende cómo usar la app paso a paso.",
+      "quickDesc": "Learn how to use the app step by step.",
       "support": "Support",
-      "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
-      "title": "Centro de ayuda"
+      "supportDesc": "Do you have a problem or question? Contact us.",
+      "title": "Help center"
     },
     "labels": {
-      "email": "Correo:",
+      "email": "Email:",
       "organization": "Organización:",
-      "orgId": "Organización ID:",
+      "orgId": "Organization ID:",
       "role": "Rol:"
     },
-    "loadingPermissions": "Resolviendo permisos…",
-    "loginToContinue": "Inicia sesión para continuar.",
-    "missingContextBody": "La sesión existe ({{correo}}), pero aún no se pudo determinar tu rol u organización activa.",
-    "missingContextTitle": "Sesión iniciada, pero falta contexto",
-    "open": "Abrir →",
+    "loadingPermissions": "Resolving permissions...",
+    "loginToContinue": "Sign in to continue.",
+    "missingContextBody": "Session exists ({{correo}}), but your active role or organization could not be determined yet.",
+    "missingContextTitle": "Signed in, but context is missing",
+    "open": "Open →",
     "orgNotResolved": "(no resuelta)",
-    "retry": "Reintentar",
+    "retry": "Retry",
     "roleEmpty": "(vacío)",
-    "sessionAs": "Sesión iniciada como",
-    "welcome": "Bienvenido a App Geocercas"
+    "sessionAs": "Signed in as",
+    "welcome": "Welcome to App Geocercas"
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",
