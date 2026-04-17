@@ -179,10 +179,7 @@ function ProPlanAction({
 
 export default function Pricing() {
   const { t } = useTranslation();
-  const tp = React.useCallback(
-    (key, options) => t([`pricingPage.${key}`, `pricing.${key}`], options),
-    [t]
-  );
+  const tp = React.useCallback((key, options) => t(`pricing.${key}`, options), [t]);
   const { loading, ready, authenticated, currentOrgId, isAdmin } = useAuth();
   const {
     loading: entitlementsLoading,
@@ -247,7 +244,7 @@ export default function Pricing() {
   const detectedPlanLabel = useMemo(() => {
     const key = `summary.planCodes.${currentPlanCode}`;
     const translated = tp(key);
-    if (translated !== `pricingPage.${key}` && translated !== `pricing.${key}`) {
+    if (translated !== `pricing.${key}`) {
       return translated;
     }
     return tp("summary.planCodeUnknown", { code: String(currentPlanCode || "").toUpperCase() });
@@ -266,7 +263,7 @@ export default function Pricing() {
 
     const statusKey = `status.${billingStatus}`;
     const translated = tp(statusKey);
-    if (translated !== `pricingPage.${statusKey}` && translated !== `pricing.${statusKey}`)
+    if (translated !== `pricing.${statusKey}`)
       return translated;
 
     return tp("status.other", { status: billingStatus });
