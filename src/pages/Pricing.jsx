@@ -540,39 +540,10 @@ export default function Pricing() {
               {tt(
                 "page.previewNotice.prefix",
                 i18n.language === "fr"
-                  ? "Cet écran fonctionne en"
+                  ? "Gérez votre forfait et vérifiez la capacité disponible de votre organisation."
                   : i18n.language === "en"
-                    ? "This screen runs in"
-                    : "Esta pantalla trabaja en"
-              )}{" "}
-              <b>
-                {tt(
-                  "page.previewNotice.previewTag",
-                  "PREVIEW"
-                )}
-              </b>{" "}
-              {tt(
-                "page.previewNotice.middle",
-                i18n.language === "fr"
-                  ? "et utilise le flux d'abonnement en mode"
-                  : i18n.language === "en"
-                    ? "and uses the subscription flow in"
-                    : "y usa el flujo de suscripción en modo"
-              )}{" "}
-              <b>
-                {tt(
-                  "page.previewNotice.testTag",
-                  "TEST"
-                )}
-              </b>
-              .{" "}
-              {tt(
-                "page.previewNotice.suffix",
-                i18n.language === "fr"
-                  ? "Cela n'affecte pas la production."
-                  : i18n.language === "en"
-                    ? "It does not affect production."
-                    : "No afecta producción."
+                    ? "Manage your plan and review your organization capacity."
+                    : "Administra tu plan y revisa la capacidad disponible de tu organización."
               )}
             </p>
           </div>
@@ -879,10 +850,10 @@ export default function Pricing() {
             {tt(
               "notes.proCheckout",
               i18n.language === "fr"
-                ? "La mise à niveau vers Pro utilise un checkout sécurisé. Gérez votre abonnement depuis la facturation."
+                ? "La mise à niveau vers Pro utilise un paiement sécurisé. La gestion de l'abonnement sera disponible depuis la facturation."
                 : i18n.language === "en"
-                  ? "Upgrade to Pro with secure checkout. Manage your subscription from Billing."
-                  : "La mejora a Pro usa checkout seguro. Administra tu suscripción desde Facturación."
+                  ? "Upgrading to Pro uses a secure checkout. Subscription management will be available from Billing."
+                  : "La mejora a Pro usa un checkout seguro. La administración de la suscripción estará disponible desde Facturación."
             )}
           </p>
           <p>
