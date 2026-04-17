@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { applyLanguageSafely } from "@/i18n/i18n";
 
 const LANGS = [
   { code: "es", label: "ES" },
@@ -12,14 +13,18 @@ const SUPPORTED = new Set(["es", "en", "fr"]);
 export default function LanguageSwitcher() {
   const { i18n, t } = useTranslation();
 
-  function changeLang(code: string) {
+  function handleLanguageChange(e: React.MouseEvent<HTMLButtonElement>, code: string) {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (!SUPPORTED.has(code)) return;
 
     const normalized = String(code).toLowerCase().slice(0, 2);
     const url = new URL(window.location.href);
     url.searchParams.set("lang", normalized);
+    window.history.replaceState({}, "", url.toString());
 
-    window.location.assign(url.toString());
+    applyLanguageSafely(normalized);
   }
 
   const current = String(i18n.resolvedLanguage || i18n.language || "es")
@@ -38,11 +43,11 @@ export default function LanguageSwitcher() {
           <button
             key={lang.code}
             type="button"
-            onClick={() => {
+            onClick={(e) => {
               if (!SUPPORTED.has(lang.code)) return;
               if (lang.code === current) return;
 
-              changeLang(lang.code);
+              handleLanguageChange(e, lang.code);
             }}
             className={
               "px-2 py-1 rounded-full border transition select-none cursor-pointer pointer-events-auto " +

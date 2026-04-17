@@ -1782,6 +1782,17 @@
   "pricingPage": {
     "title": "Plans and pricing",
     "updatedAt": "Last updated: {{date}}",
+    "common": {
+      "notAvailable": "—"
+    },
+    "summary": {
+      "planCodes": {
+        "free": "FREE",
+        "pro": "PRO",
+        "enterprise": "ENTERPRISE"
+      },
+      "planCodeUnknown": "{{code}}"
+    },
     "free": {
       "title": "Free plan",
       "item1": "1 geofence",
@@ -1800,6 +1811,7 @@
     "common": {
       "currentPlan": "Plan actual",
       "loading": "Cargando...",
+      "notAvailable": "—",
       "unlimited": "Ilimitadas"
     },
     "actions": {
@@ -1821,6 +1833,12 @@
       "noCommercialData": "No commercial data",
       "status": "Status",
       "trialUntil": "Trial until",
+      "planCodes": {
+        "free": "FREE",
+        "pro": "PRO",
+        "enterprise": "ENTERPRISE"
+      },
+      "planCodeUnknown": "{{code}}",
       "maxGeofences": "Máx. geocercas",
       "maxTrackers": "Máx. trackers"
     },

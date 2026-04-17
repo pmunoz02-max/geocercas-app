@@ -1800,6 +1800,17 @@
   "pricingPage": {
     "title": "Planes y precios",
     "updatedAt": "Última actualización: {{date}}",
+    "common": {
+      "notAvailable": "—"
+    },
+    "summary": {
+      "planCodes": {
+        "free": "FREE",
+        "pro": "PRO",
+        "enterprise": "ENTERPRISE"
+      },
+      "planCodeUnknown": "{{code}}"
+    },
     "free": {
       "title": "Plan Free",
       "item1": "1 geocerca",
@@ -1818,6 +1829,7 @@
     "common": {
       "currentPlan": "Plan actual",
       "loading": "Cargando...",
+      "notAvailable": "—",
       "unlimited": "Ilimitadas"
     },
     "actions": {
@@ -1839,6 +1851,12 @@
       "noCommercialData": "Sin datos comerciales",
       "status": "Estado",
       "trialUntil": "Prueba hasta",
+      "planCodes": {
+        "free": "FREE",
+        "pro": "PRO",
+        "enterprise": "ENTERPRISE"
+      },
+      "planCodeUnknown": "{{code}}",
       "maxGeofences": "Máx. geocercas",
       "maxTrackers": "Máx. trackers"
     },

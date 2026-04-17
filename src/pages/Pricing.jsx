@@ -11,7 +11,7 @@ function normalizePlanCode(value) {
   return String(value || "free").toLowerCase();
 }
 
-function formatLimit(value, fallback = "—", unlimitedLabel = "Unlimited") {
+function formatLimit(value, fallback, unlimitedLabel) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   if (n >= 9999) return unlimitedLabel;
@@ -242,6 +242,17 @@ export default function Pricing() {
     return normalizePlanCode(billingPanel?.effective_plan_code || planCode);
   }, [billingPanel, planCode]);
 
+  const notAvailableLabel = tp("common.notAvailable");
+
+  const detectedPlanLabel = useMemo(() => {
+    const key = `summary.planCodes.${currentPlanCode}`;
+    const translated = tp(key);
+    if (translated !== `pricingPage.${key}` && translated !== `pricing.${key}`) {
+      return translated;
+    }
+    return tp("summary.planCodeUnknown", { code: String(currentPlanCode || "").toUpperCase() });
+  }, [currentPlanCode, tp]);
+
   const billingStatus = useMemo(() => {
     const raw = billingPanel?.plan_status;
     if (raw == null || raw === "") return "unknown";
@@ -263,11 +274,11 @@ export default function Pricing() {
 
   const trialUntil = useMemo(() => {
     const value = billingPanel?.trial_end;
-    if (!value) return "-";
+    if (!value) return notAvailableLabel;
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return "-";
+    if (Number.isNaN(d.getTime())) return notAvailableLabel;
     return d.toLocaleDateString();
-  }, [billingPanel]);
+  }, [billingPanel, notAvailableLabel]);
 
   const freeFeatures = useMemo(
     () => [
@@ -286,13 +297,13 @@ export default function Pricing() {
         count: formatLimit(maxTrackers || 3, "3", tp("common.unlimited")),
       }),
       tp("pro.features.upToGeofences", {
-        count: formatLimit(maxGeocercas || 9999, "—", tp("common.unlimited")),
+        count: formatLimit(maxGeocercas || 9999, notAvailableLabel, tp("common.unlimited")),
       }),
       tp("pro.features.trackerEnabled"),
       tp("pro.features.invitesEnabled"),
       tp("pro.features.paddleManaged"),
     ],
-    [maxTrackers, maxGeocercas, tp]
+    [maxTrackers, maxGeocercas, notAvailableLabel, tp]
   );
 
   const enterpriseFeatures = useMemo(
@@ -350,7 +361,7 @@ export default function Pricing() {
               {tp("summary.detectedPlan")}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
-              {currentPlanCode.toUpperCase()}
+              {detectedPlanLabel}
             </div>
           </div>
 
@@ -377,7 +388,7 @@ export default function Pricing() {
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {entitlementsLoading
                 ? tp("common.loading")
-                : formatLimit(maxGeocercas, "—", tp("common.unlimited"))}
+                : formatLimit(maxGeocercas, notAvailableLabel, tp("common.unlimited"))}
             </div>
           </div>
 
@@ -388,7 +399,7 @@ export default function Pricing() {
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {entitlementsLoading
                 ? tp("common.loading")
-                : formatLimit(maxTrackers, "—", tp("common.unlimited"))}
+                : formatLimit(maxTrackers, notAvailableLabel, tp("common.unlimited"))}
             </div>
           </div>
         </div>
