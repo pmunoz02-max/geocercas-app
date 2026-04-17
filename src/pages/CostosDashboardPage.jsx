@@ -1,6 +1,6 @@
 ﻿// src/pages/CostosDashboardPage.jsx
 // Dashboard de Costos — alineado con Reports.jsx por Camino A
-// Fuente canónica: /api/reportes?action=costs_hybrid
+// Fuente canónica: /api/reportes?action=costs
 // ✅ Usa costo_final como costo del dashboard
 // ✅ Mantiene agregación por persona / actividad / geocerca / moneda
 // ✅ Mantiene export CSV y PNG
@@ -404,7 +404,7 @@ const CostosDashboardPage = () => {
   if (loadingAccess) {
     return (
       <div className="p-4 text-sm text-gray-600">
-        {t("dashboardCostos.loadingPermissions") || "Loading permissions…"}
+        {t("dashboardCostos.loadingPermissions")}
       </div>
     );
   }
@@ -477,7 +477,7 @@ const CostosDashboardPage = () => {
       }
 
       const params = new URLSearchParams();
-      params.set("action", "costs_hybrid");
+      params.set("action", "costs");
 
       if (fromDate) params.set("start", fromDate);
       if (toDate) params.set("end", toDate);
@@ -541,7 +541,7 @@ const CostosDashboardPage = () => {
 
   const handleExportDataCSV = () => {
     if (!aggregatedData.length) {
-      window.alert(t("dashboardCostos.exportNoData") || "No hay datos para exportar.");
+      window.alert(t("dashboardCostos.exportNoData"));
       return;
     }
 
@@ -572,7 +572,7 @@ const CostosDashboardPage = () => {
 
   const handleExportChartPNG = async () => {
     if (!chartRef.current) {
-      window.alert(t("dashboardCostos.exportChartError") || "No se pudo exportar el gráfico.");
+      window.alert(t("dashboardCostos.exportChartError"));
       return;
     }
 
@@ -591,7 +591,7 @@ const CostosDashboardPage = () => {
       link.click();
       document.body.removeChild(link);
     } catch (e) {
-      window.alert(t("dashboardCostos.exportChartError") || "No se pudo exportar el gráfico.");
+      window.alert(t("dashboardCostos.exportChartError"));
     }
   };
 
@@ -602,7 +602,7 @@ const CostosDashboardPage = () => {
           <h1 className="text-2xl font-bold">{t("dashboardCostos.title")}</h1>
           <p className="text-sm text-gray-600">{t("dashboardCostos.subtitle")}</p>
           <p className="text-xs text-gray-500 mt-1">
-            {t("dashboardCostos.currentOrgLabel", "Current organization")}:{" "}
+            {t("dashboardCostos.currentOrganization")}:{" "}
             <span className="font-medium">
               {currentOrg?.name || "—"}
             </span>
@@ -616,22 +616,22 @@ const CostosDashboardPage = () => {
             disabled={loading}
           >
             {loading
-              ? t("dashboardCostos.refreshing") || "Refreshing…"
-              : t("dashboardCostos.refreshButton")}
+              ? t("dashboardCostos.loading")
+              : t("dashboardCostos.actions.refresh")}
           </button>
 
           <button
             onClick={handleExportDataCSV}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportDataButton") || "Export data (CSV)"}
+            {t("dashboardCostos.actions.exportData")}
           </button>
 
           <button
             onClick={handleExportChartPNG}
             className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
           >
-            {t("dashboardCostos.exportChartButton") || "Export chart (PNG)"}
+            {t("dashboardCostos.actions.exportGraphic")}
           </button>
         </div>
       </div>
@@ -651,28 +651,28 @@ const CostosDashboardPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-emerald-500">
           <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiTotalHours")}
+            {t("dashboardCostos.kpis.totalHours")}
           </p>
           <p className="text-xl font-bold">{formatNumber(totalGlobal.totalHours)}</p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-indigo-500">
           <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiTotalCost")}
+            {t("dashboardCostos.kpis.totalCost")}
           </p>
           <p className="text-xl font-bold">{formatNumber(totalGlobal.totalCost)}</p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-amber-500">
           <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiRecords")}
+            {t("dashboardCostos.kpis.registrations")}
           </p>
           <p className="text-xl font-bold">{rows.length}</p>
         </div>
 
         <div className="bg-white rounded-xl p-3 shadow border-l-4 border-pink-500">
           <p className="text-xs text-gray-500 uppercase">
-            {t("dashboardCostos.kpiAvgRate") || "Average rate"}
+            {t("dashboardCostos.kpis.avgRate")}
           </p>
           <p className="text-xl font-bold">{formatNumber(globalAvgRate)}</p>
         </div>
@@ -681,7 +681,7 @@ const CostosDashboardPage = () => {
       {resumenMoneda.length > 0 && (
         <div className="bg-white rounded-xl p-3 shadow">
           <h2 className="text-xs font-semibold text-gray-700 mb-2">
-            {t("dashboardCostos.currenciesSummaryTitle") || "Summary by currency"}
+            {t("dashboardCostos.currenciesSummaryTitle")}
           </h2>
           <div className="flex flex-wrap gap-2 text-xs">
             {resumenMoneda.map((m, idx) => (
@@ -696,7 +696,7 @@ const CostosDashboardPage = () => {
                 <span className="font-semibold">{m.currency || "N/A"}</span>
                 <span className="text-gray-500">
                   {formatNumber(m.totalCost)} / {formatNumber(m.totalHours)}{" "}
-                  {t("dashboardCostos.labelHours") || "hours"}
+                  {t("dashboardCostos.labelHours")}
                 </span>
               </div>
             ))}
@@ -903,7 +903,7 @@ const CostosDashboardPage = () => {
                   {t("dashboardCostos.colCosto")}
                 </th>
                 <th className="px-2 py-1 text-right">
-                  {t("dashboardCostos.colTarifaPromedio") || "Avg. rate"}
+                  {t("dashboardCostos.colTarifaPromedio")}
                 </th>
                 <th className="px-2 py-1 text-right">
                   {t("dashboardCostos.colRegistros")}
