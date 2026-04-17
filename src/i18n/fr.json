@@ -134,7 +134,10 @@
       "activate": "Activar",
       "deactivate": "Desactivar",
       "delete": "Eliminar",
-      "edit": "Editar"
+      "edit": "Editar",
+      "save": "Enregistrer l'affectation",
+      "update": "Mettre à jour l'affectation",
+      "cancel": "Annuler"
     },
     "banner": {
       "created": "Affectation créée avec succès.",
@@ -172,6 +175,18 @@
       "geofenceAll": "Geocerca: todas",
       "personalAll": "Personal: todos"
     },
+    "fields": {
+      "person": "Personne",
+      "geofence": "Géofence",
+      "activity": "Activité",
+      "startAt": "Date/heure de début",
+      "endAt": "Date/heure de fin",
+      "status": "Statut",
+      "frequencyMinutes": "Fréquence (minutes)"
+    },
+    "statusOptions": {
+      "active": "Actif"
+    },
     "form": {
       "activityLabel": "Actividad",
       "activityPlaceholder": "Selecciona una actividad",
@@ -186,7 +201,7 @@
       "frequencyLabel": "Frecuencia (minutos)",
       "geofenceLabel": "Geocerca",
       "geofencePlaceholder": "Selecciona una geocerca",
-      "newTitle": "Nueva asignación",
+      "newTitle": "Nouvelle affectation",
       "personLabel": "Persona",
       "personPlaceholder": "Selecciona una persona",
       "quickActivity": {
@@ -219,7 +234,10 @@
       "createGenericError": "No se pudo crear la asignación.",
       "createSuccess": "Affectation créée avec succès.",
       "deleteError": "No se pudo eliminar la asignación.",
-      "deleteSuccess": "Asignación eliminada correctamente.",
+      "deleteSuccess": "Affectation supprimée avec succès.",
+      "activatedSuccess": "Affectation activée avec succès.",
+      "deactivatedSuccess": "Affectation désactivée avec succès.",
+      "toggleStatusError": "Erreur lors du changement de statut.",
       "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
       "frequencyTooLow": "La frecuencia mínima permitida es de 5 minutos.",
       "loadError": "Error al cargar las asignaciones.",
@@ -391,7 +409,7 @@
       "noRole": "SANS RÔLE",
       "root": "ROOT"
     },
-    "select": "— Sélectionner —",
+    "select": "Sélectionner",
     "sending": "Envoi...",
     "show": "Afficher",
     "hide": "Masquer",

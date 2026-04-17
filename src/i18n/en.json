@@ -134,7 +134,10 @@
       "activate": "Activar",
       "deactivate": "Desactivar",
       "delete": "Eliminar",
-      "edit": "Editar"
+      "edit": "Editar",
+      "save": "Save assignment",
+      "update": "Update assignment",
+      "cancel": "Cancel"
     },
     "banner": {
       "created": "Assignment created successfully.",
@@ -171,6 +174,18 @@
       "statusAll": "Estado: todos",
       "geofenceAll": "Geocerca: todas",
       "personalAll": "Personal: todos"
+    },
+    "fields": {
+      "person": "Person",
+      "geofence": "Geofence",
+      "activity": "Activity",
+      "startAt": "Start date/time",
+      "endAt": "End date/time",
+      "status": "Status",
+      "frequencyMinutes": "Frequency (minutes)"
+    },
+    "statusOptions": {
+      "active": "Active"
     },
     "form": {
       "activityLabel": "Actividad",
@@ -219,7 +234,10 @@
       "createGenericError": "No se pudo crear la asignación.",
       "createSuccess": "Assignment created successfully.",
       "deleteError": "No se pudo eliminar la asignación.",
-      "deleteSuccess": "Asignación eliminada correctamente.",
+      "deleteSuccess": "Assignment deleted successfully.",
+      "activatedSuccess": "Assignment activated successfully.",
+      "deactivatedSuccess": "Assignment deactivated successfully.",
+      "toggleStatusError": "Error changing assignment status.",
       "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
       "frequencyTooLow": "La frecuencia mínima permitida es de 5 minutos.",
       "loadError": "Error al cargar las asignaciones.",
@@ -391,7 +409,7 @@
       "noRole": "NO ROLE",
       "root": "ROOT"
     },
-    "select": "— Select —",
+    "select": "Select",
     "sending": "Sending...",
     "show": "Show",
     "hide": "Hide",

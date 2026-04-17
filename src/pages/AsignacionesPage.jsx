@@ -214,17 +214,17 @@ export default function AsignacionesPage() {
     }
 
     if (!selectedGeocercaId) {
-      setError("Debe seleccionar una geocerca.");
+      setError(t("asignaciones.error.missingGeofence"));
       return;
     }
 
     if (!selectedActivityId) {
-      setError("Debe seleccionar una actividad.");
+      setError(t("asignaciones.error.missingActivity"));
       return;
     }
 
     if (!startTime) {
-      setError("Debe seleccionar la fecha/hora de inicio.");
+      setError(t("asignaciones.error.missingStart"));
       return;
     }
 
@@ -341,12 +341,12 @@ export default function AsignacionesPage() {
 
       setSuccess(
         next === "active"
-          ? "Asignación activada correctamente."
-          : "Asignación desactivada correctamente."
+          ? t("asignaciones.messages.activatedSuccess")
+          : t("asignaciones.messages.deactivatedSuccess")
       );
     } catch (e) {
       console.error("[AsignacionesPage] toggle status failed:", e);
-      setError(e?.message || "Error al cambiar estado de asignación.");
+      setError(e?.message || t("asignaciones.messages.toggleStatusError"));
     }
   }
 
@@ -359,10 +359,10 @@ export default function AsignacionesPage() {
 
       await deleteAsignacion(id, activeOrgId);
       await loadAll();
-      setSuccess("Asignación eliminada correctamente.");
+      setSuccess(t("asignaciones.messages.deleteSuccess"));
     } catch (e) {
       console.error("[AsignacionesPage] delete failed:", e);
-      setError(e?.message || "Error al eliminar asignación.");
+      setError(e?.message || t("asignaciones.messages.deleteError"));
     }
   }
 
@@ -384,7 +384,7 @@ export default function AsignacionesPage() {
     <div className="max-w-6xl mx-auto p-4">
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="mb-4 text-2xl font-semibold text-gray-900">
-          {editingId ? "Editar asignación" : "Nueva asignación"}
+          {editingId ? t("asignaciones.form.editTitle") : t("asignaciones.form.newTitle")}
         </h2>
 
         {error ? (
@@ -402,7 +402,7 @@ export default function AsignacionesPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-800">
-              Persona
+              {t("asignaciones.fields.person")}
             </label>
             <select
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
@@ -424,7 +424,7 @@ export default function AsignacionesPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-800">
-              Geocerca
+              {t("asignaciones.fields.geofence")}
             </label>
             <select
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
@@ -442,7 +442,7 @@ export default function AsignacionesPage() {
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-800">
-              Actividad
+              {t("asignaciones.fields.activity")}
             </label>
             <select
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
@@ -458,7 +458,7 @@ export default function AsignacionesPage() {
             </select>
             {actividades.length === 0 ? (
               <p className="mt-2 text-sm text-amber-700">
-                No hay actividades disponibles para esta organización.
+                {t("asignaciones.form.noActivitiesHint")}
               </p>
             ) : null}
           </div>
@@ -466,7 +466,7 @@ export default function AsignacionesPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-800">
-                Fecha/hora inicio
+                {t("asignaciones.fields.startAt")}
               </label>
               <input
                 type="datetime-local"
@@ -478,7 +478,7 @@ export default function AsignacionesPage() {
 
                   if (endTime && nextStart && new Date(endTime) < new Date(nextStart)) {
                     setEndTimeError(
-                      "La fecha/hora de fin no puede ser anterior a la fecha/hora de inicio."
+                      t("asignaciones.error.endBeforeStart")
                     );
                   } else {
                     setEndTimeError("");
@@ -490,7 +490,7 @@ export default function AsignacionesPage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-800">
-                Fecha/hora fin
+                {t("asignaciones.fields.endAt")}
               </label>
               <input
                 type="datetime-local"
@@ -503,7 +503,7 @@ export default function AsignacionesPage() {
 
                   if (startTime && nextEnd && new Date(nextEnd) < new Date(startTime)) {
                     setEndTimeError(
-                      "La fecha/hora de fin no puede ser anterior a la fecha/hora de inicio."
+                      t("asignaciones.error.endBeforeStart")
                     );
                   } else {
                     setEndTimeError("");
@@ -519,7 +519,7 @@ export default function AsignacionesPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-800">
-                Estado
+                {t("asignaciones.fields.status")}
               </label>
               <select
                 className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
@@ -533,7 +533,7 @@ export default function AsignacionesPage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-800">
-                Frecuencia (minutos)
+                {t("asignaciones.fields.frequencyMinutes")}
               </label>
               <input
                 type="number"
@@ -553,11 +553,11 @@ export default function AsignacionesPage() {
             >
               {saving
                 ? editingId
-                  ? "Actualizando..."
-                  : "Guardando..."
+                  ? `${t("asignaciones.form.updateButton")}...`
+                  : `${t("asignaciones.form.saveButton")}...`
                 : editingId
-                  ? "Actualizar asignación"
-                  : "Guardar asignación"}
+                  ? t("asignaciones.form.updateButton")
+                  : t("asignaciones.form.saveButton")}
             </button>
 
             {editingId ? (
@@ -566,7 +566,7 @@ export default function AsignacionesPage() {
                 onClick={handleCancelEdit}
                 className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancelar
+                {t("asignaciones.actions.cancel")}
               </button>
             ) : null}
           </div>
