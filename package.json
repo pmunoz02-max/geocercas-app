@@ -8,7 +8,6 @@
   },
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/i18n-translate.mjs",
     "build": "vite build",
     "preview": "vite preview --host",
     "i18n:audit": "node scripts/i18n-audit.mjs",
