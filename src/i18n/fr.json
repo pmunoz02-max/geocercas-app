@@ -1880,67 +1880,73 @@
       "backToBilling": "Retour à la facturation",
       "goHome": "Aller à l'accueil"
     },
-    "title": "Facturación",
-    "authRequired": "Inicia sesión para administrar tu plan.",
+    "title": "Facturation",
+    "authRequired": "Connectez-vous pour gérer votre plan.",
     "previewNotice": {
-      "prefix": "Monetización en",
+      "prefix": "Monétisation en",
       "middle": "(Stripe TEST).",
-      "suffix": "No afecta producción."
+      "suffix": "N’affecte pas la production."
     },
     "actions": {
-      "viewPlans": "Ver planes"
+      "viewPlans": "Voir les plans"
     },
     "labels": {
-      "email": "Correo",
-      "orgId": "ID de organización"
+      "email": "E-mail",
+      "orgId": "ID de l’organisation"
     },
     "planState": {
-      "title": "Estado del plan"
+      "title": "État du plan"
     },
     "states": {
-      "loadingPlanStatus": "Cargando estado del plan..."
+      "loadingPlanStatus": "Chargement de l’état du plan..."
     },
     "errors": {
-      "loadPlanStatus": "No se pudo cargar el estado del plan."
+      "loadPlanStatus": "Impossible de charger l’état du plan."
     },
     "cards": {
-      "currentPlan": "Plan actual",
-      "status": "Estado",
-      "trialUntil": "Prueba hasta",
-      "currentPeriodUntil": "Periodo actual hasta"
+      "currentPlan": "Plan actuel",
+      "status": "Statut",
+      "trialUntil": "Essai jusqu’au",
+      "currentPeriodUntil": "Période actuelle jusqu’au"
     },
     "subscriptionManagement": {
-      "title": "Gestión de suscripción",
-      "description": "Abre el portal de clientes de Stripe para actualizar tu tarjeta, cancelar o revisar tu suscripción."
+      "title": "Gestion de l’abonnement",
+      "description": "Ouvrez le portail client Stripe pour mettre à jour votre carte, annuler ou consulter votre abonnement."
     },
     "messages": {
-      "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
-      "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
+      "cancelAtPeriodEnd": "Votre abonnement sera annulé à la fin de la période actuelle.",
+      "activePlanExists": "Un plan actif existe déjà pour cette organisation. Le bouton d’upgrade est masqué."
     },
     "upgrade": {
+      "productTitle": "Geofences PRO",
       "priceLabel": "29 $US/mois · Paddle (Preview)",
       "orgIdLabel": "ID org",
-      "notResolved": "(non résolue)",
-      "organizationInputLabel": "ID de l'organisation (org_id)",
+      "notResolved": "(non résolu)",
+      "organizationInputLabel": "ID de l’organisation (org_id)",
       "organizationInputPlaceholder": "Ex. ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
-      "organizationInputHelp": "Si l'ID n'est pas détecté automatiquement, collez ici l'UUID de l'organisation.",
-      "subscribe": "M'abonner à PRO",
+      "organizationInputHelp": "Si l’ID n’est pas détecté automatiquement, collez ici l’UUID de l’organisation.",
+      "subscribe": "S’abonner à PRO",
       "processing": "Traitement en cours...",
       "noticeTitle": "Avis",
+      "messages": {
+        "paddleError": "ERREUR PADDLE:\n{{details}}",
+        "checkoutUrlMissing": "URL CHECKOUT MANQUANTE:\n{{details}}",
+        "paddleException": "EXCEPTION PADDLE:\n{{details}}"
+      },
       "errors": {
-        "invalidOrgId": "ID d'organisation invalide. Copiez l'ID de l'organisation (UUID) et collez-le ici."
+        "invalidOrgId": "ID d’organisation invalide. Copiez l’UUID et collez-le ici."
       }
     },
     "compareBeforeUpgrade": {
-      "title": "¿Quieres comparar antes de actualizar?",
-      "description": "Revisa la página de planes para comparar Free, Pro y Enterprise."
+      "title": "Voulez-vous comparer avant de mettre à niveau ?",
+      "description": "Consultez la page des plans pour comparer Free, Pro et Enterprise."
     },
     "status": {
-      "trialing": "Prueba",
-      "active": "Activo",
-      "pastDue": "Pago vencido",
-      "canceled": "Cancelado",
-      "free": "Gratis"
+      "trialing": "Essai",
+      "active": "Actif",
+      "pastDue": "Paiement en retard",
+      "canceled": "Annulé",
+      "free": "Gratuit"
     }
   },
   "reports": {
