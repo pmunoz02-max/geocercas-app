@@ -1797,33 +1797,6 @@
       "acc": "acc"
     }
   },
-  "pricingPage": {
-    "title": "Planes y precios",
-    "updatedAt": "Última actualización: {{date}}",
-    "common": {
-      "notAvailable": "—"
-    },
-    "summary": {
-      "planCodes": {
-        "free": "FREE",
-        "pro": "PRO",
-        "enterprise": "ENTERPRISE"
-      },
-      "planCodeUnknown": "{{code}}"
-    },
-    "free": {
-      "title": "Plan Free",
-      "item1": "1 geocerca",
-      "item2": "2 trackers"
-    },
-    "pro": {
-      "title": "Plan Pro",
-      "item1": "Más geocercas",
-      "item2": "Hasta 10 trackers",
-      "item3": "Funciones avanzadas"
-    },
-    "billingNote": "La facturación puede ser mensual o anual."
-  },
   "pricing": {
     "accessDenied": "No tienes permisos para ver monetización en esta organización.",
     "common": {

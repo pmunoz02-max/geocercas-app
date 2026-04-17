@@ -122,7 +122,7 @@
       "invitarTracker": "Invite tracker",
       "nuevaGeocerca": "New geofence",
       "personal": "Staff",
-      "pricing": "Pricing",
+      "pric\u0069ng": "Pricing",
       "reportes": "Reports",
       "billing": "Billing",
       "tracker": "Tracker"
@@ -1779,125 +1779,50 @@
       "acc": "acc"
     }
   },
-  "pricingPage": {
-    "title": "Plans and pricing",
-    "updatedAt": "Last updated: {{date}}",
-    "common": {
-      "notAvailable": "—"
-    },
-    "summary": {
-      "planCodes": {
-        "free": "FREE",
-        "pro": "PRO",
-        "enterprise": "ENTERPRISE"
-      },
-      "planCodeUnknown": "{{code}}"
-    },
-    "free": {
-      "title": "Free plan",
-      "item1": "1 geofence",
-      "item2": "2 trackers"
-    },
-    "pro": {
-      "title": "Pro plan",
-      "item1": "More geofences",
-      "item2": "Up to 10 trackers",
-      "item3": "Advanced features"
-    },
-    "billingNote": "Billing may be monthly or yearly."
-  },
   "pricing": {
-    "accessDenied": "You do not have permission to view monetization for this organization.",
-    "common": {
-      "currentPlan": "Current plan",
-      "loading": "Loading...",
-      "notAvailable": "—",
-      "unlimited": "Unlimited"
-    },
-    "actions": {
-      "goToBilling": "Go to Billing",
-      "contactSales": "Contact Sales"
-    },
+    "title": "Plans and pricing",
     "page": {
-      "title": "Plans and pricing",
       "previewNotice": {
         "prefix": "This screen runs in",
-        "previewTag": "PREVIEW",
-        "middle": "and reuses Stripe in",
-        "testTag": "TEST",
-        "suffix": "It does not affect production."
+        "middle": "PREVIEW",
+        "suffix": "and uses Stripe in TEST mode. It does not affect production."
       }
+    },
+    "actions": {
+      "goToBilling": "Go to Billing"
     },
     "summary": {
       "detectedPlan": "Detected plan",
-      "noCommercialData": "No commercial data",
       "status": "Status",
       "trialUntil": "Trial until",
-      "planCodes": {
-        "free": "FREE",
-        "pro": "PRO",
-        "enterprise": "ENTERPRISE"
-      },
-      "planCodeUnknown": "{{code}}",
       "maxGeofences": "Max geofences",
       "maxTrackers": "Max trackers"
     },
     "free": {
       "title": "Free",
       "subtitle": "To get started",
-      "price": "$0",
-      "description": "Designed to validate the platform's initial use.",
-      "currentPlanMessage": "You are already on the Free plan.",
+      "description": "Designed to validate initial platform usage",
       "features": {
-        "validateFlow": "Ideal to get started and validate the core flow",
-        "upToTrackers": "Up to {{count}} tracker",
-        "geofenceLimits": "Geofences with plan-based limits",
-        "billingAndUpgrade": "Access to Billing and a future plan upgrade path",
-        "backendEnforcement": "Backend still applies real enforcement"
+        "basicFlow": "Ideal to validate the base flow",
+        "oneTracker": "Up to 1 tracker"
       }
     },
     "pro": {
       "title": "Pro",
       "subtitle": "Active SaaS operations",
-      "price": "Stripe TEST",
-      "description": "Recommended plan to enable the Tracker module and operate with subscription.",
-      "higherPlanMessage": "Your organization already has a higher or different plan than Free.",
-      "reviewBillingMessage": "Review Billing to manage it.",
+      "description": "Recommended plan to enable Tracker module and operate with subscriptions",
       "features": {
-        "upToTrackers": "Up to {{count}} trackers per organization",
-        "upToGeofences": "Up to {{count}} geofences",
-        "trackerEnabled": "Tracker module enabled",
-        "invitesEnabled": "Tracker invites enabled",
+        "threeTrackers": "Up to 3 trackers per organization",
         "stripeSelfManaged": "Self-managed subscription with Stripe"
       }
     },
     "enterprise": {
       "title": "Enterprise",
       "subtitle": "Assisted sales",
-      "price": "Custom",
-      "description": "For organizations that require special commercial terms.",
+      "description": "For organizations requiring special commercial conditions",
       "features": {
-        "salesOnboarding": "Sales support and guided onboarding",
-        "flexibleLimits": "Adjustable limits and terms",
-        "multiTeamReady": "Ready for multi-team operations",
-        "specialAgreements": "Commercial scaling and special agreements",
-        "directSalesContact": "Direct contact with sales"
+        "support": "Commercial support and guided onboarding"
       }
-    },
-    "notes": {
-      "title": "Notes for this phase",
-      "backendAuthority": "The backend remains the real authority for plan state. This page only reflects the plan and shows available commercial actions.",
-      "proCheckout": "Upgrading to Pro reuses the existing Stripe Checkout flow. Subscription management reuses Stripe Customer Portal.",
-      "enterpriseSales": "Enterprise is presented as a sales channel, without enabling automatic checkout."
-    },
-    "status": {
-      "active": "Active",
-      "trialing": "Trial",
-      "past_due": "Past due",
-      "canceled": "Canceled",
-      "paused": "Paused",
-      "incomplete": "Incomplete",
-      "other": "Status: {{status}}"
     }
   },
   "billing": {

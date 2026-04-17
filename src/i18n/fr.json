@@ -1779,33 +1779,6 @@
       "acc": "acc"
     }
   },
-  "pricingPage": {
-    "title": "Plans et tarifs",
-    "updatedAt": "Dernière mise à jour : {{date}}",
-    "common": {
-      "notAvailable": "—"
-    },
-    "summary": {
-      "planCodes": {
-        "free": "FREE",
-        "pro": "PRO",
-        "enterprise": "ENTERPRISE"
-      },
-      "planCodeUnknown": "{{code}}"
-    },
-    "free": {
-      "title": "Plan Free",
-      "item1": "1 géofence",
-      "item2": "2 trackers"
-    },
-    "pro": {
-      "title": "Plan Pro",
-      "item1": "Plus de géofences",
-      "item2": "Jusqu'à 10 trackers",
-      "item3": "Fonctionnalités avancées"
-    },
-    "billingNote": "La facturation peut être mensuelle ou annuelle."
-  },
   "pricing": {
     "accessDenied": "Vous n'avez pas l'autorisation de voir la monétisation de cette organisation.",
     "common": {
