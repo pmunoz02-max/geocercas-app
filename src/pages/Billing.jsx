@@ -392,11 +392,13 @@ export default function Billing() {
                 {tr("billing.upgrade.productTitle", "Geocercas PRO")}
               </div>
               <div className="mt-1 text-sm text-slate-700">
-                {tr("billing.upgrade.priceLabel", "USD $29/month · Paddle")}
+                {tr("billing.upgrade.priceLabel", "USD $29/month · Paddle (Preview)")}
               </div>
               <div className="mt-2 text-xs text-slate-700">
                 <b>{tr("billing.upgrade.orgIdLabel", "Org ID")}:</b>{" "}
-                <span className="break-all font-mono text-slate-900">{orgId || "—"}</span>
+                <span className="font-mono break-all text-slate-900">
+                  {orgId || tr("billing.upgrade.notResolved", "(not resolved)")}
+                </span>
               </div>
               <div className="mt-4">
                 <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />

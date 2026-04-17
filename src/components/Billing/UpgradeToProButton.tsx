@@ -76,7 +76,9 @@ export default function UpgradeToProButton({
             ? result.error
             : JSON.stringify(result.error, null, 2);
 
-        setMsg(`PADDLE ERROR:\n${errorText}`);
+        setMsg(
+          t("billing.upgrade.messages.paddleError", { details: errorText })
+        );
         console.error("[billing] PADDLE ERROR:", errorText);
         return;
       }
@@ -98,13 +100,21 @@ export default function UpgradeToProButton({
       console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
 
       const missingText = JSON.stringify(result?.data ?? {}, null, 2);
-      setMsg(`CHECKOUT URL MISSING:\n${missingText}`);
+      setMsg(
+        t("billing.upgrade.messages.checkoutUrlMissing", {
+          details: missingText,
+        })
+      );
       console.warn("[billing] CHECKOUT URL MISSING:", missingText);
     } catch (e) {
       console.error("[PADDLE BUTTON] exception", e);
 
       const exceptionText = e instanceof Error ? e.message : String(e);
-      setMsg(`PADDLE EXCEPTION:\n${exceptionText}`);
+      setMsg(
+        t("billing.upgrade.messages.paddleException", {
+          details: exceptionText,
+        })
+      );
       console.error("[billing] PADDLE EXCEPTION:", exceptionText);
     } finally {
       setIsLoading(false);
@@ -115,7 +125,9 @@ export default function UpgradeToProButton({
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4">
         <div>
-          <div className="text-lg font-bold text-slate-900">Geocercas PRO</div>
+          <div className="text-lg font-bold text-slate-900">
+            {t("billing.upgrade.productTitle")}
+          </div>
           <div className="text-sm text-slate-700">
             {t("billing.upgrade.priceLabel")}
           </div>
