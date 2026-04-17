@@ -643,6 +643,20 @@
       "viewFaq": "Ver FAQ"
     },
     "faq": {
+      "breadcrumb": "Centro de Ayuda / Preguntas frecuentes",
+      "title": "Preguntas frecuentes",
+      "subtitle": "Respuestas rápidas a las dudas más comunes.",
+      "goHome": "Ir a Inicio",
+      "items": [
+        {
+          "q": "¿Cómo invito a un tracker?",
+          "a": "Ve a Invitar tracker, escribe el correo y envía la invitación."
+        },
+        {
+          "q": "¿Qué pasa si el enlace venció?",
+          "a": "Solicita una nueva invitación desde la organización."
+        }
+      ],
       "backToPanel": "Ir al panel",
       "sections": [
         {
@@ -710,9 +724,7 @@
           "title": "Datos y privacidad"
         }
       ],
-      "seeQuickGuide": "Ver guía rápida",
-      "subtitle": "Respuestas rápidas sobre invitaciones, roles, seguimiento, reportes y privacidad de datos.",
-      "title": "Preguntas frecuentes"
+      "seeQuickGuide": "Ver guía rápida"
     },
     "instructions": {
       "bestPractice1Body": "Usa siempre el mismo teléfono para evitar cortes en el seguimiento.",

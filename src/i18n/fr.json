@@ -643,6 +643,20 @@
       "viewFaq": "Ver FAQ"
     },
     "faq": {
+      "breadcrumb": "Centre d’aide / Questions fréquentes",
+      "title": "Questions fréquentes",
+      "subtitle": "Réponses rapides aux questions les plus courantes.",
+      "goHome": "Aller à l’accueil",
+      "items": [
+        {
+          "q": "Comment inviter un tracker ?",
+          "a": "Allez dans Inviter un tracker, saisissez l’e-mail et envoyez l’invitation."
+        },
+        {
+          "q": "Que se passe-t-il si le lien a expiré ?",
+          "a": "Demandez une nouvelle invitation depuis l’organisation."
+        }
+      ],
       "backToPanel": "Ir al panel",
       "sections": [
         {
@@ -710,9 +724,7 @@
           "title": "Datos y privacidad"
         }
       ],
-      "seeQuickGuide": "Ver guía rápida",
-      "subtitle": "Respuestas rápidas sobre invitaciones, roles, seguimiento, reportes y privacidad de datos.",
-      "title": "Preguntas frecuentes"
+      "seeQuickGuide": "Ver guía rápida"
     },
     "instructions": {
       "bestPractice1Body": "Usa siempre el mismo teléfono para evitar cortes en el seguimiento.",
