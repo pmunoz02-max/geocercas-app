@@ -337,12 +337,16 @@ export default function Login() {
           <p className="mt-2 text-sm text-slate-300">
             {t("landing.heroSubtitle")}
           </p>
-          <p className="mt-2 text-xs text-yellow-300">
-            {t("login.debug.lang", { defaultValue: "LANG DEBUG" })}: {String((window && window.location && window.location.search) || "")}
-          </p>
-          <p className="mt-1 text-xs text-cyan-300">
-            {t("login.debug.i18n", { defaultValue: "I18N DEBUG" })}: {String(i18n.resolvedLanguage || i18n.language || "none")}
-          </p>
+          {import.meta.env.DEV && (
+            <>
+              <p className="mt-2 text-xs text-yellow-300">
+                {t("login.debug.lang", { defaultValue: "LANG DEBUG" })}: {String((window && window.location && window.location.search) || "")}
+              </p>
+              <p className="mt-1 text-xs text-cyan-300">
+                {t("login.debug.i18n", { defaultValue: "I18N DEBUG" })}: {String(i18n.resolvedLanguage || i18n.language || "none")}
+              </p>
+            </>
+          )}
         </div>
 
         <div className="auth-card">
