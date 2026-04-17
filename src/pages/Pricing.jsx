@@ -5,7 +5,6 @@ import { useAuth } from "@/context/auth.js";
 import { supabase } from "@/lib/supabaseClient.js";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
-import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton.jsx";
 
 function normalizePlanCode(value) {
   return String(value || "free").toLowerCase();
@@ -158,7 +157,6 @@ function ProPlanAction({
   billingLabel,
   higherPlanMessage,
   reviewBillingMessage,
-  returnUrl,
 }) {
   if (!authenticated || !currentOrgId) {
     return (
@@ -177,11 +175,17 @@ function ProPlanAction({
 
   if (currentPlanCode === "pro") {
     return (
-      <ManageSubscriptionButton
-        orgId={currentOrgId}
-        getAccessToken={getAccessToken}
-        returnUrl={returnUrl}
-      />
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        {reviewBillingMessage}
+        <div className="mt-3">
+          <Link
+            to="/billing"
+            className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-800"
+          >
+            {billingLabel}
+          </Link>
+        </div>
+      </div>
     );
   }
 
@@ -296,12 +300,6 @@ export default function Pricing() {
         ? "Unlimited"
         : "Ilimitadas"
   );
-
-  const returnUrl = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const lang = params.get("lang") || i18n.language || "es";
-    return `${window.location.origin}/pricing?lang=${encodeURIComponent(lang)}`;
-  }, [location.search, i18n.language]);
 
   const detectedPlanLabel = useMemo(() => {
     const key = `summary.planCodes.${currentPlanCode}`;
@@ -437,10 +435,10 @@ export default function Pricing() {
       tt(
         "pro.features.stripeSelfManaged",
         i18n.language === "fr"
-          ? "Abonnement autogéré avec Stripe"
+          ? "Abonnement autogéré"
           : i18n.language === "en"
-            ? "Self-managed subscription with Stripe"
-            : "Suscripción autogestionable con Stripe"
+            ? "Self-managed subscription"
+            : "Suscripción autogestionable"
       ),
     ],
     [maxTrackers, maxGeocercas, notAvailableLabel, unlimitedLabel, i18n.language, tt]
@@ -556,10 +554,10 @@ export default function Pricing() {
               {tt(
                 "page.previewNotice.middle",
                 i18n.language === "fr"
-                  ? "et réutilise Stripe en mode"
+                  ? "et utilise le flux d'abonnement en mode"
                   : i18n.language === "en"
-                    ? "and uses Stripe in"
-                    : "y reutiliza Stripe en modo"
+                    ? "and uses the subscription flow in"
+                    : "y usa el flujo de suscripción en modo"
               )}{" "}
               <b>
                 {tt(
@@ -750,7 +748,7 @@ export default function Pricing() {
                 ? "Active SaaS operations"
                 : "Operación SaaS activa"
           )}
-          price={tt("pro.price", "Stripe TEST")}
+          price={tt("pro.price", "Pro")}
           description={tt(
             "pro.description",
             i18n.language === "fr"
@@ -800,7 +798,6 @@ export default function Pricing() {
                     ? "Review Billing to manage it."
                     : "Revisa Facturación para administrarlo."
               )}
-              returnUrl={returnUrl}
             />
           }
         />
@@ -882,10 +879,10 @@ export default function Pricing() {
             {tt(
               "notes.proCheckout",
               i18n.language === "fr"
-                ? "La mise à niveau vers Pro réutilise le flux Stripe Checkout existant. La gestion de l'abonnement réutilise Stripe Customer Portal."
+                ? "La mise à niveau vers Pro utilise un checkout sécurisé. Gérez votre abonnement depuis la facturation."
                 : i18n.language === "en"
-                  ? "The upgrade to Pro reuses the existing Stripe Checkout flow. Subscription management reuses the Stripe Customer Portal."
-                  : "El mejora de plan a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal."
+                  ? "Upgrade to Pro with secure checkout. Manage your subscription from Billing."
+                  : "La mejora a Pro usa checkout seguro. Administra tu suscripción desde Facturación."
             )}
           </p>
           <p>
