@@ -1809,27 +1809,27 @@
   "pricing": {
     "accessDenied": "You do not have permission to view monetization for this organization.",
     "common": {
-      "currentPlan": "Plan actual",
-      "loading": "Cargando...",
+      "currentPlan": "Current plan",
+      "loading": "Loading...",
       "notAvailable": "—",
-      "unlimited": "Ilimitadas"
+      "unlimited": "Unlimited"
     },
     "actions": {
-      "goToBilling": "Ir a Facturación",
-      "contactSales": "Contactar ventas"
+      "goToBilling": "Go to Billing",
+      "contactSales": "Contact Sales"
     },
     "page": {
-      "title": "Planes y precios",
+      "title": "Plans and pricing",
       "previewNotice": {
-        "prefix": "Esta pantalla trabaja en",
+        "prefix": "This screen runs in",
         "previewTag": "PREVIEW",
-        "middle": "y reutiliza Stripe en modo",
+        "middle": "and reuses Stripe in",
         "testTag": "TEST",
-        "suffix": "No afecta producción."
+        "suffix": "It does not affect production."
       }
     },
     "summary": {
-      "detectedPlan": "Plan detectado",
+      "detectedPlan": "Detected plan",
       "noCommercialData": "No commercial data",
       "status": "Status",
       "trialUntil": "Trial until",
@@ -1839,57 +1839,57 @@
         "enterprise": "ENTERPRISE"
       },
       "planCodeUnknown": "{{code}}",
-      "maxGeofences": "Máx. geocercas",
-      "maxTrackers": "Máx. trackers"
+      "maxGeofences": "Max geofences",
+      "maxTrackers": "Max trackers"
     },
     "free": {
       "title": "Free",
-      "subtitle": "Para comenzar",
+      "subtitle": "To get started",
       "price": "$0",
-      "description": "Pensado para validar el uso inicial de la plataforma.",
-      "currentPlanMessage": "Ya estás usando el plan Free.",
+      "description": "Designed to validate the platform's initial use.",
+      "currentPlanMessage": "You are already on the Free plan.",
       "features": {
-        "validateFlow": "Ideal para empezar y validar el flujo base",
-        "upToTrackers": "Hasta {{count}} tracker",
-        "geofenceLimits": "Geocercas con límite por plan",
-        "billingAndUpgrade": "Acceso a Facturación y futura ruta de mejora de plan",
-        "backendEnforcement": "Backend sigue aplicando enforcement real"
+        "validateFlow": "Ideal to get started and validate the core flow",
+        "upToTrackers": "Up to {{count}} tracker",
+        "geofenceLimits": "Geofences with plan-based limits",
+        "billingAndUpgrade": "Access to Billing and a future plan upgrade path",
+        "backendEnforcement": "Backend still applies real enforcement"
       }
     },
     "pro": {
       "title": "Pro",
-      "subtitle": "Operación SaaS activa",
+      "subtitle": "Active SaaS operations",
       "price": "Stripe TEST",
-      "description": "Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
-      "higherPlanMessage": "Tu organización ya tiene un plan superior o distinto de Free.",
-      "reviewBillingMessage": "Revisa Facturación para administrarlo.",
+      "description": "Recommended plan to enable the Tracker module and operate with subscription.",
+      "higherPlanMessage": "Your organization already has a higher or different plan than Free.",
+      "reviewBillingMessage": "Review Billing to manage it.",
       "features": {
-        "upToTrackers": "Hasta {{count}} trackers por organización",
-        "upToGeofences": "Hasta {{count}} geocercas",
-        "trackerEnabled": "Módulo Tracker habilitado",
-        "invitesEnabled": "Invitación de trackers habilitada",
-        "paddleManaged": "Paddle checkout and subscription management (preview)",
-        "stripeSelfManaged": "Suscripción autogestionable con Stripe"
+        "upToTrackers": "Up to {{count}} trackers per organization",
+        "upToGeofences": "Up to {{count}} geofences",
+        "trackerEnabled": "Tracker module enabled",
+        "invitesEnabled": "Tracker invites enabled",
+        "stripeSelfManaged": "Stripe checkout and subscription management (self-managed)",
+        "stripeSelfManaged": "Self-managed subscription with Stripe"
       }
     },
     "enterprise": {
       "title": "Enterprise",
-      "subtitle": "Venta asistida",
-      "price": "A medida",
-      "description": "Para organizaciones que requieren condiciones comerciales especiales.",
+      "subtitle": "Assisted sales",
+      "price": "Custom",
+      "description": "For organizations that require special commercial terms.",
       "features": {
-        "salesOnboarding": "Atención comercial y onboarding guiado",
-        "flexibleLimits": "Límites y condiciones ajustables",
-        "multiTeamReady": "Preparado para operación con múltiples equipos",
-        "specialAgreements": "Escalamiento comercial y acuerdos especiales",
-        "directSalesContact": "Contacto directo con ventas"
+        "salesOnboarding": "Sales support and guided onboarding",
+        "flexibleLimits": "Adjustable limits and terms",
+        "multiTeamReady": "Ready for multi-team operations",
+        "specialAgreements": "Commercial scaling and special agreements",
+        "directSalesContact": "Direct contact with sales"
       }
     },
     "notes": {
-      "title": "Notas de esta fase",
-      "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
-      "proCheckout": "El mejora de plan a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
-      "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
+      "title": "Notes for this phase",
+      "backendAuthority": "The backend remains the real authority for plan state. This page only reflects the plan and shows available commercial actions.",
+      "proCheckout": "Upgrading to Pro reuses the existing Stripe Checkout flow. Subscription management reuses Stripe Customer Portal.",
+      "enterpriseSales": "Enterprise is presented as a sales channel, without enabling automatic checkout."
     },
     "status": {
       "active": "Active",

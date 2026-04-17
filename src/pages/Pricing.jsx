@@ -298,7 +298,7 @@ export default function Pricing() {
       }),
       tp("pro.features.trackerEnabled"),
       tp("pro.features.invitesEnabled"),
-      tp("pro.features.paddleManaged"),
+      tp("pro.features.stripeSelfManaged"),
     ],
     [maxTrackers, maxGeocercas, notAvailableLabel, tp]
   );
