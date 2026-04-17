@@ -163,7 +163,11 @@ export default function UpgradeToProButton({
           disabled={disabled}
           className="rounded-xl bg-slate-900 px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? t("billing.upgrade.processing") : t("billing.upgrade.subscribe")}
+          {isLoading
+            ? t("billing.upgrade.processing")
+            : t("billing.upgrade.subscribe", {
+                defaultValue: "Subscribe to PRO",
+              })}
         </button>
 
         {msg && (

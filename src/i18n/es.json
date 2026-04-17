@@ -1936,6 +1936,7 @@
       "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
     },
     "upgrade": {
+      "productTitle": "Geocercas PRO",
       "priceLabel": "USD $29/mes · Paddle (Preview)",
       "orgIdLabel": "Org ID",
       "notResolved": "(no resuelta)",
@@ -1945,6 +1946,11 @@
       "subscribe": "Suscribirme a PRO",
       "processing": "Procesando...",
       "noticeTitle": "Aviso",
+      "messages": {
+        "paddleError": "ERROR DE PADDLE:\n{{details}}",
+        "checkoutUrlMissing": "FALTA CHECKOUT URL:\n{{details}}",
+        "paddleException": "EXCEPCION DE PADDLE:\n{{details}}"
+      },
       "errors": {
         "invalidOrgId": "Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí."
       }
