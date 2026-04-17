@@ -179,6 +179,10 @@ function ProPlanAction({
 
 export default function Pricing() {
   const { t } = useTranslation();
+  const tp = React.useCallback(
+    (key, options) => t([`pricingPage.${key}`, `pricing.${key}`], options),
+    [t]
+  );
   const { loading, ready, authenticated, currentOrgId, isAdmin } = useAuth();
   const {
     loading: entitlementsLoading,
@@ -246,10 +250,16 @@ export default function Pricing() {
 
   const billingStatusLabel = useMemo(() => {
     if (billingStatus === "unknown") {
-      return t("pricing.summary.noCommercialData", { defaultValue: "Sin datos comerciales" });
+      return tp("summary.noCommercialData");
     }
-    return billingStatus;
-  }, [billingStatus, t]);
+
+    const statusKey = `status.${billingStatus}`;
+    const translated = tp(statusKey);
+    if (translated !== `pricingPage.${statusKey}` && translated !== `pricing.${statusKey}`)
+      return translated;
+
+    return tp("status.other", { status: billingStatus });
+  }, [billingStatus, tp]);
 
   const trialUntil = useMemo(() => {
     const value = billingPanel?.trial_end;
@@ -261,39 +271,39 @@ export default function Pricing() {
 
   const freeFeatures = useMemo(
     () => [
-      t("pricing.free.features.validateFlow"),
-      t("pricing.free.features.upToTrackers", { count: 1 }),
-      t("pricing.free.features.geofenceLimits"),
-      t("pricing.free.features.billingAndUpgrade"),
-      t("pricing.free.features.backendEnforcement"),
+      tp("free.features.validateFlow"),
+      tp("free.features.upToTrackers", { count: 1 }),
+      tp("free.features.geofenceLimits"),
+      tp("free.features.billingAndUpgrade"),
+      tp("free.features.backendEnforcement"),
     ],
-    [t]
+    [tp]
   );
 
   const proFeatures = useMemo(
     () => [
-      t("pricing.pro.features.upToTrackers", {
-        count: formatLimit(maxTrackers || 3, "3", t("pricing.common.unlimited")),
+      tp("pro.features.upToTrackers", {
+        count: formatLimit(maxTrackers || 3, "3", tp("common.unlimited")),
       }),
-      t("pricing.pro.features.upToGeofences", {
-        count: formatLimit(maxGeocercas || 9999, "—", t("pricing.common.unlimited")),
+      tp("pro.features.upToGeofences", {
+        count: formatLimit(maxGeocercas || 9999, "—", tp("common.unlimited")),
       }),
-      t("pricing.pro.features.trackerEnabled"),
-      t("pricing.pro.features.invitesEnabled"),
-      "Checkout y gestión con Paddle (preview)",
+      tp("pro.features.trackerEnabled"),
+      tp("pro.features.invitesEnabled"),
+      tp("pro.features.paddleManaged"),
     ],
-    [maxTrackers, maxGeocercas, t]
+    [maxTrackers, maxGeocercas, tp]
   );
 
   const enterpriseFeatures = useMemo(
     () => [
-      t("pricing.enterprise.features.salesOnboarding"),
-      t("pricing.enterprise.features.flexibleLimits"),
-      t("pricing.enterprise.features.multiTeamReady"),
-      t("pricing.enterprise.features.specialAgreements"),
-      t("pricing.enterprise.features.directSalesContact"),
+      tp("enterprise.features.salesOnboarding"),
+      tp("enterprise.features.flexibleLimits"),
+      tp("enterprise.features.multiTeamReady"),
+      tp("enterprise.features.specialAgreements"),
+      tp("enterprise.features.directSalesContact"),
     ],
-    [t]
+    [tp]
   );
 
   if (loading || !ready) return null;
@@ -302,12 +312,9 @@ export default function Pricing() {
     return (
       <div className="max-w-3xl mx-auto px-6 py-10">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
-          <h1 className="text-xl font-semibold">{t("pricing.page.title")}</h1>
+          <h1 className="text-xl font-semibold">{tp("title")}</h1>
           <p className="mt-2 text-sm">
-            {t(
-              "pricing.accessDenied",
-              "You do not have permission to view monetization for this organization."
-            )}
+            {tp("accessDenied")}
           </p>
         </div>
       </div>
@@ -319,11 +326,11 @@ export default function Pricing() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-900">{t("pricing.page.title")}</h1>
+            <h1 className="text-3xl font-semibold text-slate-900">{tp("title")}</h1>
             <p className="mt-2 max-w-3xl text-slate-600">
-              {t("pricing.page.previewNotice.prefix")} <b>PREVIEW</b>{" "}
-              {t("pricing.page.previewNotice.middle")} <b>TEST</b>.{" "}
-              {t("pricing.page.previewNotice.suffix")}
+              {tp("page.previewNotice.prefix")} <b>{tp("page.previewNotice.previewTag")}</b>{" "}
+              {tp("page.previewNotice.middle")} <b>{tp("page.previewNotice.testTag")}</b>.{" "}
+              {tp("page.previewNotice.suffix")}
             </p>
           </div>
 
@@ -332,7 +339,7 @@ export default function Pricing() {
               to="/billing"
               className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
             >
-              {t("pricing.actions.goToBilling")}
+              {tp("actions.goToBilling")}
             </Link>
           </div>
         </div>
@@ -340,7 +347,7 @@ export default function Pricing() {
         <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-5">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("pricing.summary.detectedPlan")}
+              {tp("summary.detectedPlan")}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {currentPlanCode.toUpperCase()}
@@ -349,7 +356,7 @@ export default function Pricing() {
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("pricing.summary.status", { defaultValue: "Status" })}
+              {tp("summary.status")}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {billingStatusLabel}
@@ -358,30 +365,30 @@ export default function Pricing() {
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("pricing.summary.trialUntil", { defaultValue: "Trial until" })}
+              {tp("summary.trialUntil")}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">{trialUntil}</div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("pricing.summary.maxGeofences")}
+              {tp("summary.maxGeofences")}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {entitlementsLoading
-                ? t("pricing.common.loading")
-                : formatLimit(maxGeocercas, "—", t("pricing.common.unlimited"))}
+                ? tp("common.loading")
+                : formatLimit(maxGeocercas, "—", tp("common.unlimited"))}
             </div>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs uppercase tracking-wide text-slate-500">
-              {t("pricing.summary.maxTrackers")}
+              {tp("summary.maxTrackers")}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
               {entitlementsLoading
-                ? t("pricing.common.loading")
-                : formatLimit(maxTrackers, "—", t("pricing.common.unlimited"))}
+                ? tp("common.loading")
+                : formatLimit(maxTrackers, "—", tp("common.unlimited"))}
             </div>
           </div>
         </div>
@@ -395,30 +402,30 @@ export default function Pricing() {
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <PlanCard
-          title={t("pricing.free.title")}
-          subtitle={t("pricing.free.subtitle")}
-          price={t("pricing.free.price")}
-          description={t("pricing.free.description")}
+          title={tp("free.title")}
+          subtitle={tp("free.subtitle")}
+          price={tp("free.price")}
+          description={tp("free.description")}
           current={currentPlanCode === "free"}
-          currentBadgeLabel={t("pricing.common.currentPlan")}
+          currentBadgeLabel={tp("common.currentPlan")}
           features={freeFeatures}
           cta={
             <FreePlanAction
               currentPlanCode={currentPlanCode}
-              currentPlanLabel={t("pricing.free.currentPlanMessage")}
-              billingLabel={t("pricing.actions.goToBilling")}
+              currentPlanLabel={tp("free.currentPlanMessage")}
+              billingLabel={tp("actions.goToBilling")}
             />
           }
         />
 
         <PlanCard
-          title={t("pricing.pro.title")}
-          subtitle={t("pricing.pro.subtitle")}
-          price={t("pricing.pro.price")}
-          description={t("pricing.pro.description")}
+          title={tp("pro.title")}
+          subtitle={tp("pro.subtitle")}
+          price={tp("pro.price")}
+          description={tp("pro.description")}
           highlight
           current={currentPlanCode === "pro"}
-          currentBadgeLabel={t("pricing.common.currentPlan")}
+          currentBadgeLabel={tp("common.currentPlan")}
           features={proFeatures}
           cta={
             <ProPlanAction
@@ -426,31 +433,31 @@ export default function Pricing() {
               currentOrgId={currentOrgId}
               currentPlanCode={currentPlanCode}
               getAccessToken={getAccessToken}
-              billingLabel={t("pricing.actions.goToBilling")}
-              higherPlanMessage={t("pricing.pro.higherPlanMessage")}
-              reviewBillingMessage={t("pricing.pro.reviewBillingMessage")}
+              billingLabel={tp("actions.goToBilling")}
+              higherPlanMessage={tp("pro.higherPlanMessage")}
+              reviewBillingMessage={tp("pro.reviewBillingMessage")}
             />
           }
         />
 
         <PlanCard
-          title={t("pricing.enterprise.title")}
-          subtitle={t("pricing.enterprise.subtitle")}
-          price={t("pricing.enterprise.price")}
-          description={t("pricing.enterprise.description")}
+          title={tp("enterprise.title")}
+          subtitle={tp("enterprise.subtitle")}
+          price={tp("enterprise.price")}
+          description={tp("enterprise.description")}
           current={currentPlanCode === "enterprise"}
-          currentBadgeLabel={t("pricing.common.currentPlan")}
+          currentBadgeLabel={tp("common.currentPlan")}
           features={enterpriseFeatures}
-          cta={<ContactSalesButton label={t("pricing.actions.contactSales")} />}
+          cta={<ContactSalesButton label={tp("actions.contactSales")} />}
         />
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">{t("pricing.notes.title")}</h2>
+        <h2 className="text-lg font-semibold text-slate-900">{tp("notes.title")}</h2>
         <div className="mt-3 space-y-2 text-sm text-slate-600">
-          <p>{t("pricing.notes.backendAuthority")}</p>
-          <p>{t("pricing.notes.proCheckout")}</p>
-          <p>{t("pricing.notes.enterpriseSales")}</p>
+          <p>{tp("notes.backendAuthority")}</p>
+          <p>{tp("notes.proCheckout")}</p>
+          <p>{tp("notes.enterpriseSales")}</p>
         </div>
       </div>
     </div>

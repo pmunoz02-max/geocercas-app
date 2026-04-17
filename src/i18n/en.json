@@ -1779,7 +1779,24 @@
       "acc": "acc"
     }
   },
+  "pricingPage": {
+    "title": "Plans and pricing",
+    "updatedAt": "Last updated: {{date}}",
+    "free": {
+      "title": "Free plan",
+      "item1": "1 geofence",
+      "item2": "2 trackers"
+    },
+    "pro": {
+      "title": "Pro plan",
+      "item1": "More geofences",
+      "item2": "Up to 10 trackers",
+      "item3": "Advanced features"
+    },
+    "billingNote": "Billing may be monthly or yearly."
+  },
   "pricing": {
+    "accessDenied": "You do not have permission to view monetization for this organization.",
     "common": {
       "currentPlan": "Plan actual",
       "loading": "Cargando...",
@@ -1793,12 +1810,17 @@
       "title": "Planes y precios",
       "previewNotice": {
         "prefix": "Esta pantalla trabaja en",
+        "previewTag": "PREVIEW",
         "middle": "y reutiliza Stripe en modo",
+        "testTag": "TEST",
         "suffix": "No afecta producción."
       }
     },
     "summary": {
       "detectedPlan": "Plan detectado",
+      "noCommercialData": "No commercial data",
+      "status": "Status",
+      "trialUntil": "Trial until",
       "maxGeofences": "Máx. geocercas",
       "maxTrackers": "Máx. trackers"
     },
@@ -1828,6 +1850,7 @@
         "upToGeofences": "Hasta {{count}} geocercas",
         "trackerEnabled": "Módulo Tracker habilitado",
         "invitesEnabled": "Invitación de trackers habilitada",
+        "paddleManaged": "Paddle checkout and subscription management (preview)",
         "stripeSelfManaged": "Suscripción autogestionable con Stripe"
       }
     },
@@ -1849,6 +1872,15 @@
       "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
       "proCheckout": "El mejora de plan a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
       "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
+    },
+    "status": {
+      "active": "Active",
+      "trialing": "Trial",
+      "past_due": "Past due",
+      "canceled": "Canceled",
+      "paused": "Paused",
+      "incomplete": "Incomplete",
+      "other": "Status: {{status}}"
     }
   },
   "billing": {

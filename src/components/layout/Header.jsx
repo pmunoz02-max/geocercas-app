@@ -2,6 +2,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { applyLanguageSafely } from '@/i18n/i18n';
 
 const LANGS = [
   { code: 'es', label: 'ES' },
@@ -51,14 +52,19 @@ function LinkItem({ to, children }) {
 export default function Header() {
   const { t, i18n } = useTranslation();
 
-  function changeLang(code) {
-    if (!SUPPORTED.has(code)) return;
+  const handleLanguageChange = (e, lang) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-    const normalized = String(code).toLowerCase().slice(0, 2);
+    if (!SUPPORTED.has(lang)) return;
+
+    const normalized = String(lang).toLowerCase().slice(0, 2);
     const url = new URL(window.location.href);
     url.searchParams.set('lang', normalized);
-    window.location.assign(url.toString());
-  }
+    window.history.replaceState({}, '', url.toString());
+
+    applyLanguageSafely(normalized);
+  };
 
   const currentLang = String(i18n?.resolvedLanguage || i18n?.language || 'es')
     .toLowerCase()
@@ -90,7 +96,7 @@ export default function Header() {
               <button
                 key={lang.code}
                 type="button"
-                onClick={() => changeLang(lang.code)}
+                onClick={(e) => handleLanguageChange(e, lang.code)}
                 style={{
                   padding: '6px 10px',
                   fontSize: '0.875rem',
