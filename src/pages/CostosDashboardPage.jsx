@@ -352,6 +352,21 @@ const CostosDashboardPage = () => {
   const tr = (key, fallback, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
 
+  const getDefaultDates = () => {
+    const today = new Date();
+    const past = new Date();
+    past.setDate(today.getDate() - 30);
+
+    const format = (d) => d.toISOString().split("T")[0];
+
+    return {
+      from: format(past),
+      to: format(today),
+    };
+  };
+
+  const { from, to } = getDefaultDates();
+
   const chartRef = useRef(null);
 
   const { loading: authLoading, ready, currentOrg } = useAuth();
@@ -360,8 +375,8 @@ const CostosDashboardPage = () => {
     MODULE_KEYS.DASHBOARD_COSTOS
   );
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(from);
+  const [toDate, setToDate] = useState(to);
   const [selectedPersonaId, setSelectedPersonaId] = useState("");
   const [selectedActividadId, setSelectedActividadId] = useState("");
   const [selectedGeocercaId, setSelectedGeocercaId] = useState("");
@@ -465,11 +480,22 @@ const CostosDashboardPage = () => {
     setMissingView(false);
 
     try {
+      if (!fromDate || !toDate) {
+        setRows([]);
+        setError(
+          t(
+            "dashboardCostos.errors.missingDates",
+            "You must select a date range"
+          )
+        );
+        return;
+      }
+
       if (fromDate && toDate && fromDate > toDate) {
         setRows([]);
         setError(
           t(
-            "dashboardCostos.errorInvalidDateRange",
+            "dashboardCostos.errors.invalidDateRange",
             'The "From" date cannot be later than the "To" date.'
           )
         );
@@ -497,10 +523,21 @@ const CostosDashboardPage = () => {
     } catch (e) {
       console.error("[CostosDashboard] fetchReport error:", e);
       setRows([]);
+
+      if (e?.message === "Missing required parameters: start, end") {
+        setError(
+          t(
+            "dashboardCostos.errors.missingDates",
+            "You must select a date range"
+          )
+        );
+        return;
+      }
+
       setError(
         e?.message ||
           t(
-            "dashboardCostos.errorLoadReport",
+            "dashboardCostos.errors.load",
             "Could not load cost dashboard."
           )
       );

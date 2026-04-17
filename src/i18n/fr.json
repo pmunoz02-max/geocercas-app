@@ -530,6 +530,7 @@
     },
     "errors": {
       "invalidAction": "Action invalide",
+      "missingDates": "Vous devez sélectionner une plage de dates",
       "invalidDateRange": "La date \"De\" ne peut pas être ultérieure à la date \"Jusqu'à\"",
       "load": "Erreur lors du chargement du tableau de bord des coûts"
     },
@@ -574,12 +575,16 @@
     "tableNoResults": "Aucune donnée pour les filtres actuels",
     "tableTitle": "Détails pour la dimension sélectionnée",
     "chartNoData": "Aucune donnée disponible",
+    "loadingAuth": "Chargement de votre session et de votre organisation actuelle…",
+    "noOrgAssigned": "Il n'y a pas d'organisation active pour cet utilisateur.",
     "noAccess": "Vous n'avez pas accès à ce module",
+    "currentRole": "Rôle actuel",
     "noRole": "aucun rôle",
     "loadingPermissions": "Chargement des permissions…",
     "currenciesSummaryTitle": "Résumé par devise",
     "labelHours": "heures",
-    "exportNoData": "Aucune donnée à exporter"
+    "exportNoData": "Aucune donnée à exporter",
+    "exportChartError": "Impossible d'exporter le graphique"
   },
   "forgot": {
     "back": "Volver a iniciar sesión",

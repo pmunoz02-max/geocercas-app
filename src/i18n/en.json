@@ -530,6 +530,7 @@
     },
     "errors": {
       "invalidAction": "Invalid action",
+      "missingDates": "You must select a date range",
       "invalidDateRange": "The \"From\" date cannot be later than the \"To\" date",
       "load": "Error loading cost panel"
     },
@@ -574,12 +575,16 @@
     "tableNoResults": "No data for the current filters",
     "tableTitle": "Details for selected dimension",
     "chartNoData": "No data available",
+    "loadingAuth": "Loading your session and current organization…",
+    "noOrgAssigned": "There is no active organization for this user.",
     "noAccess": "You don't have access to this module",
+    "currentRole": "Current role",
     "noRole": "no role",
     "loadingPermissions": "Loading permissions…",
     "currenciesSummaryTitle": "Summary by currency",
     "labelHours": "hours",
-    "exportNoData": "No data to export"
+    "exportNoData": "No data to export",
+    "exportChartError": "Could not export chart"
   },
   "forgot": {
     "back": "Volver a iniciar sesión",

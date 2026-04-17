@@ -262,7 +262,7 @@ export default function Reports() {
       }
 
       const params = new URLSearchParams();
-      params.set("action", reportType === "cost" ? "costs_hybrid" : "attendance");
+      params.set("action", reportType === "cost" ? "costs" : "report");
 
       if (start) params.set("start", start);
       if (end) params.set("end", end);

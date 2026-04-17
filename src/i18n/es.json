@@ -134,7 +134,10 @@
       "activate": "Activar",
       "deactivate": "Desactivar",
       "delete": "Eliminar",
-      "edit": "Editar"
+      "edit": "Editar",
+      "save": "Guardar asignación",
+      "update": "Actualizar asignación",
+      "cancel": "Cancelar"
     },
     "banner": {
       "created": "Asignación creada correctamente.",
@@ -171,6 +174,18 @@
       "statusAll": "Estado: todos",
       "geofenceAll": "Geocerca: todas",
       "personalAll": "Personal: todos"
+    },
+    "fields": {
+      "person": "Persona",
+      "geofence": "Geocerca",
+      "activity": "Actividad",
+      "startAt": "Fecha/hora inicio",
+      "endAt": "Fecha/hora fin",
+      "status": "Estado",
+      "frequencyMinutes": "Frecuencia (minutos)"
+    },
+    "statusOptions": {
+      "active": "Activa"
     },
     "form": {
       "activityLabel": "Actividad",
@@ -220,6 +235,9 @@
       "createSuccess": "Asignación creada correctamente.",
       "deleteError": "No se pudo eliminar la asignación.",
       "deleteSuccess": "Asignación eliminada correctamente.",
+      "activatedSuccess": "Asignación activada correctamente.",
+      "deactivatedSuccess": "Asignación desactivada correctamente.",
+      "toggleStatusError": "Error al cambiar estado de asignación.",
       "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
       "frequencyTooLow": "La frecuencia mínima permitida es de 5 minutos.",
       "loadError": "Error al cargar las asignaciones.",
@@ -391,7 +409,7 @@
       "noRole": "SIN ROL",
       "root": "ROOT"
     },
-    "select": "— Selecciona —",
+    "select": "Seleccionar",
     "sending": "Enviando...",
     "show": "Mostrar",
     "hide": "Ocultar",
@@ -496,6 +514,27 @@
     "title": "panel de costos"
   },
   "dashboardCostos": {
+    "title": "Panel de costos",
+    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "currentOrganization": "Organización actual",
+    "actions": {
+      "refresh": "Refrescar datos",
+      "exportData": "Exportar datos",
+      "exportGraphic": "Exportar gráfico"
+    },
+    "kpis": {
+      "totalHours": "Horas totales",
+      "totalCost": "Costo total",
+      "registrations": "Registros",
+      "avgRate": "Tarifa promedio"
+    },
+    "errors": {
+      "invalidAction": "Acción inválida",
+      "missingDates": "Debes seleccionar un rango de fechas",
+      "invalidDateRange": "La fecha \"Desde\" no puede ser posterior a la fecha \"Hasta\"",
+      "load": "Error al cargar el panel de costos"
+    },
+    "loading": "Refrescando…",
     "chartDimension": "Dimensión",
     "chartMetric": "Métrica",
     "chartTitle": "Gráfico de costos",
@@ -518,9 +557,6 @@
     "dimensionFecha": "Fecha",
     "dimensionGeocerca": "Geocerca",
     "dimensionPersona": "Persona",
-    "errorLoad": "Error al cargar el panel de costos.",
-    "exportChartButton": "Exportar gráfico",
-    "exportDataButton": "Exportar datos",
     "filtersActivity": "Actividad",
     "filtersAll": "Todos",
     "filtersApply": "Aplicar filtros",
@@ -531,18 +567,24 @@
     "filtersTitle": "Filtros",
     "filtersTo": "Hasta",
     "kpiCurrencies": "Monedas",
-    "kpiRecords": "Registros",
-    "kpiTotalCost": "Costo total",
-    "kpiTotalHours": "Horas totales",
     "metricCost": "Costo",
     "metricHours": "Horas",
     "metricRecords": "Registros",
-    "refreshButton": "Refrescar datos",
-    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "metricAvgRate": "Tarifa promedio",
     "tableEmpty": "No hay datos para mostrar",
-    "tableNoResults": "No hay datos para los filtros actuales.",
+    "tableNoResults": "No hay datos para los filtros actuales",
     "tableTitle": "Detalle para la dimensión seleccionada",
-    "title": "panel de costos"
+    "chartNoData": "Sin datos disponibles",
+    "loadingAuth": "Cargando tu sesión y organización actual…",
+    "noOrgAssigned": "No hay organización activa para este usuario.",
+    "noAccess": "No tienes acceso a este módulo",
+    "currentRole": "Rol actual",
+    "noRole": "sin rol",
+    "loadingPermissions": "Cargando permisos…",
+    "currenciesSummaryTitle": "Resumen por moneda",
+    "labelHours": "horas",
+    "exportNoData": "No hay datos para exportar",
+    "exportChartError": "No se pudo exportar el gráfico"
   },
   "forgot": {
     "back": "Volver a iniciar sesión",
@@ -977,37 +1019,19 @@
     }
   },
   "home": {
-    "goToLogin": "Ir a iniciar sesión",
-    "quickStart": "Ver guía rápida",
     "goDashboard": "Ir al panel",
     "deleteAccount": "Eliminar cuenta",
     "help": {
-      "faq": "Preguntas frecuentes",
-      "faqDesc": "Respuestas a las dudas más comunes.",
-      "news": "Novedades",
-      "newsDesc": "Cambios, mejoras y actualizaciones recientes.",
+      "title": "Centro de ayuda",
       "quick": "Guía rápida",
       "quickDesc": "Aprende cómo usar la app paso a paso.",
+      "faq": "Preguntas frecuentes",
+      "faqDesc": "Respuestas a las dudas más comunes.",
       "support": "Soporte",
       "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
-      "title": "Centro de ayuda"
-    },
-    "labels": {
-      "email": "Correo:",
-      "organization": "Organización:",
-      "orgId": "Organización ID:",
-      "role": "Rol:"
-    },
-    "loadingPermissions": "Resolviendo permisos…",
-    "loginToContinue": "Inicia sesión para continuar.",
-    "missingContextBody": "La sesión existe ({{correo}}), pero aún no se pudo determinar tu rol u organización activa.",
-    "missingContextTitle": "Sesión iniciada, pero falta contexto",
-    "open": "Abrir →",
-    "orgNotResolved": "(no resuelta)",
-    "retry": "Reintentar",
-    "roleEmpty": "(vacío)",
-    "sessionAs": "Sesión iniciada como",
-    "welcome": "Bienvenido a App Geocercas"
+      "news": "Novedades",
+      "newsDesc": "Cambios, mejoras y actualizaciones recientes."
+    }
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",
