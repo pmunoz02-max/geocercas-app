@@ -142,7 +142,7 @@ function FreePlanAction({ currentPlanCode, currentPlanLabel, billingLabel }) {
   return (
     <Link
       to="/billing"
-      className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+      className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
     >
       {billingLabel}
     </Link>
@@ -162,7 +162,7 @@ function ProPlanAction({
     return (
       <Link
         to="/billing"
-        className="inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+        className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
       >
         {billingLabel}
       </Link>
@@ -175,12 +175,14 @@ function ProPlanAction({
 
   if (currentPlanCode === "pro") {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-        {reviewBillingMessage}
-        <div className="mt-3">
+      <div className="rounded-xl border border-green-200 bg-green-50 p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+        <span className="block text-sm font-medium text-green-800">
+          {reviewBillingMessage}
+        </span>
+        <div className="mt-3 sm:mt-0 sm:shrink-0">
           <Link
             to="/billing"
-            className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-800"
+            className="inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
           >
             {billingLabel}
           </Link>
@@ -190,14 +192,15 @@ function ProPlanAction({
   }
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-      {higherPlanMessage}
-      <br />
-      {reviewBillingMessage}
-      <div className="mt-3">
+    <div className="rounded-xl border border-green-200 bg-green-50 p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+      <div className="text-sm text-green-800">
+        <div className="font-medium">{higherPlanMessage}</div>
+        <div className="mt-1">{reviewBillingMessage}</div>
+      </div>
+      <div className="mt-3 sm:mt-0 sm:shrink-0">
         <Link
           to="/billing"
-          className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 font-semibold text-white transition hover:bg-emerald-800"
+          className="inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
         >
           {billingLabel}
         </Link>
@@ -551,7 +554,7 @@ export default function Pricing() {
           <div className="flex flex-wrap gap-3">
             <Link
               to="/billing"
-              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
             >
               {tt(
                 "actions.goToBilling",
