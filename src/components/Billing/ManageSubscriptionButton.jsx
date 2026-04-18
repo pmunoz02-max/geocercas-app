@@ -7,14 +7,13 @@ export default function ManageSubscriptionButton({
   orgId,
   getAccessToken,
   disabled = false,
-  unavailableMessage = "Subscription management is temporarily unavailable in this version.",
   buttonLabel = "Suspend plan",
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function handleClick() {
+  async function handleSuspendPlan() {
     if (loading || disabled) return;
     try {
       setLoading(true);
@@ -42,11 +41,11 @@ export default function ManageSubscriptionButton({
       const payload = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const msg = payload?.error || unavailableMessage || "Subscription cancellation is temporarily unavailable.";
+        const msg = payload?.error || "Could not suspend the plan.";
         throw new Error(msg);
       }
 
-      setSuccess("Plan suspension scheduled successfully.");
+      setSuccess("Plan will be canceled at end of billing period");
     } catch (err) {
       setError(err?.message || "Could not open subscription management.");
     } finally {
@@ -59,7 +58,7 @@ export default function ManageSubscriptionButton({
     <div className="space-y-2">
       <button
         type="button"
-        onClick={handleClick}
+        onClick={handleSuspendPlan}
         disabled={!canManageSubscription}
         className={`inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
           !canManageSubscription

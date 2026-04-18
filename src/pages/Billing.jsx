@@ -682,10 +682,6 @@ export default function Billing() {
                 orgId={billing?.org_id ?? currentOrgId ?? null}
                 getAccessToken={getAccessToken}
                 buttonLabel={tr("billing.subscriptionManagement.suspendPlan", "Suspend plan")}
-                unavailableMessage={tr(
-                  "billing.subscriptionManagement.suspendUnavailable",
-                  "Suspend plan is temporarily unavailable in this version."
-                )}
               />
             ) : null}
           </div>
