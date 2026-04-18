@@ -16,6 +16,35 @@ function json(status: number, body: Record<string, unknown>) {
   });
 }
 
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function pickPriceIdFromTransactionData(data: any): string | null {
+  if (!data || typeof data !== "object") return null;
+
+  const direct = asString(data?.price_id) ?? asString(data?.price?.id);
+  if (direct) return direct;
+
+  const items = Array.isArray(data?.items) ? data.items : [];
+  for (const item of items) {
+    const candidate = asString(item?.price_id) ?? asString(item?.price?.id);
+    if (candidate) return candidate;
+  }
+
+  const lineItems = Array.isArray(data?.details?.line_items)
+    ? data.details.line_items
+    : [];
+  for (const item of lineItems) {
+    const candidate = asString(item?.price_id) ?? asString(item?.price?.id);
+    if (candidate) return candidate;
+  }
+
+  return asString(data?.custom_data?.price_id);
+}
+
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`Missing environment variable: ${name}`);
@@ -72,6 +101,26 @@ serve(async (req) => {
     const SUPABASE_URL = requireEnv("SUPABASE_URL");
     const SERVICE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
     const SECRET = requireEnv("PADDLE_WEBHOOK_SECRET");
+    const PADDLE_PRO_PRICE_ID = requireEnv("PADDLE_PRO_PRICE_ID");
+    const PADDLE_ENTERPRISE_PRICE_ID = requireEnv("PADDLE_ENTERPRISE_PRICE_ID");
+
+    if (!PADDLE_PRO_PRICE_ID.startsWith("pri_")) {
+      return json(500, {
+        ok: false,
+        error: "Invalid Paddle price id in env",
+        env: "PADDLE_PRO_PRICE_ID",
+        value: PADDLE_PRO_PRICE_ID,
+      });
+    }
+
+    if (!PADDLE_ENTERPRISE_PRICE_ID.startsWith("pri_")) {
+      return json(500, {
+        ok: false,
+        error: "Invalid Paddle price id in env",
+        env: "PADDLE_ENTERPRISE_PRICE_ID",
+        value: PADDLE_ENTERPRISE_PRICE_ID,
+      });
+    }
 
     const rawBody = await req.text();
 
@@ -107,6 +156,35 @@ serve(async (req) => {
     }
 
     const data = event.data;
+    const transactionPriceId = pickPriceIdFromTransactionData(data);
+
+    if (!transactionPriceId) {
+      return json(400, {
+        ok: false,
+        error: "Cannot resolve price_id from transaction event",
+      });
+    }
+
+    const planByPriceId: Record<string, "pro" | "enterprise"> = {
+      [PADDLE_PRO_PRICE_ID]: "pro",
+      [PADDLE_ENTERPRISE_PRICE_ID]: "enterprise",
+    };
+
+    const trackerLimitByPlan: Record<"pro" | "enterprise", number> = {
+      pro: 3,
+      enterprise: 10,
+    };
+
+    const planCode = planByPriceId[transactionPriceId];
+    if (!planCode) {
+      return json(400, {
+        ok: false,
+        error: "Unsupported Paddle price_id for this environment",
+        price_id: transactionPriceId,
+      });
+    }
+
+    const trackerLimit = trackerLimitByPlan[planCode];
 
     const transactionId = data?.id ?? null;
 
@@ -157,17 +235,19 @@ serve(async (req) => {
 
     const { error } = await supabase
       .from("org_billing")
-      .update({
+      .upsert({
+        org_id: orgId,
         billing_provider: "paddle",
-        plan_code: "pro",
-        subscribed_plan_code: "pro",
+        plan_code: planCode,
+        subscribed_plan_code: planCode,
         plan_status: "active",
+        tracker_limit_override: trackerLimit,
         updated_at: now,
         last_paddle_event_at: now,
+        paddle_price_id: transactionPriceId,
         paddle_subscription_id: data?.subscription_id ?? null,
         paddle_customer_id: data?.customer_id ?? null,
-      })
-      .eq("org_id", orgId);
+      }, { onConflict: "org_id" });
 
     if (error) {
       return json(500, {
@@ -177,12 +257,27 @@ serve(async (req) => {
       });
     }
 
-    console.log("[WEBHOOK] SUCCESS → org activated:", orgId);
+    const { data: entitlementsRow } = await supabase
+      .from("org_entitlements")
+      .select("org_id, max_trackers")
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    console.log("[WEBHOOK] SUCCESS → org activated:", orgId, {
+      plan_code: planCode,
+      price_id: transactionPriceId,
+      tracker_limit_override: trackerLimit,
+      effective_max_trackers: entitlementsRow?.max_trackers ?? null,
+    });
 
     return json(200, {
       ok: true,
       orgId,
       transactionId,
+      plan_code: planCode,
+      price_id: transactionPriceId,
+      tracker_limit: trackerLimit,
+      max_trackers: entitlementsRow?.max_trackers ?? null,
     });
   } catch (err) {
     return json(500, {

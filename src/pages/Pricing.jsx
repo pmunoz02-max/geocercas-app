@@ -209,6 +209,56 @@ function ProPlanAction({
   );
 }
 
+function EnterprisePlanAction({
+  authenticated,
+  currentOrgId,
+  currentPlanCode,
+  getAccessToken,
+  billingLabel,
+  contactSalesLabel,
+  reviewBillingMessage,
+}) {
+  if (!authenticated || !currentOrgId) {
+    return (
+      <Link
+        to="/billing"
+        className="inline-flex w-full items-center justify-center px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold transition"
+      >
+        {billingLabel}
+      </Link>
+    );
+  }
+
+  if (currentPlanCode === "enterprise") {
+    return (
+      <div className="rounded-xl border border-green-200 bg-green-50 p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+        <span className="block text-sm font-medium text-green-800">
+          {reviewBillingMessage}
+        </span>
+        <div className="mt-3 sm:mt-0 sm:shrink-0">
+          <Link
+            to="/billing"
+            className="inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+          >
+            {billingLabel}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <UpgradeToProButton
+        orgId={currentOrgId}
+        plan="enterprise"
+        getAccessToken={getAccessToken}
+      />
+      <ContactSalesButton label={contactSalesLabel} />
+    </div>
+  );
+}
+
 export default function Pricing() {
   const { t, i18n } = useTranslation();
   const location = useLocation();
@@ -813,14 +863,34 @@ export default function Pricing() {
           )}
           features={enterpriseFeatures}
           cta={
-            <ContactSalesButton
-              label={tt(
+            <EnterprisePlanAction
+              authenticated={authenticated}
+              currentOrgId={currentOrgId}
+              currentPlanCode={currentPlanCode}
+              getAccessToken={getAccessToken}
+              billingLabel={tt(
+                "actions.goToBilling",
+                i18n.language === "fr"
+                  ? "Aller à la facturation"
+                  : i18n.language === "en"
+                    ? "Go to Billing"
+                    : "Go to Billing"
+              )}
+              contactSalesLabel={tt(
                 "actions.contactSales",
                 i18n.language === "fr"
                   ? "Contacter l'équipe commerciale"
                   : i18n.language === "en"
                     ? "Contact sales"
                     : "Contact sales"
+              )}
+              reviewBillingMessage={tt(
+                "pro.reviewBillingMessage",
+                i18n.language === "fr"
+                  ? "Consultez la facturation pour le gérer."
+                  : i18n.language === "en"
+                    ? "Review Billing to manage it."
+                    : "Review Billing to manage it."
               )}
             />
           }

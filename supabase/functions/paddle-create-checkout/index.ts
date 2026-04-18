@@ -71,7 +71,8 @@ serve(async (req: Request) => {
     const SUPABASE_URL = getEnv("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = getEnv("SUPABASE_SERVICE_ROLE_KEY");
     const PADDLE_API_KEY = getEnv("PADDLE_API_KEY");
-    const PADDLE_PRICE_ID_PRO = getEnv("PADDLE_PRICE_ID_PRO");
+    const PADDLE_PRO_PRICE_ID = getEnv("PADDLE_PRO_PRICE_ID");
+    const PADDLE_ENTERPRISE_PRICE_ID = getEnv("PADDLE_ENTERPRISE_PRICE_ID");
     const PADDLE_ENV = (Deno.env.get("PADDLE_ENV") || "sandbox").trim();
 
     const isSandboxKey = PADDLE_API_KEY.startsWith("pdl_sdbx_apikey_");
@@ -100,11 +101,21 @@ serve(async (req: Request) => {
       });
     }
 
-    if (!PADDLE_PRICE_ID_PRO.startsWith("pri_")) {
+    if (!PADDLE_PRO_PRICE_ID.startsWith("pri_")) {
       return json(500, {
         ok: false,
         error: "Invalid Paddle price id in env",
-        value: PADDLE_PRICE_ID_PRO,
+        env: "PADDLE_PRO_PRICE_ID",
+        value: PADDLE_PRO_PRICE_ID,
+      });
+    }
+
+    if (!PADDLE_ENTERPRISE_PRICE_ID.startsWith("pri_")) {
+      return json(500, {
+        ok: false,
+        error: "Invalid Paddle price id in env",
+        env: "PADDLE_ENTERPRISE_PRICE_ID",
+        value: PADDLE_ENTERPRISE_PRICE_ID,
       });
     }
 
@@ -148,16 +159,45 @@ serve(async (req: Request) => {
           ? body.priceId
           : "";
 
+    const requestedPlanCodeRaw =
+      typeof body.plan_code === "string"
+        ? body.plan_code
+        : typeof body.planCode === "string"
+          ? body.planCode
+          : "";
+
     const fallbackEmail =
       typeof body.email === "string" ? body.email.trim() : "";
 
     const orgId = orgIdRaw.trim();
     const returnUrl = returnUrlRaw.trim();
+    const requestedPlanCode = requestedPlanCodeRaw.trim().toLowerCase();
 
     if (!orgId) {
       return json(400, {
         ok: false,
         error: "org_id is required",
+      });
+    }
+
+    if (!requestedPlanCode) {
+      return json(400, {
+        ok: false,
+        error: "plan_code is required",
+      });
+    }
+
+    const priceIdByPlan: Record<string, string> = {
+      pro: PADDLE_PRO_PRICE_ID,
+      enterprise: PADDLE_ENTERPRISE_PRICE_ID,
+    };
+
+    const selectedPriceId = priceIdByPlan[requestedPlanCode];
+    if (!selectedPriceId) {
+      return json(400, {
+        ok: false,
+        error: "Unsupported plan_code. Allowed values: pro, enterprise",
+        plan_code: requestedPlanCode,
       });
     }
 
@@ -168,10 +208,12 @@ serve(async (req: Request) => {
       });
     }
 
-    if (requestedPriceId && requestedPriceId !== PADDLE_PRICE_ID_PRO) {
+    if (requestedPriceId && requestedPriceId !== selectedPriceId) {
       return json(400, {
         ok: false,
         error: "priceId does not match server configured plan",
+        expected: selectedPriceId,
+        plan_code: requestedPlanCode,
       });
     }
 
@@ -275,8 +317,9 @@ serve(async (req: Request) => {
       ...customData,
       org_id: orgId,
       user_id: user.id,
+      plan_code: requestedPlanCode,
       source: "geocercas_app",
-      requested_plan_code: "pro",
+      requested_plan_code: requestedPlanCode,
     };
 
     console.log("[paddle-create-checkout] org_id:", orgId);
@@ -292,7 +335,7 @@ serve(async (req: Request) => {
     const payload: Record<string, unknown> = {
       items: [
         {
-          price_id: PADDLE_PRICE_ID_PRO,
+          price_id: selectedPriceId,
           quantity: 1,
         },
       ],
@@ -457,7 +500,7 @@ serve(async (req: Request) => {
 
     const updatePayload: Record<string, unknown> = {
       billing_provider: "paddle",
-      paddle_price_id: PADDLE_PRICE_ID_PRO,
+      paddle_price_id: selectedPriceId,
       updated_at: new Date().toISOString(),
     };
 
@@ -481,6 +524,15 @@ serve(async (req: Request) => {
       });
     }
 
+    const customDataOrgIdSent =
+      customData.org_id === null || customData.org_id === undefined
+        ? null
+        : String(customData.org_id);
+    const customDataOrgIdReturned =
+      returnedCustomData?.org_id === null || returnedCustomData?.org_id === undefined
+        ? null
+        : String(returnedCustomData.org_id);
+
     return json(200, {
       ok: true,
       url: checkoutUrl,
@@ -490,8 +542,8 @@ serve(async (req: Request) => {
       environment: PADDLE_ENV,
       debug: {
         org_id_sent: orgId,
-        custom_data_org_id_sent: customData.org_id ?? null,
-        custom_data_org_id_returned: returnedCustomData?.org_id ?? null,
+        custom_data_org_id_sent: customDataOrgIdSent,
+        custom_data_org_id_returned: customDataOrgIdReturned,
         mapping_saved: !mappingError,
       },
     });

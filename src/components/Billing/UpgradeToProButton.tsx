@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 type Props = {
   orgId?: string | null;
-  plan?: "PRO";
+  plan?: "pro" | "enterprise";
   projectRef?: string;
   onStarted?: () => void;
   getAccessToken?: () => Promise<string | null>;
@@ -18,7 +18,7 @@ function isUuid(v: string) {
 
 export default function UpgradeToProButton({
   orgId,
-  plan = "PRO",
+  plan = "pro",
   onStarted,
 }: Props) {
   const { t } = useTranslation();
@@ -61,7 +61,7 @@ export default function UpgradeToProButton({
       const result = await supabase.functions.invoke("paddle-create-checkout", {
         body: {
           org_id: resolvedOrgId,
-          plan,
+          plan_code: plan,
         },
       });
 
@@ -166,7 +166,10 @@ export default function UpgradeToProButton({
           {isLoading
             ? t("billing.upgrade.processing")
             : t("billing.upgrade.subscribe", {
-                defaultValue: "Subscribe to PRO",
+                defaultValue:
+                  plan === "enterprise"
+                    ? "Subscribe to ENTERPRISE"
+                    : "Subscribe to PRO",
               })}
         </button>
 
