@@ -1,52 +1,60 @@
 // src/components/Billing/ManageSubscriptionButton.jsx
 import React, { useState } from "react";
-import { supabase } from "@/lib/supabaseClient.js";
 
 
 
 export default function ManageSubscriptionButton({
   orgId,
   getAccessToken,
-  returnUrl,
   disabled = false,
   unavailableMessage = "Subscription management is temporarily unavailable in this version.",
   buttonLabel = "Suspend plan",
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [portalUrl, setPortalUrl] = useState("");
-  const [portalLoading, setPortalLoading] = useState(false);
+  const [success, setSuccess] = useState("");
 
   async function handleClick() {
-    if (portalLoading || disabled) return;
+    if (loading || disabled) return;
     try {
-      setPortalLoading(true);
+      setLoading(true);
       setError("");
+      setSuccess("");
+
+      if (!orgId) {
+        throw new Error("Missing organization context.");
+      }
+
       const accessToken = await getAccessToken?.();
       if (!accessToken) {
         throw new Error("Could not get user session.");
       }
 
-      const target = typeof returnUrl === "string" && returnUrl.trim()
-        ? returnUrl.trim()
-        : "/billing/cancel";
+      const response = await fetch("/api/paddle-cancel-subscription", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ org_id: orgId }),
+      });
 
-      const isRelativePath = target.startsWith("/");
-      const isAbsoluteHttp = /^https?:\/\//i.test(target);
-      if (!isRelativePath && !isAbsoluteHttp) {
-        throw new Error(unavailableMessage || "Subscription cancellation is temporarily unavailable.");
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const msg = payload?.error || unavailableMessage || "Subscription cancellation is temporarily unavailable.";
+        throw new Error(msg);
       }
 
-      window.location.href = target;
-      return;
+      setSuccess("Plan suspension scheduled successfully.");
     } catch (err) {
       setError(err?.message || "Could not open subscription management.");
     } finally {
-      setPortalLoading(false);
+      setLoading(false);
     }
   }
 
-  const canManageSubscription = !portalLoading && !disabled;
+  const canManageSubscription = !loading && !disabled;
   return (
     <div className="space-y-2">
       <button
@@ -59,12 +67,18 @@ export default function ManageSubscriptionButton({
             : "bg-slate-900 text-white hover:bg-slate-800"
         }`}
       >
-        {portalLoading ? "Opening..." : buttonLabel}
+        {loading ? "Suspending..." : buttonLabel}
       </button>
 
-      {error && !portalLoading && (
+      {error && !loading && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           {error}
+        </div>
+      )}
+
+      {success && !loading && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          {success}
         </div>
       )}
     </div>

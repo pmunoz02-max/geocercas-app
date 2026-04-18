@@ -17,3 +17,6 @@ entrypoint = "./functions/paddle-webhook/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/paddle-webhook/*.html" ]
+
+[functions.paddle-cancel-subscription]
+verify_jwt = true

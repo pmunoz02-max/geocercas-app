@@ -45,6 +45,19 @@ function pickPriceIdFromTransactionData(data: any): string | null {
   return asString(data?.custom_data?.price_id);
 }
 
+function pickSubscriptionId(data: any): string | null {
+  return asString(data?.id) ?? asString(data?.subscription_id);
+}
+
+function pickCurrentPeriodEnd(data: any): string | null {
+  return (
+    asString(data?.current_period_end) ??
+    asString(data?.current_billing_period?.ends_at) ??
+    asString(data?.next_billed_at) ??
+    asString(data?.scheduled_change?.effective_at)
+  );
+}
+
 function requireEnv(name: string): string {
   const value = Deno.env.get(name);
   if (!value) throw new Error(`Missing environment variable: ${name}`);
@@ -101,26 +114,6 @@ serve(async (req) => {
     const SUPABASE_URL = requireEnv("SUPABASE_URL");
     const SERVICE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
     const SECRET = requireEnv("PADDLE_WEBHOOK_SECRET");
-    const PADDLE_PRO_PRICE_ID = requireEnv("PADDLE_PRO_PRICE_ID");
-    const PADDLE_ENTERPRISE_PRICE_ID = requireEnv("PADDLE_ENTERPRISE_PRICE_ID");
-
-    if (!PADDLE_PRO_PRICE_ID.startsWith("pri_")) {
-      return json(500, {
-        ok: false,
-        error: "Invalid Paddle price id in env",
-        env: "PADDLE_PRO_PRICE_ID",
-        value: PADDLE_PRO_PRICE_ID,
-      });
-    }
-
-    if (!PADDLE_ENTERPRISE_PRICE_ID.startsWith("pri_")) {
-      return json(500, {
-        ok: false,
-        error: "Invalid Paddle price id in env",
-        env: "PADDLE_ENTERPRISE_PRICE_ID",
-        value: PADDLE_ENTERPRISE_PRICE_ID,
-      });
-    }
 
     const rawBody = await req.text();
 
@@ -150,135 +143,238 @@ serve(async (req) => {
 
     const event = JSON.parse(rawBody);
     const type = event?.event_type;
-
-    if (type !== "transaction.completed") {
-      return json(200, { ok: true, ignored: true });
-    }
-
-    const data = event.data;
-    const transactionPriceId = pickPriceIdFromTransactionData(data);
-
-    if (!transactionPriceId) {
-      return json(400, {
-        ok: false,
-        error: "Cannot resolve price_id from transaction event",
-      });
-    }
-
-    const planByPriceId: Record<string, "pro" | "enterprise"> = {
-      [PADDLE_PRO_PRICE_ID]: "pro",
-      [PADDLE_ENTERPRISE_PRICE_ID]: "enterprise",
-    };
-
-    const trackerLimitByPlan: Record<"pro" | "enterprise", number> = {
-      pro: 3,
-      enterprise: 10,
-    };
-
-    const planCode = planByPriceId[transactionPriceId];
-    if (!planCode) {
-      return json(400, {
-        ok: false,
-        error: "Unsupported Paddle price_id for this environment",
-        price_id: transactionPriceId,
-      });
-    }
-
-    const trackerLimit = trackerLimitByPlan[planCode];
-
-    const transactionId = data?.id ?? null;
-
-    console.log("[WEBHOOK] transactionId:", transactionId);
+    const data = event?.data;
 
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
       auth: { persistSession: false },
     });
 
-    // ---------------------------------
-    // 🔥 RESOLVER org_id (NUEVO)
-    // ---------------------------------
+    if (type === "transaction.completed") {
+      const PADDLE_PRO_PRICE_ID = requireEnv("PADDLE_PRO_PRICE_ID");
+      const PADDLE_ENTERPRISE_PRICE_ID = requireEnv("PADDLE_ENTERPRISE_PRICE_ID");
 
-    let orgId: string | null = null;
+      if (!PADDLE_PRO_PRICE_ID.startsWith("pri_")) {
+        return json(500, {
+          ok: false,
+          error: "Invalid Paddle price id in env",
+          env: "PADDLE_PRO_PRICE_ID",
+          value: PADDLE_PRO_PRICE_ID,
+        });
+      }
 
-    // 1. intentar desde custom_data
-    if (data?.custom_data?.org_id) {
-      orgId = data.custom_data.org_id;
-      console.log("[WEBHOOK] orgId from custom_data:", orgId);
-    }
+      if (!PADDLE_ENTERPRISE_PRICE_ID.startsWith("pri_")) {
+        return json(500, {
+          ok: false,
+          error: "Invalid Paddle price id in env",
+          env: "PADDLE_ENTERPRISE_PRICE_ID",
+          value: PADDLE_ENTERPRISE_PRICE_ID,
+        });
+      }
 
-    // 2. fallback → DB
-    if (!orgId && transactionId) {
-      const { data: tx } = await supabase
-        .from("billing_transactions")
-        .select("org_id")
-        .eq("transaction_id", transactionId)
+      const transactionPriceId = pickPriceIdFromTransactionData(data);
+
+      if (!transactionPriceId) {
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve price_id from transaction event",
+        });
+      }
+
+      const planByPriceId: Record<string, "pro" | "enterprise"> = {
+        [PADDLE_PRO_PRICE_ID]: "pro",
+        [PADDLE_ENTERPRISE_PRICE_ID]: "enterprise",
+      };
+
+      const trackerLimitByPlan: Record<"pro" | "enterprise", number> = {
+        pro: 3,
+        enterprise: 10,
+      };
+
+      const planCode = planByPriceId[transactionPriceId];
+      if (!planCode) {
+        return json(400, {
+          ok: false,
+          error: "Unsupported Paddle price_id for this environment",
+          price_id: transactionPriceId,
+        });
+      }
+
+      const trackerLimit = trackerLimitByPlan[planCode];
+      const transactionId = data?.id ?? null;
+
+      console.log("[WEBHOOK] transactionId:", transactionId);
+
+      let orgId: string | null = null;
+
+      if (data?.custom_data?.org_id) {
+        orgId = data.custom_data.org_id;
+        console.log("[WEBHOOK] orgId from custom_data:", orgId);
+      }
+
+      if (!orgId && transactionId) {
+        const { data: tx } = await supabase
+          .from("billing_transactions")
+          .select("org_id")
+          .eq("transaction_id", transactionId)
+          .maybeSingle();
+
+        orgId = tx?.org_id ?? null;
+        console.log("[WEBHOOK] orgId from DB:", orgId);
+      }
+
+      if (!orgId) {
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve org_id",
+          transactionId,
+        });
+      }
+
+      const now = new Date().toISOString();
+
+      const { error } = await supabase
+        .from("org_billing")
+        .upsert({
+          org_id: orgId,
+          billing_provider: "paddle",
+          plan_code: planCode,
+          subscribed_plan_code: planCode,
+          plan_status: "active",
+          tracker_limit_override: trackerLimit,
+          updated_at: now,
+          last_paddle_event_at: now,
+          paddle_price_id: transactionPriceId,
+          paddle_subscription_id: data?.subscription_id ?? null,
+          paddle_customer_id: data?.customer_id ?? null,
+        }, { onConflict: "org_id" });
+
+      if (error) {
+        return json(500, {
+          ok: false,
+          error: "DB update failed",
+          details: error.message,
+        });
+      }
+
+      const { data: entitlementsRow } = await supabase
+        .from("org_entitlements")
+        .select("org_id, max_trackers")
+        .eq("org_id", orgId)
         .maybeSingle();
 
-      orgId = tx?.org_id ?? null;
-
-      console.log("[WEBHOOK] orgId from DB:", orgId);
-    }
-
-    if (!orgId) {
-      return json(400, {
-        ok: false,
-        error: "Cannot resolve org_id",
-        transactionId,
-      });
-    }
-
-    // ---------------------------------
-    // ACTIVAR PLAN
-    // ---------------------------------
-
-    const now = new Date().toISOString();
-
-    const { error } = await supabase
-      .from("org_billing")
-      .upsert({
-        org_id: orgId,
-        billing_provider: "paddle",
+      console.log("[WEBHOOK] SUCCESS → org activated:", orgId, {
         plan_code: planCode,
-        subscribed_plan_code: planCode,
-        plan_status: "active",
+        price_id: transactionPriceId,
         tracker_limit_override: trackerLimit,
-        updated_at: now,
-        last_paddle_event_at: now,
-        paddle_price_id: transactionPriceId,
-        paddle_subscription_id: data?.subscription_id ?? null,
-        paddle_customer_id: data?.customer_id ?? null,
-      }, { onConflict: "org_id" });
+        effective_max_trackers: entitlementsRow?.max_trackers ?? null,
+      });
 
-    if (error) {
-      return json(500, {
-        ok: false,
-        error: "DB update failed",
-        details: error.message,
+      return json(200, {
+        ok: true,
+        orgId,
+        transactionId,
+        plan_code: planCode,
+        price_id: transactionPriceId,
+        tracker_limit: trackerLimit,
+        max_trackers: entitlementsRow?.max_trackers ?? null,
       });
     }
 
-    const { data: entitlementsRow } = await supabase
-      .from("org_entitlements")
-      .select("org_id, max_trackers")
-      .eq("org_id", orgId)
-      .maybeSingle();
+    if (type === "subscription.updated" || type === "subscription.canceled") {
+      const subscriptionId = pickSubscriptionId(data);
+      if (!subscriptionId) {
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve subscription id from subscription event",
+          event_type: type,
+        });
+      }
 
-    console.log("[WEBHOOK] SUCCESS → org activated:", orgId, {
-      plan_code: planCode,
-      price_id: transactionPriceId,
-      tracker_limit_override: trackerLimit,
-      effective_max_trackers: entitlementsRow?.max_trackers ?? null,
-    });
+      let orgId = asString(data?.custom_data?.org_id);
 
-    return json(200, {
-      ok: true,
-      orgId,
-      transactionId,
-      plan_code: planCode,
-      price_id: transactionPriceId,
-      tracker_limit: trackerLimit,
-      max_trackers: entitlementsRow?.max_trackers ?? null,
-    });
+      if (!orgId) {
+        const { data: row } = await supabase
+          .from("org_billing")
+          .select("org_id")
+          .eq("billing_provider", "paddle")
+          .eq("paddle_subscription_id", subscriptionId)
+          .maybeSingle();
+
+        orgId = row?.org_id ?? null;
+      }
+
+      if (!orgId) {
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve org_id from subscription event",
+          event_type: type,
+          subscription_id: subscriptionId,
+        });
+      }
+
+      const now = new Date().toISOString();
+      const planStatus = type === "subscription.canceled" ? "canceled" : "active";
+      const currentPeriodEnd = pickCurrentPeriodEnd(data);
+      const canceledAt =
+        asString(data?.canceled_at) ??
+        asString(data?.scheduled_change?.effective_at) ??
+        (type === "subscription.canceled" ? asString(event?.occurred_at) ?? now : null);
+
+      const { data: updatedRow, error } = await supabase
+        .from("org_billing")
+        .update({
+          plan_status: planStatus,
+          cancel_at_period_end: true,
+          current_period_end: currentPeriodEnd,
+          canceled_at: canceledAt,
+          updated_at: now,
+          last_paddle_event_at: now,
+        })
+        .eq("org_id", orgId)
+        .eq("billing_provider", "paddle")
+        .select("org_id")
+        .maybeSingle();
+
+      if (error) {
+        return json(500, {
+          ok: false,
+          error: "DB update failed",
+          details: error.message,
+          event_type: type,
+        });
+      }
+
+      if (!updatedRow) {
+        return json(404, {
+          ok: false,
+          error: "Paddle billing row not found",
+          org_id: orgId,
+          subscription_id: subscriptionId,
+        });
+      }
+
+      console.log("[WEBHOOK] subscription state updated", {
+        org_id: orgId,
+        event_type: type,
+        plan_status: planStatus,
+        cancel_at_period_end: true,
+        current_period_end: currentPeriodEnd,
+        canceled_at: canceledAt,
+      });
+
+      return json(200, {
+        ok: true,
+        org_id: orgId,
+        subscription_id: subscriptionId,
+        event_type: type,
+        plan_status: planStatus,
+        cancel_at_period_end: true,
+        current_period_end: currentPeriodEnd,
+        canceled_at: canceledAt,
+      });
+    }
+
+    return json(200, { ok: true, ignored: true });
   } catch (err) {
     return json(500, {
       ok: false,

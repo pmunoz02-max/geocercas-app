@@ -171,7 +171,6 @@ export default function Billing() {
 
   const pricingHref = useMemo(() => buildLangPath("/pricing", currentLang), [currentLang]);
   const homeHref = useMemo(() => buildLangPath("/inicio", currentLang), [currentLang]);
-  const cancelHref = useMemo(() => buildLangPath("/billing/cancel", currentLang), [currentLang]);
 
   const [billing, setBilling] = useState(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -682,7 +681,6 @@ export default function Billing() {
               <ManageSubscriptionButton
                 orgId={billing?.org_id ?? currentOrgId ?? null}
                 getAccessToken={getAccessToken}
-                returnUrl={cancelHref}
                 buttonLabel={tr("billing.subscriptionManagement.suspendPlan", "Suspend plan")}
                 unavailableMessage={tr(
                   "billing.subscriptionManagement.suspendUnavailable",
