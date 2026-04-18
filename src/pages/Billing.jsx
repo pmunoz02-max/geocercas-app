@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
+import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton";
 
 function resolveDateLocale(language) {
   const lang = String(language || "").toLowerCase();
@@ -170,6 +171,7 @@ export default function Billing() {
 
   const pricingHref = useMemo(() => buildLangPath("/pricing", currentLang), [currentLang]);
   const homeHref = useMemo(() => buildLangPath("/inicio", currentLang), [currentLang]);
+  const cancelHref = useMemo(() => buildLangPath("/billing/cancel", currentLang), [currentLang]);
 
   const [billing, setBilling] = useState(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -312,6 +314,11 @@ export default function Billing() {
     if (["free", "starter"].includes(effectivePlanCode)) return "free";
     return "none";
   }, [billingFallback, isOverLimit, effectivePlanStatus, effectivePlanCode]);
+
+  const hasActivePlan = useMemo(
+    () => ["active", "past_due", "paused"].includes(effectivePlanStatus),
+    [effectivePlanStatus]
+  );
 
   if (loading || !ready) return null;
 
@@ -663,11 +670,26 @@ export default function Billing() {
         ) : null}
 
         {ctaVariant === "none" ? (
-          <div className="text-sm text-emerald-800">
-            {tr(
-              "billing.messages.activePlanExists",
-              "There is already an active plan for this organization. The upgrade button is not shown."
-            )}
+          <div className="space-y-3">
+            <div className="text-sm text-emerald-800">
+              {tr(
+                "billing.messages.activePlanExists",
+                "There is already an active plan for this organization. The upgrade button is not shown."
+              )}
+            </div>
+
+            {hasActivePlan ? (
+              <ManageSubscriptionButton
+                orgId={billing?.org_id ?? currentOrgId ?? null}
+                getAccessToken={getAccessToken}
+                returnUrl={cancelHref}
+                buttonLabel={tr("billing.subscriptionManagement.suspendPlan", "Suspend plan")}
+                unavailableMessage={tr(
+                  "billing.subscriptionManagement.suspendUnavailable",
+                  "Suspend plan is temporarily unavailable in this version."
+                )}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
