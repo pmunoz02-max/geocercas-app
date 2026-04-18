@@ -1,11 +1,11 @@
 // src/components/Billing/ManageSubscriptionButton.jsx
 import React, { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 
 
 export default function ManageSubscriptionButton({
   orgId,
-  getAccessToken,
   disabled = false,
   buttonLabel = "Suspend plan",
 }) {
@@ -24,25 +24,16 @@ export default function ManageSubscriptionButton({
         throw new Error("Missing organization context.");
       }
 
-      const accessToken = await getAccessToken?.();
-      if (!accessToken) {
-        throw new Error("Could not get user session.");
-      }
-
-      const response = await fetch("/api/paddle-cancel-subscription", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
+      const { error: invokeError } = await supabase.functions.invoke(
+        "paddle-cancel-subscription",
+        {
+          body: { org_id: orgId },
         },
-        body: JSON.stringify({ org_id: orgId }),
-      });
+      );
 
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        const msg = payload?.error || "Could not suspend the plan.";
-        throw new Error(msg);
+      if (invokeError) {
+        console.error(invokeError);
+        throw new Error("Cancel failed");
       }
 
       setSuccess("Plan will be canceled at end of billing period");

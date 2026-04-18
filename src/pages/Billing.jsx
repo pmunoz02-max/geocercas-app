@@ -680,7 +680,6 @@ export default function Billing() {
             {hasActivePlan ? (
               <ManageSubscriptionButton
                 orgId={billing?.org_id ?? currentOrgId ?? null}
-                getAccessToken={getAccessToken}
                 buttonLabel={tr("billing.subscriptionManagement.suspendPlan", "Suspend plan")}
               />
             ) : null}
