@@ -1814,7 +1814,7 @@
       "previewNotice": {
         "prefix": "Esta pantalla trabaja en",
         "previewTag": "PREVIEW",
-        "middle": "y reutiliza Stripe en modo",
+        "middle": "y usa el flujo de suscripción en modo",
         "testTag": "TEST",
         "suffix": "No afecta producción."
       }
@@ -1850,7 +1850,7 @@
     "pro": {
       "title": "Pro",
       "subtitle": "Operación SaaS activa",
-      "price": "Stripe TEST",
+      "price": "Pro",
       "description": "Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
       "higherPlanMessage": "Tu organización ya tiene un plan superior o distinto de Free.",
       "reviewBillingMessage": "Revisa Facturación para administrarlo.",
@@ -1859,7 +1859,7 @@
         "upToGeofences": "Hasta {{count}} geocercas",
         "trackerEnabled": "Módulo Tracker habilitado",
         "invitesEnabled": "Invitación de trackers habilitada",
-        "stripeSelfManaged": "Suscripción autogestionable con Stripe"
+        "stripeSelfManaged": "Suscripción autogestionable"
       }
     },
     "enterprise": {
@@ -1878,7 +1878,7 @@
     "notes": {
       "title": "Notas de esta fase",
       "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
-      "proCheckout": "El mejora de plan a Pro reutiliza el flujo existente de Stripe Checkout. La administración de suscripción reutiliza Stripe Customer Portal.",
+      "proCheckout": "La mejora a Pro usa checkout seguro. Administra tu suscripción desde Facturación.",
       "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
     },
     "status": {
@@ -1902,7 +1902,7 @@
     "authRequired": "Inicia sesión para administrar tu plan.",
     "previewNotice": {
       "prefix": "Monetización en",
-      "middle": "(Stripe TEST).",
+      "middle": "(Flujo de suscripción).",
       "suffix": "No afecta producción."
     },
     "actions": {
@@ -1929,7 +1929,7 @@
     },
     "subscriptionManagement": {
       "title": "Gestión de suscripción",
-      "description": "Abre el portal de clientes de Stripe para actualizar tu tarjeta, cancelar o revisar tu suscripción."
+      "description": "Abre Facturación para gestionar los detalles de tu suscripción."
     },
     "messages": {
       "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
@@ -1937,7 +1937,7 @@
     },
     "upgrade": {
       "productTitle": "Geocercas PRO",
-      "priceLabel": "USD $29/mes · Paddle (Preview)",
+      "priceLabel": "USD $29/mes",
       "orgIdLabel": "Org ID",
       "notResolved": "(no resuelta)",
       "organizationInputLabel": "Organization ID (org_id)",

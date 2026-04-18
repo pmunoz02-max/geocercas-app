@@ -1090,7 +1090,7 @@ set(data, "billing.title", "Billing");
 set(data, "billing.authRequired", "Sign in to manage your plan.");
 data.billing.previewNotice = {
   prefix: "Monetization in",
-  middle: "(Stripe TEST).",
+  middle: "(Subscription flow).",
   suffix: "Does not affect production.",
 };
 data.billing.actions = { viewPlans: "View plans" };
@@ -1106,7 +1106,7 @@ data.billing.cards = {
 };
 data.billing.subscriptionManagement = {
   title: "Subscription management",
-  description: "Open the Stripe customer portal to update your card, cancel or review your subscription.",
+  description: "Open Billing to manage your subscription details.",
 };
 data.billing.messages = {
   cancelAtPeriodEnd: "Your subscription is set to cancel at the end of the current period.",

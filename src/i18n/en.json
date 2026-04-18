@@ -1785,7 +1785,7 @@
       "previewNotice": {
         "prefix": "This screen runs in",
         "middle": "PREVIEW",
-        "suffix": "and uses Stripe in TEST mode. It does not affect production."
+        "suffix": "and uses the subscription flow in TEST mode. It does not affect production."
       }
     },
     "actions": {
@@ -1813,7 +1813,7 @@
       "description": "Recommended plan to enable Tracker module and operate with subscriptions",
       "features": {
         "threeTrackers": "Up to 3 trackers per organization",
-        "stripeSelfManaged": "Self-managed subscription with Stripe"
+        "stripeSelfManaged": "Self-managed subscription"
       }
     },
     "enterprise": {
@@ -1836,7 +1836,7 @@
     "authRequired": "Sign in to manage your plan.",
     "previewNotice": {
       "prefix": "Monetization in",
-      "middle": "(Stripe TEST).",
+      "middle": "(Subscription flow).",
       "suffix": "Does not affect production."
     },
     "actions": {
@@ -1864,7 +1864,7 @@
     },
     "subscriptionManagement": {
       "title": "Subscription management",
-      "description": "Open the Stripe customer portal to update your card, cancel or review your subscription."
+      "description": "Open Billing to manage your subscription details."
     },
     "messages": {
       "cancelAtPeriodEnd": "Your subscription is set to cancel at the end of the current period.",
@@ -1872,7 +1872,7 @@
     },
     "upgrade": {
       "productTitle": "Geocercas PRO",
-      "priceLabel": "USD $29/month · Paddle (Preview)",
+      "priceLabel": "USD $29/month",
       "orgIdLabel": "Org ID",
       "notResolved": "(not resolved)",
       "organizationInputLabel": "Organization ID (org_id)",

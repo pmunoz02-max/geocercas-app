@@ -80,6 +80,15 @@ function normalizeUuid(v) {
   return isValidUuid(value) ? value : null;
 }
 
+function isRpcFunctionNotFound(error) {
+  if (!error) return false;
+  const details = [error?.code, error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .map((part) => String(part).toLowerCase())
+    .join(" ");
+  return details.includes("not found") || details.includes("could not find the function");
+}
+
 
 function replacePositionByUserId(rows, nextRow) {
   if (!nextRow?.user_id) return Array.isArray(rows) ? rows : [];
@@ -1255,7 +1264,7 @@ export default function TrackerDashboard() {
         lng,
         accuracy,
         ts,
-        device_recorded_at,
+        created_at,
         source
       `)
       .eq("org_id", safeOrgId)
@@ -1282,13 +1291,11 @@ export default function TrackerDashboard() {
               accuracy: row?.accuracy ?? mapped.accuracy ?? null,
               recorded_at:
                 row?.ts ??
-                row?.device_recorded_at ??
                 row?.created_at ??
                 mapped.recorded_at ??
                 null,
               ts:
                 row?.ts ??
-                row?.device_recorded_at ??
                 row?.created_at ??
                 mapped.ts ??
                 null,
@@ -1306,13 +1313,11 @@ export default function TrackerDashboard() {
                 accuracy: row?.accuracy ?? mapped.accuracy ?? null,
                 recorded_at:
                   row?.ts ??
-                  row?.device_recorded_at ??
                   row?.created_at ??
                   mapped.recorded_at ??
                   null,
                 ts:
                   row?.ts ??
-                  row?.device_recorded_at ??
                   row?.created_at ??
                   mapped.ts ??
                   null,
@@ -1426,13 +1431,15 @@ export default function TrackerDashboard() {
           p_org_id: safeOrgId,
         });
 
+        const trackerStatusRows = Array.isArray(statusRes.data) ? statusRes.data : [];
+
         if (statusRes.error) {
           console.error("[tracker-dashboard] rpc_tracker_dashboard_status error:", statusRes.error);
           setErrorMsg("Error loading tracker dashboard status.");
           setTrackerStatusRows([]);
           setTrackerCounts(null);
         } else {
-          setTrackerStatusRows(Array.isArray(statusRes.data) ? statusRes.data : []);
+          setTrackerStatusRows(trackerStatusRows);
         }
 
         const countsRes = await supabase.rpc("rpc_tracker_dashboard_counts", {
@@ -1440,13 +1447,29 @@ export default function TrackerDashboard() {
         });
 
         if (countsRes.error) {
-          console.error("[tracker-dashboard] rpc_tracker_dashboard_counts error:", countsRes.error);
-          setTrackerCounts(null);
+          console.warn("[tracker-dashboard] rpc not available, using fallback");
+
+          const localCounts = Array.isArray(statusRes.data)
+            ? statusRes.data.reduce(
+                (acc, row) => {
+                  const s = String(row?.status || "").toLowerCase();
+                  acc.total += 1;
+                  if (s === "online") acc.online += 1;
+                  else if (s === "stale") acc.stale += 1;
+                  else acc.offline += 1;
+                  return acc;
+                },
+                { total: 0, online: 0, stale: 0, offline: 0 }
+              )
+            : null;
+
+          setTrackerCounts(localCounts);
         } else {
           const countsRow =
             Array.isArray(countsRes.data) && countsRes.data.length > 0
               ? countsRes.data[0]
               : null;
+
           setTrackerCounts(countsRow);
         }
 

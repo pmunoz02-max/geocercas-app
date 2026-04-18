@@ -1796,7 +1796,7 @@
       "previewNotice": {
         "prefix": "Cet écran fonctionne en",
         "previewTag": "APERÇU",
-        "middle": "et réutilise Stripe en mode",
+        "middle": "et utilise le flux d'abonnement en mode",
         "testTag": "TEST",
         "suffix": "Cela n'affecte pas la production."
       }
@@ -1832,7 +1832,7 @@
     "pro": {
       "title": "Pro",
       "subtitle": "Opérations SaaS actives",
-      "price": "Stripe TEST",
+      "price": "Pro",
       "description": "Plan recommandé pour activer le module Tracker et opérer avec un abonnement.",
       "higherPlanMessage": "Votre organisation a déjà un plan supérieur ou différent de Free.",
       "reviewBillingMessage": "Consultez la facturation pour le gérer.",
@@ -1841,7 +1841,7 @@
         "upToGeofences": "Jusqu'à {{count}} géoclôtures",
         "trackerEnabled": "Module Tracker activé",
         "invitesEnabled": "Invitations de trackers activées",
-        "stripeSelfManaged": "Abonnement autogéré avec Stripe"
+        "stripeSelfManaged": "Abonnement autogéré"
       }
     },
     "enterprise": {
@@ -1860,7 +1860,7 @@
     "notes": {
       "title": "Notes pour cette phase",
       "backendAuthority": "Le backend reste la vraie autorité pour l'état du plan. Cette page reflète uniquement le plan et affiche les actions commerciales disponibles.",
-      "proCheckout": "La mise à niveau vers Pro réutilise le flux Stripe Checkout existant. La gestion des abonnements réutilise le Stripe Customer Portal.",
+      "proCheckout": "La mise à niveau vers Pro utilise un checkout sécurisé. Gérez votre abonnement depuis la facturation.",
       "enterpriseSales": "Enterprise est présenté comme canal commercial, sans activer le checkout automatique."
     },
     "status": {
@@ -1884,7 +1884,7 @@
     "authRequired": "Connectez-vous pour gérer votre plan.",
     "previewNotice": {
       "prefix": "Monétisation en",
-      "middle": "(Stripe TEST).",
+      "middle": "(Flux d'abonnement).",
       "suffix": "N’affecte pas la production."
     },
     "actions": {
@@ -1911,7 +1911,7 @@
     },
     "subscriptionManagement": {
       "title": "Gestion de l’abonnement",
-      "description": "Ouvrez le portail client Stripe pour mettre à jour votre carte, annuler ou consulter votre abonnement."
+      "description": "Ouvrez la facturation pour gérer votre abonnement."
     },
     "messages": {
       "cancelAtPeriodEnd": "Votre abonnement sera annulé à la fin de la période actuelle.",
@@ -1919,7 +1919,7 @@
     },
     "upgrade": {
       "productTitle": "Geofences PRO",
-      "priceLabel": "29 $US/mois · Paddle (Preview)",
+      "priceLabel": "29 $US/mois",
       "orgIdLabel": "ID org",
       "notResolved": "(non résolu)",
       "organizationInputLabel": "ID de l’organisation (org_id)",

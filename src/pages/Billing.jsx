@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
-import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton.jsx";
 
 function resolveDateLocale(language) {
   const lang = String(language || "").toLowerCase();
@@ -170,7 +169,6 @@ export default function Billing() {
   }, [location.search, i18n?.language]);
 
   const pricingHref = useMemo(() => buildLangPath("/pricing", currentLang), [currentLang]);
-  const billingHref = useMemo(() => buildLangPath("/billing", currentLang), [currentLang]);
   const homeHref = useMemo(() => buildLangPath("/inicio", currentLang), [currentLang]);
 
   const [billing, setBilling] = useState(null);
@@ -207,7 +205,6 @@ export default function Billing() {
           .select(`
             org_id,
             org_name,
-            billing_provider,
             billing_plan_code,
             effective_plan_code,
             plan_status,
@@ -276,7 +273,6 @@ export default function Billing() {
     return String(raw).toLowerCase();
   }, [billing]);
 
-  const billingProvider = billing?.billing_provider || null;
   const isOverLimit = Boolean(billing?.billing_over_limit);
   const trialEndsAt = billing?.trial_end || null;
 
@@ -308,15 +304,6 @@ export default function Billing() {
       lessThanHour: tr("billing.trial.lessThanHour", "Less than 1 hour remaining"),
     });
   }, [trialEndsAt, dateLocale, tr]);
-
-  const shouldShowManageButton = useMemo(() => {
-    if (!currentOrgId) return false;
-    if (!billingProvider) return false;
-    if (billingProvider === "stripe") {
-      return ["trialing", "active", "past_due", "canceled"].includes(effectivePlanStatus);
-    }
-    return false;
-  }, [currentOrgId, billingProvider, effectivePlanStatus]);
 
   const ctaVariant = useMemo(() => {
     if (billingFallback) return "none";
@@ -383,16 +370,15 @@ export default function Billing() {
 
         {(() => {
           const orgId = billing?.org_id ?? currentOrgId ?? null;
-          const showPaddleUpgrade =
-            billingProvider === "paddle" || !billingProvider || ctaVariant === "free";
+          const showUpgradeCta = ["free", "trialing", "over_limit"].includes(ctaVariant);
 
-          return showPaddleUpgrade ? (
+          return showUpgradeCta ? (
             <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
               <div className="text-xl font-bold text-slate-900">
                 {tr("billing.upgrade.productTitle", "Geocercas PRO")}
               </div>
               <div className="mt-1 text-sm text-slate-700">
-                {tr("billing.upgrade.priceLabel", "USD $29/month · Paddle (Preview)")}
+                {tr("billing.upgrade.priceLabel", "USD $29/month")}
               </div>
               <div className="mt-2 text-xs text-slate-700">
                 <b>{tr("billing.upgrade.orgIdLabel", "Org ID")}:</b>{" "}
@@ -606,27 +592,6 @@ export default function Billing() {
               </div>
             </div>
 
-            {shouldShowManageButton ? (
-              <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-sm font-semibold text-slate-900">
-                  {tr("billing.subscriptionManagement.title", "Subscription management")}
-                </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  {tr(
-                    "billing.subscriptionManagement.description",
-                    "Open the subscription portal to update payment details or review your subscription."
-                  )}
-                </p>
-
-                <div className="mt-4">
-                  <ManageSubscriptionButton
-                    orgId={currentOrgId}
-                    getAccessToken={getAccessToken}
-                    returnUrl={billingHref}
-                  />
-                </div>
-              </div>
-            ) : null}
           </>
         )}
       </div>
@@ -671,13 +636,6 @@ export default function Billing() {
               >
                 {tr("billing.actions.viewPlans", "View plans")}
               </Link>
-              {shouldShowManageButton ? (
-                <ManageSubscriptionButton
-                  orgId={currentOrgId}
-                  getAccessToken={getAccessToken}
-                  returnUrl={billingHref}
-                />
-              ) : null}
             </div>
           </>
         ) : null}
