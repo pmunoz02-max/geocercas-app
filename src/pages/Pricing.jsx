@@ -142,7 +142,7 @@ function FreePlanAction({ currentPlanCode, currentPlanLabel, billingLabel }) {
   return (
     <Link
       to="/billing"
-      className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+      className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:from-blue-600 hover:to-blue-700"
     >
       {billingLabel}
     </Link>
@@ -162,7 +162,7 @@ function ProPlanAction({
     return (
       <Link
         to="/billing"
-        className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+        className="inline-flex w-full items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:from-blue-600 hover:to-blue-700"
       >
         {billingLabel}
       </Link>
@@ -554,7 +554,7 @@ export default function Pricing() {
           <div className="flex flex-wrap gap-3">
             <Link
               to="/billing"
-              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              className="inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition hover:from-blue-600 hover:to-blue-700"
             >
               {tt(
                 "actions.goToBilling",
