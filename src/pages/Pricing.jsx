@@ -298,7 +298,7 @@ export default function Pricing() {
       ? "Illimité"
       : i18n.language === "en"
         ? "Unlimited"
-        : "Ilimitadas"
+        : "Unlimited"
   );
 
   const detectedPlanLabel = useMemo(() => {
@@ -326,7 +326,7 @@ export default function Pricing() {
           ? "Aucune donnée commerciale"
           : i18n.language === "en"
             ? "No commercial data"
-            : "Sin datos comerciales"
+            : "No commercial data"
       );
     }
 
@@ -357,11 +357,11 @@ export default function Pricing() {
           ? "Idéal pour démarrer et valider le flux de base"
           : i18n.language === "en"
             ? "Ideal to get started and validate the base flow"
-            : "Ideal para empezar y validar el flujo base"
+            : "Ideal to get started and validate the base flow"
       ),
       tt(
         "free.features.upToTrackers",
-        i18n.language === "fr" ? "Jusqu'à 1 tracker" : i18n.language === "en" ? "Up to 1 tracker" : "Hasta 1 tracker",
+        i18n.language === "fr" ? "Jusqu'à 1 tracker" : i18n.language === "en" ? "Up to 1 tracker" : "Up to 1 tracker",
         { count: 1 }
       ),
       tt(
@@ -370,7 +370,7 @@ export default function Pricing() {
           ? "Géorepères avec limite selon le plan"
           : i18n.language === "en"
             ? "Geofences with plan-based limits"
-            : "Geocercas con límite por plan"
+            : "Geofences with plan-based limits"
       ),
       tt(
         "free.features.billingAndUpgrade",
@@ -378,7 +378,7 @@ export default function Pricing() {
           ? "Accès à la facturation et à la future mise à niveau du plan"
           : i18n.language === "en"
             ? "Access to Billing and future plan upgrade flow"
-            : "Acceso a Facturación y futura ruta de mejora de plan"
+            : "Access to Billing and future plan upgrade flow"
       ),
       tt(
         "free.features.backendEnforcement",
@@ -386,7 +386,7 @@ export default function Pricing() {
           ? "Le backend applique toujours les limites réelles"
           : i18n.language === "en"
             ? "Backend still enforces the real limits"
-            : "Backend sigue aplicando enforcement real"
+            : "Backend still enforces the real limits"
       ),
     ],
     [i18n.language, tt]
@@ -400,7 +400,7 @@ export default function Pricing() {
           ? `Jusqu'à ${formatLimit(maxTrackers || 3, "3", unlimitedLabel)} trackers par organisation`
           : i18n.language === "en"
             ? `Up to ${formatLimit(maxTrackers || 3, "3", unlimitedLabel)} trackers per organization`
-            : `Hasta ${formatLimit(maxTrackers || 3, "3", unlimitedLabel)} trackers por organización`,
+            : `Up to ${formatLimit(maxTrackers || 3, "3", unlimitedLabel)} trackers per organization`,
         {
           count: formatLimit(maxTrackers || 3, "3", unlimitedLabel),
         }
@@ -411,7 +411,7 @@ export default function Pricing() {
           ? `Jusqu'à ${formatLimit(maxGeocercas || 9999, notAvailableLabel, unlimitedLabel)} géorepères`
           : i18n.language === "en"
             ? `Up to ${formatLimit(maxGeocercas || 9999, notAvailableLabel, unlimitedLabel)} geofences`
-            : `Hasta ${formatLimit(maxGeocercas || 9999, notAvailableLabel, unlimitedLabel)} geocercas`,
+            : `Up to ${formatLimit(maxGeocercas || 9999, notAvailableLabel, unlimitedLabel)} geofences`,
         {
           count: formatLimit(maxGeocercas || 9999, notAvailableLabel, unlimitedLabel),
         }
@@ -422,7 +422,7 @@ export default function Pricing() {
           ? "Module Tracker activé"
           : i18n.language === "en"
             ? "Tracker module enabled"
-            : "Módulo Tracker habilitado"
+            : "Tracker module enabled"
       ),
       tt(
         "pro.features.invitesEnabled",
@@ -430,7 +430,7 @@ export default function Pricing() {
           ? "Invitation des trackers activée"
           : i18n.language === "en"
             ? "Tracker invitations enabled"
-            : "Invitación de trackers habilitada"
+            : "Tracker invitations enabled"
       ),
       tt(
         "pro.features.stripeSelfManaged",
@@ -438,7 +438,7 @@ export default function Pricing() {
           ? "Abonnement autogéré"
           : i18n.language === "en"
             ? "Self-managed subscription"
-            : "Suscripción autogestionable"
+            : "Self-managed subscription"
       ),
     ],
     [maxTrackers, maxGeocercas, notAvailableLabel, unlimitedLabel, i18n.language, tt]
@@ -452,7 +452,7 @@ export default function Pricing() {
           ? "Accompagnement commercial et onboarding guidé"
           : i18n.language === "en"
             ? "Sales assistance and guided onboarding"
-            : "Atención comercial y onboarding guiado"
+            : "Sales assistance and guided onboarding"
       ),
       tt(
         "enterprise.features.flexibleLimits",
@@ -460,7 +460,7 @@ export default function Pricing() {
           ? "Limites et conditions ajustables"
           : i18n.language === "en"
             ? "Adjustable limits and conditions"
-            : "Límites y condiciones ajustables"
+            : "Adjustable limits and conditions"
       ),
       tt(
         "enterprise.features.multiTeamReady",
@@ -468,7 +468,7 @@ export default function Pricing() {
           ? "Prêt pour les opérations multi-équipes"
           : i18n.language === "en"
             ? "Ready for multi-team operations"
-            : "Preparado para operación con múltiples equipos"
+            : "Ready for multi-team operations"
       ),
       tt(
         "enterprise.features.specialAgreements",
@@ -476,7 +476,7 @@ export default function Pricing() {
           ? "Escalade commerciale et accords spéciaux"
           : i18n.language === "en"
             ? "Commercial escalation and special agreements"
-            : "Escalamiento comercial y acuerdos especiales"
+            : "Commercial escalation and special agreements"
       ),
       tt(
         "enterprise.features.directSalesContact",
@@ -484,7 +484,7 @@ export default function Pricing() {
           ? "Contact direct avec l'équipe commerciale"
           : i18n.language === "en"
             ? "Direct contact with sales"
-            : "Contacto directo con ventas"
+            : "Direct contact with sales"
       ),
     ],
     [i18n.language, tt]
@@ -503,7 +503,7 @@ export default function Pricing() {
                 ? "Plans et tarifs"
                 : i18n.language === "en"
                   ? "Plans and pricing"
-                  : "Planes y precios"
+                  : "Plans and pricing"
             )}
           </h1>
           <p className="mt-2 text-sm">
@@ -513,7 +513,7 @@ export default function Pricing() {
                 ? "Vous n'avez pas accès à ce module."
                 : i18n.language === "en"
                   ? "You do not have access to this module."
-                  : "No tienes acceso a este módulo."
+                  : "You do not have access to this module."
             )}
           </p>
         </div>
@@ -533,7 +533,7 @@ export default function Pricing() {
                   ? "Plans et tarifs"
                   : i18n.language === "en"
                     ? "Plans and pricing"
-                    : "Planes y precios"
+                    : "Plans and pricing"
               )}
             </h1>
             <p className="mt-2 max-w-3xl text-slate-600">
@@ -543,7 +543,7 @@ export default function Pricing() {
                   ? "Gérez votre forfait et vérifiez la capacité disponible de votre organisation."
                   : i18n.language === "en"
                     ? "Manage your plan and review your organization capacity."
-                    : "Administra tu plan y revisa la capacidad disponible de tu organización."
+                    : "Manage your plan and review your organization capacity."
               )}
             </p>
           </div>
@@ -559,7 +559,7 @@ export default function Pricing() {
                   ? "Aller à la facturation"
                   : i18n.language === "en"
                     ? "Go to Billing"
-                    : "Ir a Facturación"
+                    : "Go to Billing"
               )}
             </Link>
           </div>
@@ -574,7 +574,7 @@ export default function Pricing() {
                   ? "Plan détecté"
                   : i18n.language === "en"
                     ? "Detected plan"
-                    : "Plan detectado"
+                    : "Detected plan"
               )}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
@@ -590,7 +590,7 @@ export default function Pricing() {
                   ? "Statut"
                   : i18n.language === "en"
                     ? "Status"
-                    : "Estado"
+                    : "Status"
               )}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
@@ -606,7 +606,7 @@ export default function Pricing() {
                   ? "Essai jusqu'au"
                   : i18n.language === "en"
                     ? "Trial until"
-                    : "Prueba hasta"
+                    : "Trial until"
               )}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">{trialUntil}</div>
@@ -620,7 +620,7 @@ export default function Pricing() {
                   ? "Max. géorepères"
                   : i18n.language === "en"
                     ? "Max geofences"
-                    : "Máx. geocercas"
+                    : "Max geofences"
               )}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
@@ -638,7 +638,7 @@ export default function Pricing() {
                   ? "Max. trackers"
                   : i18n.language === "en"
                     ? "Max trackers"
-                    : "Máx. trackers"
+                    : "Max trackers"
               )}
             </div>
             <div className="mt-1 text-lg font-semibold text-slate-900">
@@ -665,7 +665,7 @@ export default function Pricing() {
               ? "Pour commencer"
               : i18n.language === "en"
                 ? "To get started"
-                : "Para comenzar"
+                : "To get started"
           )}
           price={tt("free.price", "$0")}
           description={tt(
@@ -674,7 +674,7 @@ export default function Pricing() {
               ? "Conçu pour valider l'usage initial de la plateforme."
               : i18n.language === "en"
                 ? "Designed to validate initial platform usage."
-                : "Pensado para validar el uso inicial de la plataforma."
+                : "Designed to validate initial platform usage."
           )}
           current={currentPlanCode === "free"}
           currentBadgeLabel={tt(
@@ -683,7 +683,7 @@ export default function Pricing() {
               ? "Plan actuel"
               : i18n.language === "en"
                 ? "Current plan"
-                : "Plan actual"
+                : "Current plan"
           )}
           features={freeFeatures}
           cta={
@@ -695,7 +695,7 @@ export default function Pricing() {
                   ? "Vous utilisez déjà le plan Free."
                   : i18n.language === "en"
                     ? "You are already using the Free plan."
-                    : "Ya estás usando el plan Free."
+                    : "You are already using the Free plan."
               )}
               billingLabel={tt(
                 "actions.goToBilling",
@@ -703,7 +703,7 @@ export default function Pricing() {
                   ? "Aller à la facturation"
                   : i18n.language === "en"
                     ? "Go to Billing"
-                    : "Ir a Facturación"
+                    : "Go to Billing"
               )}
             />
           }
@@ -717,7 +717,7 @@ export default function Pricing() {
               ? "Opérations SaaS actives"
               : i18n.language === "en"
                 ? "Active SaaS operations"
-                : "Operación SaaS activa"
+                : "Active SaaS operations"
           )}
           price={tt("pro.price", "Pro")}
           description={tt(
@@ -726,7 +726,7 @@ export default function Pricing() {
               ? "Plan recommandé pour activer le module Tracker et fonctionner avec abonnement."
               : i18n.language === "en"
                 ? "Recommended plan to enable the Tracker module and operate with subscriptions."
-                : "Plan recomendado para habilitar el módulo Tracker y operar con suscripción."
+                : "Recommended plan to enable the Tracker module and operate with subscriptions."
           )}
           highlight
           current={currentPlanCode === "pro"}
@@ -736,7 +736,7 @@ export default function Pricing() {
               ? "Plan actuel"
               : i18n.language === "en"
                 ? "Current plan"
-                : "Plan actual"
+                : "Current plan"
           )}
           features={proFeatures}
           cta={
@@ -751,7 +751,7 @@ export default function Pricing() {
                   ? "Aller à la facturation"
                   : i18n.language === "en"
                     ? "Go to Billing"
-                    : "Ir a Facturación"
+                    : "Go to Billing"
               )}
               higherPlanMessage={tt(
                 "pro.higherPlanMessage",
@@ -759,7 +759,7 @@ export default function Pricing() {
                   ? "Votre organisation a déjà un plan supérieur ou différent de Free."
                   : i18n.language === "en"
                     ? "Your organization already has a plan higher than or different from Free."
-                    : "Tu organización ya tiene un plan superior o distinto de Free."
+                    : "Your organization already has a plan higher than or different from Free."
               )}
               reviewBillingMessage={tt(
                 "pro.reviewBillingMessage",
@@ -767,7 +767,7 @@ export default function Pricing() {
                   ? "Consultez la facturation pour le gérer."
                   : i18n.language === "en"
                     ? "Review Billing to manage it."
-                    : "Revisa Facturación para administrarlo."
+                    : "Review Billing to manage it."
               )}
             />
           }
@@ -781,7 +781,7 @@ export default function Pricing() {
               ? "Vente assistée"
               : i18n.language === "en"
                 ? "Assisted sales"
-                : "Venta asistida"
+                : "Assisted sales"
           )}
           price={tt(
             "enterprise.price",
@@ -789,7 +789,7 @@ export default function Pricing() {
               ? "Sur mesure"
               : i18n.language === "en"
                 ? "Custom"
-                : "A medida"
+                : "Custom"
           )}
           description={tt(
             "enterprise.description",
@@ -797,7 +797,7 @@ export default function Pricing() {
               ? "Pour les organisations qui nécessitent des conditions commerciales spéciales."
               : i18n.language === "en"
                 ? "For organizations that require special commercial conditions."
-                : "Para organizaciones que requieren condiciones comerciales especiales."
+                : "For organizations that require special commercial conditions."
           )}
           current={currentPlanCode === "enterprise"}
           currentBadgeLabel={tt(
@@ -806,7 +806,7 @@ export default function Pricing() {
               ? "Plan actuel"
               : i18n.language === "en"
                 ? "Current plan"
-                : "Plan actual"
+                : "Current plan"
           )}
           features={enterpriseFeatures}
           cta={
@@ -817,7 +817,7 @@ export default function Pricing() {
                   ? "Contacter l'équipe commerciale"
                   : i18n.language === "en"
                     ? "Contact sales"
-                    : "Contactar ventas"
+                    : "Contact sales"
               )}
             />
           }
@@ -832,7 +832,7 @@ export default function Pricing() {
               ? "Notes pour cette phase"
               : i18n.language === "en"
                 ? "Notes for this phase"
-                : "Notas de esta fase"
+                : "Notes for this phase"
           )}
         </h2>
         <div className="mt-3 space-y-2 text-sm text-slate-600">
@@ -843,7 +843,7 @@ export default function Pricing() {
                 ? "Le backend reste l'autorité réelle du plan. Cette page reflète seulement le plan et affiche les actions commerciales disponibles."
                 : i18n.language === "en"
                   ? "The backend remains the real source of truth for the plan. This page only reflects the plan and shows the available commercial actions."
-                  : "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles."
+                  : "The backend remains the real source of truth for the plan. This page only reflects the plan and shows the available commercial actions."
             )}
           </p>
           <p>
@@ -853,7 +853,7 @@ export default function Pricing() {
                 ? "La mise à niveau vers Pro utilise un paiement sécurisé. La gestion de l'abonnement sera disponible depuis la facturation."
                 : i18n.language === "en"
                   ? "Upgrading to Pro uses a secure checkout. Subscription management will be available from Billing."
-                  : "La mejora a Pro usa un checkout seguro. La administración de la suscripción estará disponible desde Facturación."
+                  : "Upgrading to Pro uses a secure checkout. Subscription management will be available from Billing."
             )}
           </p>
           <p>
@@ -863,7 +863,7 @@ export default function Pricing() {
                 ? "Enterprise est présenté comme un canal commercial, sans activer de checkout automatique."
                 : i18n.language === "en"
                   ? "Enterprise is presented as a sales channel, without enabling automatic checkout."
-                  : "Enterprise queda presentado como canal comercial, sin activar checkout automático."
+                  : "Enterprise is presented as a sales channel, without enabling automatic checkout."
             )}
           </p>
         </div>

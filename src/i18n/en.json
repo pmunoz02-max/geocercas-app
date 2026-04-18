@@ -1780,49 +1780,97 @@
     }
   },
   "pricing": {
-    "title": "Plans and pricing",
-    "page": {
-      "previewNotice": {
-        "prefix": "This screen runs in",
-        "middle": "PREVIEW",
-        "suffix": "and uses the subscription flow in TEST mode. It does not affect production."
-      }
+    "accessDenied": "You do not have permission to view monetization for this organization.",
+    "common": {
+      "currentPlan": "Current plan",
+      "loading": "Loading...",
+      "notAvailable": "—",
+      "unlimited": "Unlimited"
     },
     "actions": {
-      "goToBilling": "Go to Billing"
+      "goToBilling": "Go to Billing",
+      "contactSales": "Contact sales"
+    },
+    "page": {
+      "title": "Plans and pricing",
+      "previewNotice": {
+        "prefix": "This screen runs in",
+        "previewTag": "PREVIEW",
+        "middle": "and uses the subscription flow in",
+        "testTag": "TEST",
+        "suffix": "It does not affect production."
+      }
     },
     "summary": {
       "detectedPlan": "Detected plan",
+      "noCommercialData": "No commercial data",
       "status": "Status",
       "trialUntil": "Trial until",
+      "planCodes": {
+        "free": "FREE",
+        "pro": "PRO",
+        "enterprise": "ENTERPRISE"
+      },
+      "planCodeUnknown": "{{code}}",
       "maxGeofences": "Max geofences",
       "maxTrackers": "Max trackers"
     },
     "free": {
       "title": "Free",
       "subtitle": "To get started",
-      "description": "Designed to validate initial platform usage",
+      "price": "$0",
+      "description": "Designed to validate initial platform usage.",
+      "currentPlanMessage": "You are already on the Free plan.",
       "features": {
-        "basicFlow": "Ideal to validate the base flow",
-        "oneTracker": "Up to 1 tracker"
+        "validateFlow": "Ideal to start and validate the base flow",
+        "upToTrackers": "Up to {{count}} tracker",
+        "geofenceLimits": "Geofences with plan-based limits",
+        "billingAndUpgrade": "Access Billing and the future plan upgrade path",
+        "backendEnforcement": "Backend continues applying real enforcement"
       }
     },
     "pro": {
       "title": "Pro",
       "subtitle": "Active SaaS operations",
-      "description": "Recommended plan to enable Tracker module and operate with subscriptions",
+      "price": "Pro",
+      "description": "Recommended plan to enable the Tracker module and operate with subscriptions.",
+      "higherPlanMessage": "Your organization already has a higher plan or a plan different from Free.",
+      "reviewBillingMessage": "Review Billing to manage it.",
       "features": {
-        "threeTrackers": "Up to 3 trackers per organization",
+        "upToTrackers": "Up to {{count}} trackers per organization",
+        "upToGeofences": "Up to {{count}} geofences",
+        "trackerEnabled": "Tracker module enabled",
+        "invitesEnabled": "Tracker invitations enabled",
         "stripeSelfManaged": "Self-managed subscription"
       }
     },
     "enterprise": {
       "title": "Enterprise",
       "subtitle": "Assisted sales",
-      "description": "For organizations requiring special commercial conditions",
+      "price": "Custom",
+      "description": "For organizations that require special commercial conditions.",
       "features": {
-        "support": "Commercial support and guided onboarding"
+        "salesOnboarding": "Sales assistance and guided onboarding",
+        "flexibleLimits": "Adjustable limits and conditions",
+        "multiTeamReady": "Ready for multi-team operations",
+        "specialAgreements": "Commercial scaling and special agreements",
+        "directSalesContact": "Direct sales contact"
       }
+    },
+    "notes": {
+      "title": "Notes for this phase",
+      "backendAuthority": "The backend remains the real authority for the plan. This page only reflects the plan and shows available commercial actions.",
+      "proCheckout": "Upgrading to Pro uses a secure checkout. Manage your subscription from Billing.",
+      "enterpriseSales": "Enterprise is presented as a commercial channel, without enabling automatic checkout."
+    },
+    "status": {
+      "active": "Active",
+      "trialing": "Trial",
+      "past_due": "Past due",
+      "canceled": "Canceled",
+      "paused": "Paused",
+      "incomplete": "Incomplete",
+      "other": "Status: {{status}}"
     }
   },
   "billing": {
