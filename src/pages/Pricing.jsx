@@ -170,8 +170,8 @@ function ProPlanAction({
 
   if (currentPlanCode === "free") {
     return (
-      <div className="relative">
-        <div className="relative z-20">
+      <div className="space-y-2 relative z-20">
+        <div className="relative z-30">
           <UpgradeToProButton orgId={currentOrgId} plan="pro" />
         </div>
       </div>
@@ -252,8 +252,8 @@ function EnterprisePlanAction({
   }
 
   return (
-    <div className="relative space-y-3">
-      <div className="relative z-20">
+    <div className="space-y-2 relative z-20">
+      <div className="relative z-30">
         <UpgradeToProButton orgId={currentOrgId} plan="enterprise" />
       </div>
       <ContactSalesButton label={contactSalesLabel} />

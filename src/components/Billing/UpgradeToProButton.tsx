@@ -104,9 +104,11 @@ export default function UpgradeToProButton({
     <div className="space-y-2">
       <button
         type="button"
-        onClick={() => {
-          console.log("[UpgradeToProButton] click");
-          handleUpgrade();
+        onClick={handleUpgrade}
+        style={{
+          position: "relative",
+          zIndex: 999999,
+          pointerEvents: "auto",
         }}
         className="w-full rounded-xl px-4 py-3 text-sm font-semibold transition bg-slate-900 text-white hover:bg-slate-800"
       >
