@@ -40,53 +40,38 @@ export default function UpgradeToProButton({
   const handleUpgrade = async () => {
     if (isLoading) return;
 
-    setMsg(null);
-
-    if (!resolvedOrgId || !isUuid(resolvedOrgId)) {
-      setMsg(t("billing.upgrade.errors.invalidOrgId"));
-      return;
-    }
-
-    localStorage.setItem("gc_active_org_id", resolvedOrgId);
-
     try {
       setIsLoading(true);
+      setMsg(null);
 
       const { data, error } = await supabase.functions.invoke("paddle-create-checkout", {
         body: {
-          org_id: resolvedOrgId,
           plan_code: "pro",
-          return_url: `${window.location.origin}/billing`,
         },
       });
 
       if (error) {
         console.error("[upgrade-pro] invoke error", error);
-
-        let details = "Unknown error";
-        try {
-          const errText = await error.context?.text?.();
-          console.error("[upgrade-pro] raw error body", errText);
-          details = errText || error.message || "Unknown error";
-        } catch {
-          details = error.message || "Unknown error";
-        }
-
-        throw new Error(details);
+        throw error;
       }
 
-      if (!data?.checkoutUrl && !data?.url) {
-        throw new Error("No checkout URL returned");
+      if (!data?.ok) {
+        console.error("[upgrade-pro] backend error", data);
+        throw new Error(JSON.stringify(data));
+      }
+
+      if (!data.checkoutUrl) {
+        throw new Error("Missing checkout URL");
       }
 
       if (typeof onStarted === "function") {
         onStarted();
       }
 
-      window.location.href = data.checkoutUrl || data.url;
-    } catch (e) {
-      console.error("[upgrade-pro] final error", e);
-      setMsg(String(e instanceof Error ? e.message : e));
+      window.location.href = data.checkoutUrl;
+    } catch (err: any) {
+      console.error("[upgrade-pro] final error", err);
+      setMsg(err.message || "Unknown error");
     } finally {
       setIsLoading(false);
     }

@@ -244,7 +244,6 @@ serve(async (req) => {
           updated_at: now,
           last_paddle_event_at: now,
           paddle_price_id: transactionPriceId,
-          paddle_subscription_id: data?.subscription_id ?? null,
           paddle_customer_id: data?.customer_id ?? null,
         }, { onConflict: "org_id" });
 
@@ -277,6 +276,99 @@ serve(async (req) => {
         price_id: transactionPriceId,
         tracker_limit: trackerLimit,
         max_trackers: entitlementsRow?.max_trackers ?? null,
+      });
+    }
+
+    if (type === "subscription.created") {
+      const subscriptionId = pickSubscriptionId(data);
+      if (!subscriptionId) {
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve subscription id from subscription.created",
+          event_type: type,
+        });
+      }
+
+      let orgId = asString(data?.custom_data?.org_id);
+      const customerId = asString(data?.customer_id);
+
+      if (!orgId && customerId) {
+        const { data: row } = await supabase
+          .from("org_billing")
+          .select("org_id")
+          .eq("billing_provider", "paddle")
+          .eq("paddle_customer_id", customerId)
+          .maybeSingle();
+
+        orgId = row?.org_id ?? null;
+      }
+
+      if (!orgId) {
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve org_id from subscription.created",
+          event_type: type,
+          subscription_id: subscriptionId,
+        });
+      }
+
+      const now = new Date().toISOString();
+      const currentPeriodEnd = pickCurrentPeriodEnd(data);
+
+      const updatePayload: Record<string, unknown> = {
+        paddle_subscription_id: subscriptionId,
+        plan_status: "active",
+        cancel_at_period_end: false,
+        canceled_at: null,
+        current_period_end: currentPeriodEnd,
+        updated_at: now,
+        last_paddle_event_at: now,
+      };
+
+      if (customerId) {
+        updatePayload.paddle_customer_id = customerId;
+      }
+
+      const { data: updatedRow, error } = await supabase
+        .from("org_billing")
+        .update(updatePayload)
+        .eq("org_id", orgId)
+        .eq("billing_provider", "paddle")
+        .select("org_id")
+        .maybeSingle();
+
+      if (error) {
+        return json(500, {
+          ok: false,
+          error: "DB update failed",
+          details: error.message,
+          event_type: type,
+        });
+      }
+
+      if (!updatedRow) {
+        return json(404, {
+          ok: false,
+          error: "Paddle billing row not found",
+          org_id: orgId,
+          subscription_id: subscriptionId,
+        });
+      }
+
+      console.log("[WEBHOOK] subscription created", {
+        org_id: orgId,
+        subscription_id: subscriptionId,
+        current_period_end: currentPeriodEnd,
+      });
+
+      return json(200, {
+        ok: true,
+        org_id: orgId,
+        subscription_id: subscriptionId,
+        event_type: type,
+        plan_status: "active",
+        cancel_at_period_end: false,
+        current_period_end: currentPeriodEnd,
       });
     }
 

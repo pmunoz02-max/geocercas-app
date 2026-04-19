@@ -21,6 +21,14 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "missing_authorization" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
     const { org_id } = await req.json();
 
     if (!org_id || typeof org_id !== "string") {
@@ -32,8 +40,35 @@ serve(async (req) => {
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      {
+        global: {
+          headers: {
+            Authorization: authHeader,
+          },
+        },
+      },
     );
+
+    const {
+      data: { user },
+      error: authError
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    }
+
+    const { data: memberData, error: memberError } = await supabase
+      .from("org_members")
+      .select("org_id")
+      .eq("org_id", org_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (memberError || !memberData) {
+      return new Response(JSON.stringify({ error: "forbidden" }), { status: 403 });
+    }
 
     const { data, error } = await supabase
       .from("org_billing")
