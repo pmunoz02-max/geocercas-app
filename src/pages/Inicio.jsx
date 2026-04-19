@@ -305,7 +305,6 @@ export default function Inicio() {
 
       {/* ✅ Monetización / Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <UpgradeToProButton orgId={currentOrgId} plan="pro" />
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <h2 className="text-lg font-semibold text-slate-900">
             {t("dashboard.managePlan")}
