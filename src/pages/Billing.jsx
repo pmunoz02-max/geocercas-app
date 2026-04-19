@@ -257,11 +257,6 @@ export default function Billing() {
     };
   }, [authenticated, currentOrgId, tr]);
 
-  async function getAccessToken() {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  }
-
   const effectivePlanCode = useMemo(() => {
     return normalizePlanCode(
       billing?.effective_plan_code || billing?.billing_plan_code || "free"
@@ -393,7 +388,7 @@ export default function Billing() {
                 </span>
               </div>
               <div className="mt-4">
-                <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+                <UpgradeToProButton orgId={orgId} />
               </div>
             </div>
           ) : null;

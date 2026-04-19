@@ -111,19 +111,19 @@ export default function UpgradeToProButton({
 
   return (
     <button
-      onClick={() => {
-        console.log("CLICK REAL");
-        alert("CLICK FUNCIONA");
-      }}
+      onClick={handleUpgrade}
+      disabled={loading}
       style={{
         width: "100%",
-        padding: "20px",
-        background: "red",
+        padding: "12px",
+        borderRadius: "8px",
+        backgroundColor: "#0b1b34",
         color: "white",
-        fontSize: "18px"
+        fontWeight: "bold",
+        cursor: "pointer"
       }}
     >
-      BOTON REAL
+      Suscribirme a PRO
     </button>
   );
 }
