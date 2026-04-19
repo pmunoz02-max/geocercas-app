@@ -388,7 +388,7 @@ export default function Billing() {
                 </span>
               </div>
               <div className="mt-4">
-                <UpgradeToProButton orgId={orgId} />
+                <UpgradeToProButton orgId={orgId} plan="pro" />
               </div>
             </div>
           ) : null;
