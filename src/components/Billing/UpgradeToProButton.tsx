@@ -23,6 +23,8 @@ export default function UpgradeToProButton({
   );
 
   const handleUpgrade = async () => {
+    console.log("CLICK UPGRADE BUTTON");
+
     if (isLoading) return;
 
     try {
@@ -39,6 +41,7 @@ export default function UpgradeToProButton({
         plan,
       });
 
+      console.log("Calling paddle-create-checkout...");
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
         {
@@ -51,6 +54,7 @@ export default function UpgradeToProButton({
       );
 
       console.log("[upgrade-plan] invoke result", { data, error });
+      console.log("Response:", data);
 
       if (error) {
         console.error("[upgrade-plan] invoke error", error);
