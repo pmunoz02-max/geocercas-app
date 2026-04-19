@@ -50,7 +50,7 @@ function PlanCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-6 shadow-sm ${
+      className={`relative rounded-2xl border p-6 shadow-sm ${
         highlight
           ? "border-slate-900 bg-slate-900 text-white"
           : "border-slate-200 bg-white text-slate-900"
@@ -114,7 +114,7 @@ function PlanCard({
         ))}
       </div>
 
-      <div className="mt-8">{cta}</div>
+      <div className="relative z-20 mt-8">{cta}</div>
     </div>
   );
 }
