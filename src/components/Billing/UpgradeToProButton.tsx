@@ -110,64 +110,16 @@ export default function UpgradeToProButton({
   console.log("HANDLE UPGRADE READY");
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex flex-col gap-4">
-        <div>
-          <div className="text-lg font-bold text-slate-900">
-            {t("billing.upgrade.productTitle")}
-          </div>
-          <div className="text-sm text-slate-700">
-            {t("billing.upgrade.priceLabel")}
-          </div>
-        </div>
-
-        <div className="text-sm text-slate-800">
-          <b>{t("billing.upgrade.orgIdLabel")}:</b>{" "}
-          <span className="font-mono break-all text-slate-900">
-            {resolvedOrgId || t("billing.upgrade.notResolved")}
-          </span>
-        </div>
-
-        {!orgId && (
-          <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-slate-900">
-              {t("billing.upgrade.organizationInputLabel")}
-            </label>
-            <input
-              value={orgInput}
-              onChange={(e) => setOrgInput(e.target.value)}
-              placeholder={t("billing.upgrade.organizationInputPlaceholder")}
-              className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none"
-            />
-            <div className="text-xs text-slate-600">
-              {t("billing.upgrade.organizationInputHelp")}
-            </div>
-          </div>
-        )}
-
-        <button
-          onClick={handleUpgrade}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "8px",
-            backgroundColor: "#0b1b34",
-            color: "white",
-            fontWeight: "bold",
-            cursor: "pointer"
-          }}
-        >
-          Suscribirme a PRO
-        </button>
-
-        {msg && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            <div className="font-semibold">{t("billing.upgrade.noticeTitle")}</div>
-            <div className="mt-1 whitespace-pre-wrap break-words">{msg}</div>
-          </div>
-        )}
-      </div>
-    </div>
+    <button
+      onClick={handleUpgrade}
+      style={{
+        padding: "20px",
+        background: "red",
+        color: "white",
+        fontSize: "18px"
+      }}
+    >
+      TEST BUTTON
+    </button>
   );
 }
