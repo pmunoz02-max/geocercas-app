@@ -143,7 +143,7 @@ export default function SignUp() {
         </button>
 
         <div className="relative my-2">
-          <div className="absolute inset-0 flex items-center">
+          <div className="pointer-events-none absolute inset-0 flex items-center">
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">

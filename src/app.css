@@ -67,11 +67,15 @@
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
-  .geo-mapwrap { height: 70vh; }
-  /* === Personal: tema claro mínimo === */
+  .geo-mapwrap {
+    height: 70vh;
+  }
+}
+
+/* === Personal: tema claro mínimo === */
 html, body {
-  background: #f5f7fb;           /* fondo claro */
-  color: #111827;                /* texto gris oscuro */
+  background: #f5f7fb;
+  color: #111827;
 }
 
 .card {
@@ -108,4 +112,3 @@ html, body {
   text-align: left;
 }
 .table thead { background: #f3f4f6; }
-}
