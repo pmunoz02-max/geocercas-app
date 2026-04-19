@@ -1,3 +1,5 @@
+import { supabase } from "@/lib/supabaseClient";
+
 type Props = {
   orgId?: string | null;
   plan?: "pro" | "enterprise";
@@ -10,21 +12,23 @@ export default function UpgradeToProButton({ orgId, plan = "pro" }: Props) {
     try {
       console.log("[UpgradeToProButton] starting checkout");
 
-      const res = await fetch("/api/paddle-create-checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ orgId, plan }),
-      });
-
-      const data = await res.json();
+      const { data, error } = await supabase.functions.invoke(
+        "paddle-create-checkout",
+        {
+          body: { orgId, plan },
+        }
+      );
 
       console.log("[UpgradeToProButton] response", data);
-      console.log("[UpgradeToProButton] checkout_url", data?.checkout_url);
+      console.log("[UpgradeToProButton] error", error);
+
+      if (error) {
+        console.error("Edge function error", error);
+        return;
+      }
 
       if (!data?.checkout_url) {
-        console.error("Missing checkout_url");
+        console.error("Missing checkout_url", data);
         return;
       }
 
