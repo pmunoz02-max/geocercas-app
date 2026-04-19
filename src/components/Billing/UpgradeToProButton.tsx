@@ -22,8 +22,10 @@ export default function UpgradeToProButton({
     [orgId]
   );
 
+  console.log("[UpgradeToProButton] render", { orgId, plan });
+
   const handleUpgrade = async () => {
-    console.log("CLICK UPGRADE BUTTON");
+    console.log("[UpgradeToProButton] click");
 
     if (isLoading) return;
 
@@ -41,6 +43,7 @@ export default function UpgradeToProButton({
         plan,
       });
 
+      console.log("[UpgradeToProButton] starting checkout");
       console.log("Calling paddle-create-checkout...");
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
@@ -110,12 +113,7 @@ export default function UpgradeToProButton({
       <button
         type="button"
         onClick={handleUpgrade}
-        disabled={isLoading || !resolvedOrgId}
-        className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${
-          isLoading || !resolvedOrgId
-            ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-            : "bg-slate-900 text-white hover:bg-slate-800"
-        }`}
+        className="w-full rounded-xl px-4 py-3 text-sm font-semibold transition bg-slate-900 text-white hover:bg-slate-800"
       >
         {isLoading
           ? t("billing.processing", { defaultValue: "Procesando..." })
