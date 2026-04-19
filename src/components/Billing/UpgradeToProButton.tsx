@@ -38,44 +38,70 @@ export default function UpgradeToProButton({
   const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || isLoading;
 
   const handleUpgrade = async () => {
-    if (isLoading) return;
+    const setLoading = setIsLoading;
+    const setError = setMsg;
 
     try {
-      setIsLoading(true);
-      setMsg(null);
+      setLoading(true);
+      setError(null);
 
-      const { data, error } = await supabase.functions.invoke("paddle-create-checkout", {
-        body: {
-          plan_code: "pro",
-        },
+      console.log("[upgrade-pro] click", {
+        orgId,
+        resolvedOrgId,
       });
+
+      const { data, error } = await supabase.functions.invoke(
+        "paddle-create-checkout",
+        {
+          body: {
+            org_id: resolvedOrgId || orgId,
+            plan_code: "pro",
+            return_url: `${window.location.origin}/billing`,
+          },
+        }
+      );
+
+      console.log("[upgrade-pro] invoke result", { data, error });
 
       if (error) {
         console.error("[upgrade-pro] invoke error", error);
-        throw error;
+
+        let details = error.message || "Unknown error";
+        try {
+          const raw = await error.context?.text?.();
+          console.error("[upgrade-pro] raw error body", raw);
+          if (raw) details = raw;
+        } catch {
+          // noop
+        }
+
+        throw new Error(details);
       }
 
       if (!data?.ok) {
-        console.error("[upgrade-pro] backend error", data);
+        console.error("[upgrade-pro] backend returned not ok", data);
         throw new Error(JSON.stringify(data));
       }
 
-      const checkoutUrl = data.checkout_url || data.checkoutUrl;
+      const checkoutUrl =
+        data?.checkout_url ||
+        data?.checkoutUrl ||
+        data?.url ||
+        null;
+
+      console.log("[upgrade-pro] checkoutUrl", checkoutUrl);
 
       if (!checkoutUrl) {
-        throw new Error("Missing checkout URL");
+        throw new Error(`Missing checkout URL: ${JSON.stringify(data)}`);
       }
 
-      if (typeof onStarted === "function") {
-        onStarted();
-      }
-
-      window.location.href = checkoutUrl;
+      console.log("[upgrade-pro] redirecting", checkoutUrl);
+      window.location.assign(checkoutUrl);
     } catch (err: any) {
       console.error("[upgrade-pro] final error", err);
-      setMsg(err.message || "Unknown error");
+      setError(err?.message || "Unknown error");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
