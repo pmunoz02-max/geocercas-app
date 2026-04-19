@@ -25,7 +25,7 @@ export default function UpgradeToProButton({
   console.log("[UpgradeToProButton] render", { orgId, plan });
 
   const handleUpgrade = async () => {
-    console.log("[UpgradeToProButton] click");
+    console.log("[UpgradeToProButton] click", { orgId, plan });
 
     if (isLoading) return;
 
@@ -44,7 +44,6 @@ export default function UpgradeToProButton({
       });
 
       console.log("[UpgradeToProButton] starting checkout");
-      console.log("Calling paddle-create-checkout...");
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
         {
@@ -56,8 +55,8 @@ export default function UpgradeToProButton({
         }
       );
 
-      console.log("[upgrade-plan] invoke result", { data, error });
-      console.log("Response:", data);
+      console.log("[UpgradeToProButton] response", data);
+      console.log("[UpgradeToProButton] checkout_url", data?.checkout_url);
 
       if (error) {
         console.error("[upgrade-plan] invoke error", error);
@@ -74,27 +73,15 @@ export default function UpgradeToProButton({
         throw new Error(details);
       }
 
-      if (!data?.ok) {
-        console.error("[upgrade-plan] backend returned not ok", data);
-        throw new Error(JSON.stringify(data));
-      }
-
-      const checkoutUrl =
-        data?.checkout_url ||
-        data?.checkoutUrl ||
-        data?.url ||
-        null;
-
-      console.log("[upgrade-plan] checkoutUrl", checkoutUrl);
-
-      if (!checkoutUrl) {
-        throw new Error(`Missing checkout URL: ${JSON.stringify(data)}`);
+      if (!data?.checkout_url) {
+        console.error("Missing checkout_url", data);
+        return;
       }
 
       if (onStarted) onStarted();
 
-      console.log("[upgrade-plan] redirecting", checkoutUrl);
-      window.location.assign(checkoutUrl);
+      console.log("[upgrade-plan] redirecting", data.checkout_url);
+      window.location.assign(data.checkout_url);
     } catch (err: any) {
       console.error("[upgrade-plan] final error", err);
       setMsg(err?.message || "Could not start checkout.");
@@ -103,30 +90,28 @@ export default function UpgradeToProButton({
     }
   };
 
+  const label =
+    plan === "enterprise"
+      ? t("billing.subscribeEnterprise", { defaultValue: "Suscribirme a ENTERPRISE" })
+      : t("billing.subscribePro", { defaultValue: "Suscribirme a PRO" });
+
   return (
-    <div
-      style={{
-        position: "fixed",
-        bottom: 20,
-        right: 20,
-        zIndex: 999999,
-        background: "red",
-        padding: "20px",
-      }}
-    >
+    <div className="space-y-2">
       <button
-        onClick={() => {
-          console.log("🔥 CLICK WORKING");
-          alert("CLICK OK");
-        }}
-        style={{
-          fontSize: "20px",
-          padding: "20px",
-          cursor: "pointer",
-        }}
+        type="button"
+        onClick={handleUpgrade}
+        className="w-full rounded-xl px-4 py-3 text-sm font-semibold transition bg-slate-900 text-white hover:bg-slate-800"
       >
-        TEST CLICK
+        {isLoading
+          ? t("billing.processing", { defaultValue: "Procesando..." })
+          : label}
       </button>
+
+      {msg && !isLoading && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 whitespace-pre-wrap break-words">
+          {msg}
+        </div>
+      )}
     </div>
   );
 }
