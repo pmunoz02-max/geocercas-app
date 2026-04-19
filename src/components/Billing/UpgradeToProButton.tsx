@@ -5,16 +5,8 @@ import { supabase } from "@/lib/supabaseClient";
 type Props = {
   orgId?: string | null;
   plan?: "pro" | "enterprise";
-  projectRef?: string;
   onStarted?: () => void;
-  getAccessToken?: () => Promise<string | null>;
 };
-
-function isUuid(v: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    v.trim()
-  );
-}
 
 export default function UpgradeToProButton({
   orgId,
@@ -22,56 +14,51 @@ export default function UpgradeToProButton({
   onStarted,
 }: Props) {
   const { t } = useTranslation();
-  const [orgInput, setOrgInput] = useState<string>(
-    () => localStorage.getItem("gc_active_org_id") || ""
-  );
   const [isLoading, setIsLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
   const resolvedOrgId = useMemo(
-    () => (orgId && orgId.trim() ? orgId.trim() : orgInput.trim()),
-    [orgId, orgInput]
+    () => (orgId && orgId.trim() ? orgId.trim() : ""),
+    [orgId]
   );
 
-  console.log("UpgradeToProButton render", { orgId, resolvedOrgId });
-
-  const loading = isLoading;
-
   const handleUpgrade = async () => {
-    console.log("CLICK DETECTED");
-
-    const setLoading = setIsLoading;
-    const setError = setMsg;
+    if (isLoading) return;
 
     try {
-      setLoading(true);
-      setError(null);
+      setIsLoading(true);
+      setMsg(null);
 
-      console.log("[upgrade-pro] click", {
+      if (!resolvedOrgId) {
+        throw new Error("Missing organization context.");
+      }
+
+      console.log("[upgrade-plan] click", {
         orgId,
         resolvedOrgId,
+        plan,
       });
 
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
         {
           body: {
-            org_id: resolvedOrgId || orgId,
-            plan_code: "pro",
+            org_id: resolvedOrgId,
+            plan_code: plan,
             return_url: `${window.location.origin}/billing`,
           },
         }
       );
 
-      console.log("[upgrade-pro] invoke result", { data, error });
+      console.log("[upgrade-plan] invoke result", { data, error });
 
       if (error) {
-        console.error("[upgrade-pro] invoke error", error);
+        console.error("[upgrade-plan] invoke error", error);
 
         let details = error.message || "Unknown error";
         try {
           const raw = await error.context?.text?.();
-          console.error("[upgrade-pro] raw error body", raw);
+          console.error("[upgrade-plan] raw error body", raw);
           if (raw) details = raw;
         } catch {
           // noop
@@ -81,7 +68,7 @@ export default function UpgradeToProButton({
       }
 
       if (!data?.ok) {
-        console.error("[upgrade-pro] backend returned not ok", data);
+        console.error("[upgrade-plan] backend returned not ok", data);
         throw new Error(JSON.stringify(data));
       }
 
@@ -91,39 +78,51 @@ export default function UpgradeToProButton({
         data?.url ||
         null;
 
-      console.log("[upgrade-pro] checkoutUrl", checkoutUrl);
+      console.log("[upgrade-plan] checkoutUrl", checkoutUrl);
 
       if (!checkoutUrl) {
         throw new Error(`Missing checkout URL: ${JSON.stringify(data)}`);
       }
 
-      console.log("[upgrade-pro] redirecting", checkoutUrl);
+      if (onStarted) onStarted();
+
+      console.log("[upgrade-plan] redirecting", checkoutUrl);
       window.location.assign(checkoutUrl);
     } catch (err: any) {
-      console.error("[upgrade-pro] final error", err);
-      setError(err?.message || "Unknown error");
+      console.error("[upgrade-plan] final error", err);
+      setMsg(err?.message || "Could not start checkout.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  console.log("HANDLE UPGRADE READY");
+  const label =
+    plan === "enterprise"
+      ? t("billing.subscribeEnterprise", { defaultValue: "Suscribirme a ENTERPRISE" })
+      : t("billing.subscribePro", { defaultValue: "Suscribirme a PRO" });
 
   return (
-    <button
-      onClick={handleUpgrade}
-      disabled={loading}
-      style={{
-        width: "100%",
-        padding: "12px",
-        borderRadius: "8px",
-        backgroundColor: "#0b1b34",
-        color: "white",
-        fontWeight: "bold",
-        cursor: "pointer"
-      }}
-    >
-      {loading ? "Procesando..." : "Suscribirme a PRO"}
-    </button>
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={handleUpgrade}
+        disabled={isLoading || !resolvedOrgId}
+        className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition ${
+          isLoading || !resolvedOrgId
+            ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+            : "bg-slate-900 text-white hover:bg-slate-800"
+        }`}
+      >
+        {isLoading
+          ? t("billing.processing", { defaultValue: "Procesando..." })
+          : label}
+      </button>
+
+      {msg && !isLoading && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 whitespace-pre-wrap break-words">
+          {msg}
+        </div>
+      )}
+    </div>
   );
 }

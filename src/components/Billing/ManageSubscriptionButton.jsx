@@ -1,8 +1,5 @@
-// src/components/Billing/ManageSubscriptionButton.jsx
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-
-
 
 export default function ManageSubscriptionButton({
   orgId,
@@ -15,6 +12,7 @@ export default function ManageSubscriptionButton({
 
   async function handleSuspendPlan() {
     if (loading || disabled) return;
+
     try {
       setLoading(true);
       setError("");
@@ -24,27 +22,43 @@ export default function ManageSubscriptionButton({
         throw new Error("Missing organization context.");
       }
 
-      const { error: invokeError } = await supabase.functions.invoke(
+      const { data, error: invokeError } = await supabase.functions.invoke(
         "paddle-cancel-subscription",
         {
           body: { org_id: orgId },
-        },
+        }
       );
 
       if (invokeError) {
-        console.error(invokeError);
-        throw new Error("Cancel failed");
+        console.error("[manage-subscription] invoke error", invokeError);
+
+        let details = invokeError.message || "Cancel failed";
+        try {
+          const raw = await invokeError.context?.text?.();
+          console.error("[manage-subscription] raw error body", raw);
+          if (raw) details = raw;
+        } catch {
+          // noop
+        }
+
+        throw new Error(details);
+      }
+
+      if (data && data.ok === false) {
+        throw new Error(JSON.stringify(data));
       }
 
       setSuccess("Plan will be canceled at end of billing period");
     } catch (err) {
-      setError(err?.message || "Could not open subscription management.");
+      console.error("[manage-subscription] final error", err);
+      setError(err?.message || "Could not suspend the plan.");
     } finally {
       setLoading(false);
     }
   }
 
-  const canManageSubscription = !loading && !disabled;
+  const canManageSubscription = !loading && !disabled && !!orgId;
+
   return (
     <div className="space-y-2">
       <button
@@ -61,7 +75,7 @@ export default function ManageSubscriptionButton({
       </button>
 
       {error && !loading && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 whitespace-pre-wrap break-words">
           {error}
         </div>
       )}

@@ -97,11 +97,6 @@ export default function Inicio() {
     }
   }
 
-  async function getAccessToken() {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  }
-
   // 1) Loader mientras AuthContext hidrata
   if (loading || !ready) {
     return (
@@ -310,7 +305,7 @@ export default function Inicio() {
 
       {/* ✅ Monetización / Plan */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />
+        <UpgradeToProButton orgId={currentOrgId} plan="pro" />
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <h2 className="text-lg font-semibold text-slate-900">
             {t("dashboard.managePlan")}
@@ -318,21 +313,9 @@ export default function Inicio() {
           <p className="mt-2 text-sm text-slate-600">
             {t("inicio.billing.managePlanBody")}
           </p>
-          <button
-            type="button"
-            onClick={() => navigate("/billing")}
-            className="
-              mt-4
-              rounded-xl
-              border border-slate-300
-              bg-white hover:bg-slate-50
-              text-slate-900 font-medium
-              px-5 py-3
-              transition
-            "
-          >
-            {t("dashboard.subscribePro")}
-          </button>
+          <div className="mt-4">
+            <UpgradeToProButton orgId={currentOrgId} plan="pro" />
+          </div>
           <div className="mt-3 text-xs text-slate-500">
             {t("inicio.billing.previewNote")}
           </div>

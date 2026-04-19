@@ -153,7 +153,6 @@ function ProPlanAction({
   authenticated,
   currentOrgId,
   currentPlanCode,
-  getAccessToken,
   billingLabel,
   higherPlanMessage,
   reviewBillingMessage,
@@ -170,7 +169,7 @@ function ProPlanAction({
   }
 
   if (currentPlanCode === "free") {
-    return <UpgradeToProButton orgId={currentOrgId} getAccessToken={getAccessToken} />;
+    return <UpgradeToProButton orgId={currentOrgId} plan="pro" />;
   }
 
   if (currentPlanCode === "pro") {
@@ -213,7 +212,6 @@ function EnterprisePlanAction({
   authenticated,
   currentOrgId,
   currentPlanCode,
-  getAccessToken,
   billingLabel,
   contactSalesLabel,
   reviewBillingMessage,
@@ -249,11 +247,7 @@ function EnterprisePlanAction({
 
   return (
     <div className="space-y-3">
-      <UpgradeToProButton
-        orgId={currentOrgId}
-        plan="enterprise"
-        getAccessToken={getAccessToken}
-      />
+      <UpgradeToProButton orgId={currentOrgId} plan="enterprise" />
       <ContactSalesButton label={contactSalesLabel} />
     </div>
   );
@@ -333,11 +327,6 @@ export default function Pricing() {
       cancelled = true;
     };
   }, [authenticated, currentOrgId]);
-
-  async function getAccessToken() {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  }
 
   const currentPlanCode = useMemo(() => {
     return normalizePlanCode(billingPanel?.effective_plan_code || planCode);
@@ -797,7 +786,6 @@ export default function Pricing() {
               authenticated={authenticated}
               currentOrgId={currentOrgId}
               currentPlanCode={currentPlanCode}
-              getAccessToken={getAccessToken}
               billingLabel={tt(
                 "actions.goToBilling",
                 i18n.language === "fr"
@@ -867,7 +855,6 @@ export default function Pricing() {
               authenticated={authenticated}
               currentOrgId={currentOrgId}
               currentPlanCode={currentPlanCode}
-              getAccessToken={getAccessToken}
               billingLabel={tt(
                 "actions.goToBilling",
                 i18n.language === "fr"
