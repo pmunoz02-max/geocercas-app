@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
-import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
 function HelpCard({ title, description, cta, to }) {
   const navigate = useNavigate();

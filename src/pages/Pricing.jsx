@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "@/lib/supabaseClient.js";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
-import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
 function normalizePlanCode(value) {
   return String(value || "free").toLowerCase();

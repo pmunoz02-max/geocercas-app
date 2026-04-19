@@ -4,7 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
-import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton";
 
 function resolveDateLocale(language) {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import UpgradeToProButton from "../components/Billing/UpgradeToProButton";
+import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
 export default function BillingPage() {
   const [billing, setBilling] = useState(null);
