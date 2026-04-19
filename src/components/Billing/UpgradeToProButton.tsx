@@ -103,18 +103,19 @@ export default function UpgradeToProButton({
   return (
     <div className="space-y-2">
       <button
-        type="button"
-        onClick={handleUpgrade}
-        style={{
-          position: "relative",
-          zIndex: 999999,
-          pointerEvents: "auto",
+        onClick={() => {
+          console.log("🔥 REAL CLICK OK");
+          handleUpgrade();
         }}
-        className="w-full rounded-xl px-4 py-3 text-sm font-semibold transition bg-slate-900 text-white hover:bg-slate-800"
+        style={{
+          width: "100%",
+          padding: "12px",
+          background: "#1e293b",
+          color: "white",
+          borderRadius: "10px",
+        }}
       >
-        {isLoading
-          ? t("billing.processing", { defaultValue: "Procesando..." })
-          : label}
+        Suscribirme a PRO
       </button>
 
       {msg && !isLoading && (
