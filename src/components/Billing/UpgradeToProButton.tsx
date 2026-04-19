@@ -52,70 +52,41 @@ export default function UpgradeToProButton({
     try {
       setIsLoading(true);
 
-      console.log("[PADDLE BUTTON] disabled state", {
-        isLoading,
-        orgId: resolvedOrgId,
-      });
-      console.log("[PADDLE BUTTON] click", { orgId: resolvedOrgId, plan });
-
-      const result = await supabase.functions.invoke("paddle-create-checkout", {
+      const { data, error } = await supabase.functions.invoke("paddle-create-checkout", {
         body: {
           org_id: resolvedOrgId,
-          plan_code: plan,
+          plan_code: "pro",
+          return_url: `${window.location.origin}/billing`,
         },
       });
 
-      console.log("[PADDLE BUTTON] raw result", result);
-      console.log("[PADDLE BUTTON] data", result?.data);
-      console.log("[PADDLE BUTTON] error", result?.error);
+      if (error) {
+        console.error("[upgrade-pro] invoke error", error);
 
-      if (result?.error) {
-        console.error("[PADDLE BUTTON] invoke error", result.error);
-        const errorText =
-          typeof result.error === "string"
-            ? result.error
-            : JSON.stringify(result.error, null, 2);
-
-        setMsg(
-          t("billing.upgrade.messages.paddleError", { details: errorText })
-        );
-        console.error("[billing] PADDLE ERROR:", errorText);
-        return;
-      }
-
-      const checkoutUrl = result?.data?.checkout_url || result?.data?.url;
-
-      if (checkoutUrl) {
-        console.log("[PADDLE BUTTON] redirecting", checkoutUrl);
-
-        if (typeof onStarted === "function") {
-          onStarted();
+        let details = "Unknown error";
+        try {
+          const errText = await error.context?.text?.();
+          console.error("[upgrade-pro] raw error body", errText);
+          details = errText || error.message || "Unknown error";
+        } catch {
+          details = error.message || "Unknown error";
         }
 
-        console.log("[billing] checkoutUrl:", checkoutUrl);
-        window.location.href = checkoutUrl;
-        return;
+        throw new Error(details);
       }
 
-      console.warn("[PADDLE BUTTON] checkout_url missing", result?.data);
+      if (!data?.checkoutUrl && !data?.url) {
+        throw new Error("No checkout URL returned");
+      }
 
-      const missingText = JSON.stringify(result?.data ?? {}, null, 2);
-      setMsg(
-        t("billing.upgrade.messages.checkoutUrlMissing", {
-          details: missingText,
-        })
-      );
-      console.warn("[billing] CHECKOUT URL MISSING:", missingText);
+      if (typeof onStarted === "function") {
+        onStarted();
+      }
+
+      window.location.href = data.checkoutUrl || data.url;
     } catch (e) {
-      console.error("[PADDLE BUTTON] exception", e);
-
-      const exceptionText = e instanceof Error ? e.message : String(e);
-      setMsg(
-        t("billing.upgrade.messages.paddleException", {
-          details: exceptionText,
-        })
-      );
-      console.error("[billing] PADDLE EXCEPTION:", exceptionText);
+      console.error("[upgrade-pro] final error", e);
+      setMsg(String(e instanceof Error ? e.message : e));
     } finally {
       setIsLoading(false);
     }
