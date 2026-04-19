@@ -35,9 +35,11 @@ export default function UpgradeToProButton({
 
   console.log("UpgradeToProButton render", { orgId, resolvedOrgId });
 
-  const disabled = !resolvedOrgId || !isUuid(resolvedOrgId) || isLoading;
+  const loading = isLoading;
 
   const handleUpgrade = async () => {
+    console.log("CLICK DETECTED");
+
     const setLoading = setIsLoading;
     const setError = setMsg;
 
@@ -105,6 +107,8 @@ export default function UpgradeToProButton({
     }
   };
 
+  console.log("HANDLE UPGRADE READY");
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4">
@@ -142,19 +146,11 @@ export default function UpgradeToProButton({
         )}
 
         <button
-          type="button"
           onClick={handleUpgrade}
-          disabled={disabled}
-          className="rounded-xl bg-slate-900 px-5 py-3 text-base font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={loading}
+          style={{ cursor: "pointer" }}
         >
-          {isLoading
-            ? t("billing.upgrade.processing")
-            : t("billing.upgrade.subscribe", {
-                defaultValue:
-                  plan === "enterprise"
-                    ? "Subscribe to ENTERPRISE"
-                    : "Subscribe to PRO",
-              })}
+          {loading ? "Procesando..." : "Suscribirme a PRO"}
         </button>
 
         {msg && (
