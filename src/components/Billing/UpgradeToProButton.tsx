@@ -8,7 +8,6 @@ type Props = {
 export default function UpgradeToProButton({ orgId, plan = "pro" }: Props) {
   const handleUpgrade = async () => {
     console.log("[UpgradeToProButton] click", { orgId, plan });
-    alert("UPGRADE CLICK");
 
     try {
       const { data, error } = await supabase.functions.invoke("paddle-create-checkout", {
