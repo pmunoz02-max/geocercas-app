@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type Props = {
@@ -7,65 +7,61 @@ type Props = {
 };
 
 export default function UpgradeToProButton({ orgId, plan }: Props) {
-  console.log("[UpgradeToProButton] mounted from Billing component", {
-    orgId,
-    plan,
-  });
+  const [loading, setLoading] = useState(false);
 
-  const handleUpgrade = async () => {
+  const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     console.clear();
     console.log("[UpgradeToProButton] click", { orgId, plan });
 
     try {
+      setLoading(true);
+
       console.log("[UpgradeToProButton] before invoke");
 
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
-        { body: { orgId, plan } }
+        {
+          body: { orgId, plan },
+        }
       );
 
       console.log("[UpgradeToProButton] after invoke", { data, error });
 
       if (error) {
-        console.error("[UpgradeToProButton] error", error);
-        return;
-      }
+        console.error("[UpgradeToProButton] function error", error);
 
-      if (!data?.checkout_url) {
-        console.error("[UpgradeToProButton] Missing checkout_url", data);
-        return;
-      }
-
-      console.log("[UpgradeToProButton] redirect", data.checkout_url);
-      window.location.assign(data.checkout_url);
-        } catch (error: any) {
-          console.error("[UpgradeToProButton] error raw", error);
-
-          const response = error?.context;
-
-          if (response instanceof Response) {
-            const cloned = response.clone();
-            const raw = await cloned.text();
-
-            console.error("[UpgradeToProButton] function response status", response.status);
-            console.error("[UpgradeToProButton] function response raw", raw);
-
-            try {
-              const parsed = JSON.parse(raw);
-              console.error("[UpgradeToProButton] function response json", parsed);
-            } catch {
-              // raw no era json
-            }
-          }
-
-          console.error("[UpgradeToProButton] error", error);
+        const response = (error as any)?.context;
+        if (response instanceof Response) {
+          const raw = await response.clone().text();
+          console.error("[UpgradeToProButton] function response status", response.status);
+          console.error("[UpgradeToProButton] function response raw", raw);
         }
+
+        return;
+      }
+
+      const checkoutUrl = data?.checkout_url;
+      if (!checkoutUrl) {
+        console.error("[UpgradeToProButton] missing checkout_url", data);
+        return;
+      }
+
+      console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
+      window.location.assign(checkoutUrl);
+    } catch (err) {
+      console.error("[UpgradeToProButton] unexpected error", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <button
       type="button"
-      onClick={handleUpgrade}
+      onClick={handleClick}
       className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
       style={{
         position: "relative",
@@ -73,7 +69,7 @@ export default function UpgradeToProButton({ orgId, plan }: Props) {
         pointerEvents: "auto",
       }}
     >
-      Suscribirme a PRO
+      {loading ? "Abriendo checkout..." : "Suscribirme a PRO"}
     </button>
   );
 }
