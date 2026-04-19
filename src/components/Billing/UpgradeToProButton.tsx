@@ -103,32 +103,30 @@ export default function UpgradeToProButton({
     }
   };
 
-  const label =
-    plan === "enterprise"
-      ? t("billing.subscribeEnterprise", { defaultValue: "Suscribirme a ENTERPRISE" })
-      : t("billing.subscribePro", { defaultValue: "Suscribirme a PRO" });
-
   return (
-    <div className="space-y-2">
+    <div
+      style={{
+        position: "fixed",
+        bottom: 20,
+        right: 20,
+        zIndex: 999999,
+        background: "red",
+        padding: "20px",
+      }}
+    >
       <button
         onClick={() => {
-          console.log("[UpgradeToProButton] click FORCED");
-          handleUpgrade();
+          console.log("🔥 CLICK WORKING");
+          alert("CLICK OK");
         }}
         style={{
-          zIndex: 9999,
-          position: "relative",
+          fontSize: "20px",
+          padding: "20px",
           cursor: "pointer",
         }}
       >
-        Upgrade to PRO
+        TEST CLICK
       </button>
-
-      {msg && !isLoading && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 whitespace-pre-wrap break-words">
-          {msg}
-        </div>
-      )}
     </div>
   );
 }
