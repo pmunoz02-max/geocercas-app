@@ -123,7 +123,7 @@ export default function UpgradeToProButton({
         cursor: "pointer"
       }}
     >
-      Suscribirme a PRO
+      {loading ? "Procesando..." : "Suscribirme a PRO"}
     </button>
   );
 }
