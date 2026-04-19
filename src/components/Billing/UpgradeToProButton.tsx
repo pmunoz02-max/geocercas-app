@@ -50,6 +50,7 @@ export default function UpgradeToProButton({ orgId, plan }: Props) {
       }
 
       console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
+      console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
       window.location.assign(checkoutUrl);
     } catch (err) {
       console.error("[UpgradeToProButton] unexpected error", err);
