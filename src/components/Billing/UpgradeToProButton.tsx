@@ -38,22 +38,14 @@ export default function UpgradeToProButton({ orgId, plan = "pro" }: Props) {
     }
   };
 
-  console.log("[UpgradeToProButton] mounted from Billing component", { orgId, plan });
-
   return (
     <button
       type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        alert("CLICK REAL");
-        console.log("🔥 REAL CLICK OK");
-        handleUpgrade();
-      }}
+      onClick={handleUpgrade}
       className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
       style={{ position: "relative", zIndex: 999999, pointerEvents: "auto" }}
     >
-      Suscribirme a PRO [BILLING-COMPONENT]
+      Suscribirme a PRO
     </button>
   );
 }
