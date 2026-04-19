@@ -38,6 +38,8 @@ export default function UpgradeToProButton({ orgId, plan = "pro" }: Props) {
     }
   };
 
+  console.log("[UpgradeToProButton] mounted from Billing component", { orgId, plan });
+
   return (
     <button
       type="button"
@@ -45,7 +47,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro" }: Props) {
       className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
       style={{ position: "relative", zIndex: 999999, pointerEvents: "auto" }}
     >
-      Suscribirme a PRO
+      Suscribirme a PRO [BILLING-COMPONENT]
     </button>
   );
 }
