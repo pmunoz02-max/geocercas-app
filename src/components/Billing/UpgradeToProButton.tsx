@@ -8,33 +8,22 @@ type Props = {
 export default function UpgradeToProButton({ orgId, plan = "pro" }: Props) {
   const handleUpgrade = async () => {
     console.log("[UpgradeToProButton] click", { orgId, plan });
+    alert("UPGRADE CLICK");
 
     try {
-      console.log("[UpgradeToProButton] starting checkout");
-
-      const { data, error } = await supabase.functions.invoke(
-        "paddle-create-checkout",
-        {
-          body: { orgId, plan },
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("paddle-create-checkout", {
+        body: { orgId, plan },
+      });
 
       console.log("[UpgradeToProButton] response", data);
       console.log("[UpgradeToProButton] error", error);
 
-      if (error) {
-        console.error("Edge function error", error);
-        return;
-      }
-
-      if (!data?.checkout_url) {
-        console.error("Missing checkout_url", data);
-        return;
-      }
+      if (error) return;
+      if (!data?.checkout_url) return;
 
       window.location.assign(data.checkout_url);
     } catch (err) {
-      console.error("Checkout error", err);
+      console.error("[UpgradeToProButton] catch", err);
     }
   };
 
