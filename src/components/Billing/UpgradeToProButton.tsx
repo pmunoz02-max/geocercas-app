@@ -38,9 +38,28 @@ export default function UpgradeToProButton({ orgId, plan }: Props) {
 
       console.log("[UpgradeToProButton] redirect", data.checkout_url);
       window.location.assign(data.checkout_url);
-    } catch (err) {
-      console.error("[UpgradeToProButton] catch", err);
-    }
+        } catch (error: any) {
+          console.error("[UpgradeToProButton] error raw", error);
+
+          const response = error?.context;
+
+          if (response instanceof Response) {
+            const cloned = response.clone();
+            const raw = await cloned.text();
+
+            console.error("[UpgradeToProButton] function response status", response.status);
+            console.error("[UpgradeToProButton] function response raw", raw);
+
+            try {
+              const parsed = JSON.parse(raw);
+              console.error("[UpgradeToProButton] function response json", parsed);
+            } catch {
+              // raw no era json
+            }
+          }
+
+          console.error("[UpgradeToProButton] error", error);
+        }
   };
 
   return (
