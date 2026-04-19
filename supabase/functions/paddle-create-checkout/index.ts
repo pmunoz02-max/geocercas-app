@@ -72,42 +72,39 @@ serve(async (req) => {
             quantity: 1,
           },
         ],
+        checkout: {
+          success_url: "https://preview.tugeocercas.com/billing",
+          cancel_url: "https://preview.tugeocercas.com/billing",
+        },
       }),
     });
 
-    const text = await paddleRes.text();
+    const result = await paddleRes.json();
     console.log("[paddle-create-checkout] paddle status", paddleRes.status);
-    console.log("[paddle-create-checkout] paddle body", text);
-
-    let parsed: any = {};
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = { raw: text };
-    }
+    console.log("[paddle-create-checkout] paddle body", result);
 
     if (!paddleRes.ok) {
       return json(500, {
         ok: false,
         error: "paddle_checkout_failed",
         status: paddleRes.status,
-        details: parsed,
+        details: result,
       });
     }
 
-    const checkoutUrl = parsed?.data?.checkout?.url;
+    const checkoutUrl = result?.data?.checkout?.url;
 
     if (!checkoutUrl) {
       return json(500, {
         ok: false,
-        error: "Missing checkout URL in Paddle response",
-        details: parsed,
+        error: "no_checkout_url",
+        raw: result,
       });
     }
 
     return json(200, {
       ok: true,
-      checkoutUrl,
+      checkout_url: checkoutUrl,
     });
   } catch (err) {
     console.error("[paddle-create-checkout] fatal", err);

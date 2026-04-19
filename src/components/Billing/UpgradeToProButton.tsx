@@ -60,7 +60,9 @@ export default function UpgradeToProButton({
         throw new Error(JSON.stringify(data));
       }
 
-      if (!data.checkoutUrl) {
+      const checkoutUrl = data.checkout_url || data.checkoutUrl;
+
+      if (!checkoutUrl) {
         throw new Error("Missing checkout URL");
       }
 
@@ -68,7 +70,7 @@ export default function UpgradeToProButton({
         onStarted();
       }
 
-      window.location.href = data.checkoutUrl;
+      window.location.href = checkoutUrl;
     } catch (err: any) {
       console.error("[upgrade-pro] final error", err);
       setMsg(err.message || "Unknown error");
