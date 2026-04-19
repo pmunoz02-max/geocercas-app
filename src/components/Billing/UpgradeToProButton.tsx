@@ -111,15 +111,19 @@ export default function UpgradeToProButton({
 
   return (
     <button
-      onClick={handleUpgrade}
+      onClick={() => {
+        console.log("CLICK REAL");
+        alert("CLICK FUNCIONA");
+      }}
       style={{
+        width: "100%",
         padding: "20px",
         background: "red",
         color: "white",
         fontSize: "18px"
       }}
     >
-      TEST BUTTON
+      BOTON REAL
     </button>
   );
 }
