@@ -169,7 +169,13 @@ function ProPlanAction({
   }
 
   if (currentPlanCode === "free") {
-    return <UpgradeToProButton orgId={currentOrgId} plan="pro" />;
+    return (
+      <div className="relative">
+        <div className="relative z-20">
+          <UpgradeToProButton orgId={currentOrgId} plan="pro" />
+        </div>
+      </div>
+    );
   }
 
   if (currentPlanCode === "pro") {
@@ -246,8 +252,10 @@ function EnterprisePlanAction({
   }
 
   return (
-    <div className="space-y-3">
-      <UpgradeToProButton orgId={currentOrgId} plan="enterprise" />
+    <div className="relative space-y-3">
+      <div className="relative z-20">
+        <UpgradeToProButton orgId={currentOrgId} plan="enterprise" />
+      </div>
       <ContactSalesButton label={contactSalesLabel} />
     </div>
   );
