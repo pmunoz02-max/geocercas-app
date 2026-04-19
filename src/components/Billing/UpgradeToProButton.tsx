@@ -148,9 +148,17 @@ export default function UpgradeToProButton({
         <button
           onClick={handleUpgrade}
           disabled={loading}
-          style={{ cursor: "pointer" }}
+          style={{
+            width: "100%",
+            padding: "12px",
+            borderRadius: "8px",
+            backgroundColor: "#0b1b34",
+            color: "white",
+            fontWeight: "bold",
+            cursor: "pointer"
+          }}
         >
-          {loading ? "Procesando..." : "Suscribirme a PRO"}
+          Suscribirme a PRO
         </button>
 
         {msg && (
