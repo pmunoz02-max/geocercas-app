@@ -96,8 +96,8 @@ function extractBundle(result) {
   };
 }
 
+
 export default function AsignacionesPage() {
-  console.log("[Asignaciones] render", { saving, editingId });
   const { t } = useTranslation();
   const { activeOrgId } = useAuth();
 
@@ -127,6 +127,9 @@ export default function AsignacionesPage() {
     actividades: 0,
     asignaciones: 0,
   });
+
+  // Log de render después de inicializar los estados
+  console.log("[Asignaciones] render", { saving, editingId });
 
   useEffect(() => {
     if (!activeOrgId) return;
