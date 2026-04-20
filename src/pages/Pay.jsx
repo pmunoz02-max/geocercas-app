@@ -14,9 +14,13 @@ export default function Pay() {
     const hostname = window.location.hostname;
     const isPreview = hostname === "preview.tugeocercas.com";
     const paddleEnv = isPreview ? "sandbox" : "live";
-    const token = isPreview
-      ? import.meta.env.VITE_PADDLE_CLIENT_TOKEN_SANDBOX
-      : import.meta.env.VITE_PADDLE_CLIENT_TOKEN_LIVE;
+
+    const sandboxToken = import.meta.env.VITE_PADDLE_CLIENT_TOKEN_SANDBOX;
+    const liveToken = import.meta.env.VITE_PADDLE_CLIENT_TOKEN_LIVE;
+    const token = isPreview ? sandboxToken : liveToken;
+
+    console.log("[PAY] sandbox token raw:", sandboxToken);
+    console.log("[PAY] live token raw:", liveToken);
 
     const initPaddle = () => {
       try {
