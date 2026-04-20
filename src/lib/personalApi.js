@@ -1,4 +1,12 @@
+// Helper para leer access token actual
+export async function getAccessToken() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) return "";
+  return data?.session?.access_token || "";
+}
+
 // src/lib/personalApi.js
+import { supabase } from "@/lib/supabase";
 
 const BASE = ""; // SIEMPRE relativo al mismo dominio (evita POST fantasma)
 
@@ -15,9 +23,18 @@ function withBase(path) {
 async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
+    const accessToken = await getAccessToken();
+    const headers = new Headers(options.headers || {});
+
+    if (accessToken && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    }
+
     return await fetch(url, {
       ...options,
+      headers,
       signal: controller.signal,
       credentials: "include",
     });
