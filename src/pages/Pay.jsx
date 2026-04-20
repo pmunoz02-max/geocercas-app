@@ -1,73 +1,76 @@
 import { useEffect } from "react";
-import { getPaddleEnv, getPaddleClientToken } from "../config/paddleEnv";
+
 
 export default function Pay() {
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const transactionId = params.get("_ptxn");
-    console.log("[PAY] transactionId:", transactionId);
 
-    if (!transactionId) {
-      console.error("[PAY] Missing _ptxn");
-      return;
-    }
+  import { useEffect } from "react";
 
+  export default function Pay() {
+    useEffect(() => {
+      const params = new URLSearchParams(window.location.search);
+      const transactionId = params.get("_ptxn");
+      console.log("[PAY] transactionId:", transactionId);
 
-    const initPaddle = () => {
-      try {
-        const hostname = window.location.hostname;
-        const isPreview = hostname === "preview.tugeocercas.com";
-
-        const paddleEnv = isPreview ? "sandbox" : "live";
-        const token = isPreview
-          ? import.meta.env.VITE_PADDLE_CLIENT_TOKEN_SANDBOX
-          : import.meta.env.VITE_PADDLE_CLIENT_TOKEN_LIVE;
-
-        console.log("[PAY] hostname:", hostname);
-        console.log("[PAY] paddleEnv:", paddleEnv);
-        console.log("[PAY] token present:", Boolean(token));
-
-        if (paddleEnv === "sandbox") {
-          window.Paddle.Environment.set("sandbox");
-        }
-
-        window.Paddle.Initialize({ token });
-
-        window.Paddle.Checkout.open({
-          transactionId,
-        });
-      } catch (err) {
-        console.error("[PAY] Paddle error:", err);
+      if (!transactionId) {
+        console.error("[PAY] Missing _ptxn");
+        return;
       }
-    };
 
-    if (window.Paddle) {
-      console.log("[PAY] Paddle already loaded");
-      initPaddle();
-      return;
-    }
+      const hostname = window.location.hostname;
+      const isPreview = hostname === "preview.tugeocercas.com";
+      const paddleEnv = isPreview ? "sandbox" : "live";
+      const token = isPreview
+        ? import.meta.env.VITE_PADDLE_CLIENT_TOKEN_SANDBOX
+        : import.meta.env.VITE_PADDLE_CLIENT_TOKEN_LIVE;
 
-    console.log("[PAY] Loading Paddle script...");
-    const script = document.createElement("script");
-    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-    script.async = true;
+      const initPaddle = () => {
+        try {
+          console.log("[PAY] hostname:", hostname);
+          console.log("[PAY] paddleEnv:", paddleEnv);
+          console.log("[PAY] token present:", Boolean(token));
 
-    script.onload = () => {
-      console.log("[PAY] Paddle script loaded");
-      initPaddle();
-    };
+          if (paddleEnv === "sandbox") {
+            console.log("[PAY] Setting Paddle sandbox environment");
+            window.Paddle.Environment.set("sandbox");
+          }
 
-    script.onerror = () => {
-      console.error("[PAY] Failed to load Paddle script");
-    };
+          console.log("[PAY] Initializing Paddle...");
+          window.Paddle.Initialize({ token });
 
-    document.body.appendChild(script);
-  }, []);
+          console.log("[PAY] Opening checkout...");
+          window.Paddle.Checkout.open({ transactionId });
+        } catch (err) {
+          console.error("[PAY] Paddle error:", err);
+        }
+      };
 
-  return (
-    <div style={{ padding: 40 }}>
-      <h2>Abriendo checkout seguro...</h2>
-      <p>Por favor espera, estamos redirigiéndote a Paddle.</p>
-    </div>
-  );
-}
+      if (window.Paddle) {
+        console.log("[PAY] Paddle already loaded");
+        initPaddle();
+        return;
+      }
+
+      console.log("[PAY] Loading Paddle script...");
+      const script = document.createElement("script");
+      script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+      script.async = true;
+
+      script.onload = () => {
+        console.log("[PAY] Paddle script loaded");
+        initPaddle();
+      };
+
+      script.onerror = () => {
+        console.error("[PAY] Failed to load Paddle script");
+      };
+
+      document.body.appendChild(script);
+    }, []);
+
+    return (
+      <div style={{ padding: 40 }}>
+        <h2>Abriendo checkout seguro...</h2>
+        <p>Por favor espera, estamos redirigiéndote a Paddle.</p>
+      </div>
+    );
+  }
