@@ -1,85 +1,3 @@
-        useEffect(() => {
-          let cancelled = false;
-
-          async function loadTrackerCount() {
-            if (!orgId) {
-              if (!cancelled) {
-                setTrackerCount(0);
-                setLoadingTrackerCount(false);
-              }
-              return;
-            }
-
-            try {
-              setLoadingTrackerCount(true);
-
-              const { count, error } = await supabase
-                .from("memberships")
-                .select("*", { count: "exact", head: true })
-                .eq("org_id", orgId)
-                .eq("role", "tracker")
-                .is("revoked_at", null);
-
-              if (error) {
-                throw error;
-              }
-
-              if (!cancelled) {
-                setTrackerCount(count || 0);
-              }
-            } catch (e) {
-              console.error("[invite-tracker] tracker count error", e);
-              if (!cancelled) {
-                setTrackerCount(0);
-              }
-            } finally {
-              if (!cancelled) {
-                setLoadingTrackerCount(false);
-              }
-            }
-          }
-
-          loadTrackerCount();
-
-          return () => {
-            cancelled = true;
-          };
-        }, [orgId]);
-      const handleInviteTrackerGuarded = async (...args) => {
-        if (!isActive) {
-          alert("Tu plan no está activo. Actívalo para invitar trackers.");
-          return;
-        }
-
-        if (trackerLimitReached) {
-          alert(
-            `Has alcanzado el límite de ${maxTrackers} trackers para tu plan ${planCode?.toUpperCase?.() || planCode}`
-          );
-          return;
-        }
-
-        return onSendInvite(...args);
-      };
-    const trackerLimitReached = trackerCount >= maxTrackers;
-    const canInviteTracker = isActive && !trackerLimitReached;
-  // ...existing code...
-  useEffect(() => {
-    if (!orgId) {
-      setTrackerCount(0);
-      return;
-    }
-    const loadCount = async () => {
-      const { count } = await supabase
-        .from("user_organizations")
-        .select("*", { count: "exact", head: true })
-        .eq("org_id", orgId)
-        .eq("role", "tracker");
-
-      setTrackerCount(count || 0);
-    };
-
-    loadCount();
-  }, [orgId]);
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -114,82 +32,9 @@ function normalizePlanLabel(planCode) {
 }
 
 export default function InvitarTracker() {
-    useEffect(() => {
-      let cancelled = false;
-
-      async function loadTrackerCount() {
-        if (!orgId) {
-          if (!cancelled) {
-            setTrackerCount(0);
-            setLoadingTrackerCount(false);
-          }
-          return;
-        }
-
-        try {
-          setLoadingTrackerCount(true);
-
-          const { count, error } = await supabase
-            .from("memberships")
-            .select("*", { count: "exact", head: true })
-            .eq("org_id", orgId)
-            .eq("role", "tracker")
-            .is("revoked_at", null);
-
-          if (error) {
-            throw error;
-          }
-
-          if (!cancelled) {
-            setTrackerCount(count || 0);
-          }
-        } catch (e) {
-          console.error("[invite-tracker] tracker count error", e);
-          if (!cancelled) {
-            setTrackerCount(0);
-          }
-        } finally {
-          if (!cancelled) {
-            setLoadingTrackerCount(false);
-          }
-        }
-      }
-
-      loadTrackerCount();
-
-      return () => {
-        cancelled = true;
-      };
-    }, [orgId]);
-  // State for the latest invite link and invite metadata
-  const [inviteLink, setInviteLink] = useState("");
-  const [inviteMeta, setInviteMeta] = useState(null); // { invite_id, created_at, invite_url }
-  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const auth = useAuthSafe();
-
-  // ENTITLEMENTS
-  const {
-    loading: entitlementsLoading,
-    error: entitlementsError,
-    planCode,
-    planStatus,
-    isActive,
-    maxTrackers,
-  } = useOrgEntitlements();
-
-  // STATES
-  const [busy, setBusy] = useState(false);
-  const [loadingPeople, setLoadingPeople] = useState(true);
-  const [people, setPeople] = useState([]);
-  const [activeAssignaciones, setActiveAssignaciones] = useState([]);
-  const [trackerCount, setTrackerCount] = useState(0);
-  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
-
-  const [selectedPersonKey, setSelectedPersonKey] = useState("");
-  const [emailInput, setEmailInput] = useState("");
-  const [okMsg, setOkMsg] = useState(null);
-  const [errMsg, setErrMsg] = useState(null);
 
   const orgId = useMemo(() => {
     const id =
@@ -200,15 +45,45 @@ export default function InvitarTracker() {
       auth?.currentOrg?.org_id ||
       auth?.currentOrg?.id ||
       "";
+
     return String(id || "").trim();
   }, [auth]);
+
+  const {
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    planCode,
+    planStatus,
+    isActive,
+    maxTrackers,
+  } = useOrgEntitlements();
+
+  const [busy, setBusy] = useState(false);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+  const [people, setPeople] = useState([]);
+  const [activeAssignaciones, setActiveAssignaciones] = useState([]);
+
+  const [trackerCount, setTrackerCount] = useState(0);
+  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
+
+  const [selectedPersonKey, setSelectedPersonKey] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [okMsg, setOkMsg] = useState(null);
+  const [errMsg, setErrMsg] = useState(null);
+
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteMeta, setInviteMeta] = useState(null);
 
   const lang = useMemo(() => {
     try {
       const qp = new URLSearchParams(window.location.search);
-      const qlang = String(qp.get("lang") || "").trim().toLowerCase();
+      const qlang = String(qp.get("lang") || "")
+        .trim()
+        .toLowerCase();
+
       if (qlang === "es" || qlang === "en" || qlang === "fr") return qlang;
     } catch {
+      // no-op
     }
 
     const l = String(i18n?.resolvedLanguage || i18n?.language || "es")
@@ -222,8 +97,13 @@ export default function InvitarTracker() {
 
   const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
 
-  // ...existing code...
+  const inviteBlockedByPlan = useMemo(() => {
+    return !entitlementsLoading && !isActive;
+  }, [entitlementsLoading, isActive]);
 
+  const trackerLimitReached = useMemo(() => {
+    return !loadingTrackerCount && trackerCount >= maxTrackers;
+  }, [loadingTrackerCount, trackerCount, maxTrackers]);
 
   const trackersUsageLabel = useMemo(() => {
     if (loadingTrackerCount) return "…";
@@ -232,12 +112,14 @@ export default function InvitarTracker() {
 
   const activeAssignmentByPersonId = useMemo(() => {
     const map = new Map();
+
     for (const assignment of activeAssignaciones) {
       const personId = String(assignment?.personal_id || "").trim();
       if (personId) {
         map.set(personId, assignment);
       }
     }
+
     return map;
   }, [activeAssignaciones]);
 
@@ -247,7 +129,10 @@ export default function InvitarTracker() {
       return personId && activeAssignmentByPersonId.has(personId);
     });
 
-    filtered.sort((a, b) => pickPersonalLabel(a).localeCompare(pickPersonalLabel(b)));
+    filtered.sort((a, b) =>
+      pickPersonalLabel(a).localeCompare(pickPersonalLabel(b))
+    );
+
     return filtered;
   }, [people, activeAssignmentByPersonId]);
 
@@ -268,7 +153,10 @@ export default function InvitarTracker() {
 
   const selectedPerson = useMemo(() => {
     if (!selectedPersonKey) return null;
-    return people.find((p) => String(p?.id || "").trim() === selectedPersonKey) || null;
+    return (
+      people.find((p) => String(p?.id || "").trim() === selectedPersonKey) ||
+      null
+    );
   }, [people, selectedPersonKey]);
 
   const selectedAssignment = useMemo(() => {
@@ -280,22 +168,14 @@ export default function InvitarTracker() {
 
   const allowedEmails = useMemo(() => {
     const set = new Set();
+
     for (const p of peopleWithActiveAssignments) {
       const e = normalizeEmail(p?.email);
       if (e) set.add(e);
     }
+
     return set;
   }, [peopleWithActiveAssignments]);
-
-
-  // MEMOS
-  const inviteBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && !isActive;
-  }, [entitlementsLoading, isActive]);
-
-  const trackerLimitReached = useMemo(() => {
-    return !loadingTrackerCount && trackerCount >= maxTrackers;
-  }, [loadingTrackerCount, trackerCount, maxTrackers]);
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -307,6 +187,54 @@ export default function InvitarTracker() {
     if (error) throw error;
     return String(data?.session?.access_token || "").trim();
   }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrackerCount() {
+      if (!orgId) {
+        if (!cancelled) {
+          setTrackerCount(0);
+          setLoadingTrackerCount(false);
+        }
+        return;
+      }
+
+      try {
+        setLoadingTrackerCount(true);
+
+        const { count, error } = await supabase
+          .from("memberships")
+          .select("*", { count: "exact", head: true })
+          .eq("org_id", orgId)
+          .eq("role", "tracker")
+          .is("revoked_at", null);
+
+        if (error) {
+          throw error;
+        }
+
+        if (!cancelled) {
+          setTrackerCount(count || 0);
+        }
+      } catch (e) {
+        console.error("[invite-tracker] tracker count error", e);
+        if (!cancelled) {
+          setTrackerCount(0);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTrackerCount(false);
+        }
+      }
+    }
+
+    loadTrackerCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -327,7 +255,7 @@ export default function InvitarTracker() {
         return;
       }
 
-      if (entitlementsLoading || isFree) {
+      if (entitlementsLoading || !isActive) {
         setPeople([]);
         setActiveAssignaciones([]);
         setLoadingPeople(false);
@@ -337,18 +265,18 @@ export default function InvitarTracker() {
       try {
         const now = new Date().toISOString();
 
-        const { data: assignacionesRows, error: assignacionesErr } = await supabase
-          .from("asignaciones")
-          .select("id, org_id, personal_id, user_id")
-          .eq("org_id", orgId)
-          .eq("is_deleted", false)
-          .eq("estado", "activa")
-          .lte("start_time", now)
-          .gte("end_time", now)
-          .limit(1000);
+        const { data: assignacionesRows, error: assignacionesErr } =
+          await supabase
+            .from("asignaciones")
+            .select("id, org_id, personal_id, user_id")
+            .eq("org_id", orgId)
+            .eq("is_deleted", false)
+            .eq("estado", "activa")
+            .lte("start_time", now)
+            .gte("end_time", now)
+            .limit(1000);
 
         if (assignacionesErr) throw assignacionesErr;
-
         if (cancelled) return;
 
         const activePersonIds = Array.from(
@@ -376,7 +304,9 @@ export default function InvitarTracker() {
         if (cancelled) return;
 
         setPeople(Array.isArray(pRows) ? pRows : []);
-        setActiveAssignaciones(Array.isArray(assignacionesRows) ? assignacionesRows : []);
+        setActiveAssignaciones(
+          Array.isArray(assignacionesRows) ? assignacionesRows : []
+        );
       } catch (e) {
         if (cancelled) return;
         setPeople([]);
@@ -388,10 +318,11 @@ export default function InvitarTracker() {
     }
 
     loadInviteSources();
+
     return () => {
       cancelled = true;
     };
-  }, [orgId, entitlementsLoading, isFree, t]);
+  }, [orgId, entitlementsLoading, isActive, t]);
 
   useEffect(() => {
     if (!selectedPerson) {
@@ -406,11 +337,11 @@ export default function InvitarTracker() {
     setOkMsg(null);
     setErrMsg(null);
 
-
     if (inviteBlockedByPlan) {
       setErrMsg(
         t("inviteTracker.errors.planBlocked", {
-          defaultValue: "Tu organización no tiene un plan activo para invitar trackers.",
+          defaultValue:
+            "Tu organización no tiene un plan activo para invitar trackers.",
         })
       );
       return;
@@ -419,7 +350,8 @@ export default function InvitarTracker() {
     if (trackerLimitReached) {
       setErrMsg(
         t("inviteTracker.errors.trackerLimitReached", {
-          defaultValue: "Tu organización alcanzó el límite de {{count}} trackers para el plan {{plan}}.",
+          defaultValue:
+            "Tu organización alcanzó el límite de {{count}} trackers para el plan {{plan}}.",
           count: maxTrackers,
           plan: String(planCode || "free").toUpperCase(),
         })
@@ -450,7 +382,8 @@ export default function InvitarTracker() {
     if (!selectedAssignment?.id) {
       setErrMsg(
         t("inviteTracker.assignment.noActiveForInvite", {
-          defaultValue: "La persona seleccionada no tiene asignación activa en esta organización.",
+          defaultValue:
+            "La persona seleccionada no tiene asignación activa en esta organización.",
         })
       );
       return;
@@ -468,7 +401,8 @@ export default function InvitarTracker() {
     if (!allowedEmails.has(cleanEmail)) {
       setErrMsg(
         t("inviteTracker.errors.notInOrg", {
-          defaultValue: "Ese email no existe en personal con asignación activa en esta organización.",
+          defaultValue:
+            "Ese email no existe en personal con asignación activa en esta organización.",
         })
       );
       return;
@@ -476,42 +410,25 @@ export default function InvitarTracker() {
 
     try {
       setBusy(true);
-      // Siempre limpiar estado previo antes de crear nueva invitación
       setInviteLink("");
-      // Si guardas más estado relacionado a la invitación, límpialo aquí:
-      // setInviteData(null);
+      setInviteMeta(null);
 
-      const caller_jwt = await getCallerJwt();
-      if (!caller_jwt) {
+      const callerJwt = await getCallerJwt();
+      if (!callerJwt) {
         setErrMsg("NO_SESSION");
         return;
       }
 
-      const name = [String(selectedPerson?.nombre || "").trim(), String(selectedPerson?.apellido || "").trim()]
-        .filter(Boolean)
-        .join(" ")
-        .trim();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token || "";
 
-      const payload = {
-        email: cleanEmail,
-        org_id: orgId,
-        role: "tracker",
-        lang,
-        name,
-        caller_jwt,
-        assignment_id: selectedAssignment.id,
-      };
-
-
-      // Get current Supabase session access token
-      const { data: { session } } = await supabase.auth.getSession();
-      console.log("[invite-create] has access token", !!session?.access_token);
+      console.log("[invite-create] has access token", !!accessToken);
 
       const res = await fetch("/api/invite-tracker", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token || ""}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           org_id: orgId,
@@ -521,11 +438,8 @@ export default function InvitarTracker() {
 
       const body = await res.json().catch(() => null);
 
+      console.log("[invite-create] fresh response", body);
 
-      // Log the full fresh response for debugging
-      console.log('[invite-create] fresh response', body);
-
-      // Guardar y mostrar invite_id, created_at, invite_url
       if (body?.invite_url && body?.invite_id) {
         setInviteLink(body.invite_url);
         setInviteMeta({
@@ -560,7 +474,9 @@ export default function InvitarTracker() {
   const selectPlaceholder = loadingPeople
     ? t("common.actions.loading", { defaultValue: "Cargando..." })
     : inviteOptions.length === 0
-      ? t("inviteTracker.empty.noActiveAssignments", { defaultValue: "Sin personal con asignación activa" })
+      ? t("inviteTracker.empty.noActiveAssignments", {
+          defaultValue: "Sin personal con asignación activa",
+        })
       : t("common.select", { defaultValue: "- Selecciona -" });
 
   if (entitlementsLoading) {
@@ -589,9 +505,12 @@ export default function InvitarTracker() {
           </h1>
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
             {t("inviteTracker.plan.validationError", {
-              defaultValue: "No se pudo validar el plan de la organización.",
+              defaultValue:
+                "No se pudo validar el plan de la organización.",
             })}
-            <div className="mt-2 break-all font-mono text-xs">{entitlementsError}</div>
+            <div className="mt-2 break-all font-mono text-xs">
+              {entitlementsError}
+            </div>
           </div>
         </div>
       </div>
@@ -612,7 +531,9 @@ export default function InvitarTracker() {
               onClick={() => navigate("/tracker")}
               className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
             >
-              {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
+              {t("inviteTracker.backToTracker", {
+                defaultValue: "Volver a Tracker",
+              })}
             </button>
           </div>
 
@@ -623,12 +544,18 @@ export default function InvitarTracker() {
               })}
             </div>
             <div className="mt-2 text-sm">
-              {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}:{" "}
-              <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+              {t("inviteTracker.plan.detectedPlan", {
+                defaultValue: "Plan detectado",
+              })}
+              :{" "}
+              <span className="font-semibold">
+                {normalizePlanLabel(planCode)}
+              </span>
             </div>
             <div className="mt-3 text-sm">
               {t("inviteTracker.plan.freeBlockedBody", {
-                defaultValue: "El plan FREE no permite invitar nuevos trackers a la organización.",
+                defaultValue:
+                  "El plan FREE no permite invitar nuevos trackers a la organización.",
               })}
             </div>
           </div>
@@ -637,10 +564,14 @@ export default function InvitarTracker() {
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
                 {t("inviteTracker.plan.upgradePrompt", {
-                  defaultValue: "Actualiza esta organización para habilitar invitaciones de trackers.",
+                  defaultValue:
+                    "Actualiza esta organización para habilitar invitaciones de trackers.",
                 })}
               </div>
-              <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+              <UpgradeToProButton
+                orgId={orgId}
+                getAccessToken={getAccessToken}
+              />
             </div>
           ) : null}
         </div>
@@ -661,7 +592,9 @@ export default function InvitarTracker() {
             onClick={() => navigate("/tracker")}
             className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
           >
-            {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
+            {t("inviteTracker.backToTracker", {
+              defaultValue: "Volver a Tracker",
+            })}
           </button>
         </div>
 
@@ -730,7 +663,10 @@ export default function InvitarTracker() {
               style={{
                 width:
                   maxTrackers > 0
-                    ? `${Math.min(100, Math.round((trackerCount / maxTrackers) * 100))}%`
+                    ? `${Math.min(
+                        100,
+                        Math.round((trackerCount / maxTrackers) * 100)
+                      )}%`
                     : "0%",
               }}
             />
@@ -741,71 +677,78 @@ export default function InvitarTracker() {
               <div className="text-sm text-slate-700 mb-3">
                 {!isActive
                   ? t("inviteTracker.usage.upgradeInactive", {
-                      defaultValue: "Activa un plan PRO o superior para invitar trackers.",
+                      defaultValue:
+                        "Activa un plan PRO o superior para invitar trackers.",
                     })
                   : t("inviteTracker.usage.upgradeLimit", {
-                      defaultValue: "Tu plan actual llegó al límite. Actualiza para agregar más trackers.",
+                      defaultValue:
+                        "Tu plan actual llegó al límite. Actualiza para agregar más trackers.",
                     })}
               </div>
 
               {orgId ? (
-                <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+                <UpgradeToProButton
+                  orgId={orgId}
+                  getAccessToken={getAccessToken}
+                />
               ) : null}
             </div>
           ) : null}
         </div>
 
         <form onSubmit={onSendInvite} className="mt-6 space-y-4">
-                  {inviteLink && inviteMeta && (
-                    <div className="mt-4 flex flex-col gap-2">
-                      <div className="text-xs text-slate-700 break-all">
-                        <b>Enlace de invitación:</b> <span>{inviteLink}</span>
-                      </div>
-                      <div className="text-xs text-slate-700 break-all">
-                        <b>invite_id:</b> <span>{inviteMeta.invite_id}</span><br />
-                        <b>created_at:</b> <span>{inviteMeta.created_at}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
-                          onClick={() => {
-                            // Mostrar y loggear los datos antes de copiar
-                            if (inviteMeta?.invite_url) {
-                              console.log('[invite-open] using', {
-                                invite_id: inviteMeta.invite_id,
-                                created_at: inviteMeta.created_at,
-                                invite_url: inviteMeta.invite_url,
-                              });
-                              navigator.clipboard.writeText(inviteMeta.invite_url);
-                            }
-                          }}
-                        >
-                          Copiar enlace
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded bg-green-600 text-white px-3 py-1 text-xs font-semibold hover:bg-green-700"
-                          onClick={() => {
-                            // Mostrar y loggear los datos antes de abrir
-                            if (inviteMeta?.invite_url) {
-                              console.log('[invite-open] using', {
-                                invite_id: inviteMeta.invite_id,
-                                created_at: inviteMeta.created_at,
-                                invite_url: inviteMeta.invite_url,
-                              });
-                              window.location.href = inviteMeta.invite_url;
-                            }
-                          }}
-                        >
-                          Abrir enlace
-                        </button>
-                      </div>
-                    </div>
-                  )}
+          {inviteLink && inviteMeta ? (
+            <div className="mt-4 flex flex-col gap-2">
+              <div className="text-xs text-slate-700 break-all">
+                <b>Enlace de invitación:</b> <span>{inviteLink}</span>
+              </div>
+              <div className="text-xs text-slate-700 break-all">
+                <b>invite_id:</b> <span>{inviteMeta.invite_id}</span>
+                <br />
+                <b>created_at:</b> <span>{inviteMeta.created_at}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
+                  onClick={() => {
+                    if (inviteMeta?.invite_url) {
+                      console.log("[invite-open] using", {
+                        invite_id: inviteMeta.invite_id,
+                        created_at: inviteMeta.created_at,
+                        invite_url: inviteMeta.invite_url,
+                      });
+                      navigator.clipboard.writeText(inviteMeta.invite_url);
+                    }
+                  }}
+                >
+                  Copiar enlace
+                </button>
+                <button
+                  type="button"
+                  className="rounded bg-green-600 text-white px-3 py-1 text-xs font-semibold hover:bg-green-700"
+                  onClick={() => {
+                    if (inviteMeta?.invite_url) {
+                      console.log("[invite-open] using", {
+                        invite_id: inviteMeta.invite_id,
+                        created_at: inviteMeta.created_at,
+                        invite_url: inviteMeta.invite_url,
+                      });
+                      window.location.href = inviteMeta.invite_url;
+                    }
+                  }}
+                >
+                  Abrir enlace
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div>
             <label className="block text-sm font-medium text-gray-900">
-              {t("inviteTracker.selectPersonLabel", { defaultValue: "Selecciona una persona" })}
+              {t("inviteTracker.selectPersonLabel", {
+                defaultValue: "Selecciona una persona",
+              })}
             </label>
 
             <select
@@ -816,7 +759,11 @@ export default function InvitarTracker() {
                 setOkMsg(null);
                 setErrMsg(null);
               }}
-              disabled={loadingPeople || !hasActiveAssignmentsInOrg || inviteOptions.length === 0}
+              disabled={
+                loadingPeople ||
+                !hasActiveAssignmentsInOrg ||
+                inviteOptions.length === 0
+              }
             >
               <option value="">{selectPlaceholder}</option>
               {inviteOptions.map((opt) => (
@@ -828,7 +775,8 @@ export default function InvitarTracker() {
 
             <p className="mt-2 text-xs text-slate-600">
               {t("inviteTracker.onlyActiveAssignmentsNote", {
-                defaultValue: "Solo aparecen personas con asignaciones vigentes (activas y dentro del período de tiempo).",
+                defaultValue:
+                  "Solo aparecen personas con asignaciones vigentes (activas y dentro del período de tiempo).",
               })}
             </p>
           </div>
@@ -847,7 +795,9 @@ export default function InvitarTracker() {
                 setOkMsg(null);
                 setErrMsg(null);
               }}
-              placeholder={t("inviteTracker.emailPlaceholder", { defaultValue: "tracker@ejemplo.com" })}
+              placeholder={t("inviteTracker.emailPlaceholder", {
+                defaultValue: "tracker@ejemplo.com",
+              })}
               autoComplete="email"
             />
           </div>
@@ -888,7 +838,9 @@ export default function InvitarTracker() {
           >
             {busy
               ? t("common.sending", { defaultValue: "Enviando..." })
-              : t("inviteTracker.sendInvite", { defaultValue: "Enviar invitación" })}
+              : t("inviteTracker.sendInvite", {
+                  defaultValue: "Enviar invitación",
+                })}
           </button>
         </form>
       </div>
