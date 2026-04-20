@@ -11,13 +11,9 @@ export default function Pay() {
       return;
     }
 
+
     const initPaddle = () => {
       try {
-        console.log("[PAY] Setting Paddle environment...");
-        if ((import.meta.env.VITE_PADDLE_ENV || "sandbox") === "sandbox") {
-          window.Paddle.Environment.set("sandbox");
-        }
-
         console.log("[PAY] Initializing Paddle...");
         console.log(
           "[PAY] token present:",
