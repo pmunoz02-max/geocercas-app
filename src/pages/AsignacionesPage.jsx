@@ -97,6 +97,7 @@ function extractBundle(result) {
 }
 
 export default function AsignacionesPage() {
+  console.log("[Asignaciones] render", { saving, editingId });
   const { t } = useTranslation();
   const { activeOrgId } = useAuth();
 
@@ -194,43 +195,120 @@ export default function AsignacionesPage() {
   async function handleSubmit(e) {
     e?.preventDefault?.();
 
+    console.log("[Asignaciones] handleSubmit start", {
+      saving,
+      editingId,
+      form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      },
+    });
+
     setError("");
     setSuccess("");
     setEndTimeError("");
 
+
     if (!activeOrgId) {
+      console.log("[Asignaciones] validation fail: missing org", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.noActiveOrg"));
       return;
     }
 
     if (!resolvedSelectedPersonId) {
+      console.log("[Asignaciones] validation fail: missing person", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.invalidPerson"));
       return;
     }
 
     if (!resolvedSelectedTrackerUserId) {
+      console.log("[Asignaciones] validation fail: person without user_id", { person: selectedPerson, form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.personMissingUserId"));
       return;
     }
 
     if (!selectedGeocercaId) {
+      console.log("[Asignaciones] validation fail: missing geofence", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.missingGeofence"));
       return;
     }
 
     if (!selectedActivityId) {
+      console.log("[Asignaciones] validation fail: missing activity", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.missingActivity"));
       return;
     }
 
     if (!startTime) {
+      console.log("[Asignaciones] validation fail: missing start time", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.missingStart"));
       return;
     }
 
     if (endTime && startTime && new Date(endTime) < new Date(startTime)) {
-      const msg =
-        t("asignaciones.error.endBeforeStart");
+      console.log("[Asignaciones] validation fail: invalid end time", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
+      const msg = t("asignaciones.error.endBeforeStart");
       setEndTimeError(msg);
       setError(msg);
       return;
@@ -238,6 +316,15 @@ export default function AsignacionesPage() {
 
     const parsedFreqMin = Number(freqMin);
     if (!Number.isFinite(parsedFreqMin) || parsedFreqMin <= 0) {
+      console.log("[Asignaciones] validation fail: invalid frequency", { form: {
+        selectedPersonId,
+        selectedGeocercaId,
+        selectedActivityId,
+        startTime,
+        endTime,
+        freqMin,
+        status,
+      }});
       setError(t("asignaciones.error.invalidFrequency"));
       return;
     }
@@ -259,6 +346,7 @@ export default function AsignacionesPage() {
     };
 
     try {
+      console.log("[Asignaciones] handleSubmit before save");
       if (editingId) {
         await updateAsignacion(editingId, payload, activeOrgId);
       } else {
@@ -282,16 +370,18 @@ export default function AsignacionesPage() {
       setStatus("active");
       setFreqMin(5);
       setEditingId(null);
-    } catch (e2) {
-      console.error("[AsignacionesPage] submit failed:", e2);
+      console.log("[Asignaciones] handleSubmit success");
+    } catch (err) {
+      console.log("[Asignaciones] handleSubmit error", err);
       setError(
-        e2?.message ||
+        err?.message ||
           (editingId
             ? t("asignaciones.error.update")
             : t("asignaciones.error.save"))
       );
     } finally {
       setSaving(false);
+      console.log("[Asignaciones] handleSubmit finally -> saving false");
     }
   }
 
@@ -545,6 +635,11 @@ export default function AsignacionesPage() {
             </div>
           </div>
 
+          {error ? (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
           <div className="flex gap-2">
             <button
               type="submit"
