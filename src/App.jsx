@@ -50,6 +50,7 @@ import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import PaddleCheckoutPage from "./pages/paddle-checkout.tsx";
+import Pay from "./pages/Pay.jsx";
 
 function RootEntry() {
   const location = useLocation();
@@ -125,6 +126,8 @@ function MainAppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
+
+      <Route path="/pay" element={<Pay />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
@@ -289,6 +292,7 @@ export default function App() {
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/accept-invite" element={<TrackerInviteStart />} />
+      <Route path="/pay" element={<Pay />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
   );
