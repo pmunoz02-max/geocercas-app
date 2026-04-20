@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { getPaddleEnv, getPaddleClientToken } from "../config/paddleEnv";
 
 export default function Pay() {
   useEffect(() => {
@@ -14,17 +15,24 @@ export default function Pay() {
 
     const initPaddle = () => {
       try {
-        console.log("[PAY] Initializing Paddle...");
-        console.log(
-          "[PAY] token present:",
-          Boolean(import.meta.env.VITE_PADDLE_CLIENT_TOKEN)
-        );
+        const hostname = window.location.hostname;
+        const isPreview = hostname === "preview.tugeocercas.com";
 
-        window.Paddle.Initialize({
-          token: import.meta.env.VITE_PADDLE_CLIENT_TOKEN,
-        });
+        const paddleEnv = isPreview ? "sandbox" : "live";
+        const token = isPreview
+          ? import.meta.env.VITE_PADDLE_CLIENT_TOKEN_SANDBOX
+          : import.meta.env.VITE_PADDLE_CLIENT_TOKEN_LIVE;
 
-        console.log("[PAY] Opening checkout...");
+        console.log("[PAY] hostname:", hostname);
+        console.log("[PAY] paddleEnv:", paddleEnv);
+        console.log("[PAY] token present:", Boolean(token));
+
+        if (paddleEnv === "sandbox") {
+          window.Paddle.Environment.set("sandbox");
+        }
+
+        window.Paddle.Initialize({ token });
+
         window.Paddle.Checkout.open({
           transactionId,
         });
