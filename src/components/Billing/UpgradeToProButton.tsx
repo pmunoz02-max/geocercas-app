@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabaseClient";
 type Props = {
   orgId: string;
   plan: "pro" | "enterprise";
+  className?: string;
 };
 
 export default function UpgradeToProButton({ orgId, plan }: Props) {
@@ -63,7 +64,7 @@ export default function UpgradeToProButton({ orgId, plan }: Props) {
     <button
       type="button"
       onClick={handleClick}
-      className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
+      className={className ?? "w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"}
       style={{
         position: "relative",
         zIndex: 10,
