@@ -1,3 +1,21 @@
+import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
+import { createClient } from "@supabase/supabase-js";
+
+export const config = {
+  runtime: "nodejs",
+};
+
+// --- Normalizadores ---
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildIdentityKeyFromEmail(email) {
+  const normalized = normalizeEmail(email);
+  return normalized ? `e:${normalized}` : "";
+}
+
 const TRACKER_LIMITS_BY_PLAN = {
   free: 0,
   starter: 1,
@@ -17,22 +35,11 @@ function getTrackerLimitFromBillingRow(billingRow) {
   const override = Number(billingRow?.tracker_limit_override);
   return Number.isFinite(override) ? override : fallback;
 }
-export const config = {
-  runtime: "nodejs",
-};
-
-import crypto from "node:crypto";
-import jwt from "jsonwebtoken";
-import { createClient } from "@supabase/supabase-js";
 
 const RUNTIME_SESSION_HOURS = 24 * 7;
 
 function sha256Hex(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function randomToken() {
-  return crypto.randomBytes(32).toString("hex");
 }
 
 function getTrackerRuntimeJwtSecret() {
@@ -109,7 +116,7 @@ function extractBearerToken(req) {
 
 async function resolveTrackerUserId(supabase, invite) {
   const orgId = String(invite?.org_id || "").trim();
-  const emailNorm = String(invite?.email_norm || "").trim().toLowerCase();
+  const emailNorm = normalizeEmail(invite?.email_norm || invite?.email);
   const rawEmail = String(invite?.email || "").trim();
 
   let query = supabase
@@ -133,7 +140,10 @@ async function resolveTrackerUserId(supabase, invite) {
   return { trackerUserId: data.user_id, error: null };
 }
 
-async function rotateRuntimeSession(supabase, { orgId, trackerUserId, inviteId, frequencyMinutes }) {
+async function rotateRuntimeSession(
+  supabase,
+  { orgId, trackerUserId, inviteId, frequencyMinutes }
+) {
   const runtimeJwt = createRuntimeJwt({
     trackerUserId,
     orgId,
@@ -210,7 +220,6 @@ export default async function handler(req, res) {
       return res.status(404).json({ ok: false, message: "Invite not found" });
     }
 
-    // --- BACKEND GUARD: Plan activo y límite de trackers ---
     const orgId = invite.org_id;
 
     const { data: billingRow, error: billingError } = await supabase
@@ -227,7 +236,10 @@ export default async function handler(req, res) {
       });
     }
 
-    const planStatus = String(billingRow?.plan_status || "free").toLowerCase().trim();
+    const planStatus = String(billingRow?.plan_status || "free")
+      .toLowerCase()
+      .trim();
+
     if (planStatus !== "active") {
       return res.status(403).json({
         ok: false,
@@ -311,11 +323,16 @@ export default async function handler(req, res) {
       });
     }
 
+    const inviteEmailNorm = normalizeEmail(
+      invite.email_norm || invite.email || invite.tracker_email
+    );
+
+    const inviteIdentityKey =
+      invite.identity_key || buildIdentityKeyFromEmail(inviteEmailNorm);
+
     const nowIso = new Date().toISOString();
 
     if (!alreadyAccepted) {
-
-      // 🔁 RECHECK para evitar race condition
       const { count: trackerCountNow } = await supabase
         .from("memberships")
         .select("*", { count: "exact", head: true })
@@ -330,6 +347,7 @@ export default async function handler(req, res) {
           message: `Límite alcanzado durante la activación (${trackerLimit})`,
         });
       }
+
       await supabase
         .from("tracker_invites")
         .update({
@@ -337,6 +355,62 @@ export default async function handler(req, res) {
           used_at: nowIso,
         })
         .eq("id", invite.id);
+    }
+
+    let personalSyncResult = { matched: false, updated: false };
+
+    if (inviteEmailNorm || inviteIdentityKey) {
+      let personalRow = null;
+
+      if (inviteEmailNorm) {
+        const { data } = await supabase
+          .from("personal")
+          .select("id, org_id, email_norm, identity_key, user_id")
+          .eq("org_id", orgId)
+          .eq("email_norm", inviteEmailNorm)
+          .eq("is_deleted", false)
+          .maybeSingle();
+
+        personalRow = data || null;
+      }
+
+      if (!personalRow && inviteIdentityKey) {
+        const { data } = await supabase
+          .from("personal")
+          .select("id, org_id, email_norm, identity_key, user_id")
+          .eq("org_id", orgId)
+          .eq("identity_key", inviteIdentityKey)
+          .eq("is_deleted", false)
+          .maybeSingle();
+
+        personalRow = data || null;
+      }
+
+      if (personalRow) {
+        personalSyncResult.matched = true;
+
+        if (personalRow.user_id !== trackerUserId) {
+          const { error: personalUpdateError } = await supabase
+            .from("personal")
+            .update({
+              user_id: trackerUserId,
+              updated_at: nowIso,
+            })
+            .eq("id", personalRow.id)
+            .eq("org_id", orgId);
+
+          if (personalUpdateError) {
+            console.error("[accept-tracker-invite] personal sync error", {
+              orgId,
+              trackerUserId,
+              personalId: personalRow.id,
+              message: personalUpdateError.message,
+            });
+          } else {
+            personalSyncResult.updated = true;
+          }
+        }
+      }
     }
 
     const { data: assignments } = await supabase
@@ -385,6 +459,7 @@ export default async function handler(req, res) {
       invite_id: invite.id,
       frequency_minutes: frequencyMinutes,
       expires_at: runtime.expires_at,
+      personal_sync: personalSyncResult,
     });
   } catch (e) {
     return res.status(500).json({
