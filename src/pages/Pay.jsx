@@ -1,36 +1,59 @@
 import { useEffect } from "react";
 
-export default function PayPage() {
+export default function Pay() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const transactionId = urlParams.get("_ptxn");
 
+    console.log("[PAY] transactionId:", transactionId);
+
     if (!transactionId) {
-      console.error("No _ptxn found");
+      console.error("[PAY] Missing _ptxn");
       return;
     }
 
-    const script = document.createElement("script");
-    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
-    script.async = true;
-
-    script.onload = () => {
+    const loadPaddle = async () => {
       if (!window.Paddle) {
-        console.error("Paddle not loaded");
-        return;
+        console.log("[PAY] Loading Paddle script...");
+        const script = document.createElement("script");
+        script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+        script.async = true;
+
+        script.onload = () => {
+          console.log("[PAY] Paddle script loaded");
+          initPaddle();
+        };
+
+        script.onerror = () => {
+          console.error("[PAY] Failed to load Paddle script");
+        };
+
+        document.body.appendChild(script);
+      } else {
+        initPaddle();
       }
-
-      window.Paddle.Initialize({
-        environment: "sandbox", // Cambia a 'production' en prod
-        token: "YOUR_CLIENT_TOKEN" // 👈 Reemplaza por tu token real
-      });
-
-      window.Paddle.Checkout.open({
-        transactionId: transactionId
-      });
     };
 
-    document.body.appendChild(script);
+    const initPaddle = () => {
+      try {
+        console.log("[PAY] Initializing Paddle...");
+
+        window.Paddle.Initialize({
+          environment: "sandbox", // ⚠️ cambiar a production luego
+          token: import.meta.env.VITE_PADDLE_CLIENT_TOKEN, // 👈 CLAVE REAL
+        });
+
+        console.log("[PAY] Opening checkout...");
+
+        window.Paddle.Checkout.open({
+          transactionId: transactionId,
+        });
+      } catch (err) {
+        console.error("[PAY] Paddle error:", err);
+      }
+    };
+
+    loadPaddle();
   }, []);
 
   return (
