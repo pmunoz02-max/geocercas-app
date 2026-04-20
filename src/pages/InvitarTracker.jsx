@@ -62,7 +62,7 @@
       };
     const trackerLimitReached = trackerCount >= maxTrackers;
     const canInviteTracker = isActive && !trackerLimitReached;
-  const [trackerCount, setTrackerCount] = useState(0);
+  // ...existing code...
   useEffect(() => {
     if (!orgId) {
       setTrackerCount(0);
@@ -168,6 +168,7 @@ export default function InvitarTracker() {
   const { t, i18n } = useTranslation();
   const auth = useAuthSafe();
 
+  // ENTITLEMENTS
   const {
     loading: entitlementsLoading,
     error: entitlementsError,
@@ -177,15 +178,11 @@ export default function InvitarTracker() {
     maxTrackers,
   } = useOrgEntitlements();
 
-
+  // STATES
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
   const [activeAssignaciones, setActiveAssignaciones] = useState([]);
-
-  const [trackerCount, setTrackerCount] = useState(0);
-  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
-
   const [trackerCount, setTrackerCount] = useState(0);
   const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
 
@@ -225,13 +222,8 @@ export default function InvitarTracker() {
 
   const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
 
-  const inviteBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && !isActive;
-  }, [entitlementsLoading, isActive]);
+  // ...existing code...
 
-  const trackerLimitReached = useMemo(() => {
-    return !loadingTrackerCount && trackerCount >= maxTrackers;
-  }, [loadingTrackerCount, trackerCount, maxTrackers]);
 
   const trackersUsageLabel = useMemo(() => {
     if (loadingTrackerCount) return "…";
@@ -296,6 +288,7 @@ export default function InvitarTracker() {
   }, [peopleWithActiveAssignments]);
 
 
+  // MEMOS
   const inviteBlockedByPlan = useMemo(() => {
     return !entitlementsLoading && !isActive;
   }, [entitlementsLoading, isActive]);
