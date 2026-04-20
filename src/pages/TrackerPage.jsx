@@ -28,7 +28,7 @@ export default function TrackerPage() {
     loading: entitlementsLoading,
     error: entitlementsError,
     planCode,
-    isFree,
+    isActive,
   } = useOrgEntitlements();
 
   const [resolviendoOrg, setResolviendoOrg] = useState(true);
@@ -163,8 +163,8 @@ export default function TrackerPage() {
   const currentOrgId = currentOrg?.id || null;
 
   const trackerBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && isFree;
-  }, [entitlementsLoading, isFree]);
+    return !entitlementsLoading && !isActive;
+  }, [entitlementsLoading, isActive]);
 
   if (!user) {
     return (

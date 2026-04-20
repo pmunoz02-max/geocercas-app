@@ -1,3 +1,85 @@
+        useEffect(() => {
+          let cancelled = false;
+
+          async function loadTrackerCount() {
+            if (!orgId) {
+              if (!cancelled) {
+                setTrackerCount(0);
+                setLoadingTrackerCount(false);
+              }
+              return;
+            }
+
+            try {
+              setLoadingTrackerCount(true);
+
+              const { count, error } = await supabase
+                .from("memberships")
+                .select("*", { count: "exact", head: true })
+                .eq("org_id", orgId)
+                .eq("role", "tracker")
+                .is("revoked_at", null);
+
+              if (error) {
+                throw error;
+              }
+
+              if (!cancelled) {
+                setTrackerCount(count || 0);
+              }
+            } catch (e) {
+              console.error("[invite-tracker] tracker count error", e);
+              if (!cancelled) {
+                setTrackerCount(0);
+              }
+            } finally {
+              if (!cancelled) {
+                setLoadingTrackerCount(false);
+              }
+            }
+          }
+
+          loadTrackerCount();
+
+          return () => {
+            cancelled = true;
+          };
+        }, [orgId]);
+      const handleInviteTrackerGuarded = async (...args) => {
+        if (!isActive) {
+          alert("Tu plan no está activo. Actívalo para invitar trackers.");
+          return;
+        }
+
+        if (trackerLimitReached) {
+          alert(
+            `Has alcanzado el límite de ${maxTrackers} trackers para tu plan ${planCode?.toUpperCase?.() || planCode}`
+          );
+          return;
+        }
+
+        return onSendInvite(...args);
+      };
+    const trackerLimitReached = trackerCount >= maxTrackers;
+    const canInviteTracker = isActive && !trackerLimitReached;
+  const [trackerCount, setTrackerCount] = useState(0);
+  useEffect(() => {
+    if (!orgId) {
+      setTrackerCount(0);
+      return;
+    }
+    const loadCount = async () => {
+      const { count } = await supabase
+        .from("user_organizations")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("role", "tracker");
+
+      setTrackerCount(count || 0);
+    };
+
+    loadCount();
+  }, [orgId]);
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -32,6 +114,53 @@ function normalizePlanLabel(planCode) {
 }
 
 export default function InvitarTracker() {
+    useEffect(() => {
+      let cancelled = false;
+
+      async function loadTrackerCount() {
+        if (!orgId) {
+          if (!cancelled) {
+            setTrackerCount(0);
+            setLoadingTrackerCount(false);
+          }
+          return;
+        }
+
+        try {
+          setLoadingTrackerCount(true);
+
+          const { count, error } = await supabase
+            .from("memberships")
+            .select("*", { count: "exact", head: true })
+            .eq("org_id", orgId)
+            .eq("role", "tracker")
+            .is("revoked_at", null);
+
+          if (error) {
+            throw error;
+          }
+
+          if (!cancelled) {
+            setTrackerCount(count || 0);
+          }
+        } catch (e) {
+          console.error("[invite-tracker] tracker count error", e);
+          if (!cancelled) {
+            setTrackerCount(0);
+          }
+        } finally {
+          if (!cancelled) {
+            setLoadingTrackerCount(false);
+          }
+        }
+      }
+
+      loadTrackerCount();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [orgId]);
   // State for the latest invite link and invite metadata
   const [inviteLink, setInviteLink] = useState("");
   const [inviteMeta, setInviteMeta] = useState(null); // { invite_id, created_at, invite_url }
@@ -43,13 +172,22 @@ export default function InvitarTracker() {
     loading: entitlementsLoading,
     error: entitlementsError,
     planCode,
-    isFree,
+    planStatus,
+    isActive,
+    maxTrackers,
   } = useOrgEntitlements();
+
 
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
   const [activeAssignaciones, setActiveAssignaciones] = useState([]);
+
+  const [trackerCount, setTrackerCount] = useState(0);
+  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
+
+  const [trackerCount, setTrackerCount] = useState(0);
+  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
 
   const [selectedPersonKey, setSelectedPersonKey] = useState("");
   const [emailInput, setEmailInput] = useState("");
@@ -86,6 +224,19 @@ export default function InvitarTracker() {
   }, [i18n]);
 
   const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
+
+  const inviteBlockedByPlan = useMemo(() => {
+    return !entitlementsLoading && !isActive;
+  }, [entitlementsLoading, isActive]);
+
+  const trackerLimitReached = useMemo(() => {
+    return !loadingTrackerCount && trackerCount >= maxTrackers;
+  }, [loadingTrackerCount, trackerCount, maxTrackers]);
+
+  const trackersUsageLabel = useMemo(() => {
+    if (loadingTrackerCount) return "…";
+    return `${trackerCount} / ${maxTrackers}`;
+  }, [loadingTrackerCount, trackerCount, maxTrackers]);
 
   const activeAssignmentByPersonId = useMemo(() => {
     const map = new Map();
@@ -144,9 +295,14 @@ export default function InvitarTracker() {
     return set;
   }, [peopleWithActiveAssignments]);
 
+
   const inviteBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && isFree;
-  }, [entitlementsLoading, isFree]);
+    return !entitlementsLoading && !isActive;
+  }, [entitlementsLoading, isActive]);
+
+  const trackerLimitReached = useMemo(() => {
+    return !loadingTrackerCount && trackerCount >= maxTrackers;
+  }, [loadingTrackerCount, trackerCount, maxTrackers]);
 
   async function getAccessToken() {
     const { data } = await supabase.auth.getSession();
@@ -257,10 +413,22 @@ export default function InvitarTracker() {
     setOkMsg(null);
     setErrMsg(null);
 
+
     if (inviteBlockedByPlan) {
       setErrMsg(
         t("inviteTracker.errors.planBlocked", {
-          defaultValue: "Tu plan actual no permite invitar trackers. Actualiza a PRO o superior.",
+          defaultValue: "Tu organización no tiene un plan activo para invitar trackers.",
+        })
+      );
+      return;
+    }
+
+    if (trackerLimitReached) {
+      setErrMsg(
+        t("inviteTracker.errors.trackerLimitReached", {
+          defaultValue: "Tu organización alcanzó el límite de {{count}} trackers para el plan {{plan}}.",
+          count: maxTrackers,
+          plan: String(planCode || "free").toUpperCase(),
         })
       );
       return;
@@ -516,6 +684,84 @@ export default function InvitarTracker() {
           </div>
         ) : null}
 
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">
+                {t("inviteTracker.usage.title", {
+                  defaultValue: "Uso de trackers",
+                })}
+              </div>
+              <div className="mt-1 text-sm text-slate-700">
+                {t("inviteTracker.usage.current", {
+                  defaultValue: "Usados: {{used}} / {{max}}",
+                  used: trackerCount,
+                  max: maxTrackers,
+                })}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {t("inviteTracker.usage.plan", {
+                  defaultValue: "Plan: {{plan}} · Estado: {{status}}",
+                  plan: normalizePlanLabel(planCode),
+                  status: String(planStatus || "free").toUpperCase(),
+                })}
+              </div>
+            </div>
+
+            <div className="text-sm">
+              {loadingTrackerCount ? (
+                <span className="text-slate-500">
+                  {t("inviteTracker.usage.loading", {
+                    defaultValue: "Calculando uso…",
+                  })}
+                </span>
+              ) : trackerLimitReached ? (
+                <span className="font-medium text-amber-700">
+                  {t("inviteTracker.usage.limitReached", {
+                    defaultValue: "Límite alcanzado",
+                  })}
+                </span>
+              ) : (
+                <span className="font-medium text-emerald-700">
+                  {t("inviteTracker.usage.available", {
+                    defaultValue: "Cupo disponible",
+                  })}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-slate-900 transition-all"
+              style={{
+                width:
+                  maxTrackers > 0
+                    ? `${Math.min(100, Math.round((trackerCount / maxTrackers) * 100))}%`
+                    : "0%",
+              }}
+            />
+          </div>
+
+          {!isActive || trackerLimitReached ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-700 mb-3">
+                {!isActive
+                  ? t("inviteTracker.usage.upgradeInactive", {
+                      defaultValue: "Activa un plan PRO o superior para invitar trackers.",
+                    })
+                  : t("inviteTracker.usage.upgradeLimit", {
+                      defaultValue: "Tu plan actual llegó al límite. Actualiza para agregar más trackers.",
+                    })}
+              </div>
+
+              {orgId ? (
+                <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
         <form onSubmit={onSendInvite} className="mt-6 space-y-4">
                   {inviteLink && inviteMeta && (
                     <div className="mt-4 flex flex-col gap-2">
@@ -613,12 +859,36 @@ export default function InvitarTracker() {
             />
           </div>
 
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 mb-4">
+            {t("inviteTracker.usage.trackers", {
+              defaultValue: "Trackers usados: {{used}} / {{max}}",
+              used: trackerCount,
+              max: maxTrackers,
+            })}
+          </div>
+
           <button
             type="submit"
-            disabled={busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg || !selectedAssignment?.id}
+            disabled={
+              busy ||
+              loadingPeople ||
+              loadingTrackerCount ||
+              !orgId ||
+              !hasActiveAssignmentsInOrg ||
+              !selectedAssignment?.id ||
+              inviteBlockedByPlan ||
+              trackerLimitReached
+            }
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy || loadingPeople || !orgId || !hasActiveAssignmentsInOrg || !selectedAssignment?.id
+              busy ||
+              loadingPeople ||
+              loadingTrackerCount ||
+              !orgId ||
+              !hasActiveAssignmentsInOrg ||
+              !selectedAssignment?.id ||
+              inviteBlockedByPlan ||
+              trackerLimitReached
                 ? "bg-slate-300 text-slate-600 cursor-not-allowed"
                 : "bg-black text-white hover:bg-slate-900",
             ].join(" ")}

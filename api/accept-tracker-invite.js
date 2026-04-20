@@ -1,3 +1,22 @@
+const TRACKER_LIMITS_BY_PLAN = {
+  free: 0,
+  starter: 1,
+  pro: 3,
+  enterprise: 9999,
+  elite: 9999,
+  elite_plus: 9999,
+};
+
+function normalizePlanCode(value) {
+  return String(value || "free").toLowerCase().trim();
+}
+
+function getTrackerLimitFromBillingRow(billingRow) {
+  const planCode = normalizePlanCode(billingRow?.plan_code);
+  const fallback = TRACKER_LIMITS_BY_PLAN[planCode] ?? 0;
+  const override = Number(billingRow?.tracker_limit_override);
+  return Number.isFinite(override) ? override : fallback;
+}
 export const config = {
   runtime: "nodejs",
 };
@@ -181,7 +200,7 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
     const tokenHash = sha256Hex(inviteToken);
 
-    const { data: invite } = await supabase
+    let { data: invite } = await supabase
       .from("tracker_invites")
       .select("*")
       .eq("invite_token_hash", tokenHash)
@@ -189,6 +208,57 @@ export default async function handler(req, res) {
 
     if (!invite) {
       return res.status(404).json({ ok: false, message: "Invite not found" });
+    }
+
+    // --- BACKEND GUARD: Plan activo y límite de trackers ---
+    const orgId = invite.org_id;
+
+    const { data: billingRow, error: billingError } = await supabase
+      .from("org_billing")
+      .select("org_id, plan_code, plan_status, tracker_limit_override")
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (billingError) {
+      console.error("[accept-tracker-invite] billing lookup error", billingError);
+      return res.status(500).json({
+        ok: false,
+        error: "billing_lookup_failed",
+      });
+    }
+
+    const planStatus = String(billingRow?.plan_status || "free").toLowerCase().trim();
+    if (planStatus !== "active") {
+      return res.status(403).json({
+        ok: false,
+        error: "plan_inactive",
+        message: "La organización no tiene un plan activo para agregar trackers.",
+      });
+    }
+
+    const trackerLimit = getTrackerLimitFromBillingRow(billingRow);
+
+    const { count: trackerCount, error: trackerCountError } = await supabase
+      .from("memberships")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", orgId)
+      .eq("role", "tracker")
+      .is("revoked_at", null);
+
+    if (trackerCountError) {
+      console.error("[accept-tracker-invite] tracker count error", trackerCountError);
+      return res.status(500).json({
+        ok: false,
+        error: "tracker_count_failed",
+      });
+    }
+
+    if ((trackerCount || 0) >= trackerLimit) {
+      return res.status(403).json({
+        ok: false,
+        error: "tracker_limit_reached",
+        message: `La organización alcanzó el límite de ${trackerLimit} trackers para su plan.`,
+      });
     }
 
     const alreadyAccepted = !!invite.accepted_at;
@@ -244,6 +314,22 @@ export default async function handler(req, res) {
     const nowIso = new Date().toISOString();
 
     if (!alreadyAccepted) {
+
+      // 🔁 RECHECK para evitar race condition
+      const { count: trackerCountNow } = await supabase
+        .from("memberships")
+        .select("*", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("role", "tracker")
+        .is("revoked_at", null);
+
+      if ((trackerCountNow || 0) >= trackerLimit) {
+        return res.status(403).json({
+          ok: false,
+          error: "tracker_limit_race_condition",
+          message: `Límite alcanzado durante la activación (${trackerLimit})`,
+        });
+      }
       await supabase
         .from("tracker_invites")
         .update({

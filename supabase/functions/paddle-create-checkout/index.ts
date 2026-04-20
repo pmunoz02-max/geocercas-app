@@ -1,5 +1,40 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+
+// --- Paddle environment/config logic ---
+function getPaddleEnv() {
+  const env = Deno.env.get("PADDLE_ENV")?.toLowerCase();
+  return env === "live" ? "live" : "sandbox";
+}
+
+function getPaddleApiKey() {
+  const env = getPaddleEnv();
+  const key =
+    env === "live"
+      ? Deno.env.get("PADDLE_API_KEY_LIVE")
+      : Deno.env.get("PADDLE_API_KEY_SANDBOX");
+
+  if (!key) {
+    throw new Error(`Missing Paddle API key for env: ${env}`);
+  }
+
+  return key;
+}
+
+function getPaddleProPriceId() {
+  const env = getPaddleEnv();
+  const priceId =
+    env === "live"
+      ? Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE")
+      : Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX");
+
+  if (!priceId) {
+    throw new Error(`Missing Paddle PRO price id for env: ${env}`);
+  }
+
+  return priceId;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -27,78 +62,126 @@ serve(async (req) => {
     let body: any = {};
     try {
       body = await req.json();
-    } catch {
+    } catch (e) {
+      console.error("[paddle-create-checkout] invalid json body", e);
       return json(400, { ok: false, error: "Invalid JSON body" });
     }
 
-    const planCode = String(body.plan_code || body.plan || "").trim().toLowerCase();
+    const orgId = body?.orgId ?? null;
+    const plan = body?.plan ?? null;
 
-    const PADDLE_API_KEY = Deno.env.get("PADDLE_API_KEY");
-    const PADDLE_PRO_PRICE_ID = Deno.env.get("PADDLE_PRO_PRICE_ID");
-    const PADDLE_ENTERPRISE_PRICE_ID = Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID");
-
-    if (!PADDLE_API_KEY) {
-      return json(500, { ok: false, error: "Missing PADDLE_API_KEY" });
-    }
-
-    const selectedPriceId =
-      planCode === "enterprise"
-        ? PADDLE_ENTERPRISE_PRICE_ID
-        : planCode === "pro"
-        ? PADDLE_PRO_PRICE_ID
-        : null;
-
-    if (!selectedPriceId) {
-      return json(400, {
-        ok: false,
-        error: "Invalid or missing plan_code",
-        received: planCode,
-      });
-    }
-
-    console.log("[paddle-create-checkout] selectedPriceId", selectedPriceId);
-    console.log("[paddle-create-checkout] planCode", planCode);
-
-    const paddleRes = await fetch("https://sandbox-api.paddle.com/transactions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${PADDLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        items: [
-          {
-            price_id: selectedPriceId,
-            quantity: 1,
-          },
-        ],
-        checkout: {
-          success_url: "https://preview.tugeocercas.com/billing",
-          cancel_url: "https://preview.tugeocercas.com/billing",
-        },
-      }),
+    console.log("[paddle-create-checkout] BODY:", body);
+    console.log("[paddle-create-checkout] ORG ID:", orgId);
+    console.log("[paddle-create-checkout] PLAN:", plan);
+    console.log("[paddle-create-checkout] ENV:", {
+      hasPaddleApiKey: !!Deno.env.get("PADDLE_API_KEY"),
+      hasProPriceId: !!Deno.env.get("PADDLE_PRICE_ID_PRO"),
+      hasEnterprisePriceId: !!Deno.env.get("PADDLE_PRICE_ID_ENTERPRISE"),
     });
 
-    const result = await paddleRes.json();
-    console.log("[paddle-create-checkout] paddle status", paddleRes.status);
-    console.log("[paddle-create-checkout] paddle body", result);
+    console.log("[paddle-create-checkout] validating inputs", { orgId, plan });
 
-    if (!paddleRes.ok) {
-      return json(500, {
-        ok: false,
-        error: "paddle_checkout_failed",
-        status: paddleRes.status,
-        details: result,
+    if (!orgId || !plan) {
+      console.error("[paddle-create-checkout] missing required fields", { orgId, plan });
+      return json(400, { error: "missing_orgId_or_plan", orgId, plan });
+    }
+
+    // Central Paddle config
+    const paddleEnv = getPaddleEnv();
+    const PADDLE_API_KEY = getPaddleApiKey();
+    const priceId = getPaddleProPriceId();
+
+    console.log("[paddle-create-checkout] paddleEnv:", paddleEnv);
+    console.log("[paddle-create-checkout] using API key exists:", !!PADDLE_API_KEY);
+    console.log("[paddle-create-checkout] using priceId:", priceId);
+
+    if (!PADDLE_API_KEY) {
+      return json(500, { ok: false, error: "Missing PADDLE_API_KEY for env", paddleEnv });
+    }
+
+    if (!priceId) {
+      return json(400, {
+        error: "missing_price_id_for_plan",
+        plan,
+        paddleEnv,
       });
     }
 
-    const checkoutUrl = result?.data?.checkout?.url;
+
+
+    // Determina dominio correcto para success_url según entorno
+    const isLive = getPaddleEnv() === "live";
+    const APP_URL = isLive
+      ? "https://app.tugeocercas.com"
+      : "https://preview.tugeocercas.com";
+
+    const successUrl = `${APP_URL}/dashboard?billing=success`;
+    const cancelUrl = `${APP_URL}/billing?billing=cancel`;
+
+    const paddlePayload = {
+      items: [
+        {
+          price_id: priceId,
+          quantity: 1,
+        },
+      ],
+      custom_data: {
+        org_id: orgId,
+        plan,
+      },
+      checkout: {
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      },
+    };
+    console.log("[paddle-create-checkout] PADDLE PAYLOAD:", JSON.stringify(paddlePayload));
+
+    console.log("[paddle-create-checkout] creating paddle transaction", {
+      orgId,
+      plan,
+      priceId,
+    });
+
+    const paddleApiUrl = paddleEnv === "live"
+      ? "https://api.paddle.com/transactions"
+      : "https://sandbox-api.paddle.com/transactions";
+
+    const paddleResponse = await fetch(paddleApiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${PADDLE_API_KEY}`,
+      },
+      body: JSON.stringify(paddlePayload),
+    });
+
+    const rawText = await paddleResponse.text();
+    console.log("[paddle-create-checkout] PADDLE STATUS:", paddleResponse.status);
+    console.log("[paddle-create-checkout] PADDLE RAW RESPONSE:", rawText);
+
+    let paddleJson: any = null;
+    try {
+      paddleJson = rawText ? JSON.parse(rawText) : null;
+    } catch (parseError) {
+      console.error("[paddle-create-checkout] paddle json parse error", parseError);
+    }
+    console.log("[paddle-create-checkout] PADDLE RESPONSE JSON:", paddleJson);
+
+    if (!paddleResponse.ok) {
+      return json(500, {
+        error: "paddle_request_failed",
+        status: paddleResponse.status,
+        paddle: paddleJson ?? rawText,
+      });
+    }
+
+    const checkoutUrl = paddleJson?.data?.checkout?.url;
 
     if (!checkoutUrl) {
       return json(500, {
         ok: false,
         error: "no_checkout_url",
-        raw: result,
+        raw: paddleJson,
       });
     }
 
@@ -106,12 +189,16 @@ serve(async (req) => {
       ok: true,
       checkout_url: checkoutUrl,
     });
-  } catch (err) {
-    console.error("[paddle-create-checkout] fatal", err);
+  } catch (error) {
+    console.error("[paddle-create-checkout] unhandled error", {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null,
+      error,
+    });
 
     return json(500, {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
+      error: "internal_error",
+      message: error instanceof Error ? error.message : String(error),
     });
   }
 });

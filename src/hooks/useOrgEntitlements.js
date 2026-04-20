@@ -39,9 +39,14 @@ function normalizePlanCode(value) {
   return String(value || "free").toLowerCase().trim();
 }
 
+function normalizePlanStatus(value) {
+  return String(value || "free").toLowerCase().trim();
+}
+
 function buildFallbackEntitlementsFromPlan(planCode, billingRow = null) {
   const safePlan = normalizePlanCode(planCode);
-  const defaults = FALLBACK_LIMITS_BY_PLAN[safePlan] || FALLBACK_LIMITS_BY_PLAN.free;
+  const defaults =
+    FALLBACK_LIMITS_BY_PLAN[safePlan] || FALLBACK_LIMITS_BY_PLAN.free;
 
   const trackerOverride = normalizeNumber(
     billingRow?.tracker_limit_override,
@@ -63,7 +68,12 @@ export default function useOrgEntitlements() {
   const trackerRouteBypass = useMemo(() => {
     try {
       const p = String(window.location.pathname || "").toLowerCase();
-      return p === "/tracker" || p.startsWith("/tracker/") || p === "/tracker-gps" || p.startsWith("/tracker-gps/");
+      return (
+        p === "/tracker" ||
+        p.startsWith("/tracker/") ||
+        p === "/tracker-gps" ||
+        p.startsWith("/tracker-gps/")
+      );
     } catch {
       return false;
     }
@@ -86,12 +96,14 @@ export default function useOrgEntitlements() {
         bypassLoggedRef.current = true;
       }
 
-      setEntitlements(
-        buildFallbackEntitlementsFromPlan("pro", {
+      setEntitlements({
+        ...buildFallbackEntitlementsFromPlan("pro", {
           org_id: currentOrgId || null,
           tracker_limit_override: 9999,
-        })
-      );
+        }),
+        plan_status: "active",
+      });
+
       setError("");
       setSource("tracker_preview_bypass");
       setLoading(false);
@@ -125,6 +137,7 @@ export default function useOrgEntitlements() {
       if (entitlementRow) {
         setEntitlements({
           ...entitlementRow,
+          plan_status: normalizePlanStatus(entitlementRow?.plan_status),
           __source: "org_entitlements",
         });
         setSource("org_entitlements");
@@ -154,7 +167,11 @@ export default function useOrgEntitlements() {
           billingRow
         );
 
-        setEntitlements(fallback);
+        setEntitlements({
+          ...fallback,
+          plan_status: normalizePlanStatus(billingRow.plan_status),
+        });
+
         setSource("billing_fallback");
         return;
       }
@@ -163,7 +180,10 @@ export default function useOrgEntitlements() {
         org_id: currentOrgId,
       });
 
-      setEntitlements(defaultFallback);
+      setEntitlements({
+        ...defaultFallback,
+        plan_status: "free",
+      });
       setSource("default_free_fallback");
       setError(
         "No se encontró fila en org_entitlements ni org_billing. Se aplicó fallback temporal Free."
@@ -173,7 +193,10 @@ export default function useOrgEntitlements() {
         org_id: currentOrgId,
       });
 
-      setEntitlements(defaultFallback);
+      setEntitlements({
+        ...defaultFallback,
+        plan_status: "free",
+      });
       setSource("error_free_fallback");
       setError(err?.message || "No se pudieron cargar los entitlements.");
     } finally {
@@ -189,6 +212,14 @@ export default function useOrgEntitlements() {
     return normalizePlanCode(entitlements?.plan_code);
   }, [entitlements]);
 
+  const planStatus = useMemo(() => {
+    return normalizePlanStatus(entitlements?.plan_status);
+  }, [entitlements]);
+
+  const isActive = useMemo(() => {
+    return planStatus === "active";
+  }, [planStatus]);
+
   const maxGeocercas = useMemo(() => {
     return normalizeNumber(entitlements?.max_geocercas, 0);
   }, [entitlements]);
@@ -197,12 +228,12 @@ export default function useOrgEntitlements() {
     return normalizeNumber(entitlements?.max_trackers, 0);
   }, [entitlements]);
 
-  const isFree = planCode === "free";
-  const isStarter = planCode === "starter";
-  const isPro = planCode === "pro";
-  const isEnterprise = planCode === "enterprise";
-  const isElite = planCode === "elite";
-  const isElitePlus = planCode === "elite_plus";
+  const isFree = planCode === "free" || !isActive;
+  const isStarter = planCode === "starter" && isActive;
+  const isPro = planCode === "pro" && isActive;
+  const isEnterprise = planCode === "enterprise" && isActive;
+  const isElite = planCode === "elite" && isActive;
+  const isElitePlus = planCode === "elite_plus" && isActive;
 
   return {
     loading,
@@ -213,6 +244,8 @@ export default function useOrgEntitlements() {
 
     orgId: currentOrgId || null,
     planCode,
+    planStatus,
+    isActive,
     maxGeocercas,
     maxTrackers,
 

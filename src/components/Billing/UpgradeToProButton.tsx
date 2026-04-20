@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { getPaddleEnv } from "@/config/paddleEnv";
 
 type Props = {
   orgId: string;
@@ -21,6 +22,10 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       setLoading(true);
 
       console.log("[UpgradeToProButton] before invoke");
+
+      // Log Paddle env for diagnostics
+      const paddleEnv = getPaddleEnv();
+      console.log("[UpgradeToProButton] paddleEnv:", paddleEnv);
 
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
