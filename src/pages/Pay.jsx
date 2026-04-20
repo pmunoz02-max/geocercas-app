@@ -1,46 +1,41 @@
-import React, { useEffect } from "react";
-
-// Utilidad para cargar Paddle.js dinámicamente
-function loadPaddleJs(onLoad) {
-  if (window.Paddle) {
-    onLoad();
-    return;
-  }
-  const script = document.createElement("script");
-  script.src = "https://cdn.paddle.com/paddle/paddle.js";
-  script.async = true;
-  script.onload = onLoad;
-  document.body.appendChild(script);
-}
+import { useEffect } from "react";
 
 export default function PayPage() {
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const transactionId = params.get("_ptxn");
+    const urlParams = new URLSearchParams(window.location.search);
+    const transactionId = urlParams.get("_ptxn");
+
     if (!transactionId) {
-      // Puedes mostrar un error o redirigir
-      alert("Missing transaction id (_ptxn) in URL");
+      console.error("No _ptxn found");
       return;
     }
 
-    loadPaddleJs(() => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+    script.async = true;
+
+    script.onload = () => {
       if (!window.Paddle) {
-        alert("Paddle.js failed to load");
+        console.error("Paddle not loaded");
         return;
       }
-      // Inicializa Paddle con tu client-side token
-      window.Paddle.Setup({
-        // Reemplaza con tu vendor/client token si es necesario
-        // vendor: YOUR_VENDOR_ID,
-        // token: YOUR_CLIENT_SIDE_TOKEN,
+
+      window.Paddle.Initialize({
+        environment: "sandbox", // Cambia a 'production' en prod
+        token: "YOUR_CLIENT_TOKEN" // 👈 Reemplaza por tu token real
       });
-      window.Paddle.Checkout.open({ transactionId });
-    });
+
+      window.Paddle.Checkout.open({
+        transactionId: transactionId
+      });
+    };
+
+    document.body.appendChild(script);
   }, []);
 
   return (
-    <div style={{ padding: 32, textAlign: "center" }}>
-      <h1>Abriendo checkout seguro...</h1>
+    <div style={{ padding: 40 }}>
+      <h2>Abriendo checkout seguro...</h2>
       <p>Por favor espera, estamos redirigiéndote a Paddle.</p>
     </div>
   );
