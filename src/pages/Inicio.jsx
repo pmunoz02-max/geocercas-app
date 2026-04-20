@@ -313,7 +313,11 @@ export default function Inicio() {
             {t("inicio.billing.managePlanBody")}
           </p>
           <div className="mt-4">
-            <UpgradeToProButton orgId={currentOrgId} plan="pro" />
+            <UpgradeToProButton
+              orgId={currentOrgId}
+              plan="pro"
+              className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
+            />
           </div>
           <div className="mt-3 text-xs text-slate-500">
             {t("inicio.billing.previewNote")}
