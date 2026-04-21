@@ -212,7 +212,7 @@ export default function Personal() {
       return;
     }
 
-    const id = getRowId(row);
+    const id = row?.id;
     if (!id) {
       setMsg("Missing row id (toggle).");
       return;
@@ -264,7 +264,7 @@ export default function Personal() {
       return;
     }
 
-    const id = getRowId(row);
+    const id = row?.id;
     if (!id) {
       setMsg("Missing row id (delete).");
       return;
@@ -424,9 +424,8 @@ export default function Personal() {
             </thead>
             <tbody>
               {filtered.map((r) => {
-                const rid = getRowId(r) ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
-                const rowId = getRowId(r);
-                const isRowBusy = rowBusyId === rowId;
+                const rid = r?.id ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
+                const isRowBusy = rowBusyId === r?.id;
 
                 return (
                   <tr key={rid} className="border-t">
