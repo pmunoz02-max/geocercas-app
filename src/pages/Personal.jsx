@@ -99,38 +99,19 @@ export default function Personal() {
     setRowBusyId(null);
   }, [resolvedOrgId]);
 
-  const load = useCallback(
-    async ({ qOverride, onlyActiveOverride } = {}) => {
-      if (!isLoggedIn || !resolvedOrgId) return;
+  async function load(opts = {}) {
+    const onlyActiveValue =
+      typeof opts.onlyActiveOverride === "boolean"
+        ? opts.onlyActiveOverride
+        : onlyActive;
 
-      setBusy(true);
-      setMsg("");
+    const data = await listPersonal(resolvedOrgId, {
+      q: q || "",
+      onlyActive: onlyActiveValue,
+    });
 
-      try {
-        const qToUse = typeof qOverride === "string" ? qOverride : q;
-        const onlyActiveToUse =
-          typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
-
-        const rows = await listPersonal({
-          q: qToUse,
-          onlyActive: onlyActiveToUse,
-          limit: 500,
-          orgId: resolvedOrgId,
-        });
-
-        setItems(Array.isArray(rows) ? rows : []);
-      } catch (e) {
-        setItems([]);
-        setMsg(
-          e?.message ||
-            t("personal.errorLoad", { defaultValue: "Error loading personnel." })
-        );
-      } finally {
-        setBusy(false);
-      }
-    },
-    [isLoggedIn, onlyActive, q, resolvedOrgId, t]
-  );
+    setItems(Array.isArray(data?.items) ? data.items : []);
+  }
 
   useEffect(() => {
     if (!loading && ready && isLoggedIn && resolvedOrgId) {
@@ -217,11 +198,21 @@ export default function Personal() {
     if (!id) return;
 
     try {
+      setRowBusyId(id);
+
       await upsertPersonal(
         { id, action: "toggle" },
         resolvedOrgId
       );
-      await load();
+
+      // Si estaba activo y el filtro ocultaría el registro, quitamos el filtro
+      if (row?.vigente && onlyActive) {
+        setOnlyActive(false);
+        await load({ onlyActiveOverride: false });
+        setMsg("Registro desactivado. Se muestran también los inactivos.");
+      } else {
+        await load();
+      }
     } catch (e) {
       console.error("toggle error", e);
     }
@@ -234,10 +225,13 @@ export default function Personal() {
     if (!confirm("¿Eliminar este registro?")) return;
 
     try {
+      setRowBusyId(id);
+
       await upsertPersonal(
         { id, action: "delete" },
         resolvedOrgId
       );
+
       await load();
     } catch (e) {
       console.error("delete error", e);
@@ -367,12 +361,18 @@ export default function Personal() {
                     </td>
                     <td className="p-3">
                       <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => onToggle(r)}>
+                        <button
+                          type="button"
+                          onClick={() => onToggle(r)}
+                          disabled={rowBusyId === r.id}
+                        >
                           {r.vigente ? "Deactivate" : "Activate"}
                         </button>
+
                         <button
+                          type="button"
                           onClick={() => onDelete(r)}
-                          style={{ borderColor: "red", color: "red" }}
+                          disabled={rowBusyId === r.id}
                         >
                           Delete
                         </button>
