@@ -52,6 +52,24 @@ async function readBody(req) {
     try {
       return JSON.parse(req.body);
     async function resolveContext(req, { requestedOrgId = null } = {}) {
+      // 1. Determinar org_id solicitado
+      let explicitOrgId = null;
+      try {
+        explicitOrgId = req.query?.org_id || req.query?.orgId || null;
+      } catch {}
+      let bodyOrgId = null;
+      try {
+        if (req.body && typeof req.body === "object") {
+          bodyOrgId = req.body.org_id || req.body.orgId || null;
+        }
+      } catch {}
+      // Log de entrada
+      console.log("[api/personal] resolveContext: entrada", {
+        requestedOrgId,
+        explicitOrgId,
+        bodyOrgId,
+      });
+
       const SUPABASE_URL = getEnv([
         "SUPABASE_URL",
         "VITE_SUPABASE_URL",
@@ -95,6 +113,8 @@ async function readBody(req) {
         hasCookieToken: Boolean(cookieToken),
         hasAccessToken: Boolean(accessToken),
         requestedOrgId: requestedOrgId || null,
+        explicitOrgId,
+        bodyOrgId,
       });
 
       if (!accessToken) {
@@ -160,50 +180,73 @@ async function readBody(req) {
         console.warn("[api/personal] user_current_org lookup warning", e?.message || e);
       }
 
+      // Prioridad: requestedOrgId > explicitOrgId > bodyOrgId > currentOrgId
+      let resolvedOrgId = null;
       if (requestedOrgId && isUuid(requestedOrgId)) {
-        currentOrgId = String(requestedOrgId);
+        resolvedOrgId = String(requestedOrgId);
+      } else if (explicitOrgId && isUuid(explicitOrgId)) {
+        resolvedOrgId = String(explicitOrgId);
+      } else if (bodyOrgId && isUuid(bodyOrgId)) {
+        resolvedOrgId = String(bodyOrgId);
+      } else if (currentOrgId && isUuid(currentOrgId)) {
+        resolvedOrgId = String(currentOrgId);
       }
+
+      console.log("[api/personal] resolveContext: resolvedOrgId", {
+        resolvedOrgId,
+        requestedOrgId,
+        explicitOrgId,
+        bodyOrgId,
+        currentOrgId,
+        userId: user.id,
+      });
 
       let mRow = null;
 
       async function findMembershipForOrg(orgId) {
         if (!orgId) return null;
 
-        // intento 1: esquema con is_active
+        // 1. is_active
         let r = await supaSrv
           .from("memberships")
           .select("org_id, role, created_at")
           .eq("user_id", user.id)
           .eq("org_id", orgId)
           .eq("is_active", true)
-          .limit(1);
-
+          .limit(2);
         if (!r.error && Array.isArray(r.data) && r.data.length) {
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findMembershipForOrg: multiple is_active memberships", { orgId, userId: user.id, count: r.data.length });
+          }
           return r.data[0];
         }
 
-        // intento 2: esquema con revoked_at
+        // 2. revoked_at
         r = await supaSrv
           .from("memberships")
           .select("org_id, role, created_at")
           .eq("user_id", user.id)
           .eq("org_id", orgId)
           .is("revoked_at", null)
-          .limit(1);
-
+          .limit(2);
         if (!r.error && Array.isArray(r.data) && r.data.length) {
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findMembershipForOrg: multiple revoked_at memberships", { orgId, userId: user.id, count: r.data.length });
+          }
           return r.data[0];
         }
 
-        // intento 3: fallback sin columnas opcionales
+        // 3. fallback
         r = await supaSrv
           .from("memberships")
           .select("org_id, role, created_at")
           .eq("user_id", user.id)
           .eq("org_id", orgId)
-          .limit(1);
-
+          .limit(2);
         if (!r.error && Array.isArray(r.data) && r.data.length) {
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findMembershipForOrg: multiple fallback memberships", { orgId, userId: user.id, count: r.data.length });
+          }
           return r.data[0];
         }
 
@@ -212,46 +255,51 @@ async function readBody(req) {
           userId: user.id,
           err1: r.error?.message || null,
         });
-
         return null;
       }
 
       async function findAnyMembership() {
-        // intento 1: esquema con is_active
+        // 1. is_active
         let r = await supaSrv
           .from("memberships")
           .select("org_id, role, created_at")
           .eq("user_id", user.id)
           .eq("is_active", true)
           .order("created_at", { ascending: false })
-          .limit(1);
-
+          .limit(2);
         if (!r.error && Array.isArray(r.data) && r.data.length) {
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findAnyMembership: multiple is_active memberships", { userId: user.id, count: r.data.length });
+          }
           return r.data[0];
         }
 
-        // intento 2: esquema con revoked_at
+        // 2. revoked_at
         r = await supaSrv
           .from("memberships")
           .select("org_id, role, created_at")
           .eq("user_id", user.id)
           .is("revoked_at", null)
           .order("created_at", { ascending: false })
-          .limit(1);
-
+          .limit(2);
         if (!r.error && Array.isArray(r.data) && r.data.length) {
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findAnyMembership: multiple revoked_at memberships", { userId: user.id, count: r.data.length });
+          }
           return r.data[0];
         }
 
-        // intento 3: fallback sin columnas opcionales
+        // 3. fallback
         r = await supaSrv
           .from("memberships")
           .select("org_id, role, created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(1);
-
+          .limit(2);
         if (!r.error && Array.isArray(r.data) && r.data.length) {
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findAnyMembership: multiple fallback memberships", { userId: user.id, count: r.data.length });
+          }
           return r.data[0];
         }
 
@@ -259,32 +307,43 @@ async function readBody(req) {
           userId: user.id,
           err1: r.error?.message || null,
         });
-
         return null;
       }
 
-      if (currentOrgId) {
-        mRow = await findMembershipForOrg(currentOrgId);
+      if (resolvedOrgId) {
+        mRow = await findMembershipForOrg(resolvedOrgId);
       }
 
       if (!mRow) {
-        if (requestedOrgId) {
-          return {
-            ok: false,
-            status: 403,
-            error: "Requested org is not available for current user",
-          };
-        }
-
         mRow = await findAnyMembership();
       }
 
+      if (!resolvedOrgId) {
+        console.warn("[api/personal] resolveContext: missing org_id after all sources", {
+          requestedOrgId,
+          explicitOrgId,
+          bodyOrgId,
+          currentOrgId,
+          userId: user.id,
+        });
+        return {
+          ok: false,
+          status: 400,
+          error: "Missing org_id",
+          details: "No organization id provided or resolved from context",
+        };
+      }
+
       if (!mRow?.org_id || !mRow?.role) {
+        console.warn("[api/personal] resolveContext: no valid membership found", {
+          resolvedOrgId,
+          userId: user.id,
+        });
         return {
           ok: false,
           status: 403,
           error: "Missing org/role context",
-          details: "No membership found",
+          details: "No membership found for user in org",
         };
       }
 
@@ -424,6 +483,90 @@ async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePerso
 ========================= */
 
 async function handleList(req, res) {
+    // Log diagnóstico antes de resolveContext
+    console.log("[api/personal] start", {
+      method: req.method,
+      queryOrgId: req.query?.org_id ?? null,
+      hasAuthHeader: Boolean(req.headers?.authorization),
+      hasCookie: Boolean(req.headers?.cookie),
+    });
+    // Log input explícito
+    console.log("[api/personal] resolveContext input", {
+      orgIdFromQuery: req.query?.org_id ?? null,
+      orgIdFromBody: req.body?.org_id ?? null,
+    });
+
+    // Normalizador defensivo de orgId
+    function normalizeOrgId(val) {
+      if (!val) return null;
+      if (typeof val === "string" && /^[0-9a-fA-F-]{32,36}$/.test(val)) return val;
+      if (typeof val === "object" && val.id) return String(val.id);
+      return null;
+    }
+
+    const explicitOrgId = normalizeOrgId(req.query?.org_id || req.body?.org_id);
+
+    let resolvedOrgId = null;
+    if (explicitOrgId) {
+      resolvedOrgId = explicitOrgId;
+      console.log("[api/personal] resolveContext: using explicitOrgId", { explicitOrgId });
+    } else {
+      // Buscar una org activa del usuario
+      const SUPABASE_URL = getEnv([
+        "SUPABASE_URL",
+        "VITE_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+      ]);
+      const SUPABASE_SERVICE_ROLE_KEY = getEnv([
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_SERVICE_KEY",
+      ]);
+      const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      });
+      // Necesitamos userId
+      const authHeader = req.headers.authorization || req.headers.Authorization || "";
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+      const cookieToken = getCookie(req, "tg_at") || "";
+      const accessToken = bearer || cookieToken;
+      const supaUser = createClient(SUPABASE_URL, getEnv([
+        "SUPABASE_ANON_KEY",
+        "VITE_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      ]), {
+        global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      });
+      const { data: userData } = await supaUser.auth.getUser();
+      const userId = userData?.user?.id;
+      if (userId) {
+        // Buscar primer membership activa
+        let r = await supaSrv
+          .from("memberships")
+          .select("org_id")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .limit(1);
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          resolvedOrgId = r.data[0].org_id;
+          console.log("[api/personal] resolveContext: found active membership org", { resolvedOrgId });
+        }
+      }
+    }
+
+    if (!resolvedOrgId) {
+      console.warn("[api/personal] resolveContext: no active org found");
+      return {
+        ok: false,
+        status: 403,
+        error: "no_active_membership",
+        details: "No active organization membership found",
+      };
+    }
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requestedOrgId =
     url.searchParams.get("org_id") ||
@@ -447,49 +590,61 @@ async function handleList(req, res) {
 
   let query = supaSrv
     .from("personal")
-    .select("*")
-    .eq("org_id", ctx.org_id)
-    .eq("is_deleted", false)
-    .order("nombre", { ascending: true })
-    .limit(limit);
+        // 1. is_active
+        let r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("org_id", orgId)
+          .eq("is_active", true)
+          .limit(2);
+        if (!r.error && Array.isArray(r.data)) {
+          console.log("[api/personal] memberships result", {
+            count: r.data.length,
+            memberships: r.data,
+          });
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findMembershipForOrg: multiple is_active memberships", { orgId, userId: user.id, count: r.data.length });
+          }
+          if (r.data.length) return r.data[0];
+        }
 
-  if (onlyActive) query = query.eq("vigente", true);
+        // 2. revoked_at
+        r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("org_id", orgId)
+          .is("revoked_at", null)
+          .limit(2);
+        if (!r.error && Array.isArray(r.data)) {
+          console.log("[api/personal] memberships result", {
+            count: r.data.length,
+            memberships: r.data,
+          });
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findMembershipForOrg: multiple revoked_at memberships", { orgId, userId: user.id, count: r.data.length });
+          }
+          if (r.data.length) return r.data[0];
+        }
 
-  if (q) {
-    const pattern = `%${q}%`;
-    query = query.or(
-      [
-        `nombre.ilike.${pattern}`,
-        `apellido.ilike.${pattern}`,
-        `email.ilike.${pattern}`,
-        `telefono.ilike.${pattern}`,
-        `documento.ilike.${pattern}`,
-      ].join(",")
-    );
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    return json(res, 500, {
-      ok: false,
-      error: "No se pudo listar personal",
-      details: error.message,
-    });
-  }
-
-  return json(res, 200, { ok: true, items: data || [] });
-}
-
-async function handlePost(req, res) {
-  const payload = (await readBody(req)) || {};
-  const requestedOrgId = payload.org_id || payload.orgId || null;
-
-  const ctxRes = await resolveContext(req, { requestedOrgId });
-  if (!ctxRes.ok) {
-    return json(res, ctxRes.status, {
-      ok: false,
-      error: ctxRes.error,
-      details: ctxRes.details,
+        // 3. fallback
+        r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("org_id", orgId)
+          .limit(2);
+        if (!r.error && Array.isArray(r.data)) {
+          console.log("[api/personal] memberships result", {
+            count: r.data.length,
+            memberships: r.data,
+          });
+          if (r.data.length > 1) {
+            console.warn("[api/personal] findMembershipForOrg: multiple fallback memberships", { orgId, userId: user.id, count: r.data.length });
+          }
+          if (r.data.length) return r.data[0];
+        }
     });
   }
 
