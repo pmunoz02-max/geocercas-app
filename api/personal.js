@@ -221,7 +221,7 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
       .select("org_id, role, is_default, revoked_at, created_at")
       .eq("user_id", user.id)
       .eq("org_id", currentOrgId)
-      .is("revoked_at", null)
+      .or("revoked_at.is.null,is_active.eq.true")
       .maybeSingle();
 
     if (!error && data?.org_id && data?.role) mRow = data;
@@ -240,7 +240,7 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
       .from("memberships")
       .select("org_id, role, is_default, revoked_at, created_at")
       .eq("user_id", user.id)
-      .is("revoked_at", null)
+      .or("revoked_at.is.null,is_active.eq.true")
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(1);
@@ -599,7 +599,7 @@ async function handlePost(req, res) {
       .from("personal")
       .update(updateRow)
       .eq("id", existing.id)
-      .eq("org_id", ctx.org_id)
+            .or("revoked_at.is.null,is_active.eq.true")
       .select("*")
       .limit(1);
 
@@ -619,7 +619,7 @@ async function handlePost(req, res) {
   }
 
   const insertRow = {
-    ...baseRow,
+            .or("revoked_at.is.null,is_active.eq.true")
     org_id: ctx.org_id,
     owner_id: user.id,
     user_id: desiredUserId,
