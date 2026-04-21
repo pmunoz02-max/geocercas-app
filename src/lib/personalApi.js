@@ -52,17 +52,25 @@ async function request(method, path = "", body = null) {
 }
 
 // 📋 LIST
+
 export async function listPersonal(orgId = null) {
-  const qs = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
+  const safeOrgId =
+    typeof orgId === "string" ? orgId : orgId?.id || null;
+
+  const qs = safeOrgId ? `?org_id=${encodeURIComponent(safeOrgId)}` : "";
   const data = await request("GET", qs);
   return data.items || [];
 }
 
 // ➕ CREATE / UPDATE
+
 export async function upsertPersonal(payload, orgId = null) {
+  const safeOrgId =
+    typeof orgId === "string" ? orgId : orgId?.id || null;
+
   const data = await request("POST", "", {
     ...payload,
-    ...(orgId ? { org_id: String(orgId) } : {}),
+    ...(safeOrgId ? { org_id: String(safeOrgId) } : {}),
   });
   return data.item;
 }

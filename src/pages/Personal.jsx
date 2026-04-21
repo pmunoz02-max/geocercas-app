@@ -67,6 +67,12 @@ export default function Personal() {
     vigente: true,
   });
 
+  // Normaliza orgId: solo string UUID
+  const resolvedOrgId =
+    typeof activeOrgId === "string"
+      ? activeOrgId
+      : activeOrgId?.id || activeOrgId || null;
+
   useEffect(() => {
     setItems([]);
     setMsg("");
@@ -74,7 +80,7 @@ export default function Personal() {
   }, [activeOrgId]);
 
   async function load({ qOverride, onlyActiveOverride } = {}) {
-    if (!isLoggedIn || !activeOrgId) return;
+    if (!isLoggedIn || !resolvedOrgId) return;
     setBusy(true);
     setMsg("");
     try {
@@ -86,7 +92,7 @@ export default function Personal() {
         q: qToUse,
         onlyActive: onlyActiveToUse,
         limit: 500,
-        orgId: activeOrgId,
+        orgId: resolvedOrgId,
       });
       setItems(Array.isArray(rows) ? rows : []);
     } catch (e) {
@@ -132,7 +138,7 @@ export default function Personal() {
     try {
       const item = await upsertPersonal(
         { ...form, vigente: !!form.vigente },
-        activeOrgId
+        resolvedOrgId
       );
 
       // âœ… Si el backend no devolviÃ³ item, tratamos como error real
