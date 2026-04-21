@@ -118,15 +118,27 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     "SUPABASE_SERVICE_KEY",
   ]);
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      ok: false,
-      status: 500,
-      error: "Server misconfigured",
-      details: {
-        has: {
+        let membershipResult = await supaSrv
+          .from("memberships")
+          .select("org_id, role, is_default, revoked_at, created_at, is_active")
+          .eq("user_id", user.id)
+          .eq("org_id", currentOrgId)
+          .is("revoked_at", null)
+          .maybeSingle();
           SUPABASE_URL: Boolean(SUPABASE_URL),
+        if (membershipResult.error) {
+          membershipResult = await supaSrv
+            .from("memberships")
+            .select("org_id, role, is_default, created_at, is_active")
+            .eq("user_id", user.id)
+            .eq("org_id", currentOrgId)
+            .eq("is_active", true)
+            .maybeSingle();
+        }
           SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+        if (!membershipResult.error && membershipResult.data?.org_id && membershipResult.data?.role) {
+          mRow = membershipResult.data;
+        }
           SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
         },
       },
@@ -236,11 +248,12 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
       };
     }
 
+
     let r = await supaSrv
       .from("memberships")
-      .select("org_id, role, is_default, revoked_at, created_at")
+      .select("org_id, role, is_default, revoked_at, created_at, is_active")
       .eq("user_id", user.id)
-      .or("revoked_at.is.null,is_active.eq.true")
+      .is("revoked_at", null)
       .order("is_default", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(1);
@@ -248,8 +261,9 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     if (r.error) {
       r = await supaSrv
         .from("memberships")
-        .select("org_id, role, is_default, created_at")
+        .select("org_id, role, is_default, created_at, is_active")
         .eq("user_id", user.id)
+        .eq("is_active", true)
         .order("is_default", { ascending: false })
         .order("created_at", { ascending: false })
         .limit(1);
