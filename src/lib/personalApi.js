@@ -76,15 +76,15 @@ export async function upsertPersonal(payload, orgId = null) {
 }
 
 // 🔁 TOGGLE ACTIVO
-export async function toggleVigente(id, vigente) {
-  const data = await request("PATCH", `/${id}`, {
-    vigente,
-  });
-  return data.item;
+
+// Toggle usando upsertPersonal con action: "toggle"
+export async function toggleVigente(id, orgId = null) {
+  return await upsertPersonal({ id, action: "toggle" }, orgId);
 }
 
 // 🗑 DELETE (soft)
-export async function deletePersonal(id) {
-  const data = await request("DELETE", `/${id}`);
-  return data.ok;
+
+// Delete usando upsertPersonal con action: "delete"
+export async function deletePersonal(id, orgId = null) {
+  return await upsertPersonal({ id, action: "delete" }, orgId);
 }
