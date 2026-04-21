@@ -143,7 +143,6 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  // 1) user_current_org
   let currentOrgId = null;
   try {
     const { data: uco, error: ucoErr } = await supaSrv
@@ -158,7 +157,6 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     currentOrgId = String(requestedOrgId);
   }
 
-  // 2) membership en org activa
   let mRow = null;
 
   if (currentOrgId) {
@@ -173,7 +171,6 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     if (!error && data?.org_id && data?.role) mRow = data;
   }
 
-  // 3) fallback default/primera
   if (!mRow) {
     if (requestedOrgId) {
       return {
@@ -224,7 +221,7 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
 
   let r = await supaSrv
     .from("personal")
-    .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
+    .select("id,is_deleted,vigente,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
     .eq("org_id", orgId)
     .eq("is_deleted", false)
     .or(orClause)
@@ -237,8 +234,8 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
 
   r = await supaSrv
     .from("personal")
-    .select("id,is_deleted,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
-    .eq("org_id", orgId) // Hardening: multi-tenant isolation
+    .select("id,is_deleted,vigente,updated_at,created_at,email,email_norm,identity_key,user_id,owner_id")
+    .eq("org_id", orgId)
     .or(orClause)
     .order("updated_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
@@ -250,7 +247,6 @@ async function findExistingByEmail({ supaSrv, orgId, emailNorm }) {
   return { row: null, error: null };
 }
 
-// ✅ evita violar unique (user_id, org_id)
 async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePersonalId }) {
   if (!desiredUserId) return { ok: true };
   const q = supaSrv
@@ -279,12 +275,6 @@ async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePerso
   };
 }
 
-/**
- * Obtiene el límite de personal activo permitido por organización según el plan.
- * Busca primero en org_billing_effective.effective_plan_code, luego en org_billing.plan_code,
- * y finalmente resuelve el límite en plan_entitlements.max_members.
- * Devuelve { planCode, maxMembers } o nulls si no hay datos.
- */
 async function getPersonalPlanLimit({ supaSrv, orgId }) {
   let planCode = null;
 
@@ -325,12 +315,10 @@ async function getPersonalPlanLimit({ supaSrv, orgId }) {
 
   return {
     planCode,
-    maxMembers:
-      typeof pe.data?.max_members === "number" ? pe.data.max_members : null,
+    maxMembers: typeof pe.data?.max_members === "number" ? pe.data.max_members : null,
   };
 }
 
-// Helper para contar personal activo por org_id
 async function countActivePersonal({ supaSrv, orgId }) {
   const { count, error } = await supaSrv
     .from("personal")
@@ -340,6 +328,32 @@ async function countActivePersonal({ supaSrv, orgId }) {
     .eq("is_deleted", false);
   if (error) throw error;
   return typeof count === "number" ? count : 0;
+}
+
+async function enforcePersonalActiveLimit({ supaSrv, orgId, existingRow = null, finalVigente = false, finalIsDeleted = false }) {
+  const finalActive = !!finalVigente && !finalIsDeleted;
+  if (!finalActive) return null;
+
+  const { planCode, maxMembers } = await getPersonalPlanLimit({ supaSrv, orgId });
+  if (typeof maxMembers !== "number") return null;
+
+  const activeCount = await countActivePersonal({ supaSrv, orgId });
+  const existingAlreadyActive = !!(existingRow && existingRow.vigente === true && existingRow.is_deleted === false);
+
+  if (activeCount >= maxMembers && !existingAlreadyActive) {
+    return {
+      ok: false,
+      error: "Plan limit reached",
+      details: {
+        resource: "personal",
+        plan_code: planCode,
+        limit: maxMembers,
+        current_active: activeCount,
+      },
+    };
+  }
+
+  return null;
 }
 
 /* =========================
@@ -362,7 +376,7 @@ async function handleList(req, res) {
   let query = supaSrv
     .from("personal")
     .select("*")
-    .eq("org_id", ctx.org_id) // Hardening: multi-tenant isolation
+    .eq("org_id", ctx.org_id)
     .eq("is_deleted", false)
     .order("nombre", { ascending: true })
     .limit(limit);
@@ -390,10 +404,7 @@ async function handleList(req, res) {
 
 async function handlePost(req, res) {
   const payload = (await readBody(req)) || {};
-  const requestedOrgId =
-    payload.org_id ||
-    payload.orgId ||
-    null;
+  const requestedOrgId = payload.org_id || payload.orgId || null;
 
   const ctxRes = await resolveContext(req, { requestedOrgId });
   if (!ctxRes.ok) return json(res, ctxRes.status, { ok: false, error: ctxRes.error, details: ctxRes.details });
@@ -405,81 +416,57 @@ async function handlePost(req, res) {
   }
 
   const nowIso = new Date().toISOString();
-
   const action = String(payload.action || "").toLowerCase();
   const id = payload.id ? String(payload.id) : null;
 
-  // TOGGLE
-    if (action === "toggle") {
-      if (!id) return json(res, 400, { ok: false, error: "Falta id" });
+  if (action === "toggle") {
+    if (!id) return json(res, 400, { ok: false, error: "Falta id" });
 
-      const { data: currentArr, error: currentErr } = await supaSrv
-        .from("personal")
-        .select("id, vigente, is_deleted")
-        .eq("id", id)
-        .eq("org_id", ctx.org_id)
-        .maybeSingle();
+    const { data: currentRow, error: currentErr } = await supaSrv
+      .from("personal")
+      .select("id, vigente, is_deleted")
+      .eq("id", id)
+      .eq("org_id", ctx.org_id)
+      .maybeSingle();
 
-      if (currentErr || !currentArr) {
-        return json(res, 404, { ok: false, error: "Not found" });
-      }
+    if (currentErr || !currentRow) {
+      return json(res, 404, { ok: false, error: "Not found" });
+    }
 
-      const wasVigente = !!currentArr.vigente;
-      const isDeleted = !!currentArr.is_deleted;
-      const nextVigente = !wasVigente;
+    const nextVigente = !Boolean(currentRow.vigente);
 
-      // Enforce only on activation false -> true
-      if (!wasVigente && nextVigente && !isDeleted) {
-        const { planCode, maxMembers } = await getPersonalPlanLimit({
-          supaSrv,
-          orgId: ctx.org_id,
-        });
+    const limitError = await enforcePersonalActiveLimit({
+      supaSrv,
+      orgId: ctx.org_id,
+      existingRow: currentRow,
+      finalVigente: nextVigente,
+      finalIsDeleted: Boolean(currentRow.is_deleted),
+    });
+    if (limitError) return json(res, 409, limitError);
 
-        if (typeof maxMembers === "number") {
-          const activeCount = await countActivePersonal({
-            supaSrv,
-            orgId: ctx.org_id,
-          });
+    const { data: updArr, error: updErr } = await supaSrv
+      .from("personal")
+      .update({ vigente: nextVigente, updated_at: nowIso })
+      .eq("id", id)
+      .eq("org_id", ctx.org_id)
+      .select("*")
+      .limit(1);
 
-          if (activeCount >= maxMembers) {
-            return json(res, 409, {
-              ok: false,
-              error: "Plan limit reached",
-              details: {
-                resource: "personal",
-                plan_code: planCode,
-                limit: maxMembers,
-                current_active: activeCount,
-              },
-            });
-          }
-        }
-      }
-
-      const { data: updArr, error: updErr } = await supaSrv
-        .from("personal")
-        .update({ vigente: nextVigente, updated_at: nowIso })
-        .eq("id", id)
-        .eq("org_id", ctx.org_id)
-        .select("*")
-        .limit(1);
-
-      if (updErr) {
-        return json(res, 500, {
-          ok: false,
-          error: "No se pudo cambiar estado",
-          details: updErr.message,
-        });
-      }
-
-      return json(res, 200, {
-        ok: true,
-        item: (updArr || [])[0] || null,
-        toggled: true,
+    if (updErr) {
+      return json(res, 500, {
+        ok: false,
+        error: "No se pudo cambiar estado",
+        details: updErr.message,
       });
     }
 
-  // DELETE (soft)
+    return json(res, 200, {
+      ok: true,
+      item: (updArr || [])[0] || null,
+      toggled: true,
+    });
+  }
+
   if (action === "delete") {
     if (!id) return json(res, 400, { ok: false, error: "Falta id" });
 
@@ -499,7 +486,6 @@ async function handlePost(req, res) {
     return json(res, 200, { ok: true, item: del, deleted: true });
   }
 
-  // CREATE/REVIVE
   const nombre = String(payload.nombre || "").trim();
   const apellido = String(payload.apellido || "").trim();
   const emailNorm = normEmail(payload.email);
@@ -513,7 +499,6 @@ async function handlePost(req, res) {
 
   const vigente = payload.vigente === undefined ? true : !!payload.vigente;
 
-  // ⚠️ email_norm e identity_key son GENERATED ALWAYS -> NO se envían
   const baseRow = {
     nombre,
     apellido: apellido || null,
@@ -525,10 +510,8 @@ async function handlePost(req, res) {
     updated_at: nowIso,
   };
 
-  // user_id solo si viene explícito (vinculación real a auth.users)
   const desiredUserId = isUuid(payload.user_id) ? String(payload.user_id) : null;
 
-  // si se intenta vincular, validar unique (user_id, org_id)
   if (desiredUserId) {
     const chk = await ensureUserOrgUnique({
       supaSrv,
@@ -549,9 +532,7 @@ async function handlePost(req, res) {
 
   if (findErr) return json(res, 500, { ok: false, error: "No se pudo validar duplicado", details: findErr.message });
 
-  // UPDATE/REVIVE
   if (existing?.id) {
-    // si quieren vincular a user_id explícitamente, validar unique excluyendo este registro
     if (desiredUserId) {
       const chk = await ensureUserOrgUnique({
         supaSrv,
@@ -564,10 +545,18 @@ async function handlePost(req, res) {
       }
     }
 
+    const limitError = await enforcePersonalActiveLimit({
+      supaSrv,
+      orgId: ctx.org_id,
+      existingRow: existing,
+      finalVigente: vigente,
+      finalIsDeleted: false,
+    });
+    if (limitError) return json(res, 409, limitError);
+
     const updateRow = {
       ...baseRow,
       owner_id: existing.owner_id || user.id,
-      // ✅ NO forzar user.id aquí (evita violar personal_user_org_unique)
       ...(desiredUserId ? { user_id: desiredUserId } : {}),
       is_deleted: false,
       deleted_at: null,
@@ -586,12 +575,20 @@ async function handlePost(req, res) {
     return json(res, 200, { ok: true, item: (updArr || [])[0] || null, revived: true });
   }
 
-  // INSERT
+  const limitError = await enforcePersonalActiveLimit({
+    supaSrv,
+    orgId: ctx.org_id,
+    existingRow: null,
+    finalVigente: vigente,
+    finalIsDeleted: false,
+  });
+  if (limitError) return json(res, 409, limitError);
+
   const insertRow = {
     ...baseRow,
     org_id: ctx.org_id,
-    owner_id: user.id,      // quién lo creó
-    user_id: desiredUserId, // ✅ normalmente NULL; solo si se vincula explícitamente
+    owner_id: user.id,
+    user_id: desiredUserId,
     created_at: nowIso,
     is_deleted: false,
     position_interval_sec: 300,
@@ -619,72 +616,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "GET") return await handleList(req, res);
-    if (req.method === "POST" && payload?.action === "toggle") {
-      // ...existing code para obtener id, org_id, etc...
-      // Obtener registro actual
-      const { data: currentArr, error: currentErr } = await supaSrv
-        .from("personal")
-        .select("id, vigente, is_deleted")
-        .eq("id", id)
-        .eq("org_id", ctx.org_id)
-        .maybeSingle();
-      if (currentErr || !currentArr) {
-        return json(res, 404, { ok: false, error: "Not found" });
-      }
-      const wasVigente = !!currentArr.vigente;
-      const isDeleted = !!currentArr.is_deleted;
-      const nextVigente = !wasVigente;
-
-      // Enforce only on activation false -> true
-      if (!wasVigente && nextVigente && !isDeleted) {
-        const { planCode, maxMembers } = await getPersonalPlanLimit({
-          supaSrv,
-          orgId: ctx.org_id,
-        });
-
-        if (typeof maxMembers === "number") {
-          const activeCount = await countActivePersonal({
-            supaSrv,
-            orgId: ctx.org_id,
-          });
-
-          if (activeCount >= maxMembers) {
-            return json(res, 409, {
-              ok: false,
-              error: "Plan limit reached",
-              details: {
-                resource: "personal",
-                plan_code: planCode,
-                limit: maxMembers,
-                current_active: activeCount,
-              },
-            });
-          }
-        }
-      }
-
-      const { data: updArr, error: updErr } = await supaSrv
-        .from("personal")
-        .update({ vigente: nextVigente, updated_at: nowIso })
-        .eq("id", id)
-        .eq("org_id", ctx.org_id)
-        .select("*")
-        .limit(1);
-
-      if (updErr) {
-        return json(res, 500, {
-          ok: false,
-          error: "No se pudo cambiar estado",
-          details: updErr.message,
-        });
-      }
-
-      return json(res, 200, {
-        ok: true,
-        item: (updArr || [])[0] || null,
-        toggled: true,
-      });
-    }
     if (req.method === "POST") return await handlePost(req, res);
 
     res.setHeader("Allow", "GET,POST,OPTIONS");
