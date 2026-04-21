@@ -560,6 +560,14 @@ async function handleList(req, res) {
 }
 
 async function handlePost(req, res) {
+    // Log después de buscar existing
+    console.log("[api/personal] existing by email", {
+      orgId: ctx.org_id,
+      emailNorm,
+      hasExisting: Boolean(existing?.id),
+      existingId: existing?.id || null,
+      existingDeleted: existing?.is_deleted ?? null,
+    });
   const payload = await readBody(req);
 
   const ctxRes = await resolveContext(req, {
@@ -711,6 +719,12 @@ async function handlePost(req, res) {
 
   // Si existe registro por email/org: nunca aplicar anti-seat-cycling, siempre update/revive
   if (existing?.id) {
+    console.log("[api/personal] branch", {
+      type: "update_or_revive",
+      orgId: ctx.org_id,
+      emailNorm,
+      existingId: existing?.id || null,
+    });
     const updateRow = {
       ...baseRow,
       owner_id: existing.owner_id || user.id,
@@ -744,6 +758,11 @@ async function handlePost(req, res) {
 
   // Solo aplicar anti-seat-cycling si es alta nueva incompatible
   if (desiredUserId) {
+    console.log("[api/personal] branch", {
+      type: "insert_new",
+      orgId: ctx.org_id,
+      emailNorm,
+    });
     const chk = await ensureUserOrgUnique({
       supaSrv,
       orgId: ctx.org_id,
