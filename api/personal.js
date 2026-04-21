@@ -413,24 +413,34 @@ async function handlePost(req, res) {
   if (action === "toggle") {
     if (!id) return json(res, 400, { ok: false, error: "Falta id" });
 
-    // Obtener registro actual
     const { data: currentArr, error: currentErr } = await supaSrv
       .from("personal")
       .select("id, vigente, is_deleted")
       .eq("id", id)
       .eq("org_id", ctx.org_id)
       .maybeSingle();
+
     if (currentErr || !currentArr) {
       return json(res, 404, { ok: false, error: "Not found" });
     }
+
     const wasVigente = !!currentArr.vigente;
     const isDeleted = !!currentArr.is_deleted;
-    const willBeVigente = payload.vigente === undefined ? !wasVigente : !!payload.vigente;
-    // Solo validar si el cambio es false->true y no está borrado
-    if (!wasVigente && willBeVigente && !isDeleted) {
-      const { planCode, maxMembers } = await getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id });
+    const nextVigente = !wasVigente;
+
+    // Enforce only on activation false -> true
+    if (!wasVigente && nextVigente && !isDeleted) {
+      const { planCode, maxMembers } = await getPersonalPlanLimit({
+        supaSrv,
+        orgId: ctx.org_id,
+      });
+
       if (typeof maxMembers === "number") {
-        const activeCount = await countActivePersonal({ supaSrv, orgId: ctx.org_id });
+        const activeCount = await countActivePersonal({
+          supaSrv,
+          orgId: ctx.org_id,
+        });
+
         if (activeCount >= maxMembers) {
           return json(res, 409, {
             ok: false,
@@ -446,20 +456,27 @@ async function handlePost(req, res) {
       }
     }
 
-    const nextVigente = !currentArr.vigente;
-
     const { data: updArr, error: updErr } = await supaSrv
       .from("personal")
       .update({ vigente: nextVigente, updated_at: nowIso })
       .eq("id", id)
-      .eq("org_id", ctx.org_id) // Hardening: multi-tenant isolation
       .eq("org_id", ctx.org_id)
       .select("*")
       .limit(1);
 
-    if (updErr) return json(res, 500, { ok: false, error: "No se pudo cambiar estado", details: updErr.message });
+    if (updErr) {
+      return json(res, 500, {
+        ok: false,
+        error: "No se pudo cambiar estado",
+        details: updErr.message,
+      });
+    }
 
-    return json(res, 200, { ok: true, item: (updArr || [])[0] || null, toggled: true });
+    return json(res, 200, {
+      ok: true,
+      item: (updArr || [])[0] || null,
+      toggled: true,
+    });
   }
 
   // DELETE (soft)
@@ -616,12 +633,21 @@ export default async function handler(req, res) {
       }
       const wasVigente = !!currentArr.vigente;
       const isDeleted = !!currentArr.is_deleted;
-      const willBeVigente = payload.vigente === undefined ? !wasVigente : !!payload.vigente;
-      // Solo validar si el cambio es false->true y no está borrado
-      if (!wasVigente && willBeVigente && !isDeleted) {
-        const { planCode, maxMembers } = await getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id });
+      const nextVigente = !wasVigente;
+
+      // Enforce only on activation false -> true
+      if (!wasVigente && nextVigente && !isDeleted) {
+        const { planCode, maxMembers } = await getPersonalPlanLimit({
+          supaSrv,
+          orgId: ctx.org_id,
+        });
+
         if (typeof maxMembers === "number") {
-          const activeCount = await countActivePersonal({ supaSrv, orgId: ctx.org_id });
+          const activeCount = await countActivePersonal({
+            supaSrv,
+            orgId: ctx.org_id,
+          });
+
           if (activeCount >= maxMembers) {
             return json(res, 409, {
               ok: false,
@@ -636,7 +662,28 @@ export default async function handler(req, res) {
           }
         }
       }
-      // ...existing code para toggle...
+
+      const { data: updArr, error: updErr } = await supaSrv
+        .from("personal")
+        .update({ vigente: nextVigente, updated_at: nowIso })
+        .eq("id", id)
+        .eq("org_id", ctx.org_id)
+        .select("*")
+        .limit(1);
+
+      if (updErr) {
+        return json(res, 500, {
+          ok: false,
+          error: "No se pudo cambiar estado",
+          details: updErr.message,
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        item: (updArr || [])[0] || null,
+        toggled: true,
+      });
     }
     if (req.method === "POST") return await handlePost(req, res);
 
