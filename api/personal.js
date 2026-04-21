@@ -436,66 +436,34 @@ async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePerso
 ========================= */
 
 async function handleList(req, res) {
-    // Debug temporal: log org_id en GET
-    console.log("[PERSONAL LIST] org_id:", ctxRes?.ctx?.org_id);
-  const url = new URL(req.url, `http://${req.headers.host}`);
-  const requestedOrgId =
-    url.searchParams.get("org_id") ||
-    url.searchParams.get("orgId") ||
+  // Nueva lógica: aceptar org_id desde query, validar, loggear y devolver 400 si falta
+  const orgId =
+    (typeof req.query?.org_id === "string" && req.query.org_id.trim()) ||
+    (typeof req.query?.orgId === "string" && req.query.orgId.trim()) ||
+    (typeof ctxRes?.ctx?.org_id === "string" && ctxRes.ctx.org_id.trim()) ||
     null;
 
-  const ctxRes = await resolveContext(req, {
-    requestedOrgId,
-    body: {},
-  });
+  console.log("[PERSONAL GET] query.org_id =", req.query?.org_id);
+  console.log("[PERSONAL GET] ctx.org_id =", ctxRes?.ctx?.org_id);
+  console.log("[PERSONAL GET] resolved orgId =", orgId);
 
-  if (!ctxRes.ok) {
-    return json(res, ctxRes.status, {
-      ok: false,
-      error: ctxRes.error,
-      details: ctxRes.details,
-    });
+  if (!orgId) {
+    return json(res, 400, { ok: false, error: "Missing org_id" });
   }
 
   const { ctx, supaSrv } = ctxRes;
 
-  const q = String(url.searchParams.get("q") || "").trim();
-  const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 500), 1), 2000);
-
-  let query = supaSrv
+  const { data, error } = await supaSrv
     .from("personal")
     .select("*")
-    .eq("org_id", ctx.org_id)
+    .eq("org_id", orgId)
     .eq("is_deleted", false)
-    .order("updated_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false, nullsFirst: false })
-    .limit(limit);
-
-  if (onlyActive) {
-    query = query.eq("vigente", true);
-  }
-
-  if (q) {
-    const qNorm = q.toLowerCase();
-    query = query.or(
-      [
-        `nombre.ilike.%${q}%`,
-        `apellido.ilike.%${q}%`,
-        `email.ilike.%${q}%`,
-        `email_norm.ilike.%${qNorm}%`,
-        `documento.ilike.%${q}%`,
-        `telefono.ilike.%${q}%`,
-      ].join(",")
-    );
-  }
-
-  const { data, error } = await query;
+    .order("created_at", { ascending: false });
 
   if (error) {
     return json(res, 500, {
       ok: false,
-      error: "No se pudo listar personal",
+      error: "Could not list personnel",
       details: error.message,
     });
   }
@@ -503,6 +471,7 @@ async function handleList(req, res) {
   return json(res, 200, {
     ok: true,
     items: Array.isArray(data) ? data : [],
+    version: "personal-api-v31-clean-universal",
   });
 }
 
