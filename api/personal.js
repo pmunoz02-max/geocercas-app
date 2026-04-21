@@ -627,7 +627,6 @@ async function handlePost(req, res) {
     nombre,
     apellido: apellido || null,
     email: emailNorm,
-    email_norm: emailNorm,
     documento,
     telefono: telefonoE164 || null,
     telefono_raw: telefonoRaw || null,
