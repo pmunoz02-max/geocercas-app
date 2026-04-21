@@ -734,6 +734,13 @@ async function handlePost(req, res) {
     .limit(1);
 
   if (error) {
+    if (error.code === "23505") {
+      return json(res, 409, {
+        ok: false,
+        error: "Personal ya existe (email o teléfono duplicado)",
+        details: error.message,
+      });
+    }
     return json(res, 500, {
       ok: false,
       error: "No se pudo crear personal",
