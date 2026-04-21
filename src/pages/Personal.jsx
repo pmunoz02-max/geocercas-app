@@ -188,7 +188,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionEdit", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -200,22 +200,11 @@ export default function Personal() {
       return;
     }
 
-    const prevItems = items;
-    setItems((curr) =>
-      curr.map((r) => (getRowId(r) === id ? { ...r, vigente: !r.vigente } : r))
-    );
-
     try {
       setBusy(true);
-      const item = await toggleVigente(id, activeOrgId);
-      if (item && getRowId(item)) {
-        setItems((curr) => upsertIntoList(curr, item));
-      } else {
-        // fallback: recarga
-        await load();
-      }
+      await upsertPersonal({ id, action: "toggle" }, resolvedOrgId);
+      await load();
     } catch (e) {
-      setItems(prevItems);
       setMsg(
         e?.message ||
           t("personal.errorToggle", {
@@ -231,7 +220,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionDelete", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -248,17 +237,12 @@ export default function Personal() {
     );
     if (!ok) return;
 
-    // âœ… UI inmediato
-    const prevItems = items;
-    setItems((curr) => curr.filter((r) => getRowId(r) !== id));
-
     try {
       setBusy(true);
-      await deletePersonal(id, activeOrgId);
-      // NO hacemos load() aquÃ­ para evitar que reaparezca si el backend es soft-delete + list cache.
+      await upsertPersonal({ id, action: "delete" }, resolvedOrgId);
+      await load();
       setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
-      setItems(prevItems);
       setMsg(
         e?.message ||
           t("personal.errorDelete", {
