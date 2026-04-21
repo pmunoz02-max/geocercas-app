@@ -213,46 +213,30 @@ export default function Personal() {
   }
 
   async function onToggle(row) {
-    if (!canEdit) {
-      setMsg(
-        t("personal.errorNoPermissionEdit", {
-          defaultValue: "You don't have permission.",
-        })
-      );
-      return;
-    }
-
-    const id = getRowId(row);
-    if (!id) {
-      setMsg("Missing row id (toggle).");
-      return;
-    }
+    const id = row?.id;
+    if (!id) return;
 
     try {
-      setRowBusyId(id);
-      setMsg("");
+      setBusy(true);
 
-      let updated = null;
-      if (typeof toggleVigente === "function") {
-        updated = await toggleVigente(id, resolvedOrgId);
-      } else {
-        updated = await upsertPersonal({ id, action: "toggle" }, resolvedOrgId);
-      }
+      await upsertPersonal(
+        { id, action: "toggle" },
+        resolvedOrgId
+      );
 
-      if (updated && getRowId(updated)) {
-        setItems((curr) => upsertIntoList(curr, updated));
+      // 🔥 FIX UX CLAVE
+      if (row?.vigente && onlyActive) {
+        setOnlyActive(false);
+        await load({ onlyActiveOverride: false });
+        setMsg("Registro desactivado. Se muestran también los inactivos.");
       } else {
         await load();
       }
+
     } catch (e) {
-      setMsg(
-        e?.message ||
-          t("personal.errorToggle", {
-            defaultValue: "Could not change status.",
-          })
-      );
+      setMsg("Error cambiando estado");
     } finally {
-      setRowBusyId(null);
+      setBusy(false);
     }
   }
 
@@ -369,7 +353,7 @@ export default function Personal() {
             checked={onlyActive}
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
-          {t("personal.onlyActive", { defaultValue: "Only active" })}
+          {t("personal.onlyActive", { defaultValue: "Mostrar solo activos" })}
         </label>
 
         <button
