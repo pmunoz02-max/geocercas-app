@@ -1,12 +1,7 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
-import {
-  listPersonal,
-  upsertPersonal,
-  toggleVigente,
-  deletePersonal,
-} from "../lib/personalApi.js";
+import { listPersonal, upsertPersonal } from "../lib/personalApi.js";
 
 function Modal({ open, title, children, onClose }) {
   if (!open) return null;
@@ -100,6 +95,8 @@ export default function Personal() {
   }, [resolvedOrgId]);
 
   async function load(opts = {}) {
+    if (!resolvedOrgId || !isLoggedIn) return;
+
     const onlyActiveValue =
       typeof opts.onlyActiveOverride === "boolean"
         ? opts.onlyActiveOverride
@@ -110,18 +107,34 @@ export default function Personal() {
         ? opts.qOverride
         : q;
 
-    const data = await listPersonal(resolvedOrgId, {
-      q: qValue || "",
-      onlyActive: onlyActiveValue,
-    });
+    try {
+      setBusy(true);
+      setMsg("");
 
-    setItems(Array.isArray(data?.items) ? data.items : []);
+      const data = await listPersonal(resolvedOrgId, {
+        q: qValue || "",
+        onlyActive: onlyActiveValue,
+      });
+
+      setItems(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+      setItems([]);
+      setMsg(
+        e?.message ||
+          t("personal.errorLoad", {
+            defaultValue: "Could not load personnel.",
+          })
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   useEffect(() => {
-    if (!resolvedOrgId) return;
+    if (!resolvedOrgId || !ready || !isLoggedIn) return;
     load();
-  }, [resolvedOrgId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedOrgId, ready, isLoggedIn]);
 
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -179,7 +192,8 @@ export default function Personal() {
         vigente: true,
       });
       setQ("");
-      load({ qOverride: "" });
+      await load({ qOverride: "" });
+
       setMsg(
         t("personal.bannerCreated", {
           defaultValue: "Personnel created successfully.",
@@ -198,47 +212,107 @@ export default function Personal() {
   }
 
   async function onToggle(row) {
-    const id = row?.id;
-    if (!id) return;
+    if (!canEdit) {
+      setMsg(
+        t("personal.errorNoPermissionEdit", {
+          defaultValue: "You don't have permission.",
+        })
+      );
+      return;
+    }
+
+    const id = getRowId(row);
+    if (!id) {
+      setMsg("Missing row id (toggle).");
+      return;
+    }
 
     try {
       setRowBusyId(id);
+      setMsg("");
 
-      await upsertPersonal(
-        { id, action: "toggle" },
-        resolvedOrgId
-      );
+      const result = await upsertPersonal({ id, action: "toggle" }, resolvedOrgId);
+      const updatedItem = result?.item || null;
 
-      // Si estaba activo y el filtro ocultaría el registro, quitamos el filtro
+      if (updatedItem) {
+        setItems((curr) => upsertIntoList(curr, updatedItem));
+      }
+
       if (row?.vigente && onlyActive) {
         setOnlyActive(false);
         await load({ onlyActiveOverride: false });
-        setMsg("Registro desactivado. Se muestran también los inactivos.");
+        setMsg(
+          t("personal.bannerDeactivatedShowInactive", {
+            defaultValue: "Record deactivated. Inactive records are now shown.",
+          })
+        );
       } else {
         await load();
+        setMsg(
+          row?.vigente
+            ? t("personal.bannerDeactivated", {
+                defaultValue: "Personnel deactivated.",
+              })
+            : t("personal.bannerActivated", {
+                defaultValue: "Personnel activated.",
+              })
+        );
       }
     } catch (e) {
-      console.error("toggle error", e);
+      setMsg(
+        e?.message ||
+          t("personal.errorToggle", {
+            defaultValue: "Could not change status.",
+          })
+      );
+    } finally {
+      setRowBusyId(null);
     }
   }
 
   async function onDelete(row) {
-    const id = row?.id;
-    if (!id) return;
+    if (!canEdit) {
+      setMsg(
+        t("personal.errorNoPermissionDelete", {
+          defaultValue: "You don't have permission.",
+        })
+      );
+      return;
+    }
 
-    if (!confirm("¿Eliminar este registro?")) return;
+    const id = getRowId(row);
+    if (!id) {
+      setMsg("Missing row id (delete).");
+      return;
+    }
+
+    const ok = window.confirm(
+      t("personal.confirmDelete", { defaultValue: "Delete this record?" })
+    );
+    if (!ok) return;
 
     try {
       setRowBusyId(id);
+      setMsg("");
 
-      await upsertPersonal(
-        { id, action: "delete" },
-        resolvedOrgId
-      );
-
+      await upsertPersonal({ id, action: "delete" }, resolvedOrgId);
+      setItems((curr) => removeFromList(curr, id));
       await load();
+
+      setMsg(
+        t("personal.bannerDeleted", {
+          defaultValue: "Deleted.",
+        })
+      );
     } catch (e) {
-      console.error("delete error", e);
+      setMsg(
+        e?.message ||
+          t("personal.errorDelete", {
+            defaultValue: "Could not delete.",
+          })
+      );
+    } finally {
+      setRowBusyId(null);
     }
   }
 
@@ -300,11 +374,7 @@ export default function Personal() {
             defaultValue: "Search by name, last name, email or phone...",
           })}
           value={q}
-          onChange={async (e) => {
-            const val = e.target.value;
-            setQ(val);
-            await load({ qOverride: val });
-          }}
+          onChange={(e) => setQ(e.target.value)}
         />
 
         <label className="inline-flex items-center gap-2 text-sm text-gray-200">
@@ -317,7 +387,7 @@ export default function Personal() {
               await load({ onlyActiveOverride: val });
             }}
           />
-          {t("personal.onlyActive", { defaultValue: "Mostrar solo activos" })}
+          {t("personal.onlyActive", { defaultValue: "Show only active" })}
         </label>
 
         <button
@@ -348,7 +418,9 @@ export default function Personal() {
             <thead className="bg-gray-50 text-gray-600">
               <tr>
                 <th className="p-3">{t("personal.tableName", { defaultValue: "Name" })}</th>
-                <th className="p-3">{t("personal.tableLastName", { defaultValue: "Last name" })}</th>
+                <th className="p-3">
+                  {t("personal.tableLastName", { defaultValue: "Last name" })}
+                </th>
                 <th className="p-3">{t("personal.tableEmail", { defaultValue: "Email" })}</th>
                 <th className="p-3">{t("personal.tablePhone", { defaultValue: "Phone" })}</th>
                 <th className="p-3">{t("personal.tableActive", { defaultValue: "Active" })}</th>
@@ -358,7 +430,8 @@ export default function Personal() {
             <tbody>
               {filtered.map((r) => {
                 const rid = getRowId(r) ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
-                const isRowBusy = rowBusyId === getRowId(r);
+                const rowId = getRowId(r);
+                const isRowBusy = rowBusyId === rowId;
 
                 return (
                   <tr key={rid} className="border-t">
@@ -372,21 +445,29 @@ export default function Personal() {
                         : t("personal.no", { defaultValue: "No" })}
                     </td>
                     <td className="p-3">
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div className="flex gap-2">
                         <button
                           type="button"
                           onClick={() => onToggle(r)}
-                          disabled={rowBusyId === r.id}
+                          disabled={!canEdit || isRowBusy}
+                          className="rounded-lg border px-3 py-1"
                         >
-                          {r.vigente ? "Deactivate" : "Activate"}
+                          {r?.vigente
+                            ? t("personal.actionDeactivate", {
+                                defaultValue: "Deactivate",
+                              })
+                            : t("personal.actionActivate", {
+                                defaultValue: "Activate",
+                              })}
                         </button>
 
                         <button
                           type="button"
                           onClick={() => onDelete(r)}
-                          disabled={rowBusyId === r.id}
+                          disabled={!canEdit || isRowBusy}
+                          className="rounded-lg border border-red-200 px-3 py-1 text-red-700"
                         >
-                          Delete
+                          {t("personal.actionDelete", { defaultValue: "Delete" })}
                         </button>
                       </div>
                     </td>
@@ -424,7 +505,9 @@ export default function Personal() {
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldPhonePlaceholder", { defaultValue: "Phone" })}
+            placeholder={t("personal.fieldPhonePlaceholder", {
+              defaultValue: "Phone",
+            })}
             value={form.telefono}
             onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
           />
