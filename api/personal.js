@@ -714,28 +714,8 @@ async function handlePost(req, res) {
     });
   }
 
-  if (desiredUserId) {
-    console.log("[api/personal] branch", {
-      type: "insert_new",
-      orgId: ctx.org_id,
-      emailNorm,
-    });
-
-    const chk = await ensureUserOrgUnique({
-      supaSrv,
-      orgId: ctx.org_id,
-      desiredUserId,
-      excludePersonalId: null,
-    });
-
-    if (!chk.ok) {
-      return json(res, 409, {
-        ok: false,
-        error: "Conflicto de vínculo",
-        details: chk.details || chk.error?.message,
-      });
-    }
-  }
+  // Anti-seat-cycling deshabilitado en preview.
+  // Se reemplazará por control de cupos activos por plan.
 
   const insertRow = {
     ...baseRow,
