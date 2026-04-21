@@ -1,7 +1,6 @@
-// api/personal.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v22-bearer-cookie-universal";
+const VERSION = "personal-api-v30-clean-universal";
 
 /* =========================
    Utils
@@ -18,7 +17,6 @@ function getCookie(req, name) {
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("X-Api-Version", VERSION);
-
   res.setHeader("Cache-Control", "private, no-store, no-cache, max-age=0, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
@@ -48,350 +46,360 @@ function requireWriteRole(role) {
 
 async function readBody(req) {
   if (req.body && typeof req.body === "object") return req.body;
+
   if (typeof req.body === "string") {
     try {
       return JSON.parse(req.body);
-    async function resolveContext(req, { requestedOrgId = null } = {}) {
-      // 1. Determinar org_id solicitado
-      let explicitOrgId = null;
-      try {
-        explicitOrgId = req.query?.org_id || req.query?.orgId || null;
-      } catch {}
-      let bodyOrgId = null;
-      try {
-        if (req.body && typeof req.body === "object") {
-          bodyOrgId = req.body.org_id || req.body.orgId || null;
-        }
-      } catch {}
-      // Log de entrada
-      console.log("[api/personal] resolveContext: entrada", {
-        requestedOrgId,
-        explicitOrgId,
-        bodyOrgId,
-      });
-
-      const SUPABASE_URL = getEnv([
-        "SUPABASE_URL",
-        "VITE_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_URL",
-      ]);
-      const SUPABASE_ANON_KEY = getEnv([
-        "SUPABASE_ANON_KEY",
-        "VITE_SUPABASE_ANON_KEY",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-      ]);
-      const SUPABASE_SERVICE_ROLE_KEY = getEnv([
-        "SUPABASE_SERVICE_ROLE_KEY",
-        "SUPABASE_SERVICE_KEY",
-      ]);
-
-      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-        return {
-          ok: false,
-          status: 500,
-          error: "Server misconfigured",
-          details: {
-            has: {
-              SUPABASE_URL: Boolean(SUPABASE_URL),
-              SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-              SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
-            },
-          },
-        };
-      }
-
-      const authHeader = req.headers.authorization || req.headers.Authorization || "";
-      const bearer = authHeader.startsWith("Bearer ")
-        ? authHeader.slice(7).trim()
-        : "";
-      const cookieToken = getCookie(req, "tg_at") || "";
-      const accessToken = bearer || cookieToken;
-
-      console.log("[api/personal] auth debug", {
-        hasAuthHeader: Boolean(authHeader),
-        hasBearer: Boolean(bearer),
-        hasCookieToken: Boolean(cookieToken),
-        hasAccessToken: Boolean(accessToken),
-        requestedOrgId: requestedOrgId || null,
-        explicitOrgId,
-        bodyOrgId,
-      });
-
-      if (!accessToken) {
-        return {
-          ok: false,
-          status: 401,
-          error: "Not authenticated",
-          details: "Missing access token (Bearer or cookie)",
-        };
-      }
-
-      const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-        global: {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        },
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      });
-
-      const { data: userData, error: userErr } = await supaUser.auth.getUser();
-
-      console.log("[api/personal] getUser result", {
-        hasUser: Boolean(userData?.user?.id),
-        userId: userData?.user?.id || null,
-        userErr: userErr?.message || null,
-      });
-
-      if (userErr || !userData?.user?.id) {
-        return {
-          ok: false,
-          status: 401,
-          error: "Invalid session",
-          details: userErr?.message || "No user",
-        };
-      }
-
-      const user = userData.user;
-
-      const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      });
-
-      let currentOrgId = null;
-
-      try {
-        const { data: uco, error: ucoErr } = await supaSrv
-          .from("user_current_org")
-          .select("org_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
-      } catch (e) {
-        console.warn("[api/personal] user_current_org lookup warning", e?.message || e);
-      }
-
-      // Prioridad: requestedOrgId > explicitOrgId > bodyOrgId > currentOrgId
-      let resolvedOrgId = null;
-      if (requestedOrgId && isUuid(requestedOrgId)) {
-        resolvedOrgId = String(requestedOrgId);
-      } else if (explicitOrgId && isUuid(explicitOrgId)) {
-        resolvedOrgId = String(explicitOrgId);
-      } else if (bodyOrgId && isUuid(bodyOrgId)) {
-        resolvedOrgId = String(bodyOrgId);
-      } else if (currentOrgId && isUuid(currentOrgId)) {
-        resolvedOrgId = String(currentOrgId);
-      }
-
-      console.log("[api/personal] resolveContext: resolvedOrgId", {
-        resolvedOrgId,
-        requestedOrgId,
-        explicitOrgId,
-        bodyOrgId,
-        currentOrgId,
-        userId: user.id,
-      });
-
-      let mRow = null;
-
-      async function findMembershipForOrg(orgId) {
-        if (!orgId) return null;
-
-        // 1. is_active
-        let r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("org_id", orgId)
-          .eq("is_active", true)
-          .limit(2);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findMembershipForOrg: multiple is_active memberships", { orgId, userId: user.id, count: r.data.length });
-          }
-          return r.data[0];
-        }
-
-        // 2. revoked_at
-        r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("org_id", orgId)
-          .is("revoked_at", null)
-          .limit(2);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findMembershipForOrg: multiple revoked_at memberships", { orgId, userId: user.id, count: r.data.length });
-          }
-          return r.data[0];
-        }
-
-        // 3. fallback
-        r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("org_id", orgId)
-          .limit(2);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findMembershipForOrg: multiple fallback memberships", { orgId, userId: user.id, count: r.data.length });
-          }
-          return r.data[0];
-        }
-
-        console.warn("[api/personal] membership org lookup failed", {
-          orgId,
-          userId: user.id,
-          err1: r.error?.message || null,
-        });
-        return null;
-      }
-
-      async function findAnyMembership() {
-        // 1. is_active
-        let r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-          .limit(2);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findAnyMembership: multiple is_active memberships", { userId: user.id, count: r.data.length });
-          }
-          return r.data[0];
-        }
-
-        // 2. revoked_at
-        r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .is("revoked_at", null)
-          .order("created_at", { ascending: false })
-          .limit(2);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findAnyMembership: multiple revoked_at memberships", { userId: user.id, count: r.data.length });
-          }
-          return r.data[0];
-        }
-
-        // 3. fallback
-        r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(2);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findAnyMembership: multiple fallback memberships", { userId: user.id, count: r.data.length });
-          }
-          return r.data[0];
-        }
-
-        console.warn("[api/personal] membership fallback lookup failed", {
-          userId: user.id,
-          err1: r.error?.message || null,
-        });
-        return null;
-      }
-
-      if (resolvedOrgId) {
-        mRow = await findMembershipForOrg(resolvedOrgId);
-      }
-
-      if (!mRow) {
-        mRow = await findAnyMembership();
-      }
-
-      if (!resolvedOrgId) {
-        console.warn("[api/personal] resolveContext: missing org_id after all sources", {
-          requestedOrgId,
-          explicitOrgId,
-          bodyOrgId,
-          currentOrgId,
-          userId: user.id,
-        });
-        return {
-          ok: false,
-          status: 400,
-          error: "Missing org_id",
-          details: "No organization id provided or resolved from context",
-        };
-      }
-
-      if (!mRow?.org_id || !mRow?.role) {
-        console.warn("[api/personal] resolveContext: no valid membership found", {
-          resolvedOrgId,
-          userId: user.id,
-        });
-        return {
-          ok: false,
-          status: 403,
-          error: "Missing org/role context",
-          details: "No membership found for user in org",
-        };
-      }
-
-      return {
-        ok: true,
-        user,
-        ctx: {
-          org_id: String(mRow.org_id),
-          role: String(mRow.role),
-        },
-        supaSrv,
-      };
+    } catch {
+      return {};
     }
-  if (!mRow) {
-    if (requestedOrgId) {
-      return {
-        ok: false,
-        status: 403,
-        error: "Requested org is not available for current user",
-      };
-    }
-
-
-    let r = await supaSrv
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at, created_at, is_active")
-      .eq("user_id", user.id)
-      .is("revoked_at", null)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (r.error) {
-      r = await supaSrv
-        .from("memberships")
-        .select("org_id, role, is_default, created_at, is_active")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("is_default", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1);
-    }
-
-    const row = Array.isArray(r.data) && r.data.length ? r.data[0] : null;
-    if (row?.org_id && row?.role) mRow = row;
   }
 
-  if (!mRow?.org_id || !mRow?.role) {
+  return await new Promise((resolve) => {
+    let data = "";
+    req.on("data", (chunk) => {
+      data += chunk;
+    });
+    req.on("end", () => {
+      if (!data) return resolve({});
+      try {
+        resolve(JSON.parse(data));
+      } catch {
+        resolve({});
+      }
+    });
+    req.on("error", () => resolve({}));
+  });
+}
+
+function normalizeOrgId(value) {
+  if (typeof value === "string") {
+    const v = value.trim();
+    if (!v || v === "[object Object]") return null;
+    return v;
+  }
+
+  if (value && typeof value === "object" && typeof value.id === "string") {
+    const v = value.id.trim();
+    if (!v || v === "[object Object]") return null;
+    return v;
+  }
+
+  return null;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    String(value || "")
+  );
+}
+
+function normEmail(v) {
+  const s = String(v || "").trim().toLowerCase();
+  return s || null;
+}
+
+function toE164(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return null;
+  const cleaned = raw.replace(/[^\d+]/g, "");
+  if (!cleaned) return null;
+
+  if (cleaned.startsWith("+")) {
+    return /^\+\d{8,15}$/.test(cleaned) ? cleaned : null;
+  }
+
+  const digits = cleaned.replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 15) return null;
+
+  return `+${digits}`;
+}
+
+function buildUserClient({ supabaseUrl, anonKey, accessToken }) {
+  return createClient(supabaseUrl, anonKey, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+function buildServiceClient({ supabaseUrl, serviceRoleKey }) {
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
+/* =========================
+   Context resolution
+========================= */
+
+async function findMembershipForOrg({ supaSrv, userId, orgId }) {
+  if (!userId || !orgId) return null;
+
+  // 1) Prefer is_active = true
+  let r = await supaSrv
+    .from("memberships")
+    .select("org_id, role, created_at")
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (!r.error && Array.isArray(r.data) && r.data.length) {
+    if (r.data.length > 1) {
+      console.warn("[api/personal] multiple memberships with is_active=true", {
+        userId,
+        orgId,
+        count: r.data.length,
+      });
+    }
+    return r.data[0];
+  }
+
+  // 2) Fallback revoked_at IS NULL
+  r = await supaSrv
+    .from("memberships")
+    .select("org_id, role, created_at")
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (!r.error && Array.isArray(r.data) && r.data.length) {
+    if (r.data.length > 1) {
+      console.warn("[api/personal] multiple memberships with revoked_at IS NULL", {
+        userId,
+        orgId,
+        count: r.data.length,
+      });
+    }
+    return r.data[0];
+  }
+
+  // 3) Last fallback without status filter
+  r = await supaSrv
+    .from("memberships")
+    .select("org_id, role, created_at")
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (!r.error && Array.isArray(r.data) && r.data.length) {
+    if (r.data.length > 1) {
+      console.warn("[api/personal] multiple memberships fallback", {
+        userId,
+        orgId,
+        count: r.data.length,
+      });
+    }
+    return r.data[0];
+  }
+
+  return null;
+}
+
+async function findAnyMembership({ supaSrv, userId }) {
+  if (!userId) return null;
+
+  // 1) Prefer active memberships
+  let r = await supaSrv
+    .from("memberships")
+    .select("org_id, role, created_at")
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (!r.error && Array.isArray(r.data) && r.data.length) {
+    if (r.data.length > 1) {
+      console.warn("[api/personal] multiple active memberships", {
+        userId,
+        count: r.data.length,
+      });
+    }
+    return r.data[0];
+  }
+
+  // 2) Fallback revoked_at IS NULL
+  r = await supaSrv
+    .from("memberships")
+    .select("org_id, role, created_at")
+    .eq("user_id", userId)
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (!r.error && Array.isArray(r.data) && r.data.length) {
+    if (r.data.length > 1) {
+      console.warn("[api/personal] multiple non-revoked memberships", {
+        userId,
+        count: r.data.length,
+      });
+    }
+    return r.data[0];
+  }
+
+  // 3) Last fallback without status filter
+  r = await supaSrv
+    .from("memberships")
+    .select("org_id, role, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  if (!r.error && Array.isArray(r.data) && r.data.length) {
+    if (r.data.length > 1) {
+      console.warn("[api/personal] multiple memberships fallback", {
+        userId,
+        count: r.data.length,
+      });
+    }
+    return r.data[0];
+  }
+
+  return null;
+}
+
+async function resolveContext(req, { requestedOrgId = null, body = {} } = {}) {
+  const SUPABASE_URL = getEnv([
+    "SUPABASE_URL",
+    "VITE_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+  ]);
+  const SUPABASE_ANON_KEY = getEnv([
+    "SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+  ]);
+  const SUPABASE_SERVICE_ROLE_KEY = getEnv([
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SERVICE_KEY",
+  ]);
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      ok: false,
+      status: 500,
+      error: "Server misconfigured",
+      details: {
+        has: {
+          SUPABASE_URL: Boolean(SUPABASE_URL),
+          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+        },
+      },
+    };
+  }
+
+  const authHeader = req.headers.authorization || req.headers.Authorization || "";
+  const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const cookieToken = getCookie(req, "tg_at") || "";
+  const accessToken = bearer || cookieToken;
+
+  console.log("[api/personal] resolveContext start", {
+    method: req.method,
+    hasAuthHeader: Boolean(authHeader),
+    hasBearer: Boolean(bearer),
+    hasCookieToken: Boolean(cookieToken),
+    requestedOrgId: requestedOrgId || null,
+    queryOrgId: normalizeOrgId(req.query?.org_id || req.query?.orgId),
+    bodyOrgId: normalizeOrgId(body?.org_id || body?.orgId),
+  });
+
+  if (!accessToken) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Not authenticated",
+      details: "Missing access token (Bearer or cookie)",
+    };
+  }
+
+  const supaUser = buildUserClient({
+    supabaseUrl: SUPABASE_URL,
+    anonKey: SUPABASE_ANON_KEY,
+    accessToken,
+  });
+
+  const { data: userData, error: userErr } = await supaUser.auth.getUser();
+
+  if (userErr || !userData?.user?.id) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Invalid session",
+      details: userErr?.message || "No user",
+    };
+  }
+
+  const user = userData.user;
+  const supaSrv = buildServiceClient({
+    supabaseUrl: SUPABASE_URL,
+    serviceRoleKey: SUPABASE_SERVICE_ROLE_KEY,
+  });
+
+  let currentOrgId = null;
+
+  try {
+    const { data: uco, error: ucoErr } = await supaSrv
+      .from("user_current_org")
+      .select("org_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
+  } catch (e) {
+    console.warn("[api/personal] user_current_org lookup warning", e?.message || e);
+  }
+
+  const explicitRequestedOrgId = normalizeOrgId(requestedOrgId);
+  const queryOrgId = normalizeOrgId(req.query?.org_id || req.query?.orgId);
+  const bodyOrgId = normalizeOrgId(body?.org_id || body?.orgId);
+
+  let resolvedOrgId = null;
+
+  if (isUuid(explicitRequestedOrgId)) {
+    resolvedOrgId = explicitRequestedOrgId;
+  } else if (isUuid(queryOrgId)) {
+    resolvedOrgId = queryOrgId;
+  } else if (isUuid(bodyOrgId)) {
+    resolvedOrgId = bodyOrgId;
+  } else if (isUuid(currentOrgId)) {
+    resolvedOrgId = currentOrgId;
+  }
+
+  let membership = null;
+
+  if (resolvedOrgId) {
+    membership = await findMembershipForOrg({
+      supaSrv,
+      userId: user.id,
+      orgId: resolvedOrgId,
+    });
+  }
+
+  if (!membership) {
+    membership = await findAnyMembership({
+      supaSrv,
+      userId: user.id,
+    });
+  }
+
+  if (!membership?.org_id || !membership?.role) {
     return {
       ok: false,
       status: 403,
@@ -404,8 +412,8 @@ async function readBody(req) {
     ok: true,
     user,
     ctx: {
-      org_id: String(mRow.org_id),
-      role: String(mRow.role),
+      org_id: String(membership.org_id),
+      role: String(membership.role),
     },
     supaSrv,
   };
@@ -483,97 +491,17 @@ async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePerso
 ========================= */
 
 async function handleList(req, res) {
-    // Log diagnóstico antes de resolveContext
-    console.log("[api/personal] start", {
-      method: req.method,
-      queryOrgId: req.query?.org_id ?? null,
-      hasAuthHeader: Boolean(req.headers?.authorization),
-      hasCookie: Boolean(req.headers?.cookie),
-    });
-    // Log input explícito
-    console.log("[api/personal] resolveContext input", {
-      orgIdFromQuery: req.query?.org_id ?? null,
-      orgIdFromBody: req.body?.org_id ?? null,
-    });
-
-    // Normalizador defensivo de orgId
-    function normalizeOrgId(val) {
-      if (!val) return null;
-      if (typeof val === "string" && /^[0-9a-fA-F-]{32,36}$/.test(val)) return val;
-      if (typeof val === "object" && val.id) return String(val.id);
-      return null;
-    }
-
-    const explicitOrgId = normalizeOrgId(req.query?.org_id || req.body?.org_id);
-
-    let resolvedOrgId = null;
-    if (explicitOrgId) {
-      resolvedOrgId = explicitOrgId;
-      console.log("[api/personal] resolveContext: using explicitOrgId", { explicitOrgId });
-    } else {
-      // Buscar una org activa del usuario
-      const SUPABASE_URL = getEnv([
-        "SUPABASE_URL",
-        "VITE_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_URL",
-      ]);
-      const SUPABASE_SERVICE_ROLE_KEY = getEnv([
-        "SUPABASE_SERVICE_ROLE_KEY",
-        "SUPABASE_SERVICE_KEY",
-      ]);
-      const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      });
-      // Necesitamos userId
-      const authHeader = req.headers.authorization || req.headers.Authorization || "";
-      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
-      const cookieToken = getCookie(req, "tg_at") || "";
-      const accessToken = bearer || cookieToken;
-      const supaUser = createClient(SUPABASE_URL, getEnv([
-        "SUPABASE_ANON_KEY",
-        "VITE_SUPABASE_ANON_KEY",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-      ]), {
-        global: { headers: { Authorization: `Bearer ${accessToken}` } },
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      });
-      const { data: userData } = await supaUser.auth.getUser();
-      const userId = userData?.user?.id;
-      if (userId) {
-        // Buscar primer membership activa
-        let r = await supaSrv
-          .from("memberships")
-          .select("org_id")
-          .eq("user_id", userId)
-          .eq("is_active", true)
-          .limit(1);
-        if (!r.error && Array.isArray(r.data) && r.data.length) {
-          resolvedOrgId = r.data[0].org_id;
-          console.log("[api/personal] resolveContext: found active membership org", { resolvedOrgId });
-        }
-      }
-    }
-
-    if (!resolvedOrgId) {
-      console.warn("[api/personal] resolveContext: no active org found");
-      return {
-        ok: false,
-        status: 403,
-        error: "no_active_membership",
-        details: "No active organization membership found",
-      };
-    }
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requestedOrgId =
     url.searchParams.get("org_id") ||
     url.searchParams.get("orgId") ||
     null;
 
-  const ctxRes = await resolveContext(req, { requestedOrgId });
+  const ctxRes = await resolveContext(req, {
+    requestedOrgId,
+    body: {},
+  });
+
   if (!ctxRes.ok) {
     return json(res, ctxRes.status, {
       ok: false,
@@ -584,67 +512,66 @@ async function handleList(req, res) {
 
   const { ctx, supaSrv } = ctxRes;
 
-  const q = (url.searchParams.get("q") || "").trim();
+  const q = String(url.searchParams.get("q") || "").trim();
   const onlyActive = (url.searchParams.get("onlyActive") || "1") !== "0";
-  const limit = Math.min(Number(url.searchParams.get("limit") || 500), 2000);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 500), 1), 2000);
 
   let query = supaSrv
     .from("personal")
-        // 1. is_active
-        let r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("org_id", orgId)
-          .eq("is_active", true)
-          .limit(2);
-        if (!r.error && Array.isArray(r.data)) {
-          console.log("[api/personal] memberships result", {
-            count: r.data.length,
-            memberships: r.data,
-          });
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findMembershipForOrg: multiple is_active memberships", { orgId, userId: user.id, count: r.data.length });
-          }
-          if (r.data.length) return r.data[0];
-        }
+    .select("*")
+    .eq("org_id", ctx.org_id)
+    .eq("is_deleted", false)
+    .order("updated_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
 
-        // 2. revoked_at
-        r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("org_id", orgId)
-          .is("revoked_at", null)
-          .limit(2);
-        if (!r.error && Array.isArray(r.data)) {
-          console.log("[api/personal] memberships result", {
-            count: r.data.length,
-            memberships: r.data,
-          });
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findMembershipForOrg: multiple revoked_at memberships", { orgId, userId: user.id, count: r.data.length });
-          }
-          if (r.data.length) return r.data[0];
-        }
+  if (onlyActive) {
+    query = query.eq("vigente", true);
+  }
 
-        // 3. fallback
-        r = await supaSrv
-          .from("memberships")
-          .select("org_id, role, created_at")
-          .eq("user_id", user.id)
-          .eq("org_id", orgId)
-          .limit(2);
-        if (!r.error && Array.isArray(r.data)) {
-          console.log("[api/personal] memberships result", {
-            count: r.data.length,
-            memberships: r.data,
-          });
-          if (r.data.length > 1) {
-            console.warn("[api/personal] findMembershipForOrg: multiple fallback memberships", { orgId, userId: user.id, count: r.data.length });
-          }
-          if (r.data.length) return r.data[0];
-        }
+  if (q) {
+    const qNorm = q.toLowerCase();
+    query = query.or(
+      [
+        `nombre.ilike.%${q}%`,
+        `apellido.ilike.%${q}%`,
+        `email.ilike.%${q}%`,
+        `email_norm.ilike.%${qNorm}%`,
+        `documento.ilike.%${q}%`,
+        `telefono.ilike.%${q}%`,
+      ].join(",")
+    );
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return json(res, 500, {
+      ok: false,
+      error: "No se pudo listar personal",
+      details: error.message,
+    });
+  }
+
+  return json(res, 200, {
+    ok: true,
+    items: Array.isArray(data) ? data : [],
+  });
+}
+
+async function handlePost(req, res) {
+  const payload = await readBody(req);
+
+  const ctxRes = await resolveContext(req, {
+    requestedOrgId: normalizeOrgId(payload.org_id || payload.orgId),
+    body: payload,
+  });
+
+  if (!ctxRes.ok) {
+    return json(res, ctxRes.status, {
+      ok: false,
+      error: ctxRes.error,
+      details: ctxRes.details,
     });
   }
 
@@ -827,7 +754,7 @@ async function handleList(req, res) {
       .from("personal")
       .update(updateRow)
       .eq("id", existing.id)
-            .or("revoked_at.is.null,is_active.eq.true")
+      .eq("org_id", ctx.org_id)
       .select("*")
       .limit(1);
 
@@ -847,7 +774,7 @@ async function handleList(req, res) {
   }
 
   const insertRow = {
-            .or("revoked_at.is.null,is_active.eq.true")
+    ...baseRow,
     org_id: ctx.org_id,
     owner_id: user.id,
     user_id: desiredUserId,
