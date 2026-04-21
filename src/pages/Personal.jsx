@@ -216,74 +216,26 @@ export default function Personal() {
     const id = row?.id;
     if (!id) return;
 
-    try {
-      setBusy(true);
+    await upsertPersonal(
+      { id, action: "toggle" },
+      resolvedOrgId
+    );
 
-      await upsertPersonal(
-        { id, action: "toggle" },
-        resolvedOrgId
-      );
-
-      // 🔥 FIX UX CLAVE
-      if (row?.vigente && onlyActive) {
-        setOnlyActive(false);
-        await load({ onlyActiveOverride: false });
-        setMsg("Registro desactivado. Se muestran también los inactivos.");
-      } else {
-        await load();
-      }
-
-    } catch (e) {
-      setMsg("Error cambiando estado");
-    } finally {
-      setBusy(false);
-    }
+    await load();
   }
 
   async function onDelete(row) {
-    if (!canEdit) {
-      setMsg(
-        t("personal.errorNoPermissionDelete", {
-          defaultValue: "You don't have permission.",
-        })
-      );
-      return;
-    }
+    const id = row?.id;
+    if (!id) return;
 
-    const id = getRowId(row);
-    if (!id) {
-      setMsg("Missing row id (delete).");
-      return;
-    }
+    if (!confirm("¿Eliminar este registro?")) return;
 
-    const ok = window.confirm(
-      t("personal.confirmDelete", { defaultValue: "Delete this record?" })
+    await upsertPersonal(
+      { id, action: "delete" },
+      resolvedOrgId
     );
-    if (!ok) return;
 
-    try {
-      setRowBusyId(id);
-      setMsg("");
-
-      if (typeof deletePersonal === "function") {
-        await deletePersonal(id, resolvedOrgId);
-      } else {
-        await upsertPersonal({ id, action: "delete" }, resolvedOrgId);
-      }
-
-      setItems((curr) => removeFromList(curr, id));
-      await load();
-      setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
-    } catch (e) {
-      setMsg(
-        e?.message ||
-          t("personal.errorDelete", {
-            defaultValue: "Could not delete.",
-          })
-      );
-    } finally {
-      setRowBusyId(null);
-    }
+    await load();
   }
 
   if (loading || !ready) {
@@ -408,52 +360,10 @@ export default function Personal() {
                         : t("personal.no", { defaultValue: "No" })}
                     </td>
                     <td className="flex gap-2 p-3">
-                      <button
-                        onClick={async () => {
-                          setRowBusyId(r.id);
-                          try {
-                            await upsertPersonal(
-                              { id: r.id, action: "toggle" },
-                              resolvedOrgId
-                            );
-                            await load();
-                          } catch (e) {
-                            console.error("toggle error", e);
-                          } finally {
-                            setRowBusyId(null);
-                          }
-                        }}
-                        disabled={rowBusyId === r.id}
-                        className="rounded-lg border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-60"
-                        type="button"
-                      >
-                        {r?.vigente ? "Deactivate" : "Activate"}
+                      <button onClick={() => onToggle(r)}>
+                        {r.vigente ? "Deactivate" : "Activate"}
                       </button>
-
-                      <button
-                        onClick={async () => {
-                          if (!confirm("¿Eliminar este registro?")) return;
-                          setRowBusyId(r.id);
-                          try {
-                            await upsertPersonal(
-                              { id: r.id, action: "delete" },
-                              resolvedOrgId
-                            );
-                            await load(); // Si tienes loadPersonal, reemplaza aquí
-                          } catch (e) {
-                            console.error("delete error", e);
-                          } finally {
-                            setRowBusyId(null);
-                          }
-                        }}
-                        disabled={rowBusyId === r.id}
-                        className="rounded-lg border px-3 py-1 disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{
-                          color: r.vigente ? "#333" : "green",
-                          borderColor: r.vigente ? "#ccc" : "green"
-                        }}
-                        type="button"
-                      >
+                      <button onClick={() => onDelete(r)}>
                         Delete
                       </button>
                     </td>
