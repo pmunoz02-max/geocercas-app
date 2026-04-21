@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v30-clean-universal";
+const VERSION = "personal-api-v31-clean-universal";
 
 /* =========================
    Utils
@@ -147,7 +147,6 @@ function buildServiceClient({ supabaseUrl, serviceRoleKey }) {
 async function findMembershipForOrg({ supaSrv, userId, orgId }) {
   if (!userId || !orgId) return null;
 
-  // 1) Prefer is_active = true
   let r = await supaSrv
     .from("memberships")
     .select("org_id, role, created_at")
@@ -158,17 +157,9 @@ async function findMembershipForOrg({ supaSrv, userId, orgId }) {
     .limit(2);
 
   if (!r.error && Array.isArray(r.data) && r.data.length) {
-    if (r.data.length > 1) {
-      console.warn("[api/personal] multiple memberships with is_active=true", {
-        userId,
-        orgId,
-        count: r.data.length,
-      });
-    }
     return r.data[0];
   }
 
-  // 2) Fallback revoked_at IS NULL
   r = await supaSrv
     .from("memberships")
     .select("org_id, role, created_at")
@@ -179,17 +170,9 @@ async function findMembershipForOrg({ supaSrv, userId, orgId }) {
     .limit(2);
 
   if (!r.error && Array.isArray(r.data) && r.data.length) {
-    if (r.data.length > 1) {
-      console.warn("[api/personal] multiple memberships with revoked_at IS NULL", {
-        userId,
-        orgId,
-        count: r.data.length,
-      });
-    }
     return r.data[0];
   }
 
-  // 3) Last fallback without status filter
   r = await supaSrv
     .from("memberships")
     .select("org_id, role, created_at")
@@ -199,13 +182,6 @@ async function findMembershipForOrg({ supaSrv, userId, orgId }) {
     .limit(2);
 
   if (!r.error && Array.isArray(r.data) && r.data.length) {
-    if (r.data.length > 1) {
-      console.warn("[api/personal] multiple memberships fallback", {
-        userId,
-        orgId,
-        count: r.data.length,
-      });
-    }
     return r.data[0];
   }
 
@@ -215,7 +191,6 @@ async function findMembershipForOrg({ supaSrv, userId, orgId }) {
 async function findAnyMembership({ supaSrv, userId }) {
   if (!userId) return null;
 
-  // 1) Prefer active memberships
   let r = await supaSrv
     .from("memberships")
     .select("org_id, role, created_at")
@@ -225,16 +200,9 @@ async function findAnyMembership({ supaSrv, userId }) {
     .limit(2);
 
   if (!r.error && Array.isArray(r.data) && r.data.length) {
-    if (r.data.length > 1) {
-      console.warn("[api/personal] multiple active memberships", {
-        userId,
-        count: r.data.length,
-      });
-    }
     return r.data[0];
   }
 
-  // 2) Fallback revoked_at IS NULL
   r = await supaSrv
     .from("memberships")
     .select("org_id, role, created_at")
@@ -244,16 +212,9 @@ async function findAnyMembership({ supaSrv, userId }) {
     .limit(2);
 
   if (!r.error && Array.isArray(r.data) && r.data.length) {
-    if (r.data.length > 1) {
-      console.warn("[api/personal] multiple non-revoked memberships", {
-        userId,
-        count: r.data.length,
-      });
-    }
     return r.data[0];
   }
 
-  // 3) Last fallback without status filter
   r = await supaSrv
     .from("memberships")
     .select("org_id, role, created_at")
@@ -262,12 +223,6 @@ async function findAnyMembership({ supaSrv, userId }) {
     .limit(2);
 
   if (!r.error && Array.isArray(r.data) && r.data.length) {
-    if (r.data.length > 1) {
-      console.warn("[api/personal] multiple memberships fallback", {
-        userId,
-        count: r.data.length,
-      });
-    }
     return r.data[0];
   }
 
@@ -309,16 +264,6 @@ async function resolveContext(req, { requestedOrgId = null, body = {} } = {}) {
   const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
   const cookieToken = getCookie(req, "tg_at") || "";
   const accessToken = bearer || cookieToken;
-
-  console.log("[api/personal] resolveContext start", {
-    method: req.method,
-    hasAuthHeader: Boolean(authHeader),
-    hasBearer: Boolean(bearer),
-    hasCookieToken: Boolean(cookieToken),
-    requestedOrgId: requestedOrgId || null,
-    queryOrgId: normalizeOrgId(req.query?.org_id || req.query?.orgId),
-    bodyOrgId: normalizeOrgId(body?.org_id || body?.orgId),
-  });
 
   if (!accessToken) {
     return {
@@ -560,14 +505,6 @@ async function handleList(req, res) {
 }
 
 async function handlePost(req, res) {
-    // Log después de buscar existing
-    console.log("[api/personal] existing by email", {
-      orgId: ctx.org_id,
-      emailNorm,
-      hasExisting: Boolean(existing?.id),
-      existingId: existing?.id || null,
-      existingDeleted: existing?.is_deleted ?? null,
-    });
   const payload = await readBody(req);
 
   const ctxRes = await resolveContext(req, {
@@ -583,7 +520,6 @@ async function handlePost(req, res) {
     });
   }
 
-  // ✅ SIEMPRE aquí inmediatamente
   const { ctx, user, supaSrv } = ctxRes;
 
   if (!requireWriteRole(ctx.role)) {
@@ -595,7 +531,6 @@ async function handlePost(req, res) {
   }
 
   const nowIso = new Date().toISOString();
-
   const action = String(payload.action || "").toLowerCase();
   const id = payload.id ? String(payload.id) : null;
 
@@ -680,7 +615,6 @@ async function handlePost(req, res) {
   const apellido = String(payload.apellido || "").trim();
   const emailNorm = normEmail(payload.email);
   const documento = String(payload.documento || "").trim() || null;
-
   const telefonoRaw = String(payload.telefono || "").trim();
   const telefonoE164 = toE164(telefonoRaw);
 
@@ -693,13 +627,13 @@ async function handlePost(req, res) {
     nombre,
     apellido: apellido || null,
     email: emailNorm,
+    email_norm: emailNorm,
     documento,
     telefono: telefonoE164 || null,
     telefono_raw: telefonoRaw || null,
     vigente,
     updated_at: nowIso,
   };
-
 
   const desiredUserId = isUuid(payload.user_id) ? String(payload.user_id) : null;
 
@@ -709,6 +643,13 @@ async function handlePost(req, res) {
     emailNorm,
   });
 
+  console.log("[api/personal] existing by email", {
+    orgId: ctx.org_id,
+    emailNorm,
+    hasExisting: Boolean(existing?.id),
+    existingId: existing?.id || null,
+    existingDeleted: existing?.is_deleted ?? null,
+  });
 
   if (findErr) {
     return json(res, 500, {
@@ -718,14 +659,31 @@ async function handlePost(req, res) {
     });
   }
 
-  // Si existe registro por email/org: nunca aplicar anti-seat-cycling, siempre update/revive
   if (existing?.id) {
+    if (desiredUserId) {
+      const chk = await ensureUserOrgUnique({
+        supaSrv,
+        orgId: ctx.org_id,
+        desiredUserId,
+        excludePersonalId: existing.id,
+      });
+
+      if (!chk.ok) {
+        return json(res, 409, {
+          ok: false,
+          error: "Conflicto de vínculo",
+          details: chk.details || chk.error?.message,
+        });
+      }
+    }
+
     console.log("[api/personal] branch", {
       type: "update_or_revive",
       orgId: ctx.org_id,
       emailNorm,
-      existingId: existing?.id || null,
+      existingId: existing.id,
     });
+
     const updateRow = {
       ...baseRow,
       owner_id: existing.owner_id || user.id,
@@ -757,19 +715,20 @@ async function handlePost(req, res) {
     });
   }
 
-  // Solo aplicar anti-seat-cycling si es alta nueva incompatible
   if (desiredUserId) {
     console.log("[api/personal] branch", {
       type: "insert_new",
       orgId: ctx.org_id,
       emailNorm,
     });
+
     const chk = await ensureUserOrgUnique({
       supaSrv,
       orgId: ctx.org_id,
       desiredUserId,
       excludePersonalId: null,
     });
+
     if (!chk.ok) {
       return json(res, 409, {
         ok: false,
