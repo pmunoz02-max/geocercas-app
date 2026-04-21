@@ -105,8 +105,13 @@ export default function Personal() {
         ? opts.onlyActiveOverride
         : onlyActive;
 
+    const qValue =
+      typeof opts.qOverride === "string"
+        ? opts.qOverride
+        : q;
+
     const data = await listPersonal(resolvedOrgId, {
-      q: q || "",
+      q: qValue || "",
       onlyActive: onlyActiveValue,
     });
 
@@ -114,10 +119,9 @@ export default function Personal() {
   }
 
   useEffect(() => {
-    if (!loading && ready && isLoggedIn && resolvedOrgId) {
-      load();
-    }
-  }, [loading, ready, isLoggedIn, resolvedOrgId, load]);
+    if (!resolvedOrgId) return;
+    load();
+  }, [resolvedOrgId]);
 
   const filtered = useMemo(() => {
     if (!q) return items;
@@ -296,14 +300,22 @@ export default function Personal() {
             defaultValue: "Search by name, last name, email or phone...",
           })}
           value={q}
-          onChange={(e) => setQ(e.target.value)}
+          onChange={async (e) => {
+            const val = e.target.value;
+            setQ(val);
+            await load({ qOverride: val });
+          }}
         />
 
         <label className="inline-flex items-center gap-2 text-sm text-gray-200">
           <input
             type="checkbox"
             checked={onlyActive}
-            onChange={(e) => setOnlyActive(e.target.checked)}
+            onChange={async (e) => {
+              const val = e.target.checked;
+              setOnlyActive(val);
+              await load({ onlyActiveOverride: val });
+            }}
           />
           {t("personal.onlyActive", { defaultValue: "Mostrar solo activos" })}
         </label>
