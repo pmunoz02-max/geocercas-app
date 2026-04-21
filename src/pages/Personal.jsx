@@ -48,68 +48,51 @@ function removeFromList(list, id) {
   return (Array.isArray(list) ? list : []).filter((x) => getRowId(x) !== id);
 }
 
-function normalizeOrgId(value) {
-  if (typeof value === "string") {
-    const v = value.trim();
-    return v && v !== "[object Object]" ? v : null;
-  }
+  async function onSaveNew(e) {
+    e.preventDefault();
 
-  if (value && typeof value === "object" && typeof value.id === "string") {
-    const v = value.id.trim();
-    return v && v !== "[object Object]" ? v : null;
-  }
+    if (!canEdit) {
+      setMsg("You don't have permission.");
+      return;
+    }
 
-  return null;
-}
+    if (!resolvedOrgId) {
+      setMsg("No organization selected.");
+      return;
+    }
 
-export default function Personal() {
-  const { t } = useTranslation();
-  const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
-
-  const role = String(currentRole || "").toLowerCase();
-  const canEdit = role === "owner" || role === "admin";
-  const resolvedOrgId = normalizeOrgId(activeOrgId);
-
-  const [q, setQ] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [rowBusyId, setRowBusyId] = useState(null);
-  const [msg, setMsg] = useState("");
-  const [items, setItems] = useState([]);
-
-  const [openNew, setOpenNew] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    nombre: "",
-    apellido: "",
-    email: "",
-    telefono: "",
-    vigente: true,
-  });
-
-  useEffect(() => {
-    setItems([]);
+    setSaving(true);
     setMsg("");
-    setOpenNew(false);
-    setRowBusyId(null);
-  }, [resolvedOrgId]);
-
-  async function load(opts = {}) {
-    if (!resolvedOrgId || !isLoggedIn) return;
-
-    const onlyActiveValue =
-      typeof opts.onlyActiveOverride === "boolean"
-        ? opts.onlyActiveOverride
-        : onlyActive;
-
-    const qValue =
-      typeof opts.qOverride === "string"
-        ? opts.qOverride
-        : q;
 
     try {
-      setBusy(true);
-      setMsg("");
+      const item = await upsertPersonal(
+        { ...form, vigente: !!form.vigente },
+        resolvedOrgId
+      );
+
+      const newId = getRowId(item);
+      if (!item || !newId) {
+        throw new Error("Save succeeded but server did not return item.");
+      }
+
+      setOpenNew(false);
+      setForm({
+        nombre: "",
+        apellido: "",
+        email: "",
+        telefono: "",
+        vigente: true,
+      });
+
+      await load();
+
+      setMsg("Personnel created successfully.");
+    } catch (e) {
+      setMsg(e?.message || "Could not save personnel.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
       const data = await listPersonal(resolvedOrgId, {
         q: qValue || "",
