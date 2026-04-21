@@ -399,7 +399,22 @@ async function handleList(req, res) {
   const { data, error } = await query;
   if (error) return json(res, 500, { ok: false, error: "No se pudo listar personal", details: error.message });
 
-  return json(res, 200, { ok: true, items: data || [] });
+  const [activeCount, planInfo] = await Promise.all([
+    countActivePersonal({ supaSrv, orgId: ctx.org_id }),
+    getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id }),
+  ]);
+
+  const plan = {
+    plan_code: planInfo?.planCode ?? null,
+    max_members: planInfo?.maxMembers ?? null,
+    active_count: activeCount,
+  };
+
+  return json(res, 200, {
+    ok: true,
+    items: data || [],
+    plan,
+  });
 }
 
 async function handlePost(req, res) {
@@ -460,10 +475,22 @@ async function handlePost(req, res) {
       });
     }
 
+    // Plan usage info for toggle response
+    const [activeCount, planInfo] = await Promise.all([
+      countActivePersonal({ supaSrv, orgId: ctx.org_id }),
+      getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id })
+    ]);
+    const plan = {
+      plan_code: planInfo?.planCode ?? null,
+      max_members: planInfo?.maxMembers ?? null,
+      active_count: activeCount,
+    };
+
     return json(res, 200, {
       ok: true,
       item: (updArr || [])[0] || null,
       toggled: true,
+      plan,
     });
   }
 
@@ -572,7 +599,23 @@ async function handlePost(req, res) {
 
     if (error) return json(res, 500, { ok: false, error: "No se pudo actualizar personal", details: error.message });
 
-    return json(res, 200, { ok: true, item: (updArr || [])[0] || null, revived: true });
+    // Plan usage info for revive response
+    const [activeCount, planInfo] = await Promise.all([
+      countActivePersonal({ supaSrv, orgId: ctx.org_id }),
+      getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id })
+    ]);
+    const plan = {
+      plan_code: planInfo?.planCode ?? null,
+      max_members: planInfo?.maxMembers ?? null,
+      active_count: activeCount,
+    };
+
+    return json(res, 200, {
+      ok: true,
+      item: (updArr || [])[0] || null,
+      revived: true,
+      plan,
+    });
   }
 
   const limitError = await enforcePersonalActiveLimit({
@@ -597,7 +640,23 @@ async function handlePost(req, res) {
   const { data: insArr, error } = await supaSrv.from("personal").insert(insertRow).select("*").limit(1);
   if (error) return json(res, 500, { ok: false, error: "No se pudo crear personal", details: error.message });
 
-  return json(res, 200, { ok: true, item: (insArr || [])[0] || null, created: true });
+  // Plan usage info for create response
+  const [activeCount, planInfo] = await Promise.all([
+    countActivePersonal({ supaSrv, orgId: ctx.org_id }),
+    getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id })
+  ]);
+  const plan = {
+    plan_code: planInfo?.planCode ?? null,
+    max_members: planInfo?.maxMembers ?? null,
+    active_count: activeCount,
+  };
+
+  return json(res, 200, {
+    ok: true,
+    item: (insArr || [])[0] || null,
+    created: true,
+    plan,
+  });
 }
 
 export default async function handler(req, res) {
