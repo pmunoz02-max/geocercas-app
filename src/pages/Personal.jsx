@@ -216,12 +216,15 @@ export default function Personal() {
     const id = row?.id;
     if (!id) return;
 
-    await upsertPersonal(
-      { id, action: "toggle" },
-      resolvedOrgId
-    );
-
-    await load();
+    try {
+      await upsertPersonal(
+        { id, action: "toggle" },
+        resolvedOrgId
+      );
+      await load();
+    } catch (e) {
+      console.error("toggle error", e);
+    }
   }
 
   async function onDelete(row) {
@@ -230,12 +233,15 @@ export default function Personal() {
 
     if (!confirm("¿Eliminar este registro?")) return;
 
-    await upsertPersonal(
-      { id, action: "delete" },
-      resolvedOrgId
-    );
-
-    await load();
+    try {
+      await upsertPersonal(
+        { id, action: "delete" },
+        resolvedOrgId
+      );
+      await load();
+    } catch (e) {
+      console.error("delete error", e);
+    }
   }
 
   if (loading || !ready) {
@@ -359,13 +365,18 @@ export default function Personal() {
                         ? t("personal.yes", { defaultValue: "Yes" })
                         : t("personal.no", { defaultValue: "No" })}
                     </td>
-                    <td className="flex gap-2 p-3">
-                      <button onClick={() => onToggle(r)}>
-                        {r.vigente ? "Deactivate" : "Activate"}
-                      </button>
-                      <button onClick={() => onDelete(r)}>
-                        Delete
-                      </button>
+                    <td className="p-3">
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => onToggle(r)}>
+                          {r.vigente ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          onClick={() => onDelete(r)}
+                          style={{ borderColor: "red", color: "red" }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
