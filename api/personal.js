@@ -457,7 +457,6 @@ async function handleList(req, res) {
     .from("personal")
     .select("*")
     .eq("org_id", orgId)
-    .eq("is_deleted", false)
     .order("created_at", { ascending: false });
 
   if (error) {
