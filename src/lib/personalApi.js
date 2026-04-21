@@ -1,30 +1,23 @@
-import { supabase } from "@/lib/supabaseClient";
+// src/lib/personalApi.js
 
-const BASE = "/api/personal";
+const BASE = ""; // SIEMPRE relativo al mismo dominio (evita POST fantasma)
 
-// 🔐 Obtener access token
-async function getAccessToken() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return "";
-  return data?.session?.access_token || "";
+/* =========================
+   Helpers
+========================= */
+
+function withBase(path) {
+  return String(path).startsWith("/")
+    ? path
+    : "/" + String(path);
 }
 
-// 🔐 fetch universal con Bearer
 async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
-
   try {
-    const accessToken = await getAccessToken();
-    const headers = new Headers(options.headers || {});
-
-    if (accessToken) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
-    }
-
     return await fetch(url, {
       ...options,
-      headers,
       signal: controller.signal,
       credentials: "include",
     });
@@ -33,58 +26,121 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   }
 }
 
-// 🔁 request base
-async function request(method, path = "", body = null) {
-  const res = await fetchWithTimeout(`${BASE}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : null,
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || "Request failed");
+async function parseAny(res) {
+  const text = await res.text();
+  if (!text) return { json: null, text: "" };
+  try {
+    return { json: JSON.parse(text), text };
+  } catch {
+    return { json: null, text };
   }
-
-  return res.json();
 }
 
-// 📋 LIST
+function makeError(res, parsed) {
+  const status = res.status;
 
-export async function listPersonal(orgId = null) {
-  const safeOrgId =
-    typeof orgId === "string" ? orgId : orgId?.id || null;
+  if (parsed.json) {
+    const msg =
+      parsed.json.error ||
+      parsed.json.message ||
+      `Request failed (${status})`;
 
-  const qs = safeOrgId ? `?org_id=${encodeURIComponent(safeOrgId)}` : "";
-  const data = await request("GET", qs);
+    const details =
+      parsed.json.details ??
+      parsed.json.detail ??
+      parsed.json.hint ??
+      null;
+
+    const e = new Error(
+      details
+        ? `${msg}: ${
+            typeof details === "string"
+              ? details
+              : JSON.stringify(details)
+          }`
+        : msg
+    );
+    e.status = status;
+    e.payload = parsed.json;
+    return e;
+  }
+
+  const snippet = (parsed.text || "").trim().slice(0, 400);
+  const e = new Error(
+    snippet
+      ? `Request failed (${status}): ${snippet}`
+      : `Request failed (${status})`
+  );
+  e.status = status;
+  e.payload = parsed.text;
+  return e;
+}
+
+async function request(method, qs = "", body) {
+  const url = withBase(`/api/personal${qs}`);
+  const res = await fetchWithTimeout(
+    url,
+    {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    },
+    20000
+  );
+
+  const parsed = await parseAny(res);
+  if (!res.ok) throw makeError(res, parsed);
+
+  return parsed.json ?? {};
+}
+
+/* =========================
+   API pública
+========================= */
+
+export async function listPersonal({
+  q = "",
+  onlyActive = true,
+  limit = 500,
+  orgId = null,
+} = {}) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  params.set("onlyActive", onlyActive ? "1" : "0");
+  params.set("limit", String(limit));
+  if (orgId) params.set("org_id", String(orgId));
+
+  const data = await request("GET", `?${params.toString()}`); // SOURCE_PERSONAL_OK
   return data.items || [];
 }
 
-// ➕ CREATE / UPDATE
-
 export async function upsertPersonal(payload, orgId = null) {
-  const safeOrgId =
-    typeof orgId === "string" ? orgId : orgId?.id || null;
-
   const data = await request("POST", "", {
     ...payload,
-    ...(safeOrgId ? { org_id: String(safeOrgId) } : {}),
+    ...(orgId ? { org_id: String(orgId) } : {}),
   });
   return data.item;
 }
 
-// 🔁 TOGGLE ACTIVO
+/**
+ * toggle y delete se hacen vía POST
+ * (backend /api/personal solo soporta POST/GET)
+ */
 
-// Toggle usando upsertPersonal con action: "toggle"
 export async function toggleVigente(id, orgId = null) {
-  return await upsertPersonal({ id, action: "toggle" }, orgId);
+  const data = await request("POST", "", {
+    id,
+    action: "toggle",
+    ...(orgId ? { org_id: String(orgId) } : {}),
+  });
+  return data.item;
 }
 
-// 🗑 DELETE (soft)
-
-// Delete usando upsertPersonal con action: "delete"
 export async function deletePersonal(id, orgId = null) {
-  return await upsertPersonal({ id, action: "delete" }, orgId);
+  const data = await request("POST", "", {
+    id,
+    action: "delete",
+    ...(orgId ? { org_id: String(orgId) } : {}),
+  });
+  return data.item;
 }

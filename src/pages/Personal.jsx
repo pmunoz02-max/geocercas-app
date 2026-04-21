@@ -1,23 +1,27 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
-import { listPersonal, upsertPersonal } from "../lib/personalApi.js";
+import {
+  listPersonal,
+  upsertPersonal,
+  toggleVigente,
+  deletePersonal,
+} from "../lib/personalApi.js";
 
 function Modal({ open, title, children, onClose }) {
   if (!open) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative mx-4 w-full max-w-lg rounded-2xl bg-white text-slate-900 shadow-xl">
-        <div className="flex items-center justify-between border-b px-5 py-4">
+      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl text-slate-900">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
           <h3 className="text-lg font-semibold">{title}</h3>
           <button
             className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100"
             onClick={onClose}
             type="button"
           >
-            ✕
+            âœ•
           </button>
         </div>
         <div className="p-5">{children}</div>
@@ -26,38 +30,30 @@ function Modal({ open, title, children, onClose }) {
   );
 }
 
-function getRowId(row) {
-  return row?.id ?? row?.personal_id ?? row?.user_id ?? row?.usuario_id ?? null;
+function getRowId(r) {
+  return r?.id ?? r?.personal_id ?? r?.user_id ?? r?.usuario_id ?? null;
 }
 
-function normalizeOrgId(value) {
-  if (typeof value === "string") {
-    const v = value.trim();
-    return v && v !== "[object Object]" ? v : null;
-  }
-
-  if (value && typeof value === "object" && typeof value.id === "string") {
-    const v = value.id.trim();
-    return v && v !== "[object Object]" ? v : null;
-  }
-
-  return null;
+function upsertIntoList(list, item) {
+  const id = getRowId(item);
+  if (!id) return list;
+  const next = Array.isArray(list) ? [...list] : [];
+  const idx = next.findIndex((x) => getRowId(x) === id);
+  if (idx >= 0) next[idx] = { ...next[idx], ...item };
+  else next.unshift(item);
+  return next;
 }
 
 export default function Personal() {
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
 
-  const loadSeqRef = useRef(0);
-
   const role = String(currentRole || "").toLowerCase();
   const canEdit = role === "owner" || role === "admin";
-  const resolvedOrgId = normalizeOrgId(activeOrgId);
 
   const [q, setQ] = useState("");
   const [onlyActive, setOnlyActive] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [rowBusyId, setRowBusyId] = useState(null);
   const [msg, setMsg] = useState("");
   const [items, setItems] = useState([]);
 
@@ -72,108 +68,84 @@ export default function Personal() {
   });
 
   useEffect(() => {
-    loadSeqRef.current += 1;
     setItems([]);
     setMsg("");
     setOpenNew(false);
-    setRowBusyId(null);
-  }, [resolvedOrgId]);
+  }, [activeOrgId]);
 
-  async function load() {
-    if (!resolvedOrgId || !isLoggedIn) return;
-
-    const seq = ++loadSeqRef.current;
-
+  async function load({ qOverride, onlyActiveOverride } = {}) {
+    if (!isLoggedIn || !activeOrgId) return;
+    setBusy(true);
+    setMsg("");
     try {
-      setBusy(true);
-      setMsg("");
+      const qToUse = typeof qOverride === "string" ? qOverride : q;
+      const onlyActiveToUse =
+        typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
 
-      const data = await listPersonal(resolvedOrgId);
-
-      if (seq !== loadSeqRef.current) return;
-
-      setItems(Array.isArray(data?.items) ? data.items : []);
+      const rows = await listPersonal({
+        q: qToUse,
+        onlyActive: onlyActiveToUse,
+        limit: 500,
+        orgId: activeOrgId,
+      });
+      setItems(Array.isArray(rows) ? rows : []);
     } catch (e) {
-      if (seq !== loadSeqRef.current) return;
-
+      setItems([]);
       setMsg(
         e?.message ||
-          t("personal.errorLoad", {
-            defaultValue: "Could not load personnel.",
-          })
+          t("personal.errorLoad", { defaultValue: "Error loading personnel." })
       );
     } finally {
-      if (seq === loadSeqRef.current) {
-        setBusy(false);
-      }
+      setBusy(false);
     }
   }
 
   useEffect(() => {
-    if (!resolvedOrgId || !isLoggedIn) return;
-    load();
+    if (!loading && ready && isLoggedIn && activeOrgId) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedOrgId, isLoggedIn]);
-
-  const normalizedItems = useMemo(
-    () =>
-      items.map((row) => ({
-        ...row,
-        vigente: Boolean(row?.vigente),
-      })),
-    [items]
-  );
+  }, [loading, ready, isLoggedIn, activeOrgId]);
 
   const filtered = useMemo(() => {
-    let arr = normalizedItems;
-
-    if (onlyActive) {
-      arr = arr.filter((r) => Boolean(r?.vigente));
-    }
-
-    const ql = String(q || "").trim().toLowerCase();
-    if (!ql) return arr;
-
-    return arr.filter((r) =>
+    if (!q) return items;
+    const ql = q.toLowerCase();
+    return items.filter((r) =>
       `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
         .toLowerCase()
         .includes(ql)
     );
-  }, [normalizedItems, q, onlyActive]);
+  }, [items, q]);
 
   async function onSaveNew(e) {
     e.preventDefault();
-
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionCreate", {
-          defaultValue: "You don't have permission.",
+          defaultValue: "You donâ€™t have permission.",
         })
       );
       return;
     }
 
-    if (!resolvedOrgId) {
-      setMsg(
-        t("personal.errorMissingTenant", {
-          defaultValue: "No organization selected.",
-        })
-      );
-      return;
-    }
+    setSaving(true);
+    setMsg("");
 
     try {
-      setSaving(true);
-      setMsg("");
-
-      await upsertPersonal(
-        {
-          ...form,
-          vigente: !!form.vigente,
-        },
-        resolvedOrgId
+      const item = await upsertPersonal(
+        { ...form, vigente: !!form.vigente },
+        activeOrgId
       );
 
+      // âœ… Si el backend no devolviÃ³ item, tratamos como error real
+      const newId = getRowId(item);
+      if (!item || !newId) {
+        throw new Error("Save succeeded but server did not return item.");
+      }
+
+      // âœ… UI inmediata (NO dependemos del GET)
+      setItems((curr) => upsertIntoList(curr, item));
+
+      // cerrar modal + reset
+      setOpenNew(false);
       setForm({
         nombre: "",
         apellido: "",
@@ -182,17 +154,21 @@ export default function Personal() {
         vigente: true,
       });
 
-      setOpenNew(false);
-      await load();
+      // limpiar bÃºsqueda para que no te oculte lo reciÃ©n creado
+      setQ("");
+
+      // opcional: refrescar lista real (pero no bloquea la UI)
+      // Si el backend tarda en reflejar, igual ya lo ves por UI.
+      load({ qOverride: "" });
 
       setMsg(
-        t("personal.bannerSaved", {
-          defaultValue: "Personnel saved.",
+        t("personal.bannerCreated", {
+          defaultValue: "Personnel created successfully.",
         })
       );
-    } catch (e) {
+    } catch (e2) {
       setMsg(
-        e?.message ||
+        e2?.message ||
           t("personal.errorSave", {
             defaultValue: "Could not save personnel.",
           })
@@ -206,43 +182,34 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionEdit", {
-          defaultValue: "You don't have permission.",
+          defaultValue: "You donâ€™t have permission.",
         })
       );
       return;
     }
 
-    const id = row?.id;
+    const id = getRowId(row);
     if (!id) {
       setMsg("Missing row id (toggle).");
       return;
     }
 
+    const prevItems = items;
+    setItems((curr) =>
+      curr.map((r) => (getRowId(r) === id ? { ...r, vigente: !r.vigente } : r))
+    );
+
     try {
-      setRowBusyId(id);
-      setMsg("");
-
-      await upsertPersonal({ id, action: "toggle" }, resolvedOrgId);
-      await load();
-
-      const nextState = !Boolean(row?.vigente);
-      const hiddenByFilter = onlyActive && !nextState;
-
-      setMsg(
-        hiddenByFilter
-          ? t("personal.bannerStatusChangedFiltered", {
-              defaultValue:
-                "Status changed. The record may be hidden by the current filter.",
-            })
-          : nextState
-            ? t("personal.bannerActivated", {
-                defaultValue: "Personnel activated.",
-              })
-            : t("personal.bannerDeactivated", {
-                defaultValue: "Personnel deactivated.",
-              })
-      );
+      setBusy(true);
+      const item = await toggleVigente(id, activeOrgId);
+      if (item && getRowId(item)) {
+        setItems((curr) => upsertIntoList(curr, item));
+      } else {
+        // fallback: recarga
+        await load();
+      }
     } catch (e) {
+      setItems(prevItems);
       setMsg(
         e?.message ||
           t("personal.errorToggle", {
@@ -250,7 +217,7 @@ export default function Personal() {
           })
       );
     } finally {
-      setRowBusyId(null);
+      setBusy(false);
     }
   }
 
@@ -258,38 +225,34 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionDelete", {
-          defaultValue: "You don't have permission.",
+          defaultValue: "You donâ€™t have permission.",
         })
       );
       return;
     }
 
-    const id = row?.id;
+    const id = getRowId(row);
     if (!id) {
       setMsg("Missing row id (delete).");
       return;
     }
 
-    const confirmed = window.confirm(
-      t("personal.confirmDelete", {
-        defaultValue: "Are you sure you want to delete this person?",
-      })
+    const ok = window.confirm(
+      t("personal.confirmDelete", { defaultValue: "Delete this record?" })
     );
-    if (!confirmed) return;
+    if (!ok) return;
+
+    // âœ… UI inmediato
+    const prevItems = items;
+    setItems((curr) => curr.filter((r) => getRowId(r) !== id));
 
     try {
-      setRowBusyId(id);
-      setMsg("");
-
-      await upsertPersonal({ id, action: "delete" }, resolvedOrgId);
-      await load();
-
-      setMsg(
-        t("personal.bannerDeleted", {
-          defaultValue: "Personnel deleted.",
-        })
-      );
+      setBusy(true);
+      await deletePersonal(id, activeOrgId);
+      // NO hacemos load() aquÃ­ para evitar que reaparezca si el backend es soft-delete + list cache.
+      setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
+      setItems(prevItems);
       setMsg(
         e?.message ||
           t("personal.errorDelete", {
@@ -297,57 +260,48 @@ export default function Personal() {
           })
       );
     } finally {
-      setRowBusyId(null);
+      setBusy(false);
     }
   }
 
-  if (loading || !ready) {
+  if (loading || !ready)
     return (
       <div className="p-6 text-gray-300">
-        {t("personal.bannerLoadingSession", {
-          defaultValue: "Loading session...",
-        })}
+        {t("personal.bannerLoadingSession", { defaultValue: "Loading sessionâ€¦" })}
       </div>
     );
-  }
 
-  if (!isLoggedIn) {
+  if (!isLoggedIn)
     return (
       <div className="p-6 text-red-400">
-        {t("personal.bannerLoginRequired", {
-          defaultValue: "You must log in.",
-        })}
+        {t("personal.bannerLoginRequired", { defaultValue: "You must log in." })}
       </div>
     );
-  }
 
-  if (!resolvedOrgId) {
+  if (!activeOrgId)
     return (
       <div className="p-6 text-red-400">
-        {t("personal.errorMissingTenant", {
-          defaultValue: "No organization selected.",
-        })}
+        {t("personal.errorMissingTenant", { defaultValue: "No organization selected." })}
       </div>
     );
-  }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-2xl font-semibold text-white">
+          <h1 className="text-2xl font-semibold mb-1 text-white">
             {t("personal.title", { defaultValue: "Personnel" })}
           </h1>
           <div className="text-sm text-gray-300">
             {t("personal.roleLabel", { defaultValue: "Role:" })}{" "}
-            <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
-            <span className="font-mono">{resolvedOrgId}</span>
+            <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{" "}
+            <span className="font-mono">{activeOrgId}</span>
           </div>
         </div>
 
         {canEdit && (
           <button
-            className="rounded-xl bg-slate-900 px-4 py-2 text-white"
+            className="rounded-xl bg-slate-900 text-white px-4 py-2"
             onClick={() => setOpenNew(true)}
             type="button"
           >
@@ -356,11 +310,11 @@ export default function Personal() {
         )}
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+      <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
-          className="w-full rounded-xl border px-3 py-2 md:w-96"
+          className="w-full md:w-96 rounded-xl border px-3 py-2"
           placeholder={t("personal.searchPlaceholder", {
-            defaultValue: "Search by name, last name, email or phone...",
+            defaultValue: "Search by name, last name, email or phoneâ€¦",
           })}
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -372,7 +326,7 @@ export default function Personal() {
             checked={onlyActive}
             onChange={(e) => setOnlyActive(e.target.checked)}
           />
-          {t("personal.onlyActive", { defaultValue: "Show only active" })}
+          {t("personal.onlyActive", { defaultValue: "Only active" })}
         </label>
 
         <button
@@ -382,17 +336,17 @@ export default function Personal() {
           type="button"
         >
           {busy
-            ? t("personal.processing", { defaultValue: "Processing..." })
+            ? t("personal.processing", { defaultValue: "Processingâ€¦" })
             : t("personal.buttonRefresh", { defaultValue: "Refresh" })}
         </button>
       </div>
 
       {msg && <div className="mt-4 text-sm text-yellow-200">{msg}</div>}
 
-      <div className="mt-4 overflow-hidden rounded-2xl border bg-white text-slate-900">
+      <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
           <div className="p-4 text-gray-600">
-            {t("personal.loading", { defaultValue: "Loading..." })}
+            {t("personal.loading", { defaultValue: "Loadingâ€¦" })}
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-4 text-gray-600">
@@ -402,31 +356,17 @@ export default function Personal() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="p-3 text-left">
-                  {t("personal.tableName", { defaultValue: "Name" })}
-                </th>
-                <th className="p-3 text-left">
-                  {t("personal.tableLastName", { defaultValue: "Last name" })}
-                </th>
-                <th className="p-3 text-left">
-                  {t("personal.tableEmail", { defaultValue: "Email" })}
-                </th>
-                <th className="p-3 text-left">
-                  {t("personal.tablePhone", { defaultValue: "Phone" })}
-                </th>
-                <th className="p-3 text-left">
-                  {t("personal.status", { defaultValue: "Status" })}
-                </th>
-                <th className="p-3 text-left">
-                  {t("personal.actions", { defaultValue: "Actions" })}
-                </th>
+                <th className="p-3">{t("personal.tableName", { defaultValue: "Name" })}</th>
+                <th className="p-3">{t("personal.tableLastName", { defaultValue: "Last name" })}</th>
+                <th className="p-3">{t("personal.tableEmail", { defaultValue: "Email" })}</th>
+                <th className="p-3">{t("personal.tablePhone", { defaultValue: "Phone" })}</th>
+                <th className="p-3">{t("personal.tableActive", { defaultValue: "Active" })}</th>
+                <th className="p-3">{t("personal.actions", { defaultValue: "Actions" })}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => {
-                const rid = r?.id ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
-                const isRowBusy = rowBusyId === r?.id;
-
+                const rid = getRowId(r) ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
                 return (
                   <tr key={rid} className="border-t">
                     <td className="p-3">{r?.nombre ?? "-"}</td>
@@ -434,46 +374,30 @@ export default function Personal() {
                     <td className="p-3">{r?.email ?? "-"}</td>
                     <td className="p-3">{r?.telefono ?? "-"}</td>
                     <td className="p-3">
-                      <span
-                        className={
-                          r?.vigente
-                            ? "inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800"
-                            : "inline-block rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600"
-                        }
+                      {r?.vigente
+                        ? t("personal.yes", { defaultValue: "Yes" })
+                        : t("personal.no", { defaultValue: "No" })}
+                    </td>
+                    <td className="p-3 flex gap-2">
+                      <button
+                        onClick={() => onToggle(r)}
+                        disabled={!canEdit || busy}
+                        className="rounded-lg border px-3 py-1"
+                        type="button"
                       >
                         {r?.vigente
-                          ? t("personal.badgeActive", { defaultValue: "Activo" })
-                          : t("personal.badgeInactive", { defaultValue: "Inactivo" })}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() => onToggle(r)}
-                          disabled={!canEdit || isRowBusy}
-                          className="rounded-lg border px-3 py-1"
-                        >
-                          {r?.vigente
-                            ? t("personal.actionDeactivate", {
-                                defaultValue: "Deactivate",
-                              })
-                            : t("personal.actionActivate", {
-                                defaultValue: "Activate",
-                              })}
-                        </button>
+                          ? t("personal.actionDeactivate", { defaultValue: "Deactivate" })
+                          : t("personal.actionActivate", { defaultValue: "Activate" })}
+                      </button>
 
-                        <button
-                          type="button"
-                          onClick={() => onDelete(r)}
-                          disabled={!canEdit || isRowBusy}
-                          className="rounded-lg border border-red-200 px-3 py-1 text-red-700"
-                        >
-                          {t("personal.actionDelete", {
-                            defaultValue: "Delete",
-                          })}
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => onDelete(r)}
+                        disabled={!canEdit || busy}
+                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1"
+                        type="button"
+                      >
+                        {t("personal.actionDelete", { defaultValue: "Delete" })}
+                      </button>
                     </td>
                   </tr>
                 );
@@ -485,9 +409,7 @@ export default function Personal() {
 
       <Modal
         open={openNew}
-        title={t("personal.formTitleNew", {
-          defaultValue: "Nuevo personal",
-        })}
+        title={t("personal.formTitleNew", { defaultValue: "Nuevo personal" })}
         onClose={() => setOpenNew(false)}
       >
         <form className="space-y-3" onSubmit={onSaveNew}>
@@ -499,13 +421,9 @@ export default function Personal() {
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldLastName", {
-              defaultValue: "Last name",
-            })}
+            placeholder={t("personal.fieldLastName", { defaultValue: "Last name" })}
             value={form.apellido}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, apellido: e.target.value }))
-            }
+            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
@@ -515,27 +433,21 @@ export default function Personal() {
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldPhonePlaceholder", {
-              defaultValue: "Phone",
-            })}
+            placeholder={t("personal.fieldPhonePlaceholder", { defaultValue: "Phone" })}
             value={form.telefono}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, telefono: e.target.value }))
-            }
+            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
           />
 
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, vigente: e.target.checked }))
-              }
+              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
             />
             {t("personal.fieldActive", { defaultValue: "Active" })}
           </label>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="pt-2 flex justify-end gap-2">
             <button
               type="button"
               className="rounded-xl border px-4 py-2"
@@ -546,11 +458,11 @@ export default function Personal() {
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-slate-900 px-4 py-2 text-white"
+              className="rounded-xl bg-slate-900 text-white px-4 py-2"
               disabled={saving}
             >
               {saving
-                ? t("personal.processing", { defaultValue: "Processing..." })
+                ? t("personal.processing", { defaultValue: "Processingâ€¦" })
                 : t("common.actions.save", { defaultValue: "Save" })}
             </button>
           </div>
@@ -559,3 +471,4 @@ export default function Personal() {
     </div>
   );
 }
+
