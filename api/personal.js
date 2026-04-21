@@ -691,30 +691,15 @@ async function handlePost(req, res) {
     updated_at: nowIso,
   };
 
+
   const desiredUserId = isUuid(payload.user_id) ? String(payload.user_id) : null;
-
-  if (desiredUserId) {
-    const chk = await ensureUserOrgUnique({
-      supaSrv,
-      orgId: ctx.org_id,
-      desiredUserId,
-      excludePersonalId: null,
-    });
-
-    if (!chk.ok) {
-      return json(res, 409, {
-        ok: false,
-        error: "Conflicto de vínculo",
-        details: chk.details || chk.error?.message,
-      });
-    }
-  }
 
   const { row: existing, error: findErr } = await findExistingByEmail({
     supaSrv,
     orgId: ctx.org_id,
     emailNorm,
   });
+
 
   if (findErr) {
     return json(res, 500, {
@@ -724,24 +709,8 @@ async function handlePost(req, res) {
     });
   }
 
+  // Si existe registro por email/org: nunca aplicar anti-seat-cycling, siempre update/revive
   if (existing?.id) {
-    if (desiredUserId) {
-      const chk = await ensureUserOrgUnique({
-        supaSrv,
-        orgId: ctx.org_id,
-        desiredUserId,
-        excludePersonalId: existing.id,
-      });
-
-      if (!chk.ok) {
-        return json(res, 409, {
-          ok: false,
-          error: "Conflicto de vínculo",
-          details: chk.details || chk.error?.message,
-        });
-      }
-    }
-
     const updateRow = {
       ...baseRow,
       owner_id: existing.owner_id || user.id,
@@ -771,6 +740,23 @@ async function handlePost(req, res) {
       item: (updArr || [])[0] || null,
       revived: true,
     });
+  }
+
+  // Solo aplicar anti-seat-cycling si es alta nueva incompatible
+  if (desiredUserId) {
+    const chk = await ensureUserOrgUnique({
+      supaSrv,
+      orgId: ctx.org_id,
+      desiredUserId,
+      excludePersonalId: null,
+    });
+    if (!chk.ok) {
+      return json(res, 409, {
+        ok: false,
+        error: "Conflicto de vínculo",
+        details: chk.details || chk.error?.message,
+      });
+    }
   }
 
   const insertRow = {
