@@ -443,12 +443,8 @@ export default function Personal() {
                         }
                       >
                         {r?.vigente
-                          ? t("personal.badgeActive", {
-                              defaultValue: "Activo",
-                            })
-                          : t("personal.badgeInactive", {
-                              defaultValue: "Inactivo",
-                            })}
+                          ? t("personal.badgeActive", { defaultValue: "Activo" })
+                          : t("personal.badgeInactive", { defaultValue: "Inactivo" })}
                       </span>
                     </td>
                     <td className="p-3">
