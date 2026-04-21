@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { listPersonal, upsertPersonal } from "../lib/personalApi.js";
@@ -30,24 +30,6 @@ function getRowId(row) {
   return row?.id ?? row?.personal_id ?? row?.user_id ?? row?.usuario_id ?? null;
 }
 
-function upsertIntoList(list, item) {
-  const id = getRowId(item);
-  if (!id) return Array.isArray(list) ? list : [];
-
-  const next = Array.isArray(list) ? [...list] : [];
-  const idx = next.findIndex((x) => getRowId(x) === id);
-
-  if (idx >= 0) next[idx] = { ...next[idx], ...item };
-  else next.unshift(item);
-
-  return next;
-}
-
-function removeFromList(list, id) {
-  if (!id) return Array.isArray(list) ? list : [];
-  return (Array.isArray(list) ? list : []).filter((x) => getRowId(x) !== id);
-}
-
 function normalizeOrgId(value) {
   if (typeof value === "string") {
     const v = value.trim();
@@ -63,9 +45,10 @@ function normalizeOrgId(value) {
 }
 
 export default function Personal() {
-    const loadSeqRef = React.useRef(0);
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
+
+  const loadSeqRef = useRef(0);
 
   const role = String(currentRole || "").toLowerCase();
   const canEdit = role === "owner" || role === "admin";
@@ -89,29 +72,15 @@ export default function Personal() {
   });
 
   useEffect(() => {
+    loadSeqRef.current += 1;
     setItems([]);
     setMsg("");
     setOpenNew(false);
     setRowBusyId(null);
   }, [resolvedOrgId]);
 
-  async function load(opts = {}) {
+  async function load() {
     if (!resolvedOrgId || !isLoggedIn) return;
-
-    const onlyActiveValue =
-      typeof opts.onlyActiveOverride === "boolean"
-        ? opts.onlyActiveOverride
-        : onlyActive;
-      vigente: false,
-    const onlyActiveValue =
-      typeof opts.onlyActiveOverride === "boolean"
-        ? opts.onlyActiveOverride
-        : onlyActive;
-
-    const qValue =
-      typeof opts.qOverride === "string"
-        ? opts.qOverride
-        : q;
 
     const seq = ++loadSeqRef.current;
 
@@ -119,56 +88,67 @@ export default function Personal() {
       setBusy(true);
       setMsg("");
 
-      const data = await listPersonal(resolvedOrgId, {
-        q: qValue || "",
-        onlyActive: onlyActiveValue,
-      });
+      const data = await listPersonal(resolvedOrgId);
 
       if (seq !== loadSeqRef.current) return;
+
+      setItems(Array.isArray(data?.items) ? data.items : []);
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
-      setItems([]);
+
       setMsg(
         e?.message ||
           t("personal.errorLoad", {
             defaultValue: "Could not load personnel.",
           })
-      useEffect(() => {
-        if (!resolvedOrgId) return;
-        try {
-          setBusy(true);
-          setMsg("");
+      );
+    } finally {
+      if (seq === loadSeqRef.current) {
+        setBusy(false);
+      }
+    }
+  }
 
-          const data = await listPersonal(resolvedOrgId, {
-            q: qValue || "",
-            onlyActive: onlyActiveValue,
-          });
+  useEffect(() => {
+    if (!resolvedOrgId || !isLoggedIn) return;
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedOrgId, isLoggedIn]);
 
-          if (seq !== loadSeqRef.current) return;
-          setItems(Array.isArray(data?.items) ? data.items : []);
-        } catch (e) {
-          if (seq !== loadSeqRef.current) return;
-          setMsg(
-            e?.message ||
-              t("personal.errorLoad", {
-                defaultValue: "Could not load personnel.",
-              })
-          );
-        } finally {
-          setBusy(false);
-        }
-      () =>
-        items.map((row) => ({
-          ...row,
-          vigente: Boolean(row?.vigente),
-        })),
-      [items]
+  const normalizedItems = useMemo(
+    () =>
+      items.map((row) => ({
+        ...row,
+        vigente: Boolean(row?.vigente),
+      })),
+    [items]
+  );
+
+  const filtered = useMemo(() => {
+    let arr = normalizedItems;
+
+    if (onlyActive) {
+      arr = arr.filter((r) => Boolean(r?.vigente));
+    }
+
+    const ql = String(q || "").trim().toLowerCase();
+    if (!ql) return arr;
+
+    return arr.filter((r) =>
+      `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
+        .toLowerCase()
+        .includes(ql)
     );
+  }, [normalizedItems, q, onlyActive]);
 
-    const filtered = useMemo(() => {
-      let arr = normalizedItems;
-      if (onlyActive) arr = arr.filter((r) => Boolean(r.vigente));
-      if (!q) return arr;
+  async function onSaveNew(e) {
+    e.preventDefault();
+
+    if (!canEdit) {
+      setMsg(
+        t("personal.errorNoPermissionCreate", {
+          defaultValue: "You don't have permission.",
+        })
       );
       return;
     }
@@ -187,7 +167,10 @@ export default function Personal() {
       setMsg("");
 
       await upsertPersonal(
-        { ...form, vigente: !!form.vigente },
+        {
+          ...form,
+          vigente: !!form.vigente,
+        },
         resolvedOrgId
       );
 
@@ -198,8 +181,15 @@ export default function Personal() {
         telefono: "",
         vigente: true,
       });
+
       setOpenNew(false);
       await load();
+
+      setMsg(
+        t("personal.bannerSaved", {
+          defaultValue: "Personnel saved.",
+        })
+      );
     } catch (e) {
       setMsg(
         e?.message ||
@@ -212,42 +202,46 @@ export default function Personal() {
     }
   }
 
-  async function load() {
-    if (!resolvedOrgId || !isLoggedIn) return;
+  async function onToggle(row) {
+    if (!canEdit) {
+      setMsg(
+        t("personal.errorNoPermissionEdit", {
+          defaultValue: "You don't have permission.",
+        })
+      );
+      return;
+    }
 
-    const seq = ++loadSeqRef.current;
+    const id = getRowId(row);
+    if (!id) {
+      setMsg("Missing row id (toggle).");
+      return;
+    }
 
     try {
-      setBusy(true);
+      setRowBusyId(id);
       setMsg("");
 
-      const data = await listPersonal(resolvedOrgId);
+      await upsertPersonal({ id, action: "toggle" }, resolvedOrgId);
+      await load();
 
-      if (seq !== loadSeqRef.current) return;
-      setItems(Array.isArray(data?.items) ? data.items : []);
-    } catch (e) {
-      if (seq !== loadSeqRef.current) return;
+      const nextState = !Boolean(row?.vigente);
+      const hiddenByFilter = onlyActive && !nextState;
+
       setMsg(
-        e?.message ||
-          t("personal.errorLoad", {
-            defaultValue: "Could not load personnel.",
-          })
-      );
-    } finally {
-      if (seq === loadSeqRef.current) setBusy(false);
-    }
-  }
-        await load();
-        setMsg(
-          row?.vigente
-            ? t("personal.bannerDeactivated", {
-                defaultValue: "Personnel deactivated.",
-              })
-            : t("personal.bannerActivated", {
+        hiddenByFilter
+          ? t("personal.bannerStatusChangedFiltered", {
+              defaultValue:
+                "Status changed. The record may be hidden by the current filter.",
+            })
+          : nextState
+            ? t("personal.bannerActivated", {
                 defaultValue: "Personnel activated.",
               })
-        );
-      }
+            : t("personal.bannerDeactivated", {
+                defaultValue: "Personnel deactivated.",
+              })
+      );
     } catch (e) {
       setMsg(
         e?.message ||
@@ -260,31 +254,45 @@ export default function Personal() {
     }
   }
 
-  async function load() {
-    if (!resolvedOrgId || !isLoggedIn) return;
+  async function onDelete(row) {
+    if (!canEdit) {
+      setMsg(
+        t("personal.errorNoPermissionDelete", {
+          defaultValue: "You don't have permission.",
+        })
+      );
+      return;
+    }
 
-    const seq = ++loadSeqRef.current;
+    const id = getRowId(row);
+    if (!id) {
+      setMsg("Missing row id (delete).");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      t("personal.confirmDelete", {
+        defaultValue: "Are you sure you want to delete this person?",
+      })
+    );
+    if (!confirmed) return;
 
     try {
-      setBusy(true);
+      setRowBusyId(id);
       setMsg("");
 
-      const data = await listPersonal(resolvedOrgId);
+      await upsertPersonal({ id, action: "delete" }, resolvedOrgId);
+      await load();
 
-      if (seq !== loadSeqRef.current) return;
-      setItems(Array.isArray(data?.items) ? data.items : []);
+      setMsg(
+        t("personal.bannerDeleted", {
+          defaultValue: "Personnel deleted.",
+        })
+      );
     } catch (e) {
-      if (seq !== loadSeqRef.current) return;
       setMsg(
         e?.message ||
-          t("personal.errorLoad", {
-            defaultValue: "Could not load personnel.",
-          })
-      );
-    } finally {
-      if (seq === loadSeqRef.current) setBusy(false);
-    }
-  }
+          t("personal.errorDelete", {
             defaultValue: "Could not delete.",
           })
       );
@@ -296,7 +304,9 @@ export default function Personal() {
   if (loading || !ready) {
     return (
       <div className="p-6 text-gray-300">
-        {t("personal.bannerLoadingSession", { defaultValue: "Loading session..." })}
+        {t("personal.bannerLoadingSession", {
+          defaultValue: "Loading session...",
+        })}
       </div>
     );
   }
@@ -304,7 +314,9 @@ export default function Personal() {
   if (!isLoggedIn) {
     return (
       <div className="p-6 text-red-400">
-        {t("personal.bannerLoginRequired", { defaultValue: "You must log in." })}
+        {t("personal.bannerLoginRequired", {
+          defaultValue: "You must log in.",
+        })}
       </div>
     );
   }
@@ -358,11 +370,7 @@ export default function Personal() {
           <input
             type="checkbox"
             checked={onlyActive}
-            onChange={async (e) => {
-              const val = e.target.checked;
-              setOnlyActive(val);
-              await load({ onlyActiveOverride: val });
-            }}
+            onChange={(e) => setOnlyActive(e.target.checked)}
           />
           {t("personal.onlyActive", { defaultValue: "Show only active" })}
         </label>
@@ -394,15 +402,24 @@ export default function Personal() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
               <tr>
-                <th className="p-3">{t("personal.tableName", { defaultValue: "Name" })}</th>
-                <th className="p-3">
+                <th className="p-3 text-left">
+                  {t("personal.tableName", { defaultValue: "Name" })}
+                </th>
+                <th className="p-3 text-left">
                   {t("personal.tableLastName", { defaultValue: "Last name" })}
                 </th>
-                <th className="p-3">{t("personal.tableEmail", { defaultValue: "Email" })}</th>
-                <th className="p-3">{t("personal.tablePhone", { defaultValue: "Phone" })}</th>
-                <th className="p-3">{t("personal.tableActive", { defaultValue: "Active" })}</th>
-                  <th className="p-3">{t("personal.status", { defaultValue: "Status" })}</th>
-                <th className="p-3">{t("personal.actions", { defaultValue: "Actions" })}</th>
+                <th className="p-3 text-left">
+                  {t("personal.tableEmail", { defaultValue: "Email" })}
+                </th>
+                <th className="p-3 text-left">
+                  {t("personal.tablePhone", { defaultValue: "Phone" })}
+                </th>
+                <th className="p-3 text-left">
+                  {t("personal.status", { defaultValue: "Status" })}
+                </th>
+                <th className="p-3 text-left">
+                  {t("personal.actions", { defaultValue: "Actions" })}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -418,23 +435,24 @@ export default function Personal() {
                     <td className="p-3">{r?.email ?? "-"}</td>
                     <td className="p-3">{r?.telefono ?? "-"}</td>
                     <td className="p-3">
-                      {r?.vigente
-                        ? t("personal.yes", { defaultValue: "Yes" })
-                        : t("personal.no", { defaultValue: "No" })}
+                      <span
+                        className={
+                          r?.vigente
+                            ? "inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800"
+                            : "inline-block rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600"
+                        }
+                      >
+                        {r?.vigente
+                          ? t("personal.badgeActive", {
+                              defaultValue: "Activo",
+                            })
+                          : t("personal.badgeInactive", {
+                              defaultValue: "Inactivo",
+                            })}
+                      </span>
                     </td>
                     <td className="p-3">
-                        <span
-                          className={
-                            r?.vigente
-                              ? "inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800"
-                              : "inline-block rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600"
-                          }
-                        >
-                          {r?.vigente
-                            ? t("personal.badgeActive", { defaultValue: "Activo" })
-                            : t("personal.badgeInactive", { defaultValue: "Inactivo" })}
-                        </span>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => onToggle(r)}
@@ -456,7 +474,9 @@ export default function Personal() {
                           disabled={!canEdit || isRowBusy}
                           className="rounded-lg border border-red-200 px-3 py-1 text-red-700"
                         >
-                          {t("personal.actionDelete", { defaultValue: "Delete" })}
+                          {t("personal.actionDelete", {
+                            defaultValue: "Delete",
+                          })}
                         </button>
                       </div>
                     </td>
@@ -470,7 +490,9 @@ export default function Personal() {
 
       <Modal
         open={openNew}
-        title={t("personal.formTitleNew", { defaultValue: "Nuevo personal" })}
+        title={t("personal.formTitleNew", {
+          defaultValue: "Nuevo personal",
+        })}
         onClose={() => setOpenNew(false)}
       >
         <form className="space-y-3" onSubmit={onSaveNew}>
@@ -482,9 +504,13 @@ export default function Personal() {
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
-            placeholder={t("personal.fieldLastName", { defaultValue: "Last name" })}
+            placeholder={t("personal.fieldLastName", {
+              defaultValue: "Last name",
+            })}
             value={form.apellido}
-            onChange={(e) => setForm((f) => ({ ...f, apellido: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, apellido: e.target.value }))
+            }
           />
           <input
             className="w-full rounded-xl border px-3 py-2"
@@ -498,14 +524,18 @@ export default function Personal() {
               defaultValue: "Phone",
             })}
             value={form.telefono}
-            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, telefono: e.target.value }))
+            }
           />
 
           <label className="inline-flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={!!form.vigente}
-              onChange={(e) => setForm((f) => ({ ...f, vigente: e.target.checked }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, vigente: e.target.checked }))
+              }
             />
             {t("personal.fieldActive", { defaultValue: "Active" })}
           </label>
