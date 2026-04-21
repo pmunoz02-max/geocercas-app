@@ -1,7 +1,7 @@
 // api/personal.js
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "personal-api-v21-memberships-canonical-server-owned-universal";
+const VERSION = "personal-api-v31-clean-universal";
 
 /* =========================
    Utils
@@ -410,74 +410,74 @@ async function handlePost(req, res) {
   const id = payload.id ? String(payload.id) : null;
 
   // TOGGLE
-  if (action === "toggle") {
-    if (!id) return json(res, 400, { ok: false, error: "Falta id" });
+    if (action === "toggle") {
+      if (!id) return json(res, 400, { ok: false, error: "Falta id" });
 
-    const { data: currentArr, error: currentErr } = await supaSrv
-      .from("personal")
-      .select("id, vigente, is_deleted")
-      .eq("id", id)
-      .eq("org_id", ctx.org_id)
-      .maybeSingle();
+      const { data: currentArr, error: currentErr } = await supaSrv
+        .from("personal")
+        .select("id, vigente, is_deleted")
+        .eq("id", id)
+        .eq("org_id", ctx.org_id)
+        .maybeSingle();
 
-    if (currentErr || !currentArr) {
-      return json(res, 404, { ok: false, error: "Not found" });
-    }
+      if (currentErr || !currentArr) {
+        return json(res, 404, { ok: false, error: "Not found" });
+      }
 
-    const wasVigente = !!currentArr.vigente;
-    const isDeleted = !!currentArr.is_deleted;
-    const nextVigente = !wasVigente;
+      const wasVigente = !!currentArr.vigente;
+      const isDeleted = !!currentArr.is_deleted;
+      const nextVigente = !wasVigente;
 
-    // Enforce only on activation false -> true
-    if (!wasVigente && nextVigente && !isDeleted) {
-      const { planCode, maxMembers } = await getPersonalPlanLimit({
-        supaSrv,
-        orgId: ctx.org_id,
-      });
-
-      if (typeof maxMembers === "number") {
-        const activeCount = await countActivePersonal({
+      // Enforce only on activation false -> true
+      if (!wasVigente && nextVigente && !isDeleted) {
+        const { planCode, maxMembers } = await getPersonalPlanLimit({
           supaSrv,
           orgId: ctx.org_id,
         });
 
-        if (activeCount >= maxMembers) {
-          return json(res, 409, {
-            ok: false,
-            error: "Plan limit reached",
-            details: {
-              resource: "personal",
-              plan_code: planCode,
-              limit: maxMembers,
-              current_active: activeCount,
-            },
+        if (typeof maxMembers === "number") {
+          const activeCount = await countActivePersonal({
+            supaSrv,
+            orgId: ctx.org_id,
           });
+
+          if (activeCount >= maxMembers) {
+            return json(res, 409, {
+              ok: false,
+              error: "Plan limit reached",
+              details: {
+                resource: "personal",
+                plan_code: planCode,
+                limit: maxMembers,
+                current_active: activeCount,
+              },
+            });
+          }
         }
       }
-    }
 
-    const { data: updArr, error: updErr } = await supaSrv
-      .from("personal")
-      .update({ vigente: nextVigente, updated_at: nowIso })
-      .eq("id", id)
-      .eq("org_id", ctx.org_id)
-      .select("*")
-      .limit(1);
+      const { data: updArr, error: updErr } = await supaSrv
+        .from("personal")
+        .update({ vigente: nextVigente, updated_at: nowIso })
+        .eq("id", id)
+        .eq("org_id", ctx.org_id)
+        .select("*")
+        .limit(1);
 
-    if (updErr) {
-      return json(res, 500, {
-        ok: false,
-        error: "No se pudo cambiar estado",
-        details: updErr.message,
+      if (updErr) {
+        return json(res, 500, {
+          ok: false,
+          error: "No se pudo cambiar estado",
+          details: updErr.message,
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        item: (updArr || [])[0] || null,
+        toggled: true,
       });
     }
-
-    return json(res, 200, {
-      ok: true,
-      item: (updArr || [])[0] || null,
-      toggled: true,
-    });
-  }
 
   // DELETE (soft)
   if (action === "delete") {
