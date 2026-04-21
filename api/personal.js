@@ -51,194 +51,253 @@ async function readBody(req) {
   if (typeof req.body === "string") {
     try {
       return JSON.parse(req.body);
-    } catch {
-      return {};
-    }
-  }
-  const chunks = [];
-  for await (const c of req) chunks.push(c);
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
+    async function resolveContext(req, { requestedOrgId = null } = {}) {
+      const SUPABASE_URL = getEnv([
+        "SUPABASE_URL",
+        "VITE_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_URL",
+      ]);
+      const SUPABASE_ANON_KEY = getEnv([
+        "SUPABASE_ANON_KEY",
+        "VITE_SUPABASE_ANON_KEY",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      ]);
+      const SUPABASE_SERVICE_ROLE_KEY = getEnv([
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "SUPABASE_SERVICE_KEY",
+      ]);
 
-function onlyDigits(s) {
-  return String(s || "").replace(/[^\d]/g, "");
-}
+      if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+        return {
+          ok: false,
+          status: 500,
+          error: "Server misconfigured",
+          details: {
+            has: {
+              SUPABASE_URL: Boolean(SUPABASE_URL),
+              SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
+              SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+            },
+          },
+        };
+      }
 
-function toE164(rawPhone) {
-  const p = String(rawPhone || "").trim();
-  if (!p) return null;
+      const authHeader = req.headers.authorization || req.headers.Authorization || "";
+      const bearer = authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : "";
+      const cookieToken = getCookie(req, "tg_at") || "";
+      const accessToken = bearer || cookieToken;
 
-  if (p.startsWith("+")) {
-    const d = onlyDigits(p);
-    if (d.length >= 8 && d.length <= 15) return `+${d}`;
-    return null;
-  }
+      console.log("[api/personal] auth debug", {
+        hasAuthHeader: Boolean(authHeader),
+        hasBearer: Boolean(bearer),
+        hasCookieToken: Boolean(cookieToken),
+        hasAccessToken: Boolean(accessToken),
+        requestedOrgId: requestedOrgId || null,
+      });
 
-  const d = onlyDigits(p);
-  if (d.length >= 11 && d.length <= 15) return `+${d}`;
+      if (!accessToken) {
+        return {
+          ok: false,
+          status: 401,
+          error: "Not authenticated",
+          details: "Missing access token (Bearer or cookie)",
+        };
+      }
 
-  if (d.length === 10 && d.startsWith("0")) return `+593${d.slice(1)}`;
-
-  return null;
-}
-
-function normEmail(email) {
-  return String(email || "").trim().toLowerCase();
-}
-
-function isUuid(v) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    String(v || "")
-  );
-}
-
-/* =========================
-   Context Resolver (UNIVERSAL)
-========================= */
-
-async function resolveContext(req, { requestedOrgId = null } = {}) {
-  const SUPABASE_URL = getEnv([
-    "SUPABASE_URL",
-    "VITE_SUPABASE_URL",
-    "NEXT_PUBLIC_SUPABASE_URL",
-  ]);
-  const SUPABASE_ANON_KEY = getEnv([
-    "SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  ]);
-  const SUPABASE_SERVICE_ROLE_KEY = getEnv([
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "SUPABASE_SERVICE_KEY",
-  ]);
-
-        let membershipResult = await supaSrv
-          .from("memberships")
-          .select("org_id, role, is_default, revoked_at, created_at, is_active")
-          .eq("user_id", user.id)
-          .eq("org_id", currentOrgId)
-          .is("revoked_at", null)
-          .maybeSingle();
-          SUPABASE_URL: Boolean(SUPABASE_URL),
-        if (membershipResult.error) {
-          membershipResult = await supaSrv
-            .from("memberships")
-            .select("org_id, role, is_default, created_at, is_active")
-            .eq("user_id", user.id)
-            .eq("org_id", currentOrgId)
-            .eq("is_active", true)
-            .maybeSingle();
-        }
-          SUPABASE_ANON_KEY: Boolean(SUPABASE_ANON_KEY),
-        if (!membershipResult.error && membershipResult.data?.org_id && membershipResult.data?.role) {
-          mRow = membershipResult.data;
-        }
-          SUPABASE_SERVICE_ROLE_KEY: Boolean(SUPABASE_SERVICE_ROLE_KEY),
+      const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        global: {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
         },
-      },
-    };
-  }
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      });
 
-  const authHeader = req.headers.authorization || req.headers.Authorization || "";
-  const bearer = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  const cookieToken = getCookie(req, "tg_at") || "";
-  const accessToken = bearer || cookieToken;
+      const { data: userData, error: userErr } = await supaUser.auth.getUser();
 
-  console.log("[api/personal] auth debug", {
-    hasAuthHeader: Boolean(authHeader),
-    hasBearer: Boolean(bearer),
-    hasCookieToken: Boolean(cookieToken),
-    hasAccessToken: Boolean(accessToken),
-    requestedOrgId: requestedOrgId || null,
-  });
+      console.log("[api/personal] getUser result", {
+        hasUser: Boolean(userData?.user?.id),
+        userId: userData?.user?.id || null,
+        userErr: userErr?.message || null,
+      });
 
-  if (!accessToken) {
-    return {
-      ok: false,
-      status: 401,
-      error: "Not authenticated",
-      details: "Missing access token (Bearer or cookie)",
-    };
-  }
+      if (userErr || !userData?.user?.id) {
+        return {
+          ok: false,
+          status: 401,
+          error: "Invalid session",
+          details: userErr?.message || "No user",
+        };
+      }
 
-  const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+      const user = userData.user;
 
-  const { data: userData, error: userErr } = await supaUser.auth.getUser();
+      const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      });
 
-  console.log("[api/personal] getUser result", {
-    hasUser: Boolean(userData?.user?.id),
-    userId: userData?.user?.id || null,
-    userErr: userErr?.message || null,
-  });
+      let currentOrgId = null;
 
-  if (userErr || !userData?.user?.id) {
-    return {
-      ok: false,
-      status: 401,
-      error: "Invalid session",
-      details: userErr?.message || "No user",
-    };
-  }
+      try {
+        const { data: uco, error: ucoErr } = await supaSrv
+          .from("user_current_org")
+          .select("org_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-  const user = userData.user;
+        if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
+      } catch (e) {
+        console.warn("[api/personal] user_current_org lookup warning", e?.message || e);
+      }
 
-  const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+      if (requestedOrgId && isUuid(requestedOrgId)) {
+        currentOrgId = String(requestedOrgId);
+      }
 
-  let currentOrgId = null;
+      let mRow = null;
 
-  try {
-    const { data: uco, error: ucoErr } = await supaSrv
-      .from("user_current_org")
-      .select("org_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
+      async function findMembershipForOrg(orgId) {
+        if (!orgId) return null;
 
-    if (!ucoErr && uco?.org_id) currentOrgId = String(uco.org_id);
-  } catch {}
+        // intento 1: esquema con is_active
+        let r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("org_id", orgId)
+          .eq("is_active", true)
+          .limit(1);
 
-  if (requestedOrgId && isUuid(requestedOrgId)) {
-    currentOrgId = String(requestedOrgId);
-  }
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          return r.data[0];
+        }
 
-  let mRow = null;
+        // intento 2: esquema con revoked_at
+        r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("org_id", orgId)
+          .is("revoked_at", null)
+          .limit(1);
 
-  if (currentOrgId) {
-    const { data, error } = await supaSrv
-      .from("memberships")
-      .select("org_id, role, is_default, revoked_at, created_at")
-      .eq("user_id", user.id)
-      .eq("org_id", currentOrgId)
-      .or("revoked_at.is.null,is_active.eq.true")
-      .maybeSingle();
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          return r.data[0];
+        }
 
-    if (!error && data?.org_id && data?.role) mRow = data;
-  }
+        // intento 3: fallback sin columnas opcionales
+        r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("org_id", orgId)
+          .limit(1);
 
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          return r.data[0];
+        }
+
+        console.warn("[api/personal] membership org lookup failed", {
+          orgId,
+          userId: user.id,
+          err1: r.error?.message || null,
+        });
+
+        return null;
+      }
+
+      async function findAnyMembership() {
+        // intento 1: esquema con is_active
+        let r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          return r.data[0];
+        }
+
+        // intento 2: esquema con revoked_at
+        r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .is("revoked_at", null)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          return r.data[0];
+        }
+
+        // intento 3: fallback sin columnas opcionales
+        r = await supaSrv
+          .from("memberships")
+          .select("org_id, role, created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (!r.error && Array.isArray(r.data) && r.data.length) {
+          return r.data[0];
+        }
+
+        console.warn("[api/personal] membership fallback lookup failed", {
+          userId: user.id,
+          err1: r.error?.message || null,
+        });
+
+        return null;
+      }
+
+      if (currentOrgId) {
+        mRow = await findMembershipForOrg(currentOrgId);
+      }
+
+      if (!mRow) {
+        if (requestedOrgId) {
+          return {
+            ok: false,
+            status: 403,
+            error: "Requested org is not available for current user",
+          };
+        }
+
+        mRow = await findAnyMembership();
+      }
+
+      if (!mRow?.org_id || !mRow?.role) {
+        return {
+          ok: false,
+          status: 403,
+          error: "Missing org/role context",
+          details: "No membership found",
+        };
+      }
+
+      return {
+        ok: true,
+        user,
+        ctx: {
+          org_id: String(mRow.org_id),
+          role: String(mRow.role),
+        },
+        supaSrv,
+      };
+    }
   if (!mRow) {
     if (requestedOrgId) {
       return {
