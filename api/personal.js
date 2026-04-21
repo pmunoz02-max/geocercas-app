@@ -729,7 +729,10 @@ async function handlePost(req, res) {
 
   const { data: insArr, error } = await supaSrv
     .from("personal")
-    .insert(insertRow)
+    .insert({
+      ...insertRow,
+      vigente: baseRow.vigente !== false,
+    })
     .select("*")
     .limit(1);
 
