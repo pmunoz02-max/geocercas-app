@@ -125,7 +125,6 @@ export default function Personal() {
       });
 
       if (seq !== loadSeqRef.current) return;
-      setItems(Array.isArray(data?.items) ? data.items : []);
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
       setItems([]);
@@ -136,30 +135,28 @@ export default function Personal() {
           })
       useEffect(() => {
         if (!resolvedOrgId) return;
-        load();
-      }, [resolvedOrgId]);
-    }
-  }
-  }, [resolvedOrgId, ready, isLoggedIn]);
+        try {
+          setBusy(true);
+          setMsg("");
 
-  const filtered = useMemo(() => {
-    if (!q) return items;
+          const data = await listPersonal(resolvedOrgId, {
+            q: qValue || "",
+            onlyActive: onlyActiveValue,
+          });
 
-    const ql = q.toLowerCase();
-    return items.filter((r) =>
-      `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
-        .toLowerCase()
-        .includes(ql)
-    );
-  }, [items, q]);
-
-  async function onSaveNew(e) {
-    e.preventDefault();
-
-    if (!canEdit) {
-      setMsg(
-        t("personal.errorNoPermissionCreate", {
-    const normalizedItems = useMemo(
+          if (seq !== loadSeqRef.current) return;
+          setItems(Array.isArray(data?.items) ? data.items : []);
+        } catch (e) {
+          if (seq !== loadSeqRef.current) return;
+          setMsg(
+            e?.message ||
+              t("personal.errorLoad", {
+                defaultValue: "Could not load personnel.",
+              })
+          );
+        } finally {
+          setBusy(false);
+        }
       () =>
         items.map((row) => ({
           ...row,
@@ -189,84 +186,57 @@ export default function Personal() {
       setSaving(true);
       setMsg("");
 
-      const item = await upsertPersonal(
+      await upsertPersonal(
         { ...form, vigente: !!form.vigente },
         resolvedOrgId
       );
 
-      const newId = getRowId(item);
-      if (!item || !newId) {
-        throw new Error("Save succeeded but server did not return item.");
-      }
-
-      setItems((curr) => upsertIntoList(curr, item));
-      setOpenNew(false);
       setForm({
         nombre: "",
         apellido: "",
         email: "",
-        const item = await upsertPersonal(
-          { ...form, vigente: Boolean(form.vigente) },
-          resolvedOrgId
-        );
-
-      await load({ qOverride: "" });
-
-      setMsg(
-        t("personal.bannerCreated", {
-          defaultValue: "Personnel created successfully.",
-        })
-      );
+        telefono: "",
+        vigente: true,
+      });
+      setOpenNew(false);
+      await load();
     } catch (e) {
       setMsg(
         e?.message ||
           t("personal.errorSave", {
             defaultValue: "Could not save personnel.",
-          vigente: false,
+          })
       );
     } finally {
       setSaving(false);
     }
   }
 
-  async function onToggle(row) {
-    if (!canEdit) {
-      setMsg(
-        t("personal.errorNoPermissionEdit", {
-          defaultValue: "You don't have permission.",
-        })
-      );
-      return;
-    }
+  async function load() {
+    if (!resolvedOrgId || !isLoggedIn) return;
 
-    const id = getRowId(row);
-    if (!id) {
-      setMsg("Missing row id (toggle).");
-      return;
-    }
+    const seq = ++loadSeqRef.current;
 
     try {
-      setRowBusyId(id);
+      setBusy(true);
       setMsg("");
 
-      const result = await upsertPersonal(
-        { id, action: "toggle" },
-        resolvedOrgId
-      );
+      const data = await listPersonal(resolvedOrgId);
 
-      if (result?.item) {
-        setItems((curr) => upsertIntoList(curr, result.item));
-      }
-
-      if (row?.vigente && onlyActive) {
-        setOnlyActive(false);
-        await load({ onlyActiveOverride: false });
-        setMsg(
-          t("personal.bannerDeactivatedShowInactive", {
-            defaultValue: "Record deactivated. Inactive records are now shown.",
+      if (seq !== loadSeqRef.current) return;
+      setItems(Array.isArray(data?.items) ? data.items : []);
+    } catch (e) {
+      if (seq !== loadSeqRef.current) return;
+      setMsg(
+        e?.message ||
+          t("personal.errorLoad", {
+            defaultValue: "Could not load personnel.",
           })
-        );
-      } else {
+      );
+    } finally {
+      if (seq === loadSeqRef.current) setBusy(false);
+    }
+  }
         await load();
         setMsg(
           row?.vigente
