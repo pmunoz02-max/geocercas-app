@@ -8,124 +8,201 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+function jsonResponse(status: number, body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: corsHeaders,
+  });
+}
+
+function requireEnv(name: string): string {
+  const value = Deno.env.get(name);
+  if (!value) {
+    throw new Error(`Missing required env: ${name}`);
+  }
+  return value;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "method_not_allowed" }), {
-      status: 405,
-      headers: corsHeaders,
-    });
+    return jsonResponse(405, { error: "method_not_allowed" });
   }
 
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "missing_authorization" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
+      return jsonResponse(401, { error: "missing_authorization" });
     }
 
-    const { org_id } = await req.json();
+    const body = await req.json().catch(() => null);
+    const orgId = body?.org_id;
 
-    if (!org_id || typeof org_id !== "string") {
-      return new Response(JSON.stringify({ error: "org_id_required" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
+    if (!orgId || typeof orgId !== "string") {
+      return jsonResponse(400, { error: "org_id_required" });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
+    const SUPABASE_URL = requireEnv("SUPABASE_URL");
+    const SUPABASE_ANON_KEY = requireEnv("SUPABASE_ANON_KEY");
+    const SUPABASE_SERVICE_ROLE_KEY = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+    const PADDLE_API_KEY = requireEnv("PADDLE_API_KEY");
+    const PADDLE_ENV = (Deno.env.get("PADDLE_ENV") || "sandbox").toLowerCase();
+
+    const baseUrl =
+      PADDLE_ENV === "live"
+        ? "https://api.paddle.com"
+        : "https://sandbox-api.paddle.com";
+
+    const userSupabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: authHeader,
         },
       },
-    );
+      auth: {
+        persistSession: false,
+      },
+    });
+
+    const serviceSupabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        persistSession: false,
+      },
+    });
 
     const {
       data: { user },
-      error: authError
-    } = await supabase.auth.getUser();
+      error: authError,
+    } = await userSupabase.auth.getUser();
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+      console.warn("[paddle-cancel] unauthorized", {
+        orgId,
+        authError: authError?.message ?? null,
+      });
+      return jsonResponse(401, { error: "unauthorized" });
     }
 
-    const { data: memberData, error: memberError } = await supabase
+    const { data: memberData, error: memberError } = await userSupabase
       .from("org_members")
       .select("org_id")
-      .eq("org_id", org_id)
+      .eq("org_id", orgId)
       .eq("user_id", user.id)
       .maybeSingle();
 
     if (memberError || !memberData) {
-      return new Response(JSON.stringify({ error: "forbidden" }), { status: 403 });
+      console.warn("[paddle-cancel] forbidden membership", {
+        orgId,
+        userId: user.id,
+        memberError: memberError?.message ?? null,
+      });
+      return jsonResponse(403, { error: "forbidden" });
     }
 
-    const { data, error } = await supabase
+    const { data: billingRow, error: billingError } = await serviceSupabase
       .from("org_billing")
-      .select("paddle_subscription_id, billing_provider")
-      .eq("org_id", org_id)
-      .single();
+      .select("paddle_subscription_id, billing_provider, paddle_customer_id, paddle_price_id")
+      .eq("org_id", orgId)
+      .maybeSingle();
 
-    if (error || !data || data.billing_provider !== "paddle") {
-      return new Response(JSON.stringify({ error: "no_paddle_subscription" }), {
-        status: 400,
-        headers: corsHeaders,
+    if (billingError) {
+      console.error("[paddle-cancel] org_billing lookup error", {
+        orgId,
+        error: billingError.message,
+      });
+      return jsonResponse(500, {
+        error: "billing_lookup_failed",
+        detail: billingError.message,
       });
     }
 
-    const subscriptionId = data.paddle_subscription_id;
+    if (!billingRow || billingRow.billing_provider !== "paddle") {
+      return jsonResponse(400, { error: "no_paddle_subscription" });
+    }
+
+    const subscriptionId = billingRow.paddle_subscription_id;
     if (!subscriptionId) {
-      return new Response(JSON.stringify({ error: "no_paddle_subscription" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return jsonResponse(400, { error: "no_paddle_subscription" });
     }
 
-    const paddleApiBaseUrl =
-      Deno.env.get("PADDLE_API_BASE_URL") || "https://sandbox-api.paddle.com";
+    console.log("[paddle-cancel] config", {
+      orgId,
+      userId: user.id,
+      env: PADDLE_ENV,
+      baseUrl,
+      subscriptionId,
+      paddleCustomerId: billingRow.paddle_customer_id ?? null,
+      paddlePriceId: billingRow.paddle_price_id ?? null,
+      hasApiKey: !!PADDLE_API_KEY,
+      apiKeyPrefix: PADDLE_API_KEY ? PADDLE_API_KEY.slice(0, 8) : null,
+    });
 
-    const res = await fetch(
-      `${paddleApiBaseUrl}/subscriptions/${subscriptionId}/cancel`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${Deno.env.get("PADDLE_API_KEY")}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          effective_from: "next_billing_period",
-        }),
+    const response = await fetch(`${baseUrl}/subscriptions/${subscriptionId}/cancel`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${PADDLE_API_KEY}`,
+        "Content-Type": "application/json",
       },
-    );
+    });
 
-    const result = await res.json();
+    const raw = await response.text();
 
-    if (!res.ok) {
-      return new Response(JSON.stringify(result), {
-        status: 500,
-        headers: corsHeaders,
+    console.log("[paddle-cancel] paddle response", {
+      status: response.status,
+      body: raw,
+    });
+
+    if (!response.ok) {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        parsed = null;
+      }
+
+      return jsonResponse(500, {
+        error: "paddle_cancel_failed",
+        paddle_status: response.status,
+        paddle_env: PADDLE_ENV,
+        subscription_id: subscriptionId,
+        paddle_error: parsed ?? raw,
       });
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: corsHeaders,
+    const now = new Date().toISOString();
+
+    const { error: updateError } = await serviceSupabase
+      .from("org_billing")
+      .update({
+        cancel_at_period_end: true,
+        updated_at: now,
+        last_paddle_event_at: now,
+      })
+      .eq("org_id", orgId);
+
+    if (updateError) {
+      console.error("[paddle-cancel] org_billing update warning", {
+        orgId,
+        error: updateError.message,
+      });
+    }
+
+    return jsonResponse(200, {
+      success: true,
+      org_id: orgId,
+      subscription_id: subscriptionId,
+      paddle_env: PADDLE_ENV,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: corsHeaders,
+    console.error("[paddle-cancel] fatal error", { message });
+
+    return jsonResponse(500, {
+      error: "internal_error",
+      message,
     });
   }
 });

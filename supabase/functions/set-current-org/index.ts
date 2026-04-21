@@ -9,20 +9,37 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
   });
 }
 
 serve(async (req) => {
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
   }
 
+
   if (req.method !== "POST") {
-    return json(405, { error: "Method not allowed" });
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "application/json",
+      },
+    });
   }
 
   try {

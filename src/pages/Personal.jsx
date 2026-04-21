@@ -427,6 +427,7 @@ export default function Personal() {
                 <th className="p-3">{t("personal.tableEmail", { defaultValue: "Email" })}</th>
                 <th className="p-3">{t("personal.tablePhone", { defaultValue: "Phone" })}</th>
                 <th className="p-3">{t("personal.tableActive", { defaultValue: "Active" })}</th>
+                  <th className="p-3">{t("personal.status", { defaultValue: "Status" })}</th>
                 <th className="p-3">{t("personal.actions", { defaultValue: "Actions" })}</th>
               </tr>
             </thead>
@@ -448,6 +449,17 @@ export default function Personal() {
                         : t("personal.no", { defaultValue: "No" })}
                     </td>
                     <td className="p-3">
+                        <span
+                          className={
+                            r?.vigente
+                              ? "inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800"
+                              : "inline-block rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600"
+                          }
+                        >
+                          {r?.vigente
+                            ? t("personal.badgeActive", { defaultValue: "Activo" })
+                            : t("personal.badgeInactive", { defaultValue: "Inactivo" })}
+                        </span>
                       <div className="flex gap-2">
                         <button
                           type="button"

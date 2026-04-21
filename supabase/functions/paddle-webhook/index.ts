@@ -95,6 +95,7 @@ function pickPriceIdFromTransactionData(data: any): string | null {
     data?.items?.[0]?.price_id,
     data?.billing_details?.line_items?.[0]?.price?.id,
     data?.billing_details?.line_items?.[0]?.price_id,
+    data?.price_id,
   ];
 
   for (const candidate of candidates) {
@@ -111,6 +112,7 @@ function pickPriceIdFromSubscriptionData(data: any): string | null {
     data?.items?.[0]?.price_id,
     data?.subscription_items?.[0]?.price?.id,
     data?.subscription_items?.[0]?.price_id,
+    data?.price_id,
   ];
 
   for (const candidate of candidates) {
@@ -122,7 +124,32 @@ function pickPriceIdFromSubscriptionData(data: any): string | null {
 }
 
 function pickSubscriptionId(data: any): string | null {
-  return asString(data?.id) ?? asString(data?.subscription_id);
+  const candidates = [
+    data?.subscription_id,
+    data?.subscription?.id,
+    data?.id,
+  ];
+
+  for (const candidate of candidates) {
+    const value = asString(candidate);
+    if (value) return value;
+  }
+
+  return null;
+}
+
+function pickCustomerId(data: any): string | null {
+  const candidates = [
+    data?.customer_id,
+    data?.customer?.id,
+  ];
+
+  for (const candidate of candidates) {
+    const value = asString(candidate);
+    if (value) return value;
+  }
+
+  return null;
 }
 
 function resolvePlanByPriceId(priceId: string): {
@@ -213,6 +240,48 @@ async function resolveOrgIdForSubscription({
   return { orgId: null, method: "not_found" };
 }
 
+async function getExistingBillingRow(supabase: any, orgId: string) {
+  const { data, error } = await supabase
+    .from("org_billing")
+    .select("paddle_subscription_id, paddle_customer_id, paddle_price_id")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[PADDLE WEBHOOK] existing org_billing lookup error", error);
+    return null;
+  }
+
+  return data ?? null;
+}
+
+function buildPaddleFields({
+  existingBilling,
+  paddleSubscriptionId,
+  paddleCustomerId,
+  paddlePriceId,
+}: {
+  existingBilling: any;
+  paddleSubscriptionId: string | null;
+  paddleCustomerId: string | null;
+  paddlePriceId: string | null;
+}) {
+  return {
+    paddle_subscription_id:
+      paddleSubscriptionId ??
+      asString(existingBilling?.paddle_subscription_id) ??
+      null,
+    paddle_customer_id:
+      paddleCustomerId ??
+      asString(existingBilling?.paddle_customer_id) ??
+      null,
+    paddle_price_id:
+      paddlePriceId ??
+      asString(existingBilling?.paddle_price_id) ??
+      null,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -271,31 +340,33 @@ serve(async (req) => {
     console.log("[PADDLE WEBHOOK] event received", { type });
 
     if (type === "transaction.completed") {
+      const paddleSubscriptionId = pickSubscriptionId(data);
+      const paddleCustomerId = pickCustomerId(data);
+      const paddlePriceId = pickPriceIdFromTransactionData(data);
       const transactionId = asString(data?.id);
-      const customerId = asString(data?.customer_id);
       const customData = data?.custom_data ?? null;
-      const transactionPriceId = pickPriceIdFromTransactionData(data);
 
       console.log("[PADDLE WEBHOOK] transaction.completed", {
         transaction_id: transactionId,
-        customer_id: customerId,
-        price_id: transactionPriceId,
+        paddle_customer_id: paddleCustomerId,
+        paddle_subscription_id: paddleSubscriptionId,
+        paddle_price_id: paddlePriceId,
         custom_data: customData,
       });
 
-      if (!transactionPriceId) {
+      if (!paddlePriceId) {
         return json(400, {
           ok: false,
           error: "Cannot resolve price_id from transaction.completed",
         });
       }
 
-      const resolvedPlan = resolvePlanByPriceId(transactionPriceId);
+      const resolvedPlan = resolvePlanByPriceId(paddlePriceId);
       if (!resolvedPlan) {
         return json(400, {
           ok: false,
           error: "Unsupported Paddle price_id for current environment",
-          price_id: transactionPriceId,
+          price_id: paddlePriceId,
           paddle_env: getPaddleEnv(),
         });
       }
@@ -324,6 +395,7 @@ serve(async (req) => {
         });
       }
 
+      const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
       const upsertPayload = {
@@ -335,8 +407,12 @@ serve(async (req) => {
         tracker_limit_override: resolvedPlan.trackerLimit,
         updated_at: now,
         last_paddle_event_at: now,
-        paddle_price_id: transactionPriceId,
-        paddle_customer_id: customerId,
+        ...buildPaddleFields({
+          existingBilling,
+          paddleSubscriptionId,
+          paddleCustomerId,
+          paddlePriceId,
+        }),
       };
 
       const { error: upsertError } = await supabase
@@ -369,19 +445,19 @@ serve(async (req) => {
     }
 
     if (type === "subscription.created" || type === "subscription.updated") {
-      const subscriptionId = pickSubscriptionId(data);
-      const customerId = asString(data?.customer_id);
-      const priceId = pickPriceIdFromSubscriptionData(data);
+      const paddleSubscriptionId = pickSubscriptionId(data);
+      const paddleCustomerId = pickCustomerId(data);
+      const paddlePriceId = pickPriceIdFromSubscriptionData(data);
 
       console.log("[PADDLE WEBHOOK] subscription event", {
         type,
-        subscription_id: subscriptionId,
-        customer_id: customerId,
-        price_id: priceId,
+        paddle_subscription_id: paddleSubscriptionId,
+        paddle_customer_id: paddleCustomerId,
+        paddle_price_id: paddlePriceId,
         custom_data: data?.custom_data ?? null,
       });
 
-      if (!subscriptionId) {
+      if (!paddleSubscriptionId) {
         return json(400, {
           ok: false,
           error: "Cannot resolve subscription id",
@@ -389,7 +465,7 @@ serve(async (req) => {
         });
       }
 
-      if (!priceId) {
+      if (!paddlePriceId) {
         return json(400, {
           ok: false,
           error: "Cannot resolve price_id from subscription event",
@@ -397,12 +473,12 @@ serve(async (req) => {
         });
       }
 
-      const resolvedPlan = resolvePlanByPriceId(priceId);
+      const resolvedPlan = resolvePlanByPriceId(paddlePriceId);
       if (!resolvedPlan) {
         return json(400, {
           ok: false,
           error: "Unsupported Paddle price_id for current environment",
-          price_id: priceId,
+          price_id: paddlePriceId,
           paddle_env: getPaddleEnv(),
         });
       }
@@ -410,16 +486,16 @@ serve(async (req) => {
       const { orgId, method } = await resolveOrgIdForSubscription({
         supabase,
         customOrgId: asString(data?.custom_data?.org_id),
-        paddleCustomerId: customerId,
-        paddleSubscriptionId: subscriptionId,
+        paddleCustomerId,
+        paddleSubscriptionId,
         logPrefix: "[PADDLE WEBHOOK]",
       });
 
       if (!orgId) {
         console.warn("[PADDLE WEBHOOK] org_id not resolved yet, skipping upsert but keeping event valid", {
           event_type: type,
-          subscription_id: subscriptionId,
-          customer_id: customerId,
+          paddle_subscription_id: paddleSubscriptionId,
+          paddle_customer_id: paddleCustomerId,
           method_tried: method,
         });
 
@@ -431,6 +507,7 @@ serve(async (req) => {
         });
       }
 
+      const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
       const upsertPayload = {
@@ -442,9 +519,12 @@ serve(async (req) => {
         tracker_limit_override: resolvedPlan.trackerLimit,
         updated_at: now,
         last_paddle_event_at: now,
-        paddle_subscription_id: subscriptionId,
-        paddle_customer_id: customerId,
-        paddle_price_id: priceId,
+        ...buildPaddleFields({
+          existingBilling,
+          paddleSubscriptionId,
+          paddleCustomerId,
+          paddlePriceId,
+        }),
       };
 
       const { error: upsertError } = await supabase
@@ -462,7 +542,7 @@ serve(async (req) => {
 
       console.log("[PADDLE WEBHOOK] org_billing upserted for subscription event", {
         org_id: orgId,
-        subscription_id: subscriptionId,
+        subscription_id: paddleSubscriptionId,
         plan_code: resolvedPlan.planCode,
         plan_status: "active",
         method_used: method,
@@ -472,7 +552,7 @@ serve(async (req) => {
         ok: true,
         event_type: type,
         org_id: orgId,
-        subscription_id: subscriptionId,
+        subscription_id: paddleSubscriptionId,
         plan_code: resolvedPlan.planCode,
         plan_status: "active",
         method_used: method,
@@ -481,7 +561,7 @@ serve(async (req) => {
 
     if (type === "subscription.canceled" || type === "subscription.paused") {
       const subscriptionId = pickSubscriptionId(data);
-      const customerId = asString(data?.customer_id);
+      const customerId = pickCustomerId(data);
 
       const { orgId, method } = await resolveOrgIdForSubscription({
         supabase,
@@ -507,6 +587,7 @@ serve(async (req) => {
         });
       }
 
+      const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
       const { error: updateError } = await supabase
@@ -518,8 +599,12 @@ serve(async (req) => {
             plan_status: "inactive",
             updated_at: now,
             last_paddle_event_at: now,
-            paddle_subscription_id: subscriptionId,
-            paddle_customer_id: customerId,
+            ...buildPaddleFields({
+              existingBilling,
+              paddleSubscriptionId: subscriptionId,
+              paddleCustomerId: customerId,
+              paddlePriceId: null,
+            }),
           },
           { onConflict: "org_id" },
         );
