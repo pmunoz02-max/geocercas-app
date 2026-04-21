@@ -583,6 +583,7 @@ async function handlePost(req, res) {
     });
   }
 
+  // ✅ SIEMPRE aquí inmediatamente
   const { ctx, user, supaSrv } = ctxRes;
 
   if (!requireWriteRole(ctx.role)) {
