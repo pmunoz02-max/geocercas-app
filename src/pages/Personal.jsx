@@ -260,44 +260,31 @@ export default function Personal() {
     }
   }
 
-  async function onDelete(row) {
-    if (!canEdit) {
-      setMsg(
-        t("personal.errorNoPermissionDelete", {
-          defaultValue: "You don't have permission.",
-        })
-      );
-      return;
-    }
+  async function load() {
+    if (!resolvedOrgId || !isLoggedIn) return;
 
-    const id = getRowId(row);
-    if (!id) {
-      setMsg("Missing row id (delete).");
-      return;
-    }
-
-    const ok = window.confirm(
-      t("personal.confirmDelete", { defaultValue: "Delete this record?" })
-    );
-    if (!ok) return;
+    const seq = ++loadSeqRef.current;
 
     try {
-      setRowBusyId(id);
+      setBusy(true);
       setMsg("");
 
-      await upsertPersonal({ id, action: "delete" }, resolvedOrgId);
-      setItems((curr) => removeFromList(curr, id));
-      await load();
+      const data = await listPersonal(resolvedOrgId);
 
-      setMsg(
-        t("personal.bannerDeleted", {
-          defaultValue: "Deleted.",
-        })
-      );
+      if (seq !== loadSeqRef.current) return;
+      setItems(Array.isArray(data?.items) ? data.items : []);
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setMsg(
         e?.message ||
-          t("personal.errorDelete", {
+          t("personal.errorLoad", {
+            defaultValue: "Could not load personnel.",
+          })
+      );
+    } finally {
+      if (seq === loadSeqRef.current) setBusy(false);
+    }
+  }
             defaultValue: "Could not delete.",
           })
       );
