@@ -63,6 +63,7 @@ function normalizeOrgId(value) {
 }
 
 export default function Personal() {
+    const loadSeqRef = React.useRef(0);
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
 
@@ -101,11 +102,18 @@ export default function Personal() {
       typeof opts.onlyActiveOverride === "boolean"
         ? opts.onlyActiveOverride
         : onlyActive;
+      vigente: false,
+    const onlyActiveValue =
+      typeof opts.onlyActiveOverride === "boolean"
+        ? opts.onlyActiveOverride
+        : onlyActive;
 
     const qValue =
       typeof opts.qOverride === "string"
         ? opts.qOverride
         : q;
+
+    const seq = ++loadSeqRef.current;
 
     try {
       setBusy(true);
@@ -116,24 +124,22 @@ export default function Personal() {
         onlyActive: onlyActiveValue,
       });
 
+      if (seq !== loadSeqRef.current) return;
       setItems(Array.isArray(data?.items) ? data.items : []);
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setItems([]);
       setMsg(
         e?.message ||
           t("personal.errorLoad", {
             defaultValue: "Could not load personnel.",
           })
-      );
-    } finally {
-      setBusy(false);
+      useEffect(() => {
+        if (!resolvedOrgId) return;
+        load();
+      }, [resolvedOrgId]);
     }
   }
-
-  useEffect(() => {
-    if (!resolvedOrgId || !ready || !isLoggedIn) return;
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedOrgId, ready, isLoggedIn]);
 
   const filtered = useMemo(() => {
@@ -153,8 +159,19 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionCreate", {
-          defaultValue: "You don't have permission.",
-        })
+    const normalizedItems = useMemo(
+      () =>
+        items.map((row) => ({
+          ...row,
+          vigente: Boolean(row?.vigente),
+        })),
+      [items]
+    );
+
+    const filtered = useMemo(() => {
+      let arr = normalizedItems;
+      if (onlyActive) arr = arr.filter((r) => Boolean(r.vigente));
+      if (!q) return arr;
       );
       return;
     }
@@ -188,10 +205,10 @@ export default function Personal() {
         nombre: "",
         apellido: "",
         email: "",
-        telefono: "",
-        vigente: true,
-      });
-      setQ("");
+        const item = await upsertPersonal(
+          { ...form, vigente: Boolean(form.vigente) },
+          resolvedOrgId
+        );
 
       await load({ qOverride: "" });
 
@@ -205,7 +222,7 @@ export default function Personal() {
         e?.message ||
           t("personal.errorSave", {
             defaultValue: "Could not save personnel.",
-          })
+          vigente: false,
       );
     } finally {
       setSaving(false);
