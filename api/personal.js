@@ -436,6 +436,8 @@ async function ensureUserOrgUnique({ supaSrv, orgId, desiredUserId, excludePerso
 ========================= */
 
 async function handleList(req, res) {
+    // Debug temporal: log org_id en GET
+    console.log("[PERSONAL LIST] org_id:", ctxRes?.ctx?.org_id);
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requestedOrgId =
     url.searchParams.get("org_id") ||
@@ -612,6 +614,15 @@ async function handlePost(req, res) {
   }
 
   const nombre = String(payload.nombre || "").trim();
+    // Log org_id para debug POST
+    console.log("[api/personal] POST org_id:", ctx.org_id);
+
+    if (!ctx.org_id) {
+      return json(res, 400, {
+        ok: false,
+        error: "Missing org_id in context",
+      });
+    }
   const apellido = String(payload.apellido || "").trim();
   const emailNorm = normEmail(payload.email);
   const documento = String(payload.documento || "").trim() || null;
@@ -718,6 +729,8 @@ async function handlePost(req, res) {
   // Se reemplazará por control de cupos activos por plan.
 
   const insertRow = {
+      // Debug temporal: log org_id antes del insert
+      console.log("[PERSONAL CREATE] org_id:", ctx.org_id);
     ...baseRow,
     org_id: ctx.org_id,
     owner_id: user.id,
