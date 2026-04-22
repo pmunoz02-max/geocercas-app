@@ -78,7 +78,7 @@ export default function Personal() {
     setOpenNew(false);
   }, [activeOrgId]);
 
-  async function load({ qOverride, onlyActiveOverride } = {}) {
+  const load = React.useCallback(async ({ qOverride, onlyActiveOverride } = {}) => {
     if (!isLoggedIn || !activeOrgId) return;
     setBusy(true);
     setMsg("");
@@ -93,23 +93,21 @@ export default function Personal() {
         limit: 500,
         orgId: activeOrgId,
       });
+
       setItems(Array.isArray(loadedItems) ? loadedItems : []);
       setPlan(loadedPlan || {});
     } catch (e) {
       setItems([]);
-      setMsg(
-        e?.message ||
-          t("personal.errorLoad", { defaultValue: "Error loading personnel." })
-      );
+      setMsg(e?.message || "Error loading personnel.");
     } finally {
       setBusy(false);
     }
-  }
+  }, [isLoggedIn, activeOrgId, q, onlyActive]);
 
   useEffect(() => {
-    if (!loading && ready && isLoggedIn && activeOrgId) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, ready, isLoggedIn, activeOrgId]);
+    if (!isLoggedIn || !activeOrgId) return;
+    load();
+  }, [load]);
 
   const filtered = useMemo(() => {
     const base = Array.isArray(items) ? items : [];
