@@ -318,60 +318,45 @@ export default function Personal() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      {typeof plan?.max_members === "number" && plan?.max_members > 0 ? (
-        <div className="mb-4 inline-block rounded-xl bg-blue-100 text-blue-900 px-4 py-2 font-semibold">
-          {plan?.active_count ?? 0} / {plan?.max_members} {t("personal.usageBadge", { defaultValue: "active staff" })}
-        </div>
-      ) : null}
+      <div className="flex items-center justify-end gap-3 mb-4">
+        {plan?.max_members != null && (
+          <div className="text-sm bg-gray-100 px-3 py-2 rounded-lg border">
+            {plan?.active_count ?? 0} de {plan?.max_members} usados
+          </div>
+        )}
+        <button
+          onClick={goToUpgrade}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+            limitReached
+              ? "bg-red-600 text-white"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
+        >
+          Upgrade 🚀
+        </button>
+        <button
+          onClick={() => setOpenNew(true)}
+          disabled={limitReached}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+            limitReached
+              ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+              : "bg-slate-900 text-white"
+          }`}
+        >
+          + Nuevo
+        </button>
+      </div>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold mb-1 text-white">
             {t("personal.title", { defaultValue: "Personnel" })}
           </h1>
           <div className="text-sm text-gray-300">
-            {t("personal.roleLabel", { defaultValue: "Role:" })}{" "}
-            <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{" "}
+            {t("personal.roleLabel", { defaultValue: "Role:" })}{{" "}}
+            <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{{" "}}
             <span className="font-mono">{activeOrgId}</span>
           </div>
         </div>
-
-        {canEdit && (
-          <div className="flex items-center gap-3 flex-col items-start sm:flex-row sm:items-center">
-            {plan?.max_members != null && (
-              <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2">
-                <div className="flex flex-row items-center gap-3">
-                  <div className="rounded-xl border px-3 py-2 text-sm font-semibold bg-white">
-                    {plan?.active_count ?? 0} de {plan?.max_members} usados
-                  </div>
-                  <button
-                    onClick={() => window.location.href = "/billing"}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${limitReached ? "bg-red-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}
-                  >
-                    Upgrade 🚀
-                  </button>
-                  <button
-                    disabled={limitReached}
-                    className={
-                      "rounded-xl bg-slate-900 text-white px-4 py-2 " +
-                      (limitReached ? "opacity-50 cursor-not-allowed" : "")
-                    }
-                    onClick={() => setOpenNew(true)}
-                    type="button"
-                  >
-                    + {t("personal.buttonNew", { defaultValue: "New" })}
-                  </button>
-                </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Aumenta tu capacidad con un upgrade
-                </div>
-                {limitReached && (
-                  <div className="text-xs text-red-600 mt-1">
-                    Has alcanzado el límite de tu plan
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         )}
       </div>
 
