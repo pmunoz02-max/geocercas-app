@@ -51,6 +51,7 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import PaddleCheckoutPage from "./pages/paddle-checkout.tsx";
 import PayPage from "./pages/Pay.jsx";
+import RefundPolicy from "./pages/RefundPolicy.jsx";
 
 function RootEntry() {
   const location = useLocation();
@@ -129,6 +130,8 @@ function MainAppRoutes() {
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
 
       <Route path="/pay" element={<PayPage />} />
+
+      <Route path="/refund-policy" element={<RefundPolicy />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />

@@ -204,6 +204,7 @@ export default function Landing() {
               <div className="mt-8 flex flex-wrap gap-4 justify-center text-xs text-slate-400 underline">
                 <Link to="/terms" className="hover:text-sky-300">Términos y condiciones</Link>
                 <Link to="/privacy" className="hover:text-sky-300">Política de privacidad</Link>
+                <Link to="/refund-policy" className="hover:text-sky-300">Política de reembolsos</Link>
               </div>
             </div>
           </div>
