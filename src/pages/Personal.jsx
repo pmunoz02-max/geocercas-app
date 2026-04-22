@@ -447,7 +447,22 @@ export default function Personal() {
                   <td className="p-3">{r?.email ?? "-"}</td>
                   <td className="p-3">{r?.telefono ?? "-"}</td>
                   <td className="p-3">{r?.vigente ? "Yes" : "No"}</td>
-                  <td className="p-3">OK</td>
+                  <td className="p-3 flex gap-2">
+                    <button
+                      onClick={() => onToggle(r)}
+                      className="px-2 py-1 rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
+                      type="button"
+                    >
+                      {r?.vigente ? "Deactivate" : "Activate"}
+                    </button>
+                    <button
+                      onClick={() => onDelete(r)}
+                      className="px-2 py-1 rounded bg-red-100 text-red-800 hover:bg-red-200"
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
