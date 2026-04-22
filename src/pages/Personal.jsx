@@ -45,9 +45,6 @@ function upsertIntoList(list, item) {
 }
 
 export default function Personal() {
-      const limitReached =
-        plan?.max_members != null &&
-        Number(plan.active_count || 0) >= Number(plan.max_members || 0);
     const goToUpgrade = () => {
       window.location.href = "/billing";
     };
@@ -62,7 +59,11 @@ export default function Personal() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [items, setItems] = useState([]);
-  const [plan, setPlan] = useState({});
+  const [plan, setPlan] = useState(null);
+
+  const limitReached =
+    plan?.max_members != null &&
+    Number(plan.active_count || 0) >= Number(plan.max_members || 0);
 
   const [openNew, setOpenNew] = useState(false);
   const [saving, setSaving] = useState(false);
