@@ -1892,6 +1892,10 @@
     }
   },
   "billing": {
+    "errors": {
+      "pendingChange": "Ya existe un cambio programado en tu suscripción. Espera a que se aplique antes de modificar el plan.",
+      "generic": "No se pudo procesar la solicitud. Intenta nuevamente."
+    },
     "cancel": {
       "title": "Checkout cancelado",
       "subtitle": "No se realizó ningún cobro.",

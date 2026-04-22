@@ -1874,6 +1874,10 @@
     }
   },
   "billing": {
+    "errors": {
+      "pendingChange": "There is already a scheduled change for this subscription. Please wait before modifying the plan.",
+      "generic": "Unable to process the request. Please try again."
+    },
     "cancel": {
       "title": "Checkout cancelled",
       "subtitle": "No charge was made.",

@@ -1874,6 +1874,10 @@
     }
   },
   "billing": {
+    "errors": {
+      "pendingChange": "Un changement est déjà programmé pour cet abonnement. Veuillez attendre avant de modifier le plan.",
+      "generic": "Impossible de traiter la demande. Veuillez réessayer."
+    },
     "cancel": {
       "title": "Paiement annulé",
       "subtitle": "Aucun paiement n'a été effectué.",
