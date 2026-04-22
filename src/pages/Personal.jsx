@@ -104,7 +104,6 @@ export default function Personal() {
         orgId: activeOrgId,
       });
 
-      console.log("[PERSONAL LOAD] rawResult", rawResult);
 
       const loadedItems = Array.isArray(rawResult?.items)
         ? rawResult.items
@@ -114,16 +113,10 @@ export default function Personal() {
 
       const loadedPlan = rawResult?.plan || null;
 
-      console.log("[PERSONAL LOAD] success", {
-        loadedItemsLength: Array.isArray(loadedItems) ? loadedItems.length : null,
-        loadedPlan,
-        firstItem: loadedItems?.[0] || null,
-      });
 
       setItems(Array.isArray(loadedItems) ? loadedItems : []);
       setPlan(loadedPlan || {});
     } catch (e) {
-      console.error("[PERSONAL LOAD] error", e);
       setItems([]);
       setMsg(e?.message || "Error loading personnel.");
     } finally {
@@ -405,12 +398,6 @@ export default function Personal() {
 
       {msg && <div className="mt-4 text-sm text-yellow-200">{msg}</div>}
 
-      <div className="mb-1 text-xs text-blue-700">
-        debug: isLoggedIn={String(isLoggedIn)} | activeOrgId={String(activeOrgId)}
-      </div>
-      <div className="mb-3 text-xs text-red-600">
-        items: {Array.isArray(items) ? items.length : "null"} | filtered: {Array.isArray(filtered) ? filtered.length : "null"} | q: "{q}" | onlyActive: {String(onlyActive)} | first: {items?.[0]?.nombre || "-"}
-      </div>
       <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
           <div className="p-4 text-gray-600">
