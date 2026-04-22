@@ -1,3 +1,14 @@
+// Central plan status normalization
+function normalizePlanStatus(raw) {
+  const value = String(raw || "").toLowerCase().trim();
+  if (["active", "trialing", "trial", "paid", "current", "approved"].includes(value)) {
+    return "active";
+  }
+  if (["canceled", "cancelled", "expired", "past_due", "inactive", "free"].includes(value)) {
+    return "inactive";
+  }
+  return "unknown";
+}
 // src/hooks/useOrgEntitlements.js
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient.js";
@@ -212,13 +223,15 @@ export default function useOrgEntitlements() {
     return normalizePlanCode(entitlements?.plan_code);
   }, [entitlements]);
 
-  const planStatus = useMemo(() => {
-    return normalizePlanStatus(entitlements?.plan_status);
-  }, [entitlements]);
 
-  const isActive = useMemo(() => {
-    return planStatus === "active";
-  }, [planStatus]);
+  // Raw status from entitlements
+  const planStatusRaw = entitlements?.plan_status;
+  // Normalized status
+  const normalizedPlanStatus = useMemo(() => normalizePlanStatus(planStatusRaw), [planStatusRaw]);
+  // Label key for UI
+  const statusLabelKey = normalizedPlanStatus === "active" ? "active" : normalizedPlanStatus;
+  // Is plan active
+  const isActive = normalizedPlanStatus === "active";
 
   const maxGeocercas = useMemo(() => {
     return normalizeNumber(entitlements?.max_geocercas, 0);
@@ -244,7 +257,9 @@ export default function useOrgEntitlements() {
 
     orgId: currentOrgId || null,
     planCode,
-    planStatus,
+    planStatusRaw,
+    normalizedPlanStatus,
+    statusLabelKey,
     isActive,
     maxGeocercas,
     maxTrackers,

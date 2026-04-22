@@ -53,7 +53,7 @@ export default function InvitarTracker() {
     loading: entitlementsLoading,
     error: entitlementsError,
     planCode,
-    planStatus,
+    normalizedPlanStatus,
     isActive,
     maxTrackers,
   } = useOrgEntitlements();
@@ -518,6 +518,53 @@ export default function InvitarTracker() {
   }
 
   if (inviteBlockedByPlan) {
+    let blockMsg = null;
+    if (planCode === "pro" && !isActive) {
+      blockMsg = (
+        <>
+          <div className="mt-2 text-sm">
+            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">PRO</span>
+          </div>
+          <div className="mt-2 text-sm">
+            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: <span className="font-semibold">{t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}</span>
+          </div>
+          <div className="mt-3 text-sm">
+            {t("inviteTracker.plan.proInactiveBlockedBody", {
+              defaultValue: "Las invitaciones de tracker requieren una suscripción PRO activa.",
+            })}
+          </div>
+        </>
+      );
+    } else if (planCode === "free") {
+      blockMsg = (
+        <>
+          <div className="mt-2 text-sm">
+            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">FREE</span>
+          </div>
+          <div className="mt-3 text-sm">
+            {t("inviteTracker.plan.freeBlockedBody", {
+              defaultValue: "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
+            })}
+          </div>
+        </>
+      );
+    } else {
+      blockMsg = (
+        <>
+          <div className="mt-2 text-sm">
+            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+          </div>
+          <div className="mt-2 text-sm">
+            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: <span className="font-semibold">{t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}</span>
+          </div>
+          <div className="mt-3 text-sm">
+            {t("inviteTracker.plan.genericBlockedBody", {
+              defaultValue: "Las invitaciones de tracker requieren una suscripción activa compatible.",
+            })}
+          </div>
+        </>
+      );
+    }
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm space-y-4">
@@ -525,53 +572,26 @@ export default function InvitarTracker() {
             <h1 className="text-xl font-semibold text-gray-900">
               {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
             </h1>
-
             <button
               type="button"
               onClick={() => navigate("/tracker")}
               className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
             >
-              {t("inviteTracker.backToTracker", {
-                defaultValue: "Volver a Tracker",
-              })}
+              {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
             </button>
           </div>
-
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
             <div className="text-base font-semibold">
-              {t("inviteTracker.plan.requiresProTitle", {
-                defaultValue: "Esta función requiere PRO o superior.",
-              })}
+              {t("inviteTracker.plan.requiresProTitle", { defaultValue: "Esta función requiere PRO o superior." })}
             </div>
-            <div className="mt-2 text-sm">
-              {t("inviteTracker.plan.detectedPlan", {
-                defaultValue: "Plan detectado",
-              })}
-              :{" "}
-              <span className="font-semibold">
-                {normalizePlanLabel(planCode)}
-              </span>
-            </div>
-            <div className="mt-3 text-sm">
-              {t("inviteTracker.plan.freeBlockedBody", {
-                defaultValue:
-                  "El plan FREE no permite invitar nuevos trackers a la organización.",
-              })}
-            </div>
+            {blockMsg}
           </div>
-
           {orgId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
-                {t("inviteTracker.plan.upgradePrompt", {
-                  defaultValue:
-                    "Actualiza esta organización para habilitar invitaciones de trackers.",
-                })}
+                {t("inviteTracker.plan.upgradePrompt", { defaultValue: "Actualiza esta organización para habilitar invitaciones de trackers." })}
               </div>
-              <UpgradeToProButton
-                orgId={orgId}
-                getAccessToken={getAccessToken}
-              />
+              <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
             </div>
           ) : null}
         </div>

@@ -156,13 +156,31 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      let parsed: unknown = null;
+      let parsed: any = null;
       try {
         parsed = JSON.parse(raw);
       } catch {
         parsed = null;
       }
 
+      const paddleCode =
+        parsed?.error?.code ??
+        parsed?.paddle_error?.error?.code ??
+        null;
+
+      // 🔥 CASO CRÍTICO NORMALIZADO
+      if (paddleCode === "subscription_locked_pending_changes") {
+        return jsonResponse(409, {
+          ok: false,
+          code: "subscription_has_pending_change",
+          error: "subscription_has_pending_change",
+          paddle_status: response.status,
+          paddle_env: PADDLE_ENV,
+          subscription_id: subscriptionId,
+        });
+      }
+
+      // resto igual
       return jsonResponse(500, {
         error: "paddle_cancel_failed",
         paddle_status: response.status,

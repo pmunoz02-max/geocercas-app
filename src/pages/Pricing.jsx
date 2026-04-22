@@ -271,6 +271,8 @@ export default function Pricing() {
     planCode,
     maxGeocercas,
     maxTrackers,
+    normalizedPlanStatus,
+    statusLabelKey,
   } = useOrgEntitlements();
 
   const [billingPanel, setBillingPanel] = useState(null);
@@ -362,14 +364,9 @@ export default function Pricing() {
     );
   }, [currentPlanCode, tp, tt]);
 
-  const billingStatus = useMemo(() => {
-    const raw = billingPanel?.plan_status;
-    if (raw == null || raw === "") return "unknown";
-    return String(raw).toLowerCase();
-  }, [billingPanel]);
-
+  // Use normalizedPlanStatus from hook as the only source of truth for status
   const billingStatusLabel = useMemo(() => {
-    if (billingStatus === "unknown") {
+    if (!normalizedPlanStatus || normalizedPlanStatus === "unknown") {
       return tt(
         "summary.noCommercialData",
         i18n.language === "fr"
@@ -379,17 +376,15 @@ export default function Pricing() {
             : "No commercial data"
       );
     }
-
-    const statusKey = `status.${billingStatus}`;
+    const statusKey = `status.${statusLabelKey}`;
     const translated = tp(statusKey);
     if (translated) return translated;
-
     return tt(
       "status.other",
-      billingStatus,
-      { status: billingStatus }
+      statusLabelKey,
+      { status: statusLabelKey }
     );
-  }, [billingStatus, i18n.language, tp, tt]);
+  }, [normalizedPlanStatus, statusLabelKey, i18n.language, tp, tt]);
 
   const trialUntil = useMemo(() => {
     const value = billingPanel?.trial_end;
