@@ -60,9 +60,6 @@ export default function Personal() {
         }
       const [planLimitModalOpen, setPlanLimitModalOpen] = useState(false);
       const [planLimitDetails, setPlanLimitDetails] = useState(null);
-    const goToUpgrade = () => {
-      window.location.href = "/billing";
-    };
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
 
