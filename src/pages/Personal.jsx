@@ -63,7 +63,7 @@ export default function Personal() {
 
   const limitReached =
     plan?.max_members != null &&
-    Number(plan.active_count || 0) >= Number(plan.max_members || 0);
+    Number(plan?.active_count || 0) >= Number(plan?.max_members || 0);
 
   const [openNew, setOpenNew] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -114,11 +114,10 @@ export default function Personal() {
           ? rawResult
           : [];
 
-      const loadedPlan = rawResult?.plan || null;
-
+      const loadedPlan = rawResult?.plan ?? null;
 
       setItems(Array.isArray(loadedItems) ? loadedItems : []);
-      setPlan(loadedPlan || {});
+      setPlan(loadedPlan);
     } catch (e) {
       setItems([]);
       setMsg(e?.message || "Error loading personnel.");
@@ -347,8 +346,8 @@ export default function Personal() {
         {canEdit && (
           <div className="flex items-center gap-3 flex-col items-start sm:flex-row sm:items-center">
             {plan?.max_members != null && (
-              <div className="text-sm bg-gray-100 px-3 py-1 rounded-lg">
-                {plan.active_count ?? 0} / {plan.max_members} activos
+              <div className="rounded-xl border px-3 py-2 text-sm">
+                {plan?.active_count ?? 0} / {plan?.max_members} activos
               </div>
             )}
             <div className="flex flex-col items-start">
