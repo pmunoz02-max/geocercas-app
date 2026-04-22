@@ -45,34 +45,23 @@ function upsertIntoList(list, item) {
 }
 
 export default function Personal() {
-          // Plan limit modal state
-          const [planLimitModalOpen, setPlanLimitModalOpen] = useState(false);
-          const [planLimitDetails, setPlanLimitDetails] = useState(null);
+  // Plan limit modal state
+  const [planLimitModalOpen, setPlanLimitModalOpen] = useState(false);
+  const [planLimitDetails, setPlanLimitDetails] = useState(null);
 
-          function openPlanLimitModal(details = null) {
-            setPlanLimitDetails(details || null);
-            setPlanLimitModalOpen(true);
-          }
+  function openPlanLimitModal(details = null) {
+    setPlanLimitDetails(details || null);
+    setPlanLimitModalOpen(true);
+  }
 
-          function closePlanLimitModal() {
-            setPlanLimitModalOpen(false);
-            setPlanLimitDetails(null);
-          }
-        function openPlanLimitModal(details = null) {
-          setPlanLimitDetails(details || null);
-          setPlanLimitModalOpen(true);
-        }
+  function closePlanLimitModal() {
+    setPlanLimitModalOpen(false);
+    setPlanLimitDetails(null);
+  }
 
-        function closePlanLimitModal() {
-          setPlanLimitModalOpen(false);
-          setPlanLimitDetails(null);
-        }
-
-        function goToUpgrade() {
-          window.location.href = "/billing";
-        }
-      const [planLimitModalOpen, setPlanLimitModalOpen] = useState(false);
-      const [planLimitDetails, setPlanLimitDetails] = useState(null);
+  function goToUpgrade() {
+    window.location.href = "/billing";
+  }
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
 
