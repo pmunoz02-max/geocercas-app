@@ -50,9 +50,6 @@ function normalizePlanCode(value) {
   return String(value || "free").toLowerCase().trim();
 }
 
-function normalizePlanStatus(value) {
-  return String(value || "free").toLowerCase().trim();
-}
 
 function buildFallbackEntitlementsFromPlan(planCode, billingRow = null) {
   const safePlan = normalizePlanCode(planCode);
