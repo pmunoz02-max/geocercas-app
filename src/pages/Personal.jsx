@@ -92,15 +92,7 @@ export default function Personal() {
       const onlyActiveToUse =
         typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
 
-      console.log("[PERSONAL LOAD] start", {
-        q: qToUse,
-        onlyActive: onlyActiveToUse,
-        activeOrgId,
-        isLoggedIn,
-      });
-
-
-      const rawResult = await listPersonal({
+            const rawResult = await listPersonal({
         q: qToUse,
         onlyActive: onlyActiveToUse,
         limit: 500,
@@ -114,7 +106,7 @@ export default function Personal() {
           ? rawResult
           : [];
 
-      const loadedPlan = rawResult?.plan ?? null;
+      const loadedPlan = rawResult && !Array.isArray(rawResult) ? (rawResult?.plan ?? null) : null;
 
       setItems(Array.isArray(loadedItems) ? loadedItems : []);
       setPlan(loadedPlan);
@@ -326,9 +318,9 @@ export default function Personal() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      {typeof plan.max_members === "number" && plan.max_members > 0 ? (
+      {typeof plan?.max_members === "number" && plan?.max_members > 0 ? (
         <div className="mb-4 inline-block rounded-xl bg-blue-100 text-blue-900 px-4 py-2 font-semibold">
-          {plan.active_count ?? 0} / {plan.max_members} {t("personal.usageBadge", { defaultValue: "active staff" })}
+          {plan?.active_count ?? 0} / {plan?.max_members} {t("personal.usageBadge", { defaultValue: "active staff" })}
         </div>
       ) : null}
       <div className="flex items-start justify-between gap-4">
