@@ -1,10 +1,28 @@
-// Friendly error handler for Paddle subscription_locked_pending_changes
-function getFriendlyError(err, t) {
+// Friendly error handler for Paddle errors (exact implementation)
+const getFriendlyError = (err, t) => {
   if (!err) return null;
-  const text = typeof err === 'string' ? err : JSON.stringify(err);
-  if (text.includes('subscription_locked_pending_changes')) {
-    return t('billing.errors.pendingChange');
+
+  try {
+    // si viene como string JSON → parsear
+    const parsed = typeof err === 'string' ? JSON.parse(err) : err;
+
+    const code =
+      parsed?.paddle_error?.error?.code ||
+      parsed?.error ||
+      null;
+
+    if (code === 'subscription_locked_pending_changes') {
+      return t('billing.errors.pendingChange');
+    }
+
+    if (code === 'paddle_cancel_failed') {
+      return t('billing.errors.generic');
+    }
+
+  } catch (e) {
+    // fallback si no es JSON
   }
+
   return t('billing.errors.generic');
 }
 // src/pages/BillingCancel.jsx
