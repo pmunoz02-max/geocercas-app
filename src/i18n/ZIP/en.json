@@ -1892,7 +1892,8 @@
     },
     "labels": {
       "email": "Email",
-      "orgId": "Organization ID"
+      "orgId": "Organization ID",
+      "orgName": "Organization"
     },
     "planState": {
       "title": "Plan status"
