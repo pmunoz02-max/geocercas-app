@@ -22,7 +22,23 @@ export default function Landing() {
       </div>
 
       <main className="mx-auto w-full max-w-7xl space-y-10 px-4 py-6 sm:px-6 lg:px-8">
+
         <HeroGeocercasDemo />
+
+        {/* Simple pricing section for PRO plan */}
+        <div style={{ marginTop: 40 }} className="mx-auto max-w-md rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center mb-10">
+          <h2 className="text-2xl font-bold mb-2 text-sky-300">Plan PRO</h2>
+          <p className="text-xl font-semibold mb-4 text-slate-100"><strong>$29 / mes</strong></p>
+          <ul className="text-slate-200 text-left mb-6 list-disc list-inside space-y-1">
+            <li>Monitoreo GPS en tiempo real</li>
+            <li>Geocercas ilimitadas</li>
+            <li>Reportes y costos</li>
+            <li>Múltiples usuarios</li>
+          </ul>
+          <a href="/login">
+            <button className="bg-sky-500 hover:bg-sky-400 text-white font-semibold px-6 py-2 rounded-xl transition">Probar gratis</button>
+          </a>
+        </div>
 
         <section className="rounded-3xl border border-slate-800/80 bg-slate-900/40 p-6 sm:p-8">
           <div className="max-w-3xl space-y-3">
