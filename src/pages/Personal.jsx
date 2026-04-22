@@ -338,42 +338,39 @@ export default function Personal() {
         {canEdit && (
           <div className="flex items-center gap-3 flex-col items-start sm:flex-row sm:items-center">
             {plan?.max_members != null && (
-              <div className="rounded-xl border px-3 py-2 text-sm">
-                {plan?.active_count ?? 0} / {plan?.max_members} activos
+              <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2">
+                <div className="flex flex-row items-center gap-3">
+                  <div className="rounded-xl border px-3 py-2 text-sm font-semibold bg-white">
+                    {plan?.active_count ?? 0} de {plan?.max_members} usados
+                  </div>
+                  <button
+                    onClick={() => window.location.href = "/billing"}
+                    className={`px-4 py-2 rounded-lg text-sm font-semibold ${limitReached ? "bg-red-600 text-white" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+                  >
+                    Upgrade 🚀
+                  </button>
+                  <button
+                    disabled={limitReached}
+                    className={
+                      "rounded-xl bg-slate-900 text-white px-4 py-2 " +
+                      (limitReached ? "opacity-50 cursor-not-allowed" : "")
+                    }
+                    onClick={() => setOpenNew(true)}
+                    type="button"
+                  >
+                    + {t("personal.buttonNew", { defaultValue: "New" })}
+                  </button>
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Aumenta tu capacidad con un upgrade
+                </div>
+                {limitReached && (
+                  <div className="text-xs text-red-600 mt-1">
+                    Has alcanzado el límite de tu plan
+                  </div>
+                )}
               </div>
             )}
-            <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2">
-              <div className="flex flex-row items-center gap-2">
-                <button
-                  disabled={limitReached}
-                  className={
-                    "rounded-xl bg-slate-900 text-white px-4 py-2 " +
-                    (limitReached ? "opacity-50 cursor-not-allowed" : "")
-                  }
-                  onClick={() => setOpenNew(true)}
-                  type="button"
-                >
-                  + {t("personal.buttonNew", { defaultValue: "New" })}
-                </button>
-                <button
-                  onClick={goToUpgrade}
-                  className={
-                    (limitReached
-                      ? "bg-blue-600 text-white "
-                      : "bg-blue-100 text-blue-800 hover:bg-blue-200 ") +
-                    "px-3 py-1 rounded-lg text-sm font-semibold transition"
-                  }
-                  type="button"
-                >
-                  Upgrade plan
-                </button>
-              </div>
-              {limitReached && (
-                <div className="text-xs text-red-600 mt-1">
-                  Has alcanzado el límite de tu plan
-                </div>
-              )}
-            </div>
           </div>
         )}
       </div>
