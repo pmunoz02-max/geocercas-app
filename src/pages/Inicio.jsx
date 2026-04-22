@@ -33,6 +33,10 @@ function HelpCard({ title, description, cta, to }) {
 }
 
 export default function Inicio() {
+    const isPreviewEnv =
+      typeof window !== "undefined" &&
+      (window.location.hostname.includes("preview") ||
+        window.location.hostname.includes("vercel.app"));
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
 
@@ -228,6 +232,11 @@ export default function Inicio() {
   // 5) HOME normal
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
+      {isPreviewEnv && (
+        <p className="mb-4 px-4 py-2 rounded-lg bg-yellow-100 text-yellow-900 border border-yellow-300 text-sm font-medium">
+          Nota: PREVIEW/TEST. No afecta producción.
+        </p>
+      )}
       {/* Bienvenida + logout */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

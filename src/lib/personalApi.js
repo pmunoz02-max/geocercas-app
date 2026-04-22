@@ -51,6 +51,15 @@ function makeError(res, parsed) {
       parsed.json.hint ??
       null;
 
+    // Normalize for 409 Plan limit reached
+    if (status === 409 && (msg.toLowerCase().includes("plan limit") || msg.toLowerCase().includes("plan reached"))) {
+      const err = new Error(msg);
+      err.status = status;
+      err.error = parsed.json.error || msg;
+      err.details = details;
+      return err;
+    }
+
     const e = new Error(
       details
         ? `${msg}: ${
