@@ -33,17 +33,27 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       const paddleEnv = getPaddleEnv();
       console.log("[UpgradeToProButton] paddleEnv:", paddleEnv);
 
-      const resolvedOrgId = orgId || activeOrgId;
-      console.log("[UpgradeToProButton] click", { org_id: resolvedOrgId, plan });
+      const normalizedOrgId = activeOrgId ?? (typeof activeOrg === "object" ? activeOrg?.id : undefined) ?? null;
 
-      if (!resolvedOrgId) {
+      console.log("[UpgradeToProButton] click", {
+        normalizedOrgId,
+        activeOrgId,
+        activeOrg: typeof activeOrg === "object" ? activeOrg?.id : activeOrg,
+        plan,
+      });
+
+      if (!normalizedOrgId) {
         setErrorMsg("No se pudo determinar la organización actual. Intenta recargar la página o contacta soporte.");
         setLoading(false);
         return;
       }
 
-      // El backend espera org_id (snake_case)
-      const payload = { org_id: resolvedOrgId, plan };
+      // TEMPORAL: enviar ambos formatos para compatibilidad
+      const payload = {
+        org_id: normalizedOrgId,
+        orgId: normalizedOrgId,
+        plan,
+      };
 
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
@@ -102,7 +112,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
           {errorMsg}
         </div>
       )}
-      {isPreviewEnv && (
+      {isPreviewEnv && !errorMsg && (
         <p className="mt-2 text-xs text-slate-500">
           Nota: PREVIEW/TEST. No afecta producción.
         </p>

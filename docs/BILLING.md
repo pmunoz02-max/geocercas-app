@@ -1,16 +1,71 @@
+## Fuente de verdad
+
+La fuente de verdad del billing actual es:
+
+- Edge Function: paddle-create-checkout
+- Frontend: UpgradeToProButton.tsx
+
+NO usar Stripe como referencia para nuevos cambios.
+## Entornos Paddle
+
+- Preview → Paddle Sandbox
+- Producción → Paddle Live
+
+⚠️ Importante:
+El entorno live puede devolver errores como:
+
+transaction_checkout_not_enabled
+
+si la cuenta no ha sido completamente habilitada por Paddle.
+## Normalización de org_id
+
+Para evitar errores entre frontend y backend:
+
+La Edge Function acepta:
+
+- org_id
+- orgId
+
+y los convierte internamente a:
+
+org_id (formato estándar)
+
+Esto evita errores como:
+
+- Missing org_id
+- missing_orgId_or_plan
+
+y permite compatibilidad entre versiones del frontend.
+## Flujo de checkout (Paddle)
+
+1. Usuario hace click en "Suscribirme a PRO"
+2. Frontend (UpgradeToProButton.tsx):
+  - obtiene org_id activo
+  - normaliza org_id
+  - envía request a Edge Function paddle-create-checkout
+3. Edge Function:
+  - acepta org_id o orgId
+  - normaliza a org_id
+  - valida plan
+  - crea checkout en Paddle
+4. Paddle Checkout
+5. Webhook (pendiente implementación completa):
+  - activa plan en org_billing
+
 # Sistema de Billing
 
 App Geocercas funciona como SaaS multi-tenant.
 
 ## Entornos
 
-- **Producción:** Stripe legacy (no migrado a Paddle)
-- **Preview:** Paddle (migrado, Stripe deshabilitado)
+- **Producción:** Paddle (modo live)
+- **Preview:** Paddle (modo sandbox)
+- **Stripe:** Deprecado/legacy (solo para migraciones históricas)
 
 ## Tecnología
 
-- Stripe (producción)
-- Paddle (preview)
+- Paddle (checkout, suscripciones y webhooks en preview y producción)
+- Stripe (legacy, solo para cuentas antiguas)
 
 ## Planes
 
@@ -19,34 +74,29 @@ Ejemplo:
 - Pro
 - Enterprise
 
-## Flujo Producción (Stripe legacy)
+## Flujo Actual Paddle (Preview y Producción)
 
 ```
 usuario crea organización
   ↓
 trial activo
   ↓
-checkout stripe
+checkout paddle-create-checkout (Edge Function)
   ↓
-webhook confirma pago
-  ↓
-se actualiza org_billing
-```
-
-## Flujo Preview (Paddle)
-
-```
-usuario crea organización
-  ↓
-trial activo
-  ↓
-checkout paddle-create-checkout
-  ↓
-Paddle Checkout
+Paddle Checkout (sandbox o live según entorno)
   ↓
 webhook paddle-webhook
   ↓
 se actualiza org_billing
 ```
+
+### Normalización de org_id/orgId
+
+- El frontend envía ambos campos: `org_id` y `orgId` (temporalmente, para compatibilidad).
+- La función `paddle-create-checkout` normaliza ambos y usa internamente un solo valor `orgId`.
+- Si falta el id, la función responde con error y muestra ambos valores crudos y el valor normalizado.
+- El payload a Paddle siempre lleva `custom_data.org_id`.
+
+---
 
 Ver detalles y arquitectura en [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md)

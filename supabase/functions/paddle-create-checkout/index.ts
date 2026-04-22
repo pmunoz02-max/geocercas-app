@@ -71,6 +71,7 @@ serve(async (req) => {
     }
 
 
+
     let body: any = {};
     try {
       body = await req.json();
@@ -79,9 +80,27 @@ serve(async (req) => {
       return json(400, { ok: false, error: "Invalid JSON body" });
     }
 
-    // Normaliza: acepta org_id o orgId
-    const orgId = body?.org_id ?? body?.orgId ?? null;
+    // Normaliza org id
+    const rawOrgIdSnake = body?.org_id ?? null;
+    const rawOrgIdCamel = body?.orgId ?? null;
+    const orgId = rawOrgIdSnake ?? rawOrgIdCamel ?? null;
     const plan = body?.plan ?? null;
+
+    if (!orgId || !plan) {
+      return new Response(
+        JSON.stringify({
+          error: "missing_org_id_or_plan",
+          org_id: rawOrgIdSnake,
+          orgId: rawOrgIdCamel,
+          normalizedOrgId: orgId,
+          plan,
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
 
     console.log("[paddle-create-checkout] BODY:", body);
     console.log("[paddle-create-checkout] ORG ID:", orgId);
