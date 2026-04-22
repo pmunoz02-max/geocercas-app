@@ -50,6 +50,17 @@ function json(status: number, body: unknown) {
 }
 
 serve(async (req) => {
+    // Paddle env/key debug log
+    const env = Deno.env.get("PADDLE_ENV");
+    const apiKey = Deno.env.get("PADDLE_API_KEY_LIVE") || "";
+    console.log("[PADDLE DEBUG]", {
+      env,
+      keyPrefix: apiKey?.slice(0, 4),
+    });
+
+    if (env === "live" && !apiKey.startsWith("pdl_")) {
+      throw new Error("Invalid Paddle live API key");
+    }
   try {
     if (req.method === "OPTIONS") {
       return new Response("ok", { headers: corsHeaders });

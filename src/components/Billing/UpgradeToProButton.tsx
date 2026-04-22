@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+// Detectar entorno preview para mostrar nota
+const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+const isPreviewEnv = hostname.includes("preview") || hostname.includes("vercel.app");
 import { supabase } from "@/lib/supabaseClient";
 import { getPaddleEnv } from "@/config/paddleEnv";
 
@@ -10,6 +13,7 @@ type Props = {
 
 export default function UpgradeToProButton({ orgId, plan, className = "" }: Props) {
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -20,6 +24,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
 
     try {
       setLoading(true);
+      setErrorMsg(null);
 
       console.log("[UpgradeToProButton] before invoke");
 
@@ -39,6 +44,8 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       if (error) {
         console.error("[UpgradeToProButton] function error", error);
 
+        setErrorMsg("No se pudo iniciar el checkout. Intenta nuevamente en unos minutos o contacta soporte.");
+
         const response = (error as any)?.context;
         if (response instanceof Response) {
           const raw = await response.clone().text();
@@ -52,27 +59,41 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       const checkoutUrl = data?.checkout_url;
       if (!checkoutUrl) {
         console.error("[UpgradeToProButton] missing checkout_url", data);
+        setErrorMsg("No se pudo iniciar el checkout. Intenta nuevamente en unos minutos o contacta soporte.");
         return;
       }
 
       console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
       console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
       window.location.assign(checkoutUrl);
-    } catch (err) {
-      console.error("[UpgradeToProButton] unexpected error", err);
+    } catch (e) {
+      console.error(e);
+      alert("No se pudo iniciar el checkout. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={loading}
-      className={className}
-    >
-      {loading ? "Abriendo checkout..." : "Suscribirme a PRO"}
-    </button>
+    <div>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={loading}
+        className={className}
+      >
+        {loading ? "Abriendo checkout..." : "Suscribirme a PRO"}
+      </button>
+      {errorMsg && (
+        <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+          {errorMsg}
+        </div>
+      )}
+      {isPreviewEnv && (
+        <p className="mt-2 text-xs text-gray-500">
+          Nota: PREVIEW/TEST. No afecta producción.
+        </p>
+      )}
+    </div>
   );
 }
