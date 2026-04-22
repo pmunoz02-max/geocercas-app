@@ -342,30 +342,36 @@ export default function Personal() {
                 {plan?.active_count ?? 0} / {plan?.max_members} activos
               </div>
             )}
-            <div className="flex flex-col items-start">
-              <button
-                disabled={limitReached}
-                className={
-                  "rounded-xl bg-slate-900 text-white px-4 py-2 " +
-                  (limitReached ? "opacity-50 cursor-not-allowed" : "")
-                }
-                onClick={() => setOpenNew(true)}
-                type="button"
-              >
-                + {t("personal.buttonNew", { defaultValue: "New" })}
-              </button>
+            <div className="flex flex-col items-start sm:flex-row sm:items-center gap-2">
+              <div className="flex flex-row items-center gap-2">
+                <button
+                  disabled={limitReached}
+                  className={
+                    "rounded-xl bg-slate-900 text-white px-4 py-2 " +
+                    (limitReached ? "opacity-50 cursor-not-allowed" : "")
+                  }
+                  onClick={() => setOpenNew(true)}
+                  type="button"
+                >
+                  + {t("personal.buttonNew", { defaultValue: "New" })}
+                </button>
+                <button
+                  onClick={goToUpgrade}
+                  className={
+                    (limitReached
+                      ? "bg-blue-600 text-white "
+                      : "bg-blue-100 text-blue-800 hover:bg-blue-200 ") +
+                    "px-3 py-1 rounded-lg text-sm font-semibold transition"
+                  }
+                  type="button"
+                >
+                  Upgrade plan
+                </button>
+              </div>
               {limitReached && (
-                <>
-                  <div className="text-xs text-red-600 mt-1">
-                    Has alcanzado el límite de tu plan
-                  </div>
-                  <button
-                    onClick={goToUpgrade}
-                    className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm mt-2"
-                  >
-                    Upgrade plan
-                  </button>
-                </>
+                <div className="text-xs text-red-600 mt-1">
+                  Has alcanzado el límite de tu plan
+                </div>
               )}
             </div>
           </div>
