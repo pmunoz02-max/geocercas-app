@@ -199,7 +199,23 @@ serve(async (req) => {
     }
     console.log("[paddle-create-checkout] PADDLE RESPONSE JSON:", paddleJson);
 
+
     if (!paddleResponse.ok) {
+      // If Paddle returns a controlled 4xx error, forward the status and a clean message
+      if (paddleResponse.status >= 400 && paddleResponse.status < 500) {
+        let cleanMsg = "Paddle request failed";
+        if (paddleJson?.error?.message) {
+          cleanMsg = paddleJson.error.message;
+        } else if (paddleJson?.error) {
+          cleanMsg = typeof paddleJson.error === "string" ? paddleJson.error : JSON.stringify(paddleJson.error);
+        }
+        return json(paddleResponse.status, {
+          error: "paddle_request_failed",
+          message: cleanMsg,
+          status: paddleResponse.status,
+        });
+      }
+      // For other errors, keep as 500
       return json(500, {
         error: "paddle_request_failed",
         status: paddleResponse.status,

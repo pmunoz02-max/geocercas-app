@@ -17,6 +17,24 @@ El entorno live puede devolver errores como:
 transaction_checkout_not_enabled
 
 si la cuenta no ha sido completamente habilitada por Paddle.
+
+## Problemas conocidos en producción
+
+### Error: `transaction_checkout_not_enabled` en Paddle Live
+
+En entorno de producción (Paddle Live), es posible recibir el error:
+
+```
+transaction_checkout_not_enabled
+```
+
+Esto ocurre cuando la cuenta de Paddle Live aún no ha sido completamente habilitada por el equipo de Paddle. Mientras tanto, el entorno de preview (Paddle Sandbox) funciona normalmente y permite pruebas de checkout.
+
+**Solución:**
+- Contactar a soporte de Paddle para completar la habilitación de la cuenta Live.
+- Hasta entonces, los checkouts en producción fallarán con este error, pero el entorno de preview seguirá funcionando.
+
+---
 ## Normalización de org_id
 
 Para evitar errores entre frontend y backend:
