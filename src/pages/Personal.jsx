@@ -96,12 +96,23 @@ export default function Personal() {
         isLoggedIn,
       });
 
-      const { items: loadedItems, plan: loadedPlan } = await listPersonal({
+
+      const rawResult = await listPersonal({
         q: qToUse,
         onlyActive: onlyActiveToUse,
         limit: 500,
         orgId: activeOrgId,
       });
+
+      console.log("[PERSONAL LOAD] rawResult", rawResult);
+
+      const loadedItems = Array.isArray(rawResult?.items)
+        ? rawResult.items
+        : Array.isArray(rawResult)
+          ? rawResult
+          : [];
+
+      const loadedPlan = rawResult?.plan || null;
 
       console.log("[PERSONAL LOAD] success", {
         loadedItemsLength: Array.isArray(loadedItems) ? loadedItems.length : null,
