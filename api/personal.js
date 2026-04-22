@@ -311,7 +311,10 @@ async function getPersonalPlanLimit({ supaSrv, orgId }) {
     .eq("active", true)
     .maybeSingle();
 
-  if (pe.error) throw pe.error;
+  if (pe.error) {
+    console.error("[plan_limit_error]", pe.error);
+    return { planCode: planCode || null, maxMembers: null };
+  }
 
   return {
     planCode,
@@ -326,7 +329,10 @@ async function countActivePersonal({ supaSrv, orgId }) {
     .eq("org_id", orgId)
     .eq("vigente", true)
     .eq("is_deleted", false);
-  if (error) throw error;
+  if (error) {
+    console.error("[count_active_error]", error);
+    return 0;
+  }
   return typeof count === "number" ? count : 0;
 }
 
@@ -399,10 +405,17 @@ async function handleList(req, res) {
   const { data, error } = await query;
   if (error) return json(res, 500, { ok: false, error: "No se pudo listar personal", details: error.message });
 
-  const [activeCount, planInfo] = await Promise.all([
-    countActivePersonal({ supaSrv, orgId: ctx.org_id }),
-    getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id }),
-  ]);
+  let activeCount = 0;
+  let planInfo = { planCode: null, maxMembers: null };
+
+  try {
+    [activeCount, planInfo] = await Promise.all([
+      countActivePersonal({ supaSrv, orgId: ctx.org_id }),
+      getPersonalPlanLimit({ supaSrv, orgId: ctx.org_id }),
+    ]);
+  } catch (e) {
+    console.error("[plan_block_error]", e);
+  }
 
   const plan = {
     plan_code: planInfo?.planCode ?? null,
