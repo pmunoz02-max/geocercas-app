@@ -80,12 +80,21 @@ export default function Personal() {
 
   const load = React.useCallback(async ({ qOverride, onlyActiveOverride } = {}) => {
     if (!isLoggedIn || !activeOrgId) return;
+
     setBusy(true);
     setMsg("");
+
     try {
       const qToUse = typeof qOverride === "string" ? qOverride : q;
       const onlyActiveToUse =
         typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
+
+      console.log("[PERSONAL LOAD] start", {
+        q: qToUse,
+        onlyActive: onlyActiveToUse,
+        activeOrgId,
+        isLoggedIn,
+      });
 
       const { items: loadedItems, plan: loadedPlan } = await listPersonal({
         q: qToUse,
@@ -94,9 +103,16 @@ export default function Personal() {
         orgId: activeOrgId,
       });
 
+      console.log("[PERSONAL LOAD] success", {
+        loadedItemsLength: Array.isArray(loadedItems) ? loadedItems.length : null,
+        loadedPlan,
+        firstItem: loadedItems?.[0] || null,
+      });
+
       setItems(Array.isArray(loadedItems) ? loadedItems : []);
       setPlan(loadedPlan || {});
     } catch (e) {
+      console.error("[PERSONAL LOAD] error", e);
       setItems([]);
       setMsg(e?.message || "Error loading personnel.");
     } finally {
@@ -106,8 +122,8 @@ export default function Personal() {
 
   useEffect(() => {
     if (!isLoggedIn || !activeOrgId) return;
-    load();
-  }, [load]);
+    load({ qOverride: "", onlyActiveOverride: onlyActive });
+  }, [isLoggedIn, activeOrgId]);
 
   const filtered = useMemo(() => {
     const base = Array.isArray(items) ? items : [];
