@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-// Detectar entorno preview para mostrar nota
+import { useAuth } from "@/context/auth.js";
+// Detectar entorno preview para mostrar nota (solo preview.* o *.vercel.app)
 const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-const isPreviewEnv = hostname.includes("preview") || hostname.includes("vercel.app");
+const isPreviewEnv = hostname.includes("preview.") || hostname.includes("vercel.app");
 import { supabase } from "@/lib/supabaseClient";
 import { getPaddleEnv } from "@/config/paddleEnv";
 
@@ -12,6 +13,7 @@ type Props = {
 };
 
 export default function UpgradeToProButton({ orgId, plan, className = "" }: Props) {
+  const { activeOrgId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -20,7 +22,8 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
     e.stopPropagation();
 
     console.clear();
-    console.log("[UpgradeToProButton] click", { orgId, plan });
+    const resolvedOrgId = orgId || activeOrgId;
+    console.log("[UpgradeToProButton] click", { orgId: resolvedOrgId, plan });
 
     try {
       setLoading(true);
@@ -32,10 +35,19 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       const paddleEnv = getPaddleEnv();
       console.log("[UpgradeToProButton] paddleEnv:", paddleEnv);
 
+      if (!resolvedOrgId) {
+        setErrorMsg("No se pudo determinar la organización actual. Intenta recargar la página o contacta soporte.");
+        setLoading(false);
+        return;
+      }
+
+      // El backend espera orgId (camelCase)
+      const payload = { orgId: resolvedOrgId, plan };
+
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
         {
-          body: { orgId, plan },
+          body: payload,
         }
       );
 
@@ -90,7 +102,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
         </div>
       )}
       {isPreviewEnv && (
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-slate-500">
           Nota: PREVIEW/TEST. No afecta producción.
         </p>
       )}
