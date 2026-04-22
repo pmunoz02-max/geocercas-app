@@ -45,6 +45,10 @@ function upsertIntoList(list, item) {
 }
 
 export default function Personal() {
+    function goToUpgrade() {
+      // Placeholder: implement navigation to upgrade page
+      alert("Upgrade plan coming soon");
+    }
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
 
@@ -56,6 +60,7 @@ export default function Personal() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [items, setItems] = useState([]);
+  const [plan, setPlan] = useState({});
 
   const [openNew, setOpenNew] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -82,13 +87,14 @@ export default function Personal() {
       const onlyActiveToUse =
         typeof onlyActiveOverride === "boolean" ? onlyActiveOverride : onlyActive;
 
-      const rows = await listPersonal({
+      const { items: loadedItems, plan: loadedPlan } = await listPersonal({
         q: qToUse,
         onlyActive: onlyActiveToUse,
         limit: 500,
         orgId: activeOrgId,
       });
-      setItems(Array.isArray(rows) ? rows : []);
+      setItems(Array.isArray(loadedItems) ? loadedItems : []);
+      setPlan(loadedPlan || {});
     } catch (e) {
       setItems([]);
       setMsg(
@@ -287,6 +293,11 @@ export default function Personal() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
+      {typeof plan.max_members === "number" && plan.max_members > 0 ? (
+        <div className="mb-4 inline-block rounded-xl bg-blue-100 text-blue-900 px-4 py-2 font-semibold">
+          {plan.active_count ?? 0} / {plan.max_members} {t("personal.usageBadge", { defaultValue: "active staff" })}
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold mb-1 text-white">
@@ -300,13 +311,26 @@ export default function Personal() {
         </div>
 
         {canEdit && (
-          <button
-            className="rounded-xl bg-slate-900 text-white px-4 py-2"
-            onClick={() => setOpenNew(true)}
-            type="button"
-          >
-            + {t("personal.buttonNew", { defaultValue: "New" })}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-xl bg-slate-900 text-white px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setOpenNew(true)}
+              type="button"
+              disabled={typeof plan.max_members === "number" && plan.max_members > 0 && plan.active_count >= plan.max_members}
+              title={typeof plan.max_members === "number" && plan.max_members > 0 && plan.active_count >= plan.max_members ? t("personal.limitReached", { defaultValue: "Plan limit reached" }) : undefined}
+            >
+              + {t("personal.buttonNew", { defaultValue: "New" })}
+            </button>
+            {typeof plan.max_members === "number" && plan.max_members > 0 && plan.active_count >= plan.max_members && (
+              <button
+                className="rounded-xl bg-yellow-400 text-yellow-900 px-4 py-2 font-semibold hover:bg-yellow-300"
+                onClick={goToUpgrade}
+                type="button"
+              >
+                {t("personal.buttonUpgrade", { defaultValue: "Upgrade plan" })}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
