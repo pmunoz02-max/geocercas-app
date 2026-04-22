@@ -21,7 +21,7 @@ function Modal({ open, title, children, onClose }) {
             onClick={onClose}
             type="button"
           >
-            âœ•
+            ✕
           </button>
         </div>
         <div className="p-5">{children}</div>
@@ -151,7 +151,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionCreate", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -166,7 +166,7 @@ export default function Personal() {
         activeOrgId
       );
 
-      // âœ… Si el backend no devolviÃ³ item, tratamos como error real
+      // âœ… Si el backend no devolvió item, tratamos como error real
       const newId = getRowId(item);
       if (!item || !newId) {
         throw new Error("Save succeeded but server did not return item.");
@@ -185,7 +185,7 @@ export default function Personal() {
         vigente: true,
       });
 
-      // limpiar bÃºsqueda para que no te oculte lo reciÃ©n creado
+      // limpiar búsqueda para que no te oculte lo recién creado
       setQ("");
 
       // opcional: refrescar lista real (pero no bloquea la UI)
@@ -213,7 +213,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionEdit", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -256,7 +256,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionDelete", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -280,7 +280,7 @@ export default function Personal() {
     try {
       setBusy(true);
       await deletePersonal(id, activeOrgId);
-      // NO hacemos load() aquÃ­ para evitar que reaparezca si el backend es soft-delete + list cache.
+      // NO hacemos load() aquí para evitar que reaparezca si el backend es soft-delete + list cache.
       setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
       setItems(prevItems);
@@ -298,7 +298,7 @@ export default function Personal() {
   if (loading || !ready)
     return (
       <div className="p-6 text-gray-300">
-        {t("personal.bannerLoadingSession", { defaultValue: "Loading sessionâ€¦" })}
+        {t("personal.bannerLoadingSession", { defaultValue: "Loading session…" })}
       </div>
     );
 
@@ -353,18 +353,17 @@ export default function Personal() {
           </h1>
           <div className="text-sm text-gray-300">
             {t("personal.roleLabel", { defaultValue: "Role:" })}:{" "}
-            <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{" "}
+            <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
             <span className="font-mono">{activeOrgId}</span>
           </div>
         </div>
-        )}
       </div>
 
       <div className="mt-4 flex flex-col md:flex-row gap-3 md:items-center">
         <input
           className="w-full md:w-96 rounded-xl border px-3 py-2"
           placeholder={t("personal.searchPlaceholder", {
-            defaultValue: "Search by name, last name, email or phoneâ€¦",
+            defaultValue: "Search by name, last name, email or phone…",
           })}
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -386,7 +385,7 @@ export default function Personal() {
           type="button"
         >
           {busy
-            ? t("personal.processing", { defaultValue: "Processingâ€¦" })
+            ? t("personal.processing", { defaultValue: "Processing…" })
             : t("personal.buttonRefresh", { defaultValue: "Refresh" })}
         </button>
       </div>
@@ -396,7 +395,7 @@ export default function Personal() {
       <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
           <div className="p-4 text-gray-600">
-            {t("personal.loading", { defaultValue: "Loadingâ€¦" })}
+            {t("personal.loading", { defaultValue: "Loading…" })}
           </div>
         ) : filtered.length === 0 ? (
           onlyActive && items.length === 0 ? (
@@ -449,7 +448,6 @@ export default function Personal() {
               ))}
             </tbody>
           </table>
-        )}
       </div>
 
       <Modal
@@ -507,7 +505,7 @@ export default function Personal() {
               disabled={saving}
             >
               {saving
-                ? t("personal.processing", { defaultValue: "Processingâ€¦" })
+                ? t("personal.processing", { defaultValue: "Processing…" })
                 : t("common.actions.save", { defaultValue: "Save" })}
             </button>
           </div>
