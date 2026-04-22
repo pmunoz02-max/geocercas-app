@@ -98,20 +98,27 @@ async function request(method, qs = "", body) {
    API pública
 ========================= */
 
-export async function listPersonal({
-  q = "",
-  onlyActive = true,
-  limit = 500,
-  orgId = null,
-} = {}) {
+export async function listPersonal({ q = "", onlyActive = true, limit = 500, orgId } = {}) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   params.set("onlyActive", onlyActive ? "1" : "0");
   params.set("limit", String(limit));
-  if (orgId) params.set("org_id", String(orgId));
+  if (orgId) params.set("org_id", orgId);
 
-  const data = await request("GET", `?${params.toString()}`); // SOURCE_PERSONAL_OK
-  return data.items || [];
+  const res = await fetch(`/api/personal?${params.toString()}`, {
+    credentials: "include",
+  });
+
+  const data = await res.json();
+
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.error || "Error loading personnel");
+  }
+
+  return {
+    items: Array.isArray(data.items) ? data.items : [],
+    plan: data.plan || null,
+  };
 }
 
 export async function upsertPersonal(payload, orgId = null) {
