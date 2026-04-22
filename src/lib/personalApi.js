@@ -126,6 +126,13 @@ export async function upsertPersonal(payload, orgId = null) {
     ...payload,
     ...(orgId ? { org_id: String(orgId) } : {}),
   });
+  if (!data?.ok) {
+    const err = new Error(data?.error || "Request failed");
+    err.status = data?.status || 400;
+    err.error = data?.error || "Request failed";
+    err.details = data?.details || null;
+    throw err;
+  }
   return data.item;
 }
 
@@ -140,6 +147,13 @@ export async function toggleVigente(id, orgId = null) {
     action: "toggle",
     ...(orgId ? { org_id: String(orgId) } : {}),
   });
+  if (!data?.ok) {
+    const err = new Error(data?.error || "Request failed");
+    err.status = data?.status || 400;
+    err.error = data?.error || "Request failed";
+    err.details = data?.details || null;
+    throw err;
+  }
   return data.item;
 }
 
@@ -149,5 +163,12 @@ export async function deletePersonal(id, orgId = null) {
     action: "delete",
     ...(orgId ? { org_id: String(orgId) } : {}),
   });
+  if (!data?.ok) {
+    const err = new Error(data?.error || "Request failed");
+    err.status = data?.status || 400;
+    err.error = data?.error || "Request failed";
+    err.details = data?.details || null;
+    throw err;
+  }
   return data.item;
 }
