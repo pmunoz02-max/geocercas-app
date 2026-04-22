@@ -1,11 +1,40 @@
 import React, { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useTranslation } from "react-i18next";
 
 export default function ManageSubscriptionButton({
   orgId,
   disabled = false,
   buttonLabel = "Suspend plan",
 }) {
+  const { t } = useTranslation();
+  // Friendly Paddle error handler for billing cancel/modify
+  function getFriendlyBillingError(err, t) {
+    if (!err) return "";
+    try {
+      const parsed = typeof err === "string" ? JSON.parse(err) : err;
+      const code =
+        parsed?.paddle_error?.error?.code ||
+        parsed?.code ||
+        parsed?.error ||
+        "";
+      if (code === "subscription_locked_pending_changes") {
+        return t(
+          "billing.errors.pendingChange",
+          "There is already a scheduled change for this subscription. Please wait before modifying the plan."
+        );
+      }
+      return t(
+        "billing.errors.generic",
+        "Unable to process the request. Please try again."
+      );
+    } catch {
+      return t(
+        "billing.errors.generic",
+        "Unable to process the request. Please try again."
+      );
+    }
+  }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -76,7 +105,7 @@ export default function ManageSubscriptionButton({
 
       {error && !loading && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 whitespace-pre-wrap break-words">
-          {error}
+          {getFriendlyBillingError(error, t)}
         </div>
       )}
 
