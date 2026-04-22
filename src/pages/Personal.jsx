@@ -46,8 +46,7 @@ function upsertIntoList(list, item) {
 
 export default function Personal() {
     function goToUpgrade() {
-      // Placeholder: implement navigation to upgrade page
-      alert("Upgrade plan coming soon");
+      window.location.href = "/billing";
     }
   const { t } = useTranslation();
   const { loading, ready, isLoggedIn, activeOrgId, currentRole } = useAuth();
@@ -342,7 +341,7 @@ export default function Personal() {
         </div>
 
         {canEdit && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 relative">
             <button
               className="rounded-xl bg-slate-900 text-white px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
               onClick={() => setOpenNew(true)}
@@ -353,13 +352,18 @@ export default function Personal() {
               + {t("personal.buttonNew", { defaultValue: "New" })}
             </button>
             {typeof plan.max_members === "number" && plan.max_members > 0 && plan.active_count >= plan.max_members && (
-              <button
-                className="rounded-xl bg-yellow-400 text-yellow-900 px-4 py-2 font-semibold hover:bg-yellow-300"
-                onClick={goToUpgrade}
-                type="button"
-              >
-                {t("personal.buttonUpgrade", { defaultValue: "Upgrade plan" })}
-              </button>
+              <>
+                <button
+                  className="rounded-xl bg-yellow-400 text-yellow-900 px-4 py-2 font-semibold hover:bg-yellow-300"
+                  onClick={goToUpgrade}
+                  type="button"
+                >
+                  {t("personal.buttonUpgrade", { defaultValue: "Upgrade plan" })}
+                </button>
+                <span className="ml-2 text-xs text-yellow-700 bg-yellow-100 rounded px-2 py-1 whitespace-nowrap">
+                  {t("personal.limitReachedMsg", { defaultValue: "Plan limit reached: no more staff can be added." })}
+                </span>
+              </>
             )}
           </div>
         )}
