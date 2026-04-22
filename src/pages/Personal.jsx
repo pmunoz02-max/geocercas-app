@@ -56,7 +56,7 @@ export default function Personal() {
   const canEdit = role === "owner" || role === "admin";
 
   const [q, setQ] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
+  const [onlyActive, setOnlyActive] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [items, setItems] = useState([]);
@@ -112,14 +112,27 @@ export default function Personal() {
   }, [loading, ready, isLoggedIn, activeOrgId]);
 
   const filtered = useMemo(() => {
-    if (!q) return items;
-    const ql = q.toLowerCase();
-    return items.filter((r) =>
-      `${r?.nombre ?? ""} ${r?.apellido ?? ""} ${r?.email ?? ""} ${r?.telefono ?? ""}`
-        .toLowerCase()
-        .includes(ql)
-    );
-  }, [items, q]);
+    const base = Array.isArray(items) ? items : [];
+    const qn = String(q || "").trim().toLowerCase();
+
+    return base.filter((item) => {
+      if (onlyActive && !item?.vigente) return false;
+
+      if (!qn) return true;
+
+      const nombre = String(item?.nombre || "").toLowerCase();
+      const apellido = String(item?.apellido || "").toLowerCase();
+      const email = String(item?.email || "").toLowerCase();
+      const telefono = String(item?.telefono || item?.telefono_raw || "").toLowerCase();
+
+      return (
+        nombre.includes(qn) ||
+        apellido.includes(qn) ||
+        email.includes(qn) ||
+        telefono.includes(qn)
+      );
+    });
+  }, [items, q, onlyActive]);
 
   async function onSaveNew(e) {
     e.preventDefault();
@@ -367,15 +380,25 @@ export default function Personal() {
 
       {msg && <div className="mt-4 text-sm text-yellow-200">{msg}</div>}
 
+      <div className="mb-3 text-xs text-red-600">
+        items: {Array.isArray(items) ? items.length : "null"} | filtered: {Array.isArray(filtered) ? filtered.length : "null"} | q: "{q}" | onlyActive: {String(onlyActive)} | first: {items?.[0]?.nombre || "-"}
+      </div>
       <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
         {busy && filtered.length === 0 ? (
           <div className="p-4 text-gray-600">
             {t("personal.loading", { defaultValue: "Loadingâ€¦" })}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-4 text-gray-600">
-            {t("personal.tableNoResults", { defaultValue: "No results." })}
-          </div>
+          onlyActive && items.length === 0 ? (
+            <div className="p-6 text-center text-gray-600">
+              <div className="text-lg font-semibold mb-2">{t("personal.emptyActiveTitle", { defaultValue: "No active staff" })}</div>
+              <div className="mb-2">{t("personal.emptyActiveDesc", { defaultValue: "There are no active staff members. Try unchecking the 'Only active' filter to see all staff." })}</div>
+            </div>
+          ) : (
+            <div className="p-4 text-gray-600">
+              {t("personal.tableNoResults", { defaultValue: "No results." })}
+            </div>
+          )
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-gray-600">
@@ -389,43 +412,16 @@ export default function Personal() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => {
-                const rid = getRowId(r) ?? `${r?.email ?? ""}-${r?.nombre ?? ""}`;
-                return (
-                  <tr key={rid} className="border-t">
-                    <td className="p-3">{r?.nombre ?? "-"}</td>
-                    <td className="p-3">{r?.apellido ?? "-"}</td>
-                    <td className="p-3">{r?.email ?? "-"}</td>
-                    <td className="p-3">{r?.telefono ?? "-"}</td>
-                    <td className="p-3">
-                      {r?.vigente
-                        ? t("personal.yes", { defaultValue: "Yes" })
-                        : t("personal.no", { defaultValue: "No" })}
-                    </td>
-                    <td className="p-3 flex gap-2">
-                      <button
-                        onClick={() => onToggle(r)}
-                        disabled={!canEdit || busy}
-                        className="rounded-lg border px-3 py-1"
-                        type="button"
-                      >
-                        {r?.vigente
-                          ? t("personal.actionDeactivate", { defaultValue: "Deactivate" })
-                          : t("personal.actionActivate", { defaultValue: "Activate" })}
-                      </button>
-
-                      <button
-                        onClick={() => onDelete(r)}
-                        disabled={!canEdit || busy}
-                        className="rounded-lg border border-red-200 text-red-700 px-3 py-1"
-                        type="button"
-                      >
-                        {t("personal.actionDelete", { defaultValue: "Delete" })}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+              {filtered.map((r, idx) => (
+                <tr key={r?.id || idx} className="border-t">
+                  <td className="p-3">{r?.nombre ?? "-"}</td>
+                  <td className="p-3">{r?.apellido ?? "-"}</td>
+                  <td className="p-3">{r?.email ?? "-"}</td>
+                  <td className="p-3">{r?.telefono ?? "-"}</td>
+                  <td className="p-3">{r?.vigente ? "Yes" : "No"}</td>
+                  <td className="p-3">OK</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}
