@@ -352,8 +352,8 @@ export default function Personal() {
             {t("personal.title", { defaultValue: "Personnel" })}
           </h1>
           <div className="text-sm text-gray-300">
-            {t("personal.roleLabel", { defaultValue: "Role:" })}{{" "}}
-            <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{{" "}}
+            {t("personal.roleLabel", { defaultValue: "Role:" })}:{" "}
+            <span className="font-semibold">{role.toUpperCase()}</span> Â· Org:{" "}
             <span className="font-mono">{activeOrgId}</span>
           </div>
         </div>
