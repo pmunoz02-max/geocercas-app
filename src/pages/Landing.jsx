@@ -156,26 +156,25 @@ export default function Landing() {
           <div className="max-w-xl w-full px-0 sm:px-2">
             <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-8 shadow-2xl">
               <div className="flex items-center justify-between gap-4">
-                {/* Antes decía "Geocercas" hardcodeado */}
                 <h1 className="text-3xl font-semibold">
-                  {t("landing.brandName")}
+                  App Geocercas
                 </h1>
-
                 <div className="relative z-50">
                   <LanguageSwitcher />
                 </div>
               </div>
 
-              {/* Antes decía "Bienvenido..." hardcodeado */}
-              <p className="mt-4 text-sm text-slate-300">
-                {t("landing.accessBody")}
+              <p className="mt-4 text-base text-slate-200 font-medium">
+                Plataforma web para control de personal, zonas y movimientos en campo. Visualiza, gestiona y valida operaciones en tiempo real con geocercas.
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                Acceso seguro para empresas y equipos operativos.
               </p>
 
               <div className="mt-6 flex flex-col sm:flex-row gap-3">
                 <Link
                   to={withSameSearch("/login")}
                   className="inline-flex items-center justify-center rounded-2xl px-5 py-3 font-semibold"
-                  // ✅ inline style para ganar a cualquier CSS global raro
                   style={{
                     backgroundColor: "#ffffff",
                     color: "#0f172a",
@@ -184,9 +183,8 @@ export default function Landing() {
                     filter: "none",
                   }}
                 >
-                  {t("app.header.login")}
+                  Iniciar sesión
                 </Link>
-
                 <Link
                   to={withSameSearch("/help/instructions")}
                   className="inline-flex items-center justify-center rounded-2xl px-5 py-3"
@@ -199,9 +197,13 @@ export default function Landing() {
                     filter: "none",
                   }}
                 >
-                  {/* Usamos una key ya existente con traducción FR */}
-                  {t("help.common.badge")}
+                  Ayuda
                 </Link>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-4 justify-center text-xs text-slate-400 underline">
+                <Link to="/terms" className="hover:text-sky-300">Términos y condiciones</Link>
+                <Link to="/privacy" className="hover:text-sky-300">Política de privacidad</Link>
               </div>
             </div>
           </div>

@@ -115,7 +115,8 @@ function MainAppRoutes() {
     <Routes>
       {/* Public */}
       <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
-      <Route path="/" element={<RootEntry />} />
+      <Route path="/" element={<Landing />} />
+      <Route path="/app" element={<RootEntry />} />
       <Route path="/landing" element={<Landing />} />
       <Route path="/demo" element={<DemoGeocercas />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
