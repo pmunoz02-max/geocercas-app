@@ -88,10 +88,15 @@ async function request(method, qs = "", body) {
     20000
   );
 
-  const parsed = await parseAny(res);
-  if (!res.ok) throw makeError(res, parsed);
-
-  return parsed.json ?? {};
+  const data = await res.json();
+  if (!res.ok || !data?.ok) {
+    const err = new Error(data?.error || "Request failed");
+    err.status = res.status;
+    err.error = data?.error || "Request failed";
+    err.details = data?.details || null;
+    throw err;
+  }
+  return data;
 }
 
 /* =========================

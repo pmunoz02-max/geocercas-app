@@ -45,6 +45,19 @@ function upsertIntoList(list, item) {
 }
 
 export default function Personal() {
+          // Plan limit modal state
+          const [planLimitModalOpen, setPlanLimitModalOpen] = useState(false);
+          const [planLimitDetails, setPlanLimitDetails] = useState(null);
+
+          function openPlanLimitModal(details = null) {
+            setPlanLimitDetails(details || null);
+            setPlanLimitModalOpen(true);
+          }
+
+          function closePlanLimitModal() {
+            setPlanLimitModalOpen(false);
+            setPlanLimitDetails(null);
+          }
         function openPlanLimitModal(details = null) {
           setPlanLimitDetails(details || null);
           setPlanLimitModalOpen(true);
@@ -274,6 +287,39 @@ export default function Personal() {
             defaultValue: "Could not change status.",
           })
       );
+          {planLimitModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Has alcanzado el límite de tu plan
+                </h3>
+
+                <p className="mt-2 text-sm text-slate-600">
+                  Para seguir agregando o activando personal, necesitas ampliar tu plan.
+                </p>
+
+                <div className="mt-4 rounded-xl border bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  Uso actual: {planLimitDetails?.current_active ?? 0} / {planLimitDetails?.limit ?? "-"}
+                </div>
+
+                <div className="mt-6 flex items-center justify-end gap-3">
+                  <button
+                    onClick={closePlanLimitModal}
+                    className="rounded-lg border px-4 py-2 text-sm font-medium text-slate-700"
+                  >
+                    Cerrar
+                  </button>
+
+                  <button
+                    onClick={goToUpgrade}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  >
+                    Upgrade ahora
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
     } finally {
       setBusy(false);
     }
