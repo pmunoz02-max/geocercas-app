@@ -21,7 +21,7 @@ function Modal({ open, title, children, onClose }) {
             onClick={onClose}
             type="button"
           >
-            ✕
+            âœ•
           </button>
         </div>
         <div className="p-5">{children}</div>
@@ -151,7 +151,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionCreate", {
-          defaultValue: "You don’t have permission.",
+          defaultValue: "You donâ€™t have permission.",
         })
       );
       return;
@@ -166,7 +166,7 @@ export default function Personal() {
         activeOrgId
       );
 
-      // âœ… Si el backend no devolvió item, tratamos como error real
+      // âœ… Si el backend no devolviÃ³ item, tratamos como error real
       const newId = getRowId(item);
       if (!item || !newId) {
         throw new Error("Save succeeded but server did not return item.");
@@ -185,7 +185,7 @@ export default function Personal() {
         vigente: true,
       });
 
-      // limpiar búsqueda para que no te oculte lo recién creado
+      // limpiar bÃºsqueda para que no te oculte lo reciÃ©n creado
       setQ("");
 
       // opcional: refrescar lista real (pero no bloquea la UI)
@@ -213,7 +213,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionEdit", {
-          defaultValue: "You don’t have permission.",
+          defaultValue: "You donâ€™t have permission.",
         })
       );
       return;
@@ -256,7 +256,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionDelete", {
-          defaultValue: "You don’t have permission.",
+          defaultValue: "You donâ€™t have permission.",
         })
       );
       return;
@@ -280,7 +280,7 @@ export default function Personal() {
     try {
       setBusy(true);
       await deletePersonal(id, activeOrgId);
-      // NO hacemos load() aquí para evitar que reaparezca si el backend es soft-delete + list cache.
+      // NO hacemos load() aquÃ­ para evitar que reaparezca si el backend es soft-delete + list cache.
       setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
       setItems(prevItems);
@@ -448,6 +448,7 @@ export default function Personal() {
               ))}
             </tbody>
           </table>
+        )}
       </div>
 
       <Modal
