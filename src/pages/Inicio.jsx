@@ -33,10 +33,10 @@ function HelpCard({ title, description, cta, to }) {
 }
 
 export default function Inicio() {
+    const hostname = typeof window !== "undefined" ? window.location.hostname : "";
     const isPreviewEnv =
-      typeof window !== "undefined" &&
-      (window.location.hostname.includes("preview") ||
-        window.location.hostname.includes("vercel.app"));
+      hostname === "preview.tugeocercas.com" ||
+      hostname.endsWith(".vercel.app");
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
 

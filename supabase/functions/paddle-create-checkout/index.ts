@@ -70,6 +70,7 @@ serve(async (req) => {
       return json(405, { ok: false, error: "Method not allowed" });
     }
 
+
     let body: any = {};
     try {
       body = await req.json();
@@ -78,7 +79,8 @@ serve(async (req) => {
       return json(400, { ok: false, error: "Invalid JSON body" });
     }
 
-    const orgId = body?.orgId ?? null;
+    // Normaliza: acepta org_id o orgId
+    const orgId = body?.org_id ?? body?.orgId ?? null;
     const plan = body?.plan ?? null;
 
     console.log("[paddle-create-checkout] BODY:", body);

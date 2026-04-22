@@ -22,8 +22,6 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
     e.stopPropagation();
 
     console.clear();
-    const resolvedOrgId = orgId || activeOrgId;
-    console.log("[UpgradeToProButton] click", { orgId: resolvedOrgId, plan });
 
     try {
       setLoading(true);
@@ -35,14 +33,17 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       const paddleEnv = getPaddleEnv();
       console.log("[UpgradeToProButton] paddleEnv:", paddleEnv);
 
+      const resolvedOrgId = orgId || activeOrgId;
+      console.log("[UpgradeToProButton] click", { org_id: resolvedOrgId, plan });
+
       if (!resolvedOrgId) {
         setErrorMsg("No se pudo determinar la organización actual. Intenta recargar la página o contacta soporte.");
         setLoading(false);
         return;
       }
 
-      // El backend espera orgId (camelCase)
-      const payload = { orgId: resolvedOrgId, plan };
+      // El backend espera org_id (snake_case)
+      const payload = { org_id: resolvedOrgId, plan };
 
       const { data, error } = await supabase.functions.invoke(
         "paddle-create-checkout",
