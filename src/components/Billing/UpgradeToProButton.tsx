@@ -33,26 +33,22 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       const paddleEnv = getPaddleEnv();
       console.log("[UpgradeToProButton] paddleEnv:", paddleEnv);
 
-      const normalizedOrgId = activeOrgId ?? (typeof activeOrg === "object" ? activeOrg?.id : undefined) ?? null;
+      const normalizedOrgId = activeOrgId ?? null;
 
       console.log("[UpgradeToProButton] click", {
         normalizedOrgId,
         activeOrgId,
-        activeOrg: typeof activeOrg === "object" ? activeOrg?.id : activeOrg,
-        plan,
+        plan: "pro",
       });
 
       if (!normalizedOrgId) {
-        setErrorMsg("No se pudo determinar la organización actual. Intenta recargar la página o contacta soporte.");
-        setLoading(false);
-        return;
+        throw new Error("No active organization id");
       }
 
-      // TEMPORAL: enviar ambos formatos para compatibilidad
       const payload = {
         org_id: normalizedOrgId,
         orgId: normalizedOrgId,
-        plan,
+        plan: "pro",
       };
 
       const { data, error } = await supabase.functions.invoke(
@@ -112,7 +108,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
           {errorMsg}
         </div>
       )}
-      {isPreviewEnv && !errorMsg && (
+      {isPreviewEnv && (
         <p className="mt-2 text-xs text-slate-500">
           Nota: PREVIEW/TEST. No afecta producción.
         </p>
