@@ -373,26 +373,6 @@ export default function InvitarTracker() {
     );
   }
 
-  if (entitlementsError) {
-    return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">
-            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
-          </h1>
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-            {t("inviteTracker.plan.validationError", {
-              defaultValue:
-                "No se pudo validar el plan de la organización.",
-            })}
-            <div className="mt-2 break-all font-mono text-xs">
-              {entitlementsError}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (inviteBlockedByPlan) {
     let blockMsg = null;
