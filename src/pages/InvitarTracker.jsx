@@ -303,9 +303,7 @@ export default function InvitarTracker() {
             .select("id, org_id, personal_id, user_id, estado, start_time, end_time, is_deleted")
             .eq("org_id", orgId)
             .eq("is_deleted", false)
-            .eq("estado", "activa")
-            .lte("start_time", now)
-            .gte("end_time", now)
+            .or(`estado.eq.activa,end_time.is.null,end_time.gte.${now}`)
             .limit(1000);
 
         if (assignacionesErr) throw assignacionesErr;
