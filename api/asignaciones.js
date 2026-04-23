@@ -1,3 +1,11 @@
+      // Enforce tenant_id from org_id if missing (POST)
+      if (!insertFields.tenant_id && insertFields.org_id) {
+        insertFields.tenant_id = insertFields.org_id;
+      }
+      // Enforce tenant_id from org_id if missing (PATCH)
+      if (!updateFields.tenant_id && nextOrgId) {
+        updateFields.tenant_id = nextOrgId;
+      }
 import { createClient } from "@supabase/supabase-js";
 
 const VERSION = "asignaciones-direct-sync-04";
