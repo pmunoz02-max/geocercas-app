@@ -32,6 +32,11 @@ function normalizePlanLabel(planCode) {
 }
 
 export default function InvitarTracker() {
+    // Safe cancellation scheduled state for future use
+    const scheduledChangeAction = entitlements?.scheduled_change_action ?? null;
+    const cancellationScheduled =
+      Boolean(entitlements?.cancel_at_period_end) &&
+      scheduledChangeAction === "cancel";
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
