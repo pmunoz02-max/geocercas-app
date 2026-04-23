@@ -61,24 +61,6 @@ export default function InvitarTracker() {
   // Always use optional chaining and fallback for entitlements
   const planStatus = entitlements?.plan_status ?? null;
 
-  // Show loader or sync message if either auth or entitlements are loading
-  if (auth.loading || entitlementsLoading) {
-    return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">
-            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
-          </h1>
-          <p className="mt-3 text-sm text-slate-600">
-            {t("inviteTracker.org.syncing", {
-              defaultValue: "Sincronizando organización y plan...",
-            })}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
@@ -344,7 +326,7 @@ export default function InvitarTracker() {
     return () => {
       cancelled = true;
     };
-  }, [orgId, entitlementsLoading, isActive, t]);
+  }, [orgId, entitlementsLoading, planStatus, t]);
 
   useEffect(() => {
     if (!selectedPerson) {
@@ -501,7 +483,7 @@ export default function InvitarTracker() {
         })
       : t("common.select", { defaultValue: "- Selecciona -" });
 
-  if (entitlementsLoading) {
+  if (auth?.loading || entitlementsLoading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
@@ -509,8 +491,8 @@ export default function InvitarTracker() {
             {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
           </h1>
           <p className="mt-3 text-sm text-slate-600">
-            {t("inviteTracker.plan.validating", {
-              defaultValue: "Validando plan de la organización...",
+            {t("inviteTracker.org.syncing", {
+              defaultValue: "Sincronizando organización y plan...",
             })}
           </p>
         </div>
