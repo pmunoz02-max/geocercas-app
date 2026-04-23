@@ -32,8 +32,8 @@ function normalizePlanLabel(planCode) {
 }
 
 
+
 export default function InvitarTracker() {
-  // Use useOrgEntitlements() and destructure cancellationScheduled directly
   const {
     entitlements,
     loading: entitlementsLoading,
@@ -42,8 +42,9 @@ export default function InvitarTracker() {
     normalizedPlanStatus,
     isActive,
     maxTrackers,
-    cancellationScheduled,
   } = useOrgEntitlements();
+
+  const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
 
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
