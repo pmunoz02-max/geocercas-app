@@ -45,7 +45,6 @@ export default function InvitarTracker() {
       auth?.currentOrg?.org_id ||
       auth?.currentOrg?.id ||
       "";
-
     return String(id || "").trim();
   }, [auth]);
 
@@ -57,6 +56,24 @@ export default function InvitarTracker() {
     isActive,
     maxTrackers,
   } = useOrgEntitlements();
+
+  // Show loader or sync message if either auth or entitlements are loading
+  if (auth.loading || entitlementsLoading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900">
+            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">
+            {t("inviteTracker.org.syncing", {
+              defaultValue: "Sincronizando organización y plan...",
+            })}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
