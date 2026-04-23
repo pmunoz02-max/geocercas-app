@@ -55,7 +55,11 @@ export default function InvitarTracker() {
     normalizedPlanStatus,
     isActive,
     maxTrackers,
+    entitlements,
   } = useOrgEntitlements();
+
+  // Always use optional chaining and fallback for entitlements
+  const planStatus = entitlements?.plan_status ?? null;
 
   // Show loader or sync message if either auth or entitlements are loading
   if (auth.loading || entitlementsLoading) {
@@ -115,8 +119,9 @@ export default function InvitarTracker() {
   const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
 
   const inviteBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && !isActive;
-  }, [entitlementsLoading, isActive]);
+    // Final protection: block only if planStatus is not active
+    return !entitlementsLoading && (!planStatus || planStatus !== "active");
+  }, [entitlementsLoading, planStatus]);
 
   const trackerLimitReached = useMemo(() => {
     return !loadingTrackerCount && trackerCount >= maxTrackers;
@@ -272,7 +277,7 @@ export default function InvitarTracker() {
         return;
       }
 
-      if (entitlementsLoading || !isActive) {
+      if (entitlementsLoading || !planStatus || planStatus !== "active") {
         setPeople([]);
         setActiveAssignaciones([]);
         setLoadingPeople(false);
@@ -536,7 +541,7 @@ export default function InvitarTracker() {
 
   if (inviteBlockedByPlan) {
     let blockMsg = null;
-    if (planCode === "pro" && !isActive) {
+    if (planCode === "pro" && (!planStatus || planStatus !== "active")) {
       blockMsg = (
         <>
           <div className="mt-2 text-sm">
@@ -572,7 +577,7 @@ export default function InvitarTracker() {
             {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
           </div>
           <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: <span className="font-semibold">{t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}</span>
+            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: <span className="font-semibold">{t(`status.${planStatus}`, { defaultValue: planStatus ?? "-" })}</span>
           </div>
           <div className="mt-3 text-sm">
             {t("inviteTracker.plan.genericBlockedBody", {
