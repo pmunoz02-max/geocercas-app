@@ -21,7 +21,7 @@ function pickPersonalLabel(row) {
 }
 
 function normalizePlanLabel(planCode) {
-  const v = String(planCode || "").toLowerCase();
+  const v = String(planCode || "").trim().toLowerCase();
   if (v === "pro") return "PRO";
   if (v === "enterprise") return "ENTERPRISE";
   if (v === "elite_plus") return "ELITE PLUS";
@@ -31,18 +31,19 @@ function normalizePlanLabel(planCode) {
   return v ? v.toUpperCase() : "-";
 }
 
-
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
 
 export default function InvitarTracker() {
-
-  // --- HOOKS FIRST ---
+  // =========================
+  // HOOKS BASE
+  // =========================
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
-  const {
-    entitlements,
-    loading: entitlementsLoading,
-  } = useOrgEntitlements();
+  const { entitlements, loading: entitlementsLoading } = useOrgEntitlements();
+
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
@@ -56,12 +57,31 @@ export default function InvitarTracker() {
   const [inviteLink, setInviteLink] = useState("");
   const [inviteMeta, setInviteMeta] = useState(null);
 
-  // --- DERIVED VARIABLES ---
+  // =========================
+  // DERIVADOS BASE
+  // =========================
   const safeMaxTrackers = Number(entitlements?.max_trackers ?? 0);
-  const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
-  const planStatus = entitlements?.plan_status ?? null;
 
-  // --- useMemo, useCallback, etc. ---
+  const planCode = String(
+    entitlements?.plan_code ||
+      entitlements?.plan ||
+      entitlements?.subscription_plan ||
+      "free"
+  )
+    .trim()
+    .toLowerCase();
+
+  const planStatus = String(entitlements?.plan_status || "free")
+    .trim()
+    .toLowerCase();
+
+  const normalizedPlanStatus = planStatus || "unknown";
+  const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
+  const isActive = normalizedPlanStatus === "active";
+
+  // =========================
+  // MEMOS
+  // =========================
   const orgId = useMemo(() => {
     const id =
       auth?.orgId ||
@@ -95,20 +115,18 @@ export default function InvitarTracker() {
     return "es";
   }, [i18n]);
 
-  // Guard: show fallback UI if entitlements are loading or undefined
-  if (entitlementsLoading || !entitlements) {
-    return <div className="min-h-[70vh] flex items-center justify-center p-6">Cargando…</div>;
-  }
-
-  const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
+  const hasActiveAssignmentsInOrg = useMemo(() => {
+    return activeAssignaciones.length > 0;
+  }, [activeAssignaciones]);
 
   const inviteBlockedByPlan = useMemo(() => {
-    // Final protection: block only if planStatus is not active
-    return !entitlementsLoading && (!planStatus || planStatus !== "active");
-  }, [entitlementsLoading, planStatus]);
+    return !entitlementsLoading && !isActive;
+  }, [entitlementsLoading, isActive]);
 
   const trackerLimitReached = useMemo(() => {
-    return !loadingTrackerCount && trackerCount >= safeMaxTrackers;
+    if (loadingTrackerCount) return false;
+    if (safeMaxTrackers <= 0) return true;
+    return trackerCount >= safeMaxTrackers;
   }, [loadingTrackerCount, trackerCount, safeMaxTrackers]);
 
   const trackersUsageLabel = useMemo(() => {
@@ -183,6 +201,23 @@ export default function InvitarTracker() {
     return set;
   }, [peopleWithActiveAssignments]);
 
+  const selectPlaceholder = useMemo(() => {
+    if (loadingPeople) {
+      return t("common.actions.loading", { defaultValue: "Cargando..." });
+    }
+
+    if (inviteOptions.length === 0) {
+      return t("inviteTracker.empty.noActiveAssignments", {
+        defaultValue: "Sin personal con asignación activa",
+      });
+    }
+
+    return t("common.select", { defaultValue: "- Selecciona -" });
+  }, [loadingPeople, inviteOptions.length, t]);
+
+  // =========================
+  // EFFECTS
+  // =========================
   useEffect(() => {
     let cancelled = false;
 
@@ -205,9 +240,7 @@ export default function InvitarTracker() {
           .eq("role", "tracker")
           .is("revoked_at", null);
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         if (!cancelled) {
           setTrackerCount(count || 0);
@@ -239,21 +272,25 @@ export default function InvitarTracker() {
       setErrMsg(null);
 
       if (!orgId) {
-        setPeople([]);
-        setActiveAssignaciones([]);
-        setLoadingPeople(false);
-        setErrMsg(
-          t("inviteTracker.errors.noOrg", {
-            defaultValue: "No se pudo determinar la organización activa.",
-          })
-        );
+        if (!cancelled) {
+          setPeople([]);
+          setActiveAssignaciones([]);
+          setLoadingPeople(false);
+          setErrMsg(
+            t("inviteTracker.errors.noOrg", {
+              defaultValue: "No se pudo determinar la organización activa.",
+            })
+          );
+        }
         return;
       }
 
-      if (entitlementsLoading || !planStatus || planStatus !== "active") {
-        setPeople([]);
-        setActiveAssignaciones([]);
-        setLoadingPeople(false);
+      if (entitlementsLoading || !isActive) {
+        if (!cancelled) {
+          setPeople([]);
+          setActiveAssignaciones([]);
+          setLoadingPeople(false);
+        }
         return;
       }
 
@@ -263,7 +300,7 @@ export default function InvitarTracker() {
         const { data: assignacionesRows, error: assignacionesErr } =
           await supabase
             .from("asignaciones")
-            .select("id, org_id, personal_id, user_id")
+            .select("id, org_id, personal_id, user_id, estado, start_time, end_time, is_deleted")
             .eq("org_id", orgId)
             .eq("is_deleted", false)
             .eq("estado", "activa")
@@ -303,12 +340,15 @@ export default function InvitarTracker() {
           Array.isArray(assignacionesRows) ? assignacionesRows : []
         );
       } catch (e) {
+        console.error("[invite-tracker] loadInviteSources error", e);
         if (cancelled) return;
         setPeople([]);
         setActiveAssignaciones([]);
         setErrMsg(String(e?.message || e));
       } finally {
-        if (!cancelled) setLoadingPeople(false);
+        if (!cancelled) {
+          setLoadingPeople(false);
+        }
       }
     }
 
@@ -317,42 +357,172 @@ export default function InvitarTracker() {
     return () => {
       cancelled = true;
     };
-  }, [orgId, entitlementsLoading, planStatus, t]);
+  }, [orgId, entitlementsLoading, isActive, t]);
 
   useEffect(() => {
     if (!selectedPerson) {
       setEmailInput("");
       return;
     }
+
     setEmailInput(String(selectedPerson?.email || ""));
   }, [selectedPerson]);
 
-  // --- GUARDS ---
-  if (auth?.loading || entitlementsLoading) {
-    return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">
-            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
-          </h1>
-          <p className="mt-3 text-sm text-slate-600">
-            {t("inviteTracker.org.syncing", {
-              defaultValue: "Sincronizando organización y plan...",
-            })}
-          </p>
-        </div>
-      </div>
-    );
+  // =========================
+  // HELPERS / HANDLERS
+  // =========================
+  async function getAccessToken() {
+    const directToken =
+      auth?.session?.access_token ||
+      auth?.access_token ||
+      auth?.token ||
+      null;
+
+    if (directToken) return directToken;
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
+
+    return data?.session?.access_token || null;
   }
 
-  const selectPlaceholder = loadingPeople
-    ? t("common.actions.loading", { defaultValue: "Cargando..." })
-    : inviteOptions.length === 0
-      ? t("inviteTracker.empty.noActiveAssignments", {
-          defaultValue: "Sin personal con asignación activa",
+  async function onSendInvite(e) {
+    e.preventDefault();
+
+    setBusy(true);
+    setOkMsg(null);
+    setErrMsg(null);
+    setInviteLink("");
+    setInviteMeta(null);
+
+    try {
+      if (!orgId) {
+        throw new Error(
+          t("inviteTracker.errors.noOrg", {
+            defaultValue: "No se pudo determinar la organización activa.",
+          })
+        );
+      }
+
+      if (inviteBlockedByPlan) {
+        throw new Error(
+          t("inviteTracker.plan.genericBlockedBody", {
+            defaultValue:
+              "Las invitaciones de tracker requieren una suscripción activa compatible.",
+          })
+        );
+      }
+
+      if (trackerLimitReached) {
+        throw new Error(
+          t("inviteTracker.usage.limitReached", {
+            defaultValue: "Límite alcanzado",
+          })
+        );
+      }
+
+      if (!selectedPerson || !selectedAssignment?.id) {
+        throw new Error(
+          t("inviteTracker.errors.selectPerson", {
+            defaultValue: "Selecciona una persona con asignación activa.",
+          })
+        );
+      }
+
+      const email = normalizeEmail(emailInput);
+
+      if (!email || !isValidEmail(email)) {
+        throw new Error(
+          t("inviteTracker.errors.invalidEmail", {
+            defaultValue: "Ingresa un email válido.",
+          })
+        );
+      }
+
+      if (!allowedEmails.has(email)) {
+        throw new Error(
+          t("inviteTracker.errors.emailMustMatchAssignedPerson", {
+            defaultValue:
+              "El email debe coincidir con el personal seleccionado con asignación activa.",
+          })
+        );
+      }
+
+      const accessToken = await getAccessToken();
+
+      if (!accessToken) {
+        throw new Error(
+          t("inviteTracker.errors.noSession", {
+            defaultValue: "No se encontró una sesión válida.",
+          })
+        );
+      }
+
+      // =========================================================
+      // IMPORTANTE:
+      // Reemplaza INVITE_API_URL por tu endpoint real de creación
+      // de invitación. Lo dejo explícito para no inventar una ruta.
+      // =========================================================
+      const INVITE_API_URL = "";
+
+      if (!INVITE_API_URL) {
+        throw new Error(
+          "Falta configurar el endpoint real de creación de invitación en InvitarTracker.jsx (INVITE_API_URL)."
+        );
+      }
+
+      const payload = {
+        org_id: orgId,
+        lang,
+        email,
+        personal_id: selectedPerson.id,
+        assignment_id: selectedAssignment.id,
+      };
+
+      const response = await fetch(INVITE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.error ||
+            result?.message ||
+            t("inviteTracker.errors.sendFailed", {
+              defaultValue: "No se pudo enviar la invitación.",
+            })
+        );
+      }
+
+      setInviteLink(String(result?.invite_url || ""));
+      setInviteMeta({
+        invite_id: result?.invite_id || "",
+        created_at: result?.created_at || "",
+        invite_url: result?.invite_url || "",
+      });
+
+      setOkMsg(
+        t("inviteTracker.success.inviteCreated", {
+          defaultValue: "Invitación creada correctamente.",
         })
-      : t("common.select", { defaultValue: "- Selecciona -" });
+      );
+    } catch (err) {
+      console.error("[invite-tracker] send invite error", err);
+      setErrMsg(String(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
+  // =========================
+  // GUARDS
+  // =========================
   if (auth?.loading || entitlementsLoading) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
@@ -369,35 +539,63 @@ export default function InvitarTracker() {
       </div>
     );
   }
-
 
   if (inviteBlockedByPlan) {
     let blockMsg = null;
-    if (planCode === "pro" && (!planStatus || planStatus !== "active")) {
+
+    if (planCode === "pro" && !isActive) {
       blockMsg = (
         <>
           <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">PRO</span>
+            {t("inviteTracker.plan.detectedPlan", {
+              defaultValue: "Plan detectado",
+            })}
+            : <span className="font-semibold">PRO</span>
           </div>
+
           <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: <span className="font-semibold">{t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}</span>
+            {t("inviteTracker.plan.statusLabel", {
+              defaultValue: "Estado del plan",
+            })}
+            :{" "}
+            <span className="font-semibold">
+              {t(`status.${normalizedPlanStatus}`, {
+                defaultValue: normalizedPlanStatus,
+              })}
+            </span>
           </div>
+
           <div className="mt-3 text-sm">
             {t("inviteTracker.plan.proInactiveBlockedBody", {
-              defaultValue: "Las invitaciones de tracker requieren una suscripción PRO activa.",
+              defaultValue:
+                "Las invitaciones de tracker requieren una suscripción PRO activa.",
             })}
           </div>
+
+          {isCancellationScheduled ? (
+            <div className="mt-2 text-xs text-amber-800">
+              {t("inviteTracker.plan.cancellationScheduled", {
+                defaultValue:
+                  "Tu suscripción tiene una cancelación programada al final del período.",
+              })}
+            </div>
+          ) : null}
         </>
       );
     } else if (planCode === "free") {
       blockMsg = (
         <>
           <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">FREE</span>
+            {t("inviteTracker.plan.detectedPlan", {
+              defaultValue: "Plan detectado",
+            })}
+            : <span className="font-semibold">FREE</span>
           </div>
+
           <div className="mt-3 text-sm">
             {t("inviteTracker.plan.freeBlockedBody", {
-              defaultValue: "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
+              defaultValue:
+                "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
             })}
           </div>
         </>
@@ -406,19 +604,37 @@ export default function InvitarTracker() {
       blockMsg = (
         <>
           <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+            {t("inviteTracker.plan.detectedPlan", {
+              defaultValue: "Plan detectado",
+            })}
+            :{" "}
+            <span className="font-semibold">
+              {normalizePlanLabel(planCode)}
+            </span>
           </div>
+
           <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: <span className="font-semibold">{t(`status.${planStatus}`, { defaultValue: planStatus ?? "-" })}</span>
+            {t("inviteTracker.plan.statusLabel", {
+              defaultValue: "Estado del plan",
+            })}
+            :{" "}
+            <span className="font-semibold">
+              {t(`status.${normalizedPlanStatus}`, {
+                defaultValue: normalizedPlanStatus,
+              })}
+            </span>
           </div>
+
           <div className="mt-3 text-sm">
             {t("inviteTracker.plan.genericBlockedBody", {
-              defaultValue: "Las invitaciones de tracker requieren una suscripción activa compatible.",
+              defaultValue:
+                "Las invitaciones de tracker requieren una suscripción activa compatible.",
             })}
           </div>
         </>
       );
     }
+
     return (
       <div className="min-h-[70vh] flex items-center justify-center p-6">
         <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm space-y-4">
@@ -426,26 +642,40 @@ export default function InvitarTracker() {
             <h1 className="text-xl font-semibold text-gray-900">
               {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
             </h1>
+
             <button
               type="button"
               onClick={() => navigate("/tracker")}
               className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
             >
-              {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
+              {t("inviteTracker.backToTracker", {
+                defaultValue: "Volver a Tracker",
+              })}
             </button>
           </div>
+
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
             <div className="text-base font-semibold">
-              {t("inviteTracker.plan.requiresProTitle", { defaultValue: "Esta función requiere PRO o superior." })}
+              {t("inviteTracker.plan.requiresProTitle", {
+                defaultValue: "Esta función requiere PRO o superior.",
+              })}
             </div>
             {blockMsg}
           </div>
+
           {orgId ? (
             <div className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
-                {t("inviteTracker.plan.upgradePrompt", { defaultValue: "Actualiza esta organización para habilitar invitaciones de trackers." })}
+                {t("inviteTracker.plan.upgradePrompt", {
+                  defaultValue:
+                    "Actualiza esta organización para habilitar invitaciones de trackers.",
+                })}
               </div>
-              <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+
+              <UpgradeToProButton
+                orgId={orgId}
+                getAccessToken={getAccessToken}
+              />
             </div>
           ) : null}
         </div>
@@ -453,6 +683,9 @@ export default function InvitarTracker() {
     );
   }
 
+  // =========================
+  // JSX
+  // =========================
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
@@ -492,6 +725,7 @@ export default function InvitarTracker() {
                   defaultValue: "Uso de trackers",
                 })}
               </div>
+
               <div className="mt-1 text-sm text-slate-700">
                 {t("inviteTracker.usage.current", {
                   defaultValue: "Usados: {{used}} / {{max}}",
@@ -499,11 +733,19 @@ export default function InvitarTracker() {
                   max: safeMaxTrackers,
                 })}
               </div>
+
               <div className="mt-1 text-xs text-slate-500">
                 {t("inviteTracker.usage.plan", {
                   defaultValue: "Plan: {{plan}} · Estado: {{status}}",
                   plan: normalizePlanLabel(planCode),
-                  status: String(planStatus || "free").toUpperCase(),
+                  status: String(normalizedPlanStatus || "-").toUpperCase(),
+                })}
+              </div>
+
+              <div className="mt-1 text-xs text-slate-500">
+                {t("inviteTracker.usage.label", {
+                  defaultValue: "Uso calculado: {{value}}",
+                  value: trackersUsageLabel,
                 })}
               </div>
             </div>
@@ -576,38 +818,31 @@ export default function InvitarTracker() {
               <div className="text-xs text-slate-700 break-all">
                 <b>Enlace de invitación:</b> <span>{inviteLink}</span>
               </div>
+
               <div className="text-xs text-slate-700 break-all">
                 <b>invite_id:</b> <span>{inviteMeta.invite_id}</span>
                 <br />
                 <b>created_at:</b> <span>{inviteMeta.created_at}</span>
               </div>
+
               <div className="flex gap-2">
                 <button
                   type="button"
                   className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
                   onClick={() => {
                     if (inviteMeta?.invite_url) {
-                      console.log("[invite-open] using", {
-                        invite_id: inviteMeta.invite_id,
-                        created_at: inviteMeta.created_at,
-                        invite_url: inviteMeta.invite_url,
-                      });
                       navigator.clipboard.writeText(inviteMeta.invite_url);
                     }
                   }}
                 >
                   Copiar enlace
                 </button>
+
                 <button
                   type="button"
                   className="rounded bg-green-600 text-white px-3 py-1 text-xs font-semibold hover:bg-green-700"
                   onClick={() => {
                     if (inviteMeta?.invite_url) {
-                      console.log("[invite-open] using", {
-                        invite_id: inviteMeta.invite_id,
-                        created_at: inviteMeta.created_at,
-                        invite_url: inviteMeta.invite_url,
-                      });
                       window.location.href = inviteMeta.invite_url;
                     }
                   }}
@@ -640,6 +875,7 @@ export default function InvitarTracker() {
               }
             >
               <option value="">{selectPlaceholder}</option>
+
               {inviteOptions.map((opt) => (
                 <option key={opt.key} value={opt.key}>
                   {opt.label}
@@ -653,6 +889,15 @@ export default function InvitarTracker() {
                   "Solo aparecen personas con asignaciones vigentes (activas y dentro del período de tiempo).",
               })}
             </p>
+
+            {selectedOption ? (
+              <p className="mt-2 text-xs text-slate-500">
+                {t("inviteTracker.selectedPerson", {
+                  defaultValue: "Seleccionado: {{label}}",
+                  label: selectedOption.label,
+                })}
+              </p>
+            ) : null}
           </div>
 
           <div>
