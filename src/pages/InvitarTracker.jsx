@@ -34,20 +34,15 @@ function normalizePlanLabel(planCode) {
 
 
 export default function InvitarTracker() {
+  const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const auth = useAuthSafe();
   const {
     entitlements,
     loading: entitlementsLoading,
   } = useOrgEntitlements();
 
   const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
-
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const auth = useAuthSafe();
-
-  if (entitlementsLoading) {
-    return <div style={{ padding: 24 }}>Cargando...</div>;
-  }
 
   const orgId = useMemo(() => {
     const id =
@@ -183,17 +178,6 @@ export default function InvitarTracker() {
 
     return set;
   }, [peopleWithActiveAssignments]);
-
-  async function getAccessToken() {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-  }
-
-  async function getCallerJwt() {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    return String(data?.session?.access_token || "").trim();
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -339,143 +323,22 @@ export default function InvitarTracker() {
     setEmailInput(String(selectedPerson?.email || ""));
   }, [selectedPerson]);
 
-  async function onSendInvite(e) {
-    e.preventDefault();
-    setOkMsg(null);
-    setErrMsg(null);
-
-    if (inviteBlockedByPlan) {
-      setErrMsg(
-        t("inviteTracker.errors.planBlocked", {
-          defaultValue:
-            "Tu organización no tiene un plan activo para invitar trackers.",
-        })
-      );
-      return;
-    }
-
-    if (trackerLimitReached) {
-      setErrMsg(
-        t("inviteTracker.errors.trackerLimitReached", {
-          defaultValue:
-            "Tu organización alcanzó el límite de {{count}} trackers para el plan {{plan}}.",
-          count: maxTrackers,
-          plan: String(planCode || "free").toUpperCase(),
-        })
-      );
-      return;
-    }
-
-    const cleanEmail = normalizeEmail(emailInput);
-
-    if (!orgId) {
-      setErrMsg(
-        t("inviteTracker.errors.noOrg", {
-          defaultValue: "No se pudo determinar la organización activa.",
-        })
-      );
-      return;
-    }
-
-    if (!selectedPerson) {
-      setErrMsg(
-        t("inviteTracker.errors.noPerson", {
-          defaultValue: "Selecciona una persona con asignación activa.",
-        })
-      );
-      return;
-    }
-
-    if (!selectedAssignment?.id) {
-      setErrMsg(
-        t("inviteTracker.assignment.noActiveForInvite", {
-          defaultValue:
-            "La persona seleccionada no tiene asignación activa en esta organización.",
-        })
-      );
-      return;
-    }
-
-    if (!cleanEmail || !cleanEmail.includes("@")) {
-      setErrMsg(
-        t("inviteTracker.errors.invalidEmail", {
-          defaultValue: "Email inválido.",
-        })
-      );
-      return;
-    }
-
-    if (!allowedEmails.has(cleanEmail)) {
-      setErrMsg(
-        t("inviteTracker.errors.notInOrg", {
-          defaultValue:
-            "Ese email no existe en personal con asignación activa en esta organización.",
-        })
-      );
-      return;
-    }
-
-    try {
-      setBusy(true);
-      setInviteLink("");
-      setInviteMeta(null);
-
-      const callerJwt = await getCallerJwt();
-      if (!callerJwt) {
-        setErrMsg("NO_SESSION");
-        return;
-      }
-
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token || "";
-
-      console.log("[invite-create] has access token", !!accessToken);
-
-      const res = await fetch("/api/invite-tracker", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({
-          org_id: orgId,
-          email: cleanEmail,
-        }),
-      });
-
-      const body = await res.json().catch(() => null);
-
-      console.log("[invite-create] fresh response", body);
-
-      if (body?.invite_url && body?.invite_id) {
-        setInviteLink(body.invite_url);
-        setInviteMeta({
-          invite_id: body.invite_id,
-          created_at: body.created_at,
-          invite_url: body.invite_url,
-        });
-      } else {
-        setInviteLink("");
-        setInviteMeta(null);
-      }
-
-      if (!res.ok || body?.ok === false) {
-        const msg = body?.error || body?.message || `HTTP ${res.status}`;
-        setErrMsg(String(msg));
-        return;
-      }
-
-      setOkMsg(
-        t("inviteTracker.ok.generated", {
-          defaultValue: "Invitación generada para {{email}}.",
-          email: cleanEmail,
-        })
-      );
-    } catch (e2) {
-      setErrMsg(String(e2?.message || e2));
-    } finally {
-      setBusy(false);
-    }
+  // --- GUARDS ---
+  if (auth?.loading || entitlementsLoading) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900">
+            {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+          </h1>
+          <p className="mt-3 text-sm text-slate-600">
+            {t("inviteTracker.org.syncing", {
+              defaultValue: "Sincronizando organización y plan...",
+            })}
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const selectPlaceholder = loadingPeople
