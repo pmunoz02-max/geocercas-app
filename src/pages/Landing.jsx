@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import HeroGeocercasDemo from "@/components/marketing/HeroGeocercasDemo.jsx";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
-const BUILD_MARKER = "PREVIEW_20260218_A"; // <- cambia el marker para validar deploy
 
 export default function Landing() {
   const { t } = useTranslation();
@@ -16,11 +15,6 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 relative">
-      {/* ✅ marcador VISIBLE */}
-      <div className="fixed bottom-3 right-4 text-[11px] text-slate-400 select-none">
-        {BUILD_MARKER}
-      </div>
-
       <main className="mx-auto w-full max-w-7xl space-y-10 px-4 py-6 sm:px-6 lg:px-8">
 
         <HeroGeocercasDemo />

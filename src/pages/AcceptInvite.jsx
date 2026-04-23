@@ -112,7 +112,8 @@ export default function AcceptInvite() {
     const isAndroidMobile = /Android/i.test(ua);
     if (isAndroidMobile) {
       // Use app link URL so Android can open the tracker app directly.
-      const appLinkUrl = `https://preview.tugeocercas.com${target}`;
+      const appOrigin = typeof window !== "undefined" && window.location && window.location.origin ? window.location.origin : "";
+      const appLinkUrl = `${appOrigin}${target}`;
       window.location.replace(appLinkUrl);
       return;
     }

@@ -542,6 +542,24 @@ serve(async (req) => {
       const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
+      // Only update if this event is newer than last_paddle_event_at
+      const { data: currentBilling } = await supabase
+        .from("org_billing")
+        .select("last_paddle_event_at")
+        .eq("org_id", orgId)
+        .maybeSingle();
+
+      if (currentBilling?.last_paddle_event_at && new Date(currentBilling.last_paddle_event_at) >= new Date(now)) {
+        console.log("[PADDLE WEBHOOK] Ignoring out-of-order subscription.updated", { org_id: orgId, eventId });
+        return json(200, { ok: true, ignored: true, reason: "event_out_of_order", event_id: eventId });
+      }
+
+      // Scheduled change fields
+      const scheduledChange = data?.scheduled_change;
+      const hasScheduled = !!scheduledChange;
+      const scheduled_change_action = hasScheduled ? asString(scheduledChange?.action) : null;
+      const scheduled_change_effective_at = hasScheduled ? asString(scheduledChange?.effective_at) : null;
+
       const upsertPayload = {
         org_id: orgId,
         billing_provider: "paddle",
@@ -554,6 +572,9 @@ serve(async (req) => {
         last_paddle_event_id: eventId,
         last_paddle_event_type: type,
         last_paddle_event_occurred_at: occurredAt,
+        cancel_at_period_end: hasScheduled ? true : false,
+        scheduled_change_action,
+        scheduled_change_effective_at,
         ...buildPaddleFields({
           existingBilling,
           paddleSubscriptionId,
@@ -625,27 +646,44 @@ serve(async (req) => {
       const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
+      // Only update if this event is newer than last_paddle_event_at
+      const { data: currentBilling } = await supabase
+        .from("org_billing")
+        .select("last_paddle_event_at")
+        .eq("org_id", orgId)
+        .maybeSingle();
+
+      if (currentBilling?.last_paddle_event_at && new Date(currentBilling.last_paddle_event_at) >= new Date(now)) {
+        console.log("[PADDLE WEBHOOK] Ignoring out-of-order subscription.canceled", { org_id: orgId, eventId });
+        return json(200, { ok: true, ignored: true, reason: "event_out_of_order", event_id: eventId });
+      }
+
+      // Only for canceled, not paused
+      const isCanceled = type === "subscription.canceled";
+      const upsertPayload = {
+        org_id: orgId,
+        billing_provider: "paddle",
+        plan_status: isCanceled ? "canceled" : "inactive",
+        cancel_at_period_end: false,
+        canceled_at: isCanceled ? now : null,
+        scheduled_change_action: null,
+        scheduled_change_effective_at: null,
+        updated_at: now,
+        last_paddle_event_at: now,
+        last_paddle_event_id: eventId,
+        last_paddle_event_type: type,
+        last_paddle_event_occurred_at: occurredAt,
+        ...buildPaddleFields({
+          existingBilling,
+          paddleSubscriptionId: subscriptionId,
+          paddleCustomerId: customerId,
+          paddlePriceId: null,
+        }),
+      };
+
       const { error: updateError } = await supabase
         .from("org_billing")
-        .upsert(
-          {
-            org_id: orgId,
-            billing_provider: "paddle",
-            plan_status: "inactive",
-            updated_at: now,
-            last_paddle_event_at: now,
-            last_paddle_event_id: eventId,
-            last_paddle_event_type: type,
-            last_paddle_event_occurred_at: occurredAt,
-            ...buildPaddleFields({
-              existingBilling,
-              paddleSubscriptionId: subscriptionId,
-              paddleCustomerId: customerId,
-              paddlePriceId: null,
-            }),
-          },
-          { onConflict: "org_id" },
-        );
+        .upsert(upsertPayload, { onConflict: "org_id" });
 
       if (updateError) {
         console.error("[PADDLE WEBHOOK] cancellation update error", updateError);
