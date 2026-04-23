@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-direct-sync-02";
+const VERSION = "asignaciones-direct-sync-03";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -214,7 +214,6 @@ async function syncTrackerAssignment(adminSupabase, row) {
     };
   }
 
-  // Delete previous assignments
   let deleteError = null;
   try {
     const deleteQuery = adminSupabase
@@ -223,19 +222,21 @@ async function syncTrackerAssignment(adminSupabase, row) {
       .eq("org_id", orgId)
       .eq("tracker_user_id", trackerUserId)
       .eq("geofence_id", geofenceId);
+
     const deleteScopedQuery =
       activityId == null ? deleteQuery.is("activity_id", null) : deleteQuery.eq("activity_id", activityId);
+
     const { error } = await deleteScopedQuery;
     if (error) deleteError = error;
   } catch (err) {
     deleteError = err;
   }
+
   if (deleteError) {
     console.error("[SYNC DELETE ERROR]", deleteError);
     return { ok: false, error: "delete_failed", details: deleteError };
   }
 
-  // Insert new assignment
   let insertError = null;
   let data = null;
   try {
@@ -252,17 +253,21 @@ async function syncTrackerAssignment(adminSupabase, row) {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
     console.log("[SYNC INSERT]", insertPayload);
+
     const result = await adminSupabase
       .from("tracker_assignments")
       .insert([insertPayload])
       .select("id")
       .single();
+
     data = result.data;
     if (result.error) insertError = result.error;
   } catch (err) {
     insertError = err;
   }
+
   if (insertError) {
     console.error("[SYNC INSERT ERROR]", insertError);
     return { ok: false, error: "insert_failed", details: insertError };
@@ -395,7 +400,6 @@ export default async function handler(req, res) {
         personalId: personal_id,
       });
 
-
       if (!resolvedUser.error) {
         insertFields.user_id = resolvedUser.userId;
       }
@@ -415,14 +419,14 @@ export default async function handler(req, res) {
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
       if (!syncResult.ok) {
-        console.warn("[SYNC SKIPPED]", syncResult.error);
+        console.warn("[SYNC SKIPPED POST]", syncResult.error, syncResult.details || null);
       }
 
       return send(res, 201, {
         ok: true,
         asignacion: data,
-        tracker_sync_ok: true,
-        tracker_sync_error: null,
+        tracker_sync_ok: syncResult.ok,
+        tracker_sync_error: syncResult.ok ? null : syncResult.error,
         tracker_sync_mode: syncResult.mode || null,
         tracker_assignment_id: syncResult.id || null,
       });
@@ -556,27 +560,14 @@ export default async function handler(req, res) {
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
       if (!syncResult.ok) {
-        await supabase
-          .from("asignaciones")
-          .delete()
-          .eq("id", data.id);
-
-        return send(res, 500, {
-          ok: false,
-          error: "tracker_assignment_sync_failed",
-          stage: syncResult.stage || null,
-          details: syncResult.error,
-          sync_details: syncResult.details || null,
-          sync_payload: syncResult.payload || null,
-          asignacion_id: data.id,
-        });
+        console.warn("[SYNC SKIPPED PATCH]", syncResult.error, syncResult.details || null);
       }
 
       return send(res, 200, {
         ok: true,
         asignacion: data,
-        tracker_sync_ok: true,
-        tracker_sync_error: null,
+        tracker_sync_ok: syncResult.ok,
+        tracker_sync_error: syncResult.ok ? null : syncResult.error,
         tracker_sync_mode: syncResult.mode || null,
         tracker_assignment_id: syncResult.id || null,
       });
