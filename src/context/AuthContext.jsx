@@ -20,6 +20,11 @@ import { isTrackerGpsPath } from "@/lib/trackerFlow";
  * FIX 2026-02-28:
  * - Evitar contaminación de org global por roles tracker (multi-rol owner+tracker)
  * - localStorage tg_current_org_id solo aplica a orgs NO-tracker
+ *
+ * FIX 2026-04-22:
+ * - currentOrgId SIEMPRE debe pertenecer a la lista real de organizaciones resueltas
+ * - si serverOrgId o localStorage apuntan a una org inválida, hacer fallback a la primera org válida
+ * - persistir inmediatamente el fallback en localStorage y servidor
  */
 
 const AuthContext = createContext(null);
@@ -101,23 +106,11 @@ function toBoolLoose(v) {
 }
 
 function extractServerOrgId(data) {
-  return (
-    data?.current_org_id ??
-    data?.currentOrgId ??
-    data?.org_id ??
-    data?.orgId ??
-    null
-  );
+  return data?.current_org_id ?? data?.currentOrgId ?? data?.org_id ?? data?.orgId ?? null;
 }
 
 function extractServerRole(data) {
-  return normalizeRole(
-    data?.currentRole ??
-      data?.current_role ??
-      data?.role ??
-      data?.app_role ??
-      null
-  );
+  return normalizeRole(data?.currentRole ?? data?.current_role ?? data?.role ?? data?.app_role ?? null);
 }
 
 function extractOrganizations(data) {
@@ -179,14 +172,41 @@ function isNonTrackerRole(role) {
  */
 function sanitizePreferredOrgId(preferredOrgId, orgs) {
   if (!preferredOrgId) return null;
-  if (!Array.isArray(orgs) || orgs.length === 0) return preferredOrgId;
+  if (!Array.isArray(orgs) || orgs.length === 0) return null;
 
   const found = orgs.find((o) => o?.id === preferredOrgId);
   if (!found) return null;
-
   if (!isNonTrackerRole(found?.role)) return null;
 
   return found.id;
+}
+
+function pickBestOrgId({ serverOrgId, preferredOrgId, orgs, allowPreferred = true }) {
+  const organizations = Array.isArray(orgs) ? orgs.filter((o) => o?.id) : [];
+  if (organizations.length === 0) {
+    return {
+      pickedId: serverOrgId || preferredOrgId || null,
+      serverOrgIdValid: false,
+      preferredOrgIdValid: false,
+    };
+  }
+
+  const validServerOrgId =
+    serverOrgId && organizations.some((o) => o?.id === serverOrgId) ? serverOrgId : null;
+
+  const validPreferredOrgId =
+    allowPreferred ? sanitizePreferredOrgId(preferredOrgId, organizations) : null;
+
+  const firstNonTracker = organizations.find((o) => isNonTrackerRole(o?.role));
+  const firstAny = organizations[0] || null;
+
+  const pickedId = validServerOrgId || validPreferredOrgId || firstNonTracker?.id || firstAny?.id || null;
+
+  return {
+    pickedId,
+    serverOrgIdValid: Boolean(validServerOrgId),
+    preferredOrgIdValid: Boolean(validPreferredOrgId),
+  };
 }
 
 export function AuthProvider({ children }) {
@@ -335,38 +355,57 @@ export function AuthProvider({ children }) {
       } catch {}
 
       const allowPreferred = !isTrackerUiPath(path);
-      const safePreferredOrgId = allowPreferred
-        ? sanitizePreferredOrgId(preferredOrgId, orgs)
-        : null;
 
-      const finalOrgId = serverOrgId || safePreferredOrgId || null;
+      const { pickedId, serverOrgIdValid, preferredOrgIdValid } = pickBestOrgId({
+        serverOrgId,
+        preferredOrgId,
+        orgs,
+        allowPreferred,
+      });
 
       if (orgs.length > 0) {
         setOrganizations(orgs);
 
-        let pickedId =
-          (finalOrgId && orgs.find((o) => o?.id === finalOrgId)?.id) || null;
+        const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) || null : null;
+        const pickedRole = serverRole || normalizeRole(orgObj?.role) || null;
 
-        if (!pickedId) {
-          const firstNonTracker = orgs.find((o) => isNonTrackerRole(o?.role));
-          pickedId = firstNonTracker?.id || orgs[0]?.id || null;
+        if (serverOrgId && !serverOrgIdValid && pickedId) {
+          console.warn("[AUTHCTX] invalid server currentOrgId replaced", {
+            invalidOrgId: serverOrgId,
+            fallbackOrgId: pickedId,
+          });
         }
 
-        const orgObj = pickedId ? orgs.find((o) => o?.id === pickedId) : null;
+        if (allowPreferred && preferredOrgId && !preferredOrgIdValid && pickedId) {
+          console.warn("[AUTHCTX] invalid stored currentOrgId replaced", {
+            invalidOrgId: preferredOrgId,
+            fallbackOrgId: pickedId,
+          });
+        }
 
         setCurrentOrg(orgObj || null);
-        setResolvedOrgId(pickedId || finalOrgId || null);
+        setResolvedOrgId(pickedId || null);
+        setResolvedRole(pickedRole);
+        setCurrentRole(pickedRole);
 
         if (pickedId && isNonTrackerRole(orgObj?.role) && !isTrackerUiPath(path)) {
           try {
             localStorage.setItem(LS_ORG_KEY, pickedId);
           } catch {}
+        } else if (!pickedId) {
+          try {
+            localStorage.removeItem(LS_ORG_KEY);
+          } catch {}
         }
 
-        setResolvedRole(serverRole || normalizeRole(orgObj?.role) || null);
-        setCurrentRole(serverRole || normalizeRole(orgObj?.role) || null);
+        if (pickedId && pickedId !== serverOrgId) {
+          void persistCurrentOrgServer(pickedId);
+        }
+
         return;
       }
+
+      const finalOrgId = serverOrgId || null;
 
       if (finalOrgId) {
         setOrganizations([{ id: finalOrgId }]);
@@ -376,60 +415,67 @@ export function AuthProvider({ children }) {
         setOrganizations([]);
         setCurrentOrg(null);
         setResolvedOrgId(null);
+        try {
+          localStorage.removeItem(LS_ORG_KEY);
+        } catch {}
       }
 
       setResolvedRole(serverRole || null);
       setCurrentRole(serverRole || null);
     },
-    [path]
+    [path, persistCurrentOrgServer]
   );
 
-  const applyEnsureContext = useCallback((payload) => {
-    const data = payload?.data ?? payload ?? {};
-    const org_id = data?.current_org_id ?? data?.active_org_id ?? data?.org_id ?? null;
-    const roleRaw = data?.current_role ?? data?.role ?? null;
-    const roleNorm = normalizeRole(roleRaw);
-    const orgs = extractOrganizations(data);
-    const currentOrgPayload = data?.current_org || data?.currentOrg || null;
+  const applyEnsureContext = useCallback(
+    (payload) => {
+      const data = payload?.data ?? payload ?? {};
+      const org_id = data?.current_org_id ?? data?.active_org_id ?? data?.org_id ?? null;
+      const roleRaw = data?.current_role ?? data?.role ?? null;
+      const roleNorm = normalizeRole(roleRaw);
+      const orgs = extractOrganizations(data);
+      const currentOrgPayload = data?.current_org || data?.currentOrg || null;
 
-    if (orgs.length > 0) {
-      setOrganizations(orgs);
-    }
+      if (orgs.length > 0) {
+        setOrganizations(orgs);
+      }
 
-    if (org_id) {
-      const normalizedCurrentOrgId = currentOrgPayload?.id ?? currentOrgPayload?.org_id ?? org_id;
-      setResolvedOrgId(normalizedCurrentOrgId);
-      const orgFromList = orgs.find((org) => org?.id === normalizedCurrentOrgId) || null;
+      if (org_id) {
+        const normalizedCurrentOrgId = currentOrgPayload?.id ?? currentOrgPayload?.org_id ?? org_id;
+        const orgFromList = orgs.find((org) => org?.id === normalizedCurrentOrgId) || null;
+        const finalOrgId = orgFromList?.id || normalizedCurrentOrgId;
 
-      setCurrentOrg((prev) => {
-        if (orgFromList) return orgFromList;
-        return {
-          ...(prev?.id === normalizedCurrentOrgId ? prev : {}),
-          ...(currentOrgPayload || {}),
-          id: normalizedCurrentOrgId,
-          role: normalizeRole(currentOrgPayload?.role) || roleNorm || prev?.role || null,
-        };
-      });
-
-      if (orgs.length === 0) {
-        setOrganizations((prev) => {
-          if (prev.some((o) => o?.id === normalizedCurrentOrgId)) return prev;
-          return [{ id: normalizedCurrentOrgId }, ...prev];
+        setResolvedOrgId(finalOrgId);
+        setCurrentOrg((prev) => {
+          if (orgFromList) return orgFromList;
+          return {
+            ...(prev?.id === finalOrgId ? prev : {}),
+            ...(currentOrgPayload || {}),
+            id: finalOrgId,
+            role: normalizeRole(currentOrgPayload?.role) || roleNorm || prev?.role || null,
+          };
         });
+
+        if (orgs.length === 0) {
+          setOrganizations((prev) => {
+            if (prev.some((o) => o?.id === finalOrgId)) return prev;
+            return [{ id: finalOrgId }, ...prev];
+          });
+        }
+
+        if (isNonTrackerRole(roleNorm) && !isTrackerUiPath(path)) {
+          try {
+            localStorage.setItem(LS_ORG_KEY, finalOrgId);
+          } catch {}
+        }
       }
 
-      if (isNonTrackerRole(roleNorm) && !isTrackerUiPath(path)) {
-        try {
-          localStorage.setItem(LS_ORG_KEY, normalizedCurrentOrgId);
-        } catch {}
+      if (roleRaw) {
+        setResolvedRole(roleNorm);
+        setCurrentRole(roleNorm);
       }
-    }
-
-    if (roleRaw) {
-      setResolvedRole(roleNorm);
-      setCurrentRole(roleNorm);
-    }
-  }, [path]);
+    },
+    [path]
+  );
 
   const clearResolvedAuthState = useCallback(() => {
     setCurrentRole(null);
@@ -482,17 +528,12 @@ export function AuthProvider({ children }) {
         } catch {}
       }
 
-      const orgIds = Array.from(
-        new Set(membershipRows.map((row) => row?.org_id).filter(Boolean))
-      );
+      const orgIds = Array.from(new Set(membershipRows.map((row) => row?.org_id).filter(Boolean)));
 
       let orgRows = [];
       if (orgIds.length > 0) {
         try {
-          const { data, error } = await supabase
-            .from("organizations")
-            .select("id, name, slug")
-            .in("id", orgIds);
+          const { data, error } = await supabase.from("organizations").select("id, name, slug").in("id", orgIds);
 
           if (!error && Array.isArray(data)) {
             orgRows = data;
@@ -525,18 +566,18 @@ export function AuthProvider({ children }) {
         preferredOrgId = localStorage.getItem(LS_ORG_KEY);
       } catch {}
 
-      const safePreferredOrgId = !isTrackerUiPath(path)
-        ? sanitizePreferredOrgId(preferredOrgId, organizationsResolved)
-        : null;
+      const { pickedId, preferredOrgIdValid } = pickBestOrgId({
+        serverOrgId: null,
+        preferredOrgId,
+        orgs: organizationsResolved,
+        allowPreferred: !isTrackerUiPath(path),
+      });
 
-      let pickedId =
-        (safePreferredOrgId &&
-          organizationsResolved.find((org) => org?.id === safePreferredOrgId)?.id) ||
-        null;
-
-      if (!pickedId) {
-        const firstNonTracker = organizationsResolved.find((org) => isNonTrackerRole(org?.role));
-        pickedId = firstNonTracker?.id || organizationsResolved[0]?.id || null;
+      if (preferredOrgId && !preferredOrgIdValid && pickedId) {
+        console.warn("[AUTHCTX] invalid stored currentOrgId replaced", {
+          invalidOrgId: preferredOrgId,
+          fallbackOrgId: pickedId,
+        });
       }
 
       const pickedOrg = pickedId
@@ -566,6 +607,10 @@ export function AuthProvider({ children }) {
       if (pickedOrg?.id && isNonTrackerRole(pickedOrg?.role) && !isTrackerUiPath(path)) {
         try {
           localStorage.setItem(LS_ORG_KEY, pickedOrg.id);
+        } catch {}
+      } else {
+        try {
+          localStorage.removeItem(LS_ORG_KEY);
         } catch {}
       }
 
