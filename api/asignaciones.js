@@ -1,32 +1,6 @@
-// Helper to resolve geocerca_id from geofence_id by matching names in the same org
-async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId }) {
-  if (!orgId || !geofenceId) return { geocercaId: null, error: "missing_org_or_geofence_id" };
-
-  const { data: gf, error: gfError } = await supabase
-    .from("geofences")
-    .select("id, name, org_id")
-    .eq("id", geofenceId)
-    .eq("org_id", orgId)
-    .maybeSingle();
-
-  if (gfError) return { geocercaId: null, error: gfError.message };
-  if (!gf?.name) return { geocercaId: null, error: "geofence_not_found" };
-
-  const { data: gz, error: gzError } = await supabase
-    .from("geocercas")
-    .select("id, nombre, org_id")
-    .eq("org_id", orgId)
-    .eq("nombre", gf.name)
-    .maybeSingle();
-
-  if (gzError) return { geocercaId: null, error: gzError.message };
-  if (!gz?.id) return { geocercaId: null, error: "matching_geocerca_not_found" };
-
-  return { geocercaId: gz.id, error: null };
-}
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-direct-sync-03";
+const VERSION = "asignaciones-direct-sync-04";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -95,6 +69,7 @@ function buildWritableFields(incoming) {
     "frecuencia_envio_sec",
     "frequency_minutes",
     "org_id",
+    "tenant_id",
     "org_people_id",
     "user_id",
   ];
@@ -130,13 +105,8 @@ async function findOverlap(supabase, { currentId = null, orgId, personalId, star
   const newStart = toDateOrNull(startTime);
   const newEnd = toDateOrNull(endTime);
 
-  if (!newStart || !newEnd) {
-    return { error: "invalid_datetime" };
-  }
-
-  if (newStart >= newEnd) {
-    return { error: "invalid_range" };
-  }
+  if (!newStart || !newEnd) return { error: "invalid_datetime" };
+  if (newStart >= newEnd) return { error: "invalid_range" };
 
   const { data: rows, error } = await supabase
     .from("asignaciones")
@@ -145,9 +115,7 @@ async function findOverlap(supabase, { currentId = null, orgId, personalId, star
     .eq("personal_id", personalId)
     .eq("is_deleted", false);
 
-  if (error) {
-    return { error: error.message };
-  }
+  if (error) return { error: error.message };
 
   const currentIdNorm = currentId ? String(currentId) : null;
 
@@ -193,15 +161,38 @@ async function resolvePersonalUserId(supabase, { orgId, personalId }) {
     .eq("is_deleted", false)
     .maybeSingle();
 
-  if (error) {
-    return { userId: null, error: error.message };
-  }
-
-  if (!data) {
-    return { userId: null, error: "personal_not_found" };
-  }
+  if (error) return { userId: null, error: error.message };
+  if (!data) return { userId: null, error: "personal_not_found" };
 
   return { userId: data.user_id || null, error: null };
+}
+
+async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId }) {
+  if (!orgId || !geofenceId) {
+    return { geocercaId: null, error: "missing_org_or_geofence_id" };
+  }
+
+  const { data: gf, error: gfError } = await supabase
+    .from("geofences")
+    .select("id, name, org_id")
+    .eq("id", geofenceId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (gfError) return { geocercaId: null, error: gfError.message };
+  if (!gf?.name) return { geocercaId: null, error: "geofence_not_found" };
+
+  const { data: gz, error: gzError } = await supabase
+    .from("geocercas")
+    .select("id, nombre, org_id")
+    .eq("org_id", orgId)
+    .eq("nombre", gf.name)
+    .maybeSingle();
+
+  if (gzError) return { geocercaId: null, error: gzError.message };
+  if (!gz?.id) return { geocercaId: null, error: "matching_geocerca_not_found" };
+
+  return { geocercaId: gz.id, error: null };
 }
 
 function createAdminSupabase(SUPABASE_URL) {
@@ -225,7 +216,7 @@ async function syncTrackerAssignment(adminSupabase, row) {
 
   const orgId = row?.org_id || null;
   const trackerUserId = row?.user_id || null;
-  const geofenceId = row?.geofence_id || row?.geocerca_id || null;
+  const geofenceId = row?.geofence_id || null;
   const activityId = row?.activity_id || null;
   const startDate = toDateOnlyOrNull(row?.start_time);
   const endDate = toDateOnlyOrNull(row?.end_time);
@@ -384,24 +375,30 @@ export default async function handler(req, res) {
     if (method === "POST") {
       const incoming = req.body || {};
       const insertFields = buildWritableFields(incoming);
-      // If geocerca_id is missing but geofence_id is present, resolve geocerca_id by matching names
+      const { personal_id, org_id, start_time, end_time } = insertFields;
+
+      if (!org_id || !personal_id || !start_time || !end_time) {
+        return send(res, 400, { ok: false, error: "missing_required_fields" });
+      }
+
+      if (!insertFields.tenant_id) {
+        insertFields.tenant_id = org_id;
+      }
+
       if (!insertFields.geocerca_id && insertFields.geofence_id) {
         const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
           orgId: org_id,
           geofenceId: insertFields.geofence_id,
         });
+
         if (resolvedGeocerca.error) {
           return send(res, 400, {
             ok: false,
             error: resolvedGeocerca.error,
           });
         }
-        insertFields.geocerca_id = resolvedGeocerca.geocercaId;
-      }
-      const { personal_id, org_id, start_time, end_time } = insertFields;
 
-      if (!org_id || !personal_id || !start_time || !end_time) {
-        return send(res, 400, { ok: false, error: "missing_required_fields" });
+        insertFields.geocerca_id = resolvedGeocerca.geocercaId;
       }
 
       const overlapCheck = await findOverlap(supabase, {
@@ -482,7 +479,7 @@ export default async function handler(req, res) {
 
       const { data: currentRow, error: fetchError } = await supabase
         .from("asignaciones")
-        .select("id, org_id, personal_id, user_id, geofence_id, geocerca_id, activity_id, start_time, end_time, status, estado, frequency_minutes, frecuencia_envio_sec, is_deleted")
+        .select("id, org_id, tenant_id, personal_id, user_id, geofence_id, geocerca_id, activity_id, start_time, end_time, status, estado, frequency_minutes, frecuencia_envio_sec, is_deleted")
         .eq("id", id)
         .eq("is_deleted", false)
         .single();
@@ -493,25 +490,25 @@ export default async function handler(req, res) {
 
       const updateFields = buildWritableFields(incoming);
 
-      const nextOrgId =
-        Object.prototype.hasOwnProperty.call(updateFields, "org_id")
-          ? updateFields.org_id
-          : currentRow.org_id;
+      const nextOrgId = Object.prototype.hasOwnProperty.call(updateFields, "org_id")
+        ? updateFields.org_id
+        : currentRow.org_id;
 
-      const nextPersonalId =
-        Object.prototype.hasOwnProperty.call(updateFields, "personal_id")
-          ? updateFields.personal_id
-          : currentRow.personal_id;
+      const nextPersonalId = Object.prototype.hasOwnProperty.call(updateFields, "personal_id")
+        ? updateFields.personal_id
+        : currentRow.personal_id;
 
-      const nextStartTime =
-        Object.prototype.hasOwnProperty.call(updateFields, "start_time")
-          ? updateFields.start_time
-          : currentRow.start_time;
+      const nextStartTime = Object.prototype.hasOwnProperty.call(updateFields, "start_time")
+        ? updateFields.start_time
+        : currentRow.start_time;
 
-      const nextEndTime =
-        Object.prototype.hasOwnProperty.call(updateFields, "end_time")
-          ? updateFields.end_time
-          : currentRow.end_time;
+      const nextEndTime = Object.prototype.hasOwnProperty.call(updateFields, "end_time")
+        ? updateFields.end_time
+        : currentRow.end_time;
+
+      if (!updateFields.tenant_id && nextOrgId) {
+        updateFields.tenant_id = nextOrgId;
+      }
 
       if (!nextStartTime || !nextEndTime) {
         return send(res, 400, {
@@ -568,8 +565,6 @@ export default async function handler(req, res) {
         }
       }
 
-
-      // If geocerca_id is missing but geofence_id is present, resolve geocerca_id by matching names
       if (!updateFields.geocerca_id) {
         const geofenceIdToUse = updateFields.geofence_id || currentRow.geofence_id;
         if (geofenceIdToUse) {
@@ -577,12 +572,14 @@ export default async function handler(req, res) {
             orgId: nextOrgId,
             geofenceId: geofenceIdToUse,
           });
+
           if (resolvedGeocerca.error) {
             return send(res, 400, {
               ok: false,
               error: resolvedGeocerca.error,
             });
           }
+
           updateFields.geocerca_id = resolvedGeocerca.geocercaId;
         }
       }
