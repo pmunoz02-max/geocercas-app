@@ -31,12 +31,24 @@ function normalizePlanLabel(planCode) {
   return v ? v.toUpperCase() : "-";
 }
 
+
 export default function InvitarTracker() {
-    // Safe cancellation scheduled state for future use
-    const scheduledChangeAction = entitlements?.scheduled_change_action ?? null;
-    const cancellationScheduled =
-      Boolean(entitlements?.cancel_at_period_end) &&
-      scheduledChangeAction === "cancel";
+  // Use useOrgEntitlements() first, destructure cancellationScheduled directly
+  const {
+    entitlements,
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    planCode,
+    normalizedPlanStatus,
+    isActive,
+    maxTrackers,
+    cancellationScheduled,
+  } = useOrgEntitlements();
+
+  // Fallback if you need a local variable
+  const isCancellationScheduled =
+    cancellationScheduled ?? Boolean(entitlements?.cancel_at_period_end);
+
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
@@ -52,16 +64,6 @@ export default function InvitarTracker() {
       "";
     return String(id || "").trim();
   }, [auth]);
-
-  const {
-    loading: entitlementsLoading,
-    error: entitlementsError,
-    planCode,
-    normalizedPlanStatus,
-    isActive,
-    maxTrackers,
-    entitlements,
-  } = useOrgEntitlements();
 
   // Always use optional chaining and fallback for entitlements
   const planStatus = entitlements?.plan_status ?? null;
