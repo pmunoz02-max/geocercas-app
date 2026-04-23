@@ -42,6 +42,10 @@ export default function InvitarTracker() {
     loading: entitlementsLoading,
   } = useOrgEntitlements();
 
+
+  // 👇 Definición segura, siempre en el scope principal
+  const safeMaxTrackers = Number(entitlements?.max_trackers ?? 0);
+  const trackerCount = Number(entitlements?.trackers_used ?? 0);
   const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
 
   const orgId = useMemo(() => {
@@ -104,13 +108,13 @@ export default function InvitarTracker() {
   }, [entitlementsLoading, planStatus]);
 
   const trackerLimitReached = useMemo(() => {
-    return !loadingTrackerCount && trackerCount >= maxTrackers;
-  }, [loadingTrackerCount, trackerCount, maxTrackers]);
+    return !loadingTrackerCount && trackerCount >= safeMaxTrackers;
+  }, [loadingTrackerCount, trackerCount, safeMaxTrackers]);
 
   const trackersUsageLabel = useMemo(() => {
     if (loadingTrackerCount) return "…";
-    return `${trackerCount} / ${maxTrackers}`;
-  }, [loadingTrackerCount, trackerCount, maxTrackers]);
+    return `${trackerCount} / ${safeMaxTrackers}`;
+  }, [loadingTrackerCount, trackerCount, safeMaxTrackers]);
 
   const activeAssignmentByPersonId = useMemo(() => {
     const map = new Map();
@@ -512,7 +516,7 @@ export default function InvitarTracker() {
                 {t("inviteTracker.usage.current", {
                   defaultValue: "Usados: {{used}} / {{max}}",
                   used: trackerCount,
-                  max: maxTrackers,
+                  max: safeMaxTrackers,
                 })}
               </div>
               <div className="mt-1 text-xs text-slate-500">
@@ -552,10 +556,10 @@ export default function InvitarTracker() {
               className="h-full rounded-full bg-slate-900 transition-all"
               style={{
                 width:
-                  maxTrackers > 0
+                  safeMaxTrackers > 0
                     ? `${Math.min(
                         100,
-                        Math.round((trackerCount / maxTrackers) * 100)
+                        Math.round((trackerCount / safeMaxTrackers) * 100)
                       )}%`
                     : "0%",
               }}
@@ -696,7 +700,7 @@ export default function InvitarTracker() {
             {t("inviteTracker.usage.trackers", {
               defaultValue: "Trackers usados: {{used}} / {{max}}",
               used: trackerCount,
-              max: maxTrackers,
+              max: safeMaxTrackers,
             })}
           </div>
 
