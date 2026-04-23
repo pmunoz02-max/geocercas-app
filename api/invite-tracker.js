@@ -1,3 +1,5 @@
+import { createClient } from "@supabase/supabase-js";
+
 export default async function handler(req, res) {
   try {
     const { org_id, email } = req.body || {};
@@ -14,39 +16,78 @@ export default async function handler(req, res) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 🔒 BACKEND GUARD (correcto)
-    const { plan_status, max_trackers } = await getOrgEntitlements(
-      supabase,
-      org_id
-    );
+    // ===============================
+    // 🔒 VALIDAR PLAN (source of truth)
+    // ===============================
+    const { data: billing, error: billingError } = await supabase
+      .from("org_billing")
+      .select("plan_status, plan_code")
+      .eq("org_id", org_id)
+      .maybeSingle();
 
-    if (plan_status !== "active") {
+    if (billingError) {
+      throw billingError;
+    }
+
+    const planStatus = billing?.plan_status ?? null;
+    const planCode = billing?.plan_code ?? "free";
+
+    if (planStatus !== "active") {
       return res.status(403).json({
         ok: false,
         error: "plan_inactive",
-        message:
-          "El plan de la organización no está activo. No se pueden invitar trackers.",
+        message: "El plan no está activo",
       });
     }
 
-    const trackerCount = await countActiveTrackers(supabase, org_id);
+    // ===============================
+    // 🔒 OBTENER LÍMITES DEL PLAN
+    // ===============================
+    const { data: planLimits, error: limitsError } = await supabase
+      .from("plan_limits")
+      .select("max_trackers")
+      .eq("plan", planCode)
+      .maybeSingle();
 
-    if (trackerCount >= max_trackers) {
+    if (limitsError) {
+      throw limitsError;
+    }
+
+    const maxTrackers = planLimits?.max_trackers ?? 0;
+
+    // ===============================
+    // 🔒 CONTAR TRACKERS ACTIVOS
+    // ===============================
+    const { count: trackerCount, error: countError } = await supabase
+      .from("tracker_memberships")
+      .select("*", { count: "exact", head: true })
+      .eq("org_id", org_id)
+      .eq("status", "active");
+
+    if (countError) {
+      throw countError;
+    }
+
+    if (trackerCount >= maxTrackers) {
       return res.status(403).json({
         ok: false,
         error: "tracker_limit_reached",
-        message: `Límite alcanzado (${trackerCount}/${max_trackers})`,
+        message: `Límite alcanzado (${trackerCount}/${maxTrackers})`,
       });
     }
 
-    // 1. Extract user JWT
+    // ===============================
+    // 🔑 USER JWT
+    // ===============================
     const userJwt =
       req.headers["x-user-jwt"] ||
       (req.headers.authorization || "").replace("Bearer ", "");
 
+    // ===============================
+    // 🚀 EDGE FUNCTION (envío email)
+    // ===============================
     const edgeUrl = `${process.env.SUPABASE_URL}/functions/v1/send-tracker-invite-brevo`;
 
-    // 2. Forward to Edge Function
     const upstreamRes = await fetch(edgeUrl, {
       method: "POST",
       headers: {
@@ -62,9 +103,7 @@ export default async function handler(req, res) {
     let upstreamJson = null;
     try {
       upstreamJson = upstreamText ? JSON.parse(upstreamText) : null;
-    } catch (_) {
-      upstreamJson = null;
-    }
+    } catch (_) {}
 
     if (!upstreamRes.ok) {
       console.error("[api/invite-tracker] upstream failed", {
