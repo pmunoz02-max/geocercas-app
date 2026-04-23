@@ -1,3 +1,29 @@
+// Helper to resolve geocerca_id from geofence_id by matching names in the same org
+async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId }) {
+  if (!orgId || !geofenceId) return { geocercaId: null, error: "missing_org_or_geofence_id" };
+
+  const { data: gf, error: gfError } = await supabase
+    .from("geofences")
+    .select("id, name, org_id")
+    .eq("id", geofenceId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (gfError) return { geocercaId: null, error: gfError.message };
+  if (!gf?.name) return { geocercaId: null, error: "geofence_not_found" };
+
+  const { data: gz, error: gzError } = await supabase
+    .from("geocercas")
+    .select("id, nombre, org_id")
+    .eq("org_id", orgId)
+    .eq("nombre", gf.name)
+    .maybeSingle();
+
+  if (gzError) return { geocercaId: null, error: gzError.message };
+  if (!gz?.id) return { geocercaId: null, error: "matching_geocerca_not_found" };
+
+  return { geocercaId: gz.id, error: null };
+}
 import { createClient } from "@supabase/supabase-js";
 
 const VERSION = "asignaciones-direct-sync-03";
@@ -358,11 +384,19 @@ export default async function handler(req, res) {
     if (method === "POST") {
       const incoming = req.body || {};
       const insertFields = buildWritableFields(incoming);
-      // Normalize geocerca_id and geofence_id: fill both if either is present
-      if (insertFields.geocerca_id && !insertFields.geofence_id) {
-        insertFields.geofence_id = insertFields.geocerca_id;
-      } else if (insertFields.geofence_id && !insertFields.geocerca_id) {
-        insertFields.geocerca_id = insertFields.geofence_id;
+      // If geocerca_id is missing but geofence_id is present, resolve geocerca_id by matching names
+      if (!insertFields.geocerca_id && insertFields.geofence_id) {
+        const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
+          orgId: org_id,
+          geofenceId: insertFields.geofence_id,
+        });
+        if (resolvedGeocerca.error) {
+          return send(res, 400, {
+            ok: false,
+            error: resolvedGeocerca.error,
+          });
+        }
+        insertFields.geocerca_id = resolvedGeocerca.geocercaId;
       }
       const { personal_id, org_id, start_time, end_time } = insertFields;
 
@@ -534,11 +568,23 @@ export default async function handler(req, res) {
         }
       }
 
-      // Normalize geocerca_id and geofence_id: fill both if either is present
-      if (updateFields.geocerca_id && !updateFields.geofence_id) {
-        updateFields.geofence_id = updateFields.geocerca_id;
-      } else if (updateFields.geofence_id && !updateFields.geocerca_id) {
-        updateFields.geocerca_id = updateFields.geofence_id;
+
+      // If geocerca_id is missing but geofence_id is present, resolve geocerca_id by matching names
+      if (!updateFields.geocerca_id) {
+        const geofenceIdToUse = updateFields.geofence_id || currentRow.geofence_id;
+        if (geofenceIdToUse) {
+          const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
+            orgId: nextOrgId,
+            geofenceId: geofenceIdToUse,
+          });
+          if (resolvedGeocerca.error) {
+            return send(res, 400, {
+              ok: false,
+              error: resolvedGeocerca.error,
+            });
+          }
+          updateFields.geocerca_id = resolvedGeocerca.geocercaId;
+        }
       }
 
       if (nextOrgId && nextPersonalId) {
