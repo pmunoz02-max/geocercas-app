@@ -34,10 +34,8 @@ function normalizePlanLabel(planCode) {
 
 
 export default function InvitarTracker() {
-    // Guard: show fallback UI if entitlements are loading or undefined
-    if (entitlementsLoading || !entitlements) {
-      return <div className="min-h-[70vh] flex items-center justify-center p-6">Cargando…</div>;
-    }
+
+  // --- HOOKS FIRST ---
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
@@ -45,12 +43,25 @@ export default function InvitarTracker() {
     entitlements,
     loading: entitlementsLoading,
   } = useOrgEntitlements();
+  const [busy, setBusy] = useState(false);
+  const [loadingPeople, setLoadingPeople] = useState(true);
+  const [people, setPeople] = useState([]);
+  const [activeAssignaciones, setActiveAssignaciones] = useState([]);
+  const [trackerCount, setTrackerCount] = useState(0);
+  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
+  const [selectedPersonKey, setSelectedPersonKey] = useState("");
+  const [emailInput, setEmailInput] = useState("");
+  const [okMsg, setOkMsg] = useState(null);
+  const [errMsg, setErrMsg] = useState(null);
+  const [inviteLink, setInviteLink] = useState("");
+  const [inviteMeta, setInviteMeta] = useState(null);
 
-
-  // 👇 Definición segura, siempre en el scope principal
+  // --- DERIVED VARIABLES ---
   const safeMaxTrackers = Number(entitlements?.max_trackers ?? 0);
   const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
+  const planStatus = entitlements?.plan_status ?? null;
 
+  // --- useMemo, useCallback, etc. ---
   const orgId = useMemo(() => {
     const id =
       auth?.orgId ||
@@ -62,25 +73,6 @@ export default function InvitarTracker() {
       "";
     return String(id || "").trim();
   }, [auth]);
-
-  // Always use optional chaining and fallback for entitlements
-  const planStatus = entitlements?.plan_status ?? null;
-
-  const [busy, setBusy] = useState(false);
-  const [loadingPeople, setLoadingPeople] = useState(true);
-  const [people, setPeople] = useState([]);
-  const [activeAssignaciones, setActiveAssignaciones] = useState([]);
-
-  const [trackerCount, setTrackerCount] = useState(0);
-  const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
-
-  const [selectedPersonKey, setSelectedPersonKey] = useState("");
-  const [emailInput, setEmailInput] = useState("");
-  const [okMsg, setOkMsg] = useState(null);
-  const [errMsg, setErrMsg] = useState(null);
-
-  const [inviteLink, setInviteLink] = useState("");
-  const [inviteMeta, setInviteMeta] = useState(null);
 
   const lang = useMemo(() => {
     try {
@@ -102,6 +94,11 @@ export default function InvitarTracker() {
     if (l.startsWith("fr")) return "fr";
     return "es";
   }, [i18n]);
+
+  // Guard: show fallback UI if entitlements are loading or undefined
+  if (entitlementsLoading || !entitlements) {
+    return <div className="min-h-[70vh] flex items-center justify-center p-6">Cargando…</div>;
+  }
 
   const hasActiveAssignmentsInOrg = activeAssignaciones.length > 0;
 
