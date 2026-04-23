@@ -148,14 +148,14 @@ export default function useOrgEntitlements() {
       if (billingError) throw billingError;
 
 
-      // Expose cancel_at_period_end as cancellationScheduled
-      const cancellationScheduled = !!billingRow?.cancel_at_period_end;
+
+
 
       if (entitlementRow) {
         setEntitlements({
           ...entitlementRow,
           plan_status: billingRow?.plan_status ?? null,
-          cancellationScheduled,
+          cancel_at_period_end: !!billingRow?.cancel_at_period_end,
           __source: billingRow ? "org_entitlements+org_billing" : "org_entitlements",
         });
         setSource(billingRow ? "org_entitlements+org_billing" : "org_entitlements");
@@ -163,13 +163,14 @@ export default function useOrgEntitlements() {
         return;
       }
 
+
       if (billingRow) {
         const fallback = buildFallbackEntitlementsFromPlan(billingRow.plan_code, billingRow);
 
         setEntitlements({
           ...fallback,
           plan_status: billingRow.plan_status ?? null,
-          cancellationScheduled,
+          cancel_at_period_end: !!billingRow?.cancel_at_period_end,
           __source: "billing_fallback",
         });
         setSource("billing_fallback");
@@ -274,7 +275,5 @@ export default function useOrgEntitlements() {
     isElite,
     isElitePlus,
 
-    // Expose cancellation scheduled state
-    cancellationScheduled,
   };
 }

@@ -37,11 +37,6 @@ export default function InvitarTracker() {
   const {
     entitlements,
     loading: entitlementsLoading,
-    error: entitlementsError,
-    planCode,
-    normalizedPlanStatus,
-    isActive,
-    maxTrackers,
   } = useOrgEntitlements();
 
   const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
@@ -49,6 +44,10 @@ export default function InvitarTracker() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
+
+  if (entitlementsLoading) {
+    return <div style={{ padding: 24 }}>Cargando...</div>;
+  }
 
   const orgId = useMemo(() => {
     const id =
