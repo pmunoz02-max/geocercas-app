@@ -139,7 +139,7 @@ export default function useOrgEntitlements() {
           supabase.from("org_entitlements").select("*").eq("org_id", currentOrgId).maybeSingle(),
           supabase
             .from("org_billing")
-            .select("org_id, plan_code, plan_status, tracker_limit_override")
+            .select("org_id, plan_code, plan_status, tracker_limit_override, cancel_at_period_end")
             .eq("org_id", currentOrgId)
             .maybeSingle(),
         ]);
@@ -147,10 +147,15 @@ export default function useOrgEntitlements() {
       if (entitlementError) throw entitlementError;
       if (billingError) throw billingError;
 
+
+      // Expose cancel_at_period_end as cancellationScheduled
+      const cancellationScheduled = !!billingRow?.cancel_at_period_end;
+
       if (entitlementRow) {
         setEntitlements({
           ...entitlementRow,
           plan_status: billingRow?.plan_status ?? null,
+          cancellationScheduled,
           __source: billingRow ? "org_entitlements+org_billing" : "org_entitlements",
         });
         setSource(billingRow ? "org_entitlements+org_billing" : "org_entitlements");
@@ -164,6 +169,7 @@ export default function useOrgEntitlements() {
         setEntitlements({
           ...fallback,
           plan_status: billingRow.plan_status ?? null,
+          cancellationScheduled,
           __source: "billing_fallback",
         });
         setSource("billing_fallback");
@@ -234,6 +240,7 @@ export default function useOrgEntitlements() {
 
   const isFree = planCode === "free" || normalizedPlanStatus === "free";
   const isStarter = planCode === "starter" && isActive;
+  // Keep PRO enabled while plan_status is active, even if cancellation is scheduled
   const isPro = planCode === "pro" && isActive;
   const isEnterprise = planCode === "enterprise" && isActive;
   const isElite = planCode === "elite" && isActive;
@@ -266,5 +273,8 @@ export default function useOrgEntitlements() {
     isEnterprise,
     isElite,
     isElitePlus,
+
+    // Expose cancellation scheduled state
+    cancellationScheduled,
   };
 }

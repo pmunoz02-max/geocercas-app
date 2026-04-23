@@ -1,5 +1,6 @@
 // src/pages/Billing.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
@@ -152,6 +153,8 @@ function buildLangPath(pathname, language) {
 }
 
 export default function Billing() {
+    // Get cancellationScheduled from entitlements
+    const { cancellationScheduled } = useOrgEntitlements();
   const { t, i18n } = useTranslation();
   const location = useLocation();
   const { loading, ready, authenticated, user, currentOrgId, isAdmin } = useAuth();
@@ -416,6 +419,32 @@ export default function Billing() {
         <h2 className="text-lg font-semibold text-slate-900">
           {tr("billing.planState.title", "Plan status")}
         </h2>
+
+        {/* Scheduled cancellation banner */}
+        {!billingLoading &&
+          !billingError &&
+          !billingFallback &&
+          cancellationScheduled &&
+          effectivePlanStatus === "active" &&
+          billing?.current_period_end ? (
+            <div className="mt-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="font-semibold">
+                {tr(
+                  "billing.messages.cancellationScheduledTitle",
+                  "Your plan will be cancelled at the end of the current period."
+                )}
+              </div>
+              <div className="mt-1">
+                {tr(
+                  "billing.messages.cancellationScheduledBody",
+                  "You will retain access to PRO features until the end of your current billing period:"
+                )}
+                <span className="ml-1 font-semibold text-slate-900">
+                  {formatDate(billing?.current_period_end, dateLocale)}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
         {!billingLoading && !billingError && !billingFallback && isOverLimit ? (
           <div className="mt-4 rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">

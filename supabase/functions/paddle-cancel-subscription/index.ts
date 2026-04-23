@@ -86,9 +86,11 @@ serve(async (req) => {
       return jsonResponse(401, { error: "unauthorized" });
     }
 
+
+    // Only allow owner or admin roles to cancel
     const { data: memberData, error: memberError } = await userSupabase
       .from("org_members")
-      .select("org_id")
+      .select("org_id, role")
       .eq("org_id", orgId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -102,9 +104,20 @@ serve(async (req) => {
       return jsonResponse(403, { error: "forbidden" });
     }
 
+    const role = String(memberData.role || "").toLowerCase();
+    if (role !== "owner" && role !== "admin") {
+      console.warn("[paddle-cancel] forbidden: insufficient role", {
+        orgId,
+        userId: user.id,
+        role,
+      });
+      return jsonResponse(403, { error: "forbidden_role" });
+    }
+
+
     const { data: billingRow, error: billingError } = await serviceSupabase
       .from("org_billing")
-      .select("paddle_subscription_id, billing_provider, paddle_customer_id, paddle_price_id")
+      .select("paddle_subscription_id, billing_provider, paddle_customer_id, paddle_price_id, cancel_at_period_end")
       .eq("org_id", orgId)
       .maybeSingle();
 
@@ -119,8 +132,20 @@ serve(async (req) => {
       });
     }
 
+
     if (!billingRow || billingRow.billing_provider !== "paddle") {
       return jsonResponse(400, { error: "no_paddle_subscription" });
+    }
+
+    // Idempotency: if already scheduled, do not call Paddle again
+    if (billingRow.cancel_at_period_end === true) {
+      return jsonResponse(200, {
+        success: true,
+        already_scheduled: true,
+        org_id: orgId,
+        subscription_id: billingRow.paddle_subscription_id,
+        paddle_env: PADDLE_ENV,
+      });
     }
 
     const subscriptionId = billingRow.paddle_subscription_id;
@@ -128,17 +153,29 @@ serve(async (req) => {
       return jsonResponse(400, { error: "no_paddle_subscription" });
     }
 
-    console.log("[paddle-cancel] config", {
-      orgId,
-      userId: user.id,
-      env: PADDLE_ENV,
-      baseUrl,
-      subscriptionId,
-      paddleCustomerId: billingRow.paddle_customer_id ?? null,
-      paddlePriceId: billingRow.paddle_price_id ?? null,
-      hasApiKey: !!PADDLE_API_KEY,
-      apiKeyPrefix: PADDLE_API_KEY ? PADDLE_API_KEY.slice(0, 8) : null,
-    });
+    if (PADDLE_ENV === "live") {
+      // Minimal log in production
+      console.log("[paddle-cancel] config", {
+        orgId,
+        userId: user.id,
+        env: PADDLE_ENV,
+        baseUrl,
+        subscriptionId,
+      });
+    } else {
+      // Full log in non-production
+      console.log("[paddle-cancel] config", {
+        orgId,
+        userId: user.id,
+        env: PADDLE_ENV,
+        baseUrl,
+        subscriptionId,
+        paddleCustomerId: billingRow.paddle_customer_id ?? null,
+        paddlePriceId: billingRow.paddle_price_id ?? null,
+        hasApiKey: !!PADDLE_API_KEY,
+        apiKeyPrefix: PADDLE_API_KEY ? PADDLE_API_KEY.slice(0, 8) : null,
+      });
+    }
 
     const response = await fetch(`${baseUrl}/subscriptions/${subscriptionId}/cancel`, {
       method: "POST",
@@ -180,8 +217,13 @@ serve(async (req) => {
         });
       }
 
-      // resto igual
-      return jsonResponse(500, {
+      // Preserve Paddle's error status for common client errors
+      const allowedStatus = [400, 401, 404, 409];
+      const statusToReturn = allowedStatus.includes(response.status)
+        ? response.status
+        : 500;
+
+      return jsonResponse(statusToReturn, {
         error: "paddle_cancel_failed",
         paddle_status: response.status,
         paddle_env: PADDLE_ENV,
@@ -202,9 +244,17 @@ serve(async (req) => {
       .eq("org_id", orgId);
 
     if (updateError) {
-      console.error("[paddle-cancel] org_billing update warning", {
+      console.error("[paddle-cancel] org_billing update desync", {
         orgId,
         error: updateError.message,
+      });
+      return jsonResponse(500, {
+        error: "org_billing_update_failed",
+        detail: updateError.message,
+        org_id: orgId,
+        subscription_id: subscriptionId,
+        paddle_env: PADDLE_ENV,
+        paddle_cancelled: true,
       });
     }
 
