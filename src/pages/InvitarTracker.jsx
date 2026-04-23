@@ -45,7 +45,6 @@ export default function InvitarTracker() {
 
   // 👇 Definición segura, siempre en el scope principal
   const safeMaxTrackers = Number(entitlements?.max_trackers ?? 0);
-  const trackerCount = Number(entitlements?.trackers_used ?? 0);
   const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
 
   const orgId = useMemo(() => {
