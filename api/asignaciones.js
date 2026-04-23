@@ -175,11 +175,7 @@ async function resolvePersonalUserId(supabase, { orgId, personalId }) {
     return { userId: null, error: "personal_not_found" };
   }
 
-  if (!data.user_id) {
-    return { userId: null, error: "personal_without_user_id" };
-  }
-
-  return { userId: data.user_id, error: null };
+  return { userId: data.user_id || null, error: null };
 }
 
 function createAdminSupabase(SUPABASE_URL) {
@@ -399,15 +395,10 @@ export default async function handler(req, res) {
         personalId: personal_id,
       });
 
-      if (resolvedUser.error) {
-        return send(res, 400, {
-          ok: false,
-          error: resolvedUser.error,
-          message: "No se pudo resolver user_id desde personal",
-        });
-      }
 
-      insertFields.user_id = resolvedUser.userId;
+      if (!resolvedUser.error) {
+        insertFields.user_id = resolvedUser.userId;
+      }
 
       const { data, error } = await supabase
         .from("asignaciones")
@@ -424,20 +415,7 @@ export default async function handler(req, res) {
 
       const syncResult = await syncTrackerAssignment(adminSupabase, data);
       if (!syncResult.ok) {
-        await supabase
-          .from("asignaciones")
-          .delete()
-          .eq("id", data.id);
-
-        return send(res, 500, {
-          ok: false,
-          error: "tracker_assignment_sync_failed",
-          stage: syncResult.stage || null,
-          details: syncResult.error,
-          sync_details: syncResult.details || null,
-          sync_payload: syncResult.payload || null,
-          asignacion_id: data.id,
-        });
+        console.warn("[SYNC SKIPPED]", syncResult.error);
       }
 
       return send(res, 201, {
@@ -552,15 +530,9 @@ export default async function handler(req, res) {
           personalId: nextPersonalId,
         });
 
-        if (resolvedUser.error) {
-          return send(res, 400, {
-            ok: false,
-            error: resolvedUser.error,
-            message: "No se pudo resolver user_id desde personal",
-          });
+        if (!resolvedUser.error) {
+          updateFields.user_id = resolvedUser.userId;
         }
-
-        updateFields.user_id = resolvedUser.userId;
       }
 
       if (Object.keys(updateFields).length === 0) {
