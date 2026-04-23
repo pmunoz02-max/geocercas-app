@@ -358,6 +358,12 @@ export default async function handler(req, res) {
     if (method === "POST") {
       const incoming = req.body || {};
       const insertFields = buildWritableFields(incoming);
+      // Normalize geocerca_id and geofence_id: fill both if either is present
+      if (insertFields.geocerca_id && !insertFields.geofence_id) {
+        insertFields.geofence_id = insertFields.geocerca_id;
+      } else if (insertFields.geofence_id && !insertFields.geocerca_id) {
+        insertFields.geocerca_id = insertFields.geofence_id;
+      }
       const { personal_id, org_id, start_time, end_time } = insertFields;
 
       if (!org_id || !personal_id || !start_time || !end_time) {
@@ -526,6 +532,13 @@ export default async function handler(req, res) {
             conflict_id: overlapCheck.conflict.id,
           });
         }
+      }
+
+      // Normalize geocerca_id and geofence_id: fill both if either is present
+      if (updateFields.geocerca_id && !updateFields.geofence_id) {
+        updateFields.geofence_id = updateFields.geocerca_id;
+      } else if (updateFields.geofence_id && !updateFields.geocerca_id) {
+        updateFields.geocerca_id = updateFields.geofence_id;
       }
 
       if (nextOrgId && nextPersonalId) {
