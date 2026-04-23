@@ -245,19 +245,6 @@ export default function AsignacionesPage() {
       return;
     }
 
-    if (!resolvedSelectedTrackerUserId) {
-      console.log("[Asignaciones] validation fail: person without user_id", { person: selectedPerson, form: {
-        selectedPersonId,
-        selectedGeocercaId,
-        selectedActivityId,
-        startTime,
-        endTime,
-        freqMin,
-        status,
-      }});
-      setError(t("asignaciones.error.personMissingUserId"));
-      return;
-    }
 
     if (!selectedGeocercaId) {
       console.log("[Asignaciones] validation fail: missing geofence", { form: {
