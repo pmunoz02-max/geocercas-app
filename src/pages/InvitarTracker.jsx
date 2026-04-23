@@ -34,6 +34,10 @@ function normalizePlanLabel(planCode) {
 
 
 export default function InvitarTracker() {
+    // Guard: show fallback UI if entitlements are loading or undefined
+    if (entitlementsLoading || !entitlements) {
+      return <div className="min-h-[70vh] flex items-center justify-center p-6">Cargando…</div>;
+    }
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
