@@ -127,7 +127,9 @@ function MainAppRoutes() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
+
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
+      <Route path="/tracker-accept" element={<TrackerInviteStart />} />
 
       <Route path="/pay" element={<PayPage />} />
 
