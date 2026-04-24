@@ -1,5 +1,31 @@
 /docs/tracker-invite-accept-flow.md
 2️⃣ Contenido (pegar completo)
+# Tracker Invite Flow
+
+## Estado actual
+
+La función legacy `invite-user` queda deprecada y no debe usarse para invitaciones de trackers.
+
+## Flujo válido
+
+Las invitaciones de trackers deben generarse exclusivamente con:
+
+`send-tracker-invite-brevo`
+
+El link enviado debe apuntar a:
+
+`/tracker-accept?inviteToken=...&org_id=...`
+
+Nunca debe usarse Supabase magiclink para trackers.
+
+## Motivo
+
+El flujo con magiclink redirigía a `/tracker-gps` sin `tracker_runtime_token`, causando que el móvil quedara detenido en “Inicializando seguimiento”.
+
+## Regla permanente
+
+Todo tracker invite debe pasar por `/tracker-accept`, generar runtime session y luego continuar a `/tracker-gps`.
+
 # Tracker Invite Acceptance Flow (Idempotent)
 
 ## Context

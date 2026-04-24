@@ -28,7 +28,7 @@ export async function createIndependentOwner(params) {
   // - role_name = "OWNER"
   // - org_id = null  → se inserta app_user_roles con org_id NULL
   //   y el trigger `ensure_org_for_owner_role` crea la organización.
-  const { data, error } = await supabase.functions.invoke("invite-user", {
+  const { data, error } = await supabase.functions.invoke("send-tracker-invite-brevo", {
     body: {
       email,
       full_name: full_name ?? null,

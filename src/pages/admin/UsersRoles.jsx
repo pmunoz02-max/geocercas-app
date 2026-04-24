@@ -128,8 +128,8 @@ export default function UsersRoles() {
     try {
       const { email, full_name, role_name } = inviteForm;
 
-      const { data, error } = await supabase.functions.invoke("invite-user", {
-        body: { email, full_name, role_name },
+      const { data, error } = await supabase.functions.invoke("send-tracker-invite-brevo", {
+        body: { org_id: null, email },
       });
 
       if (error) {
