@@ -1,14 +1,6 @@
-      // Enforce tenant_id from org_id if missing (POST)
-      if (!insertFields.tenant_id && insertFields.org_id) {
-        insertFields.tenant_id = insertFields.org_id;
-      }
-      // Enforce tenant_id from org_id if missing (PATCH)
-      if (!updateFields.tenant_id && nextOrgId) {
-        updateFields.tenant_id = nextOrgId;
-      }
 import { createClient } from "@supabase/supabase-js";
 
-const VERSION = "asignaciones-direct-sync-04";
+const VERSION = "asignaciones-direct-sync-05";
 
 function setHeaders(res) {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -66,7 +58,10 @@ function rangesOverlapInclusive(startA, endA, startB, endB) {
 
 function buildWritableFields(incoming) {
   const allowed = [
+    "tenant_id",
+    "org_id",
     "personal_id",
+    "org_people_id",
     "geofence_id",
     "geocerca_id",
     "activity_id",
@@ -76,9 +71,6 @@ function buildWritableFields(incoming) {
     "estado",
     "frecuencia_envio_sec",
     "frequency_minutes",
-    "org_id",
-    "tenant_id",
-    "org_people_id",
     "user_id",
   ];
 
@@ -201,6 +193,49 @@ async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId }) {
   if (!gz?.id) return { geocercaId: null, error: "matching_geocerca_not_found" };
 
   return { geocercaId: gz.id, error: null };
+}
+
+async function resolveTenantId(supabase, { orgId, incomingTenantId = null }) {
+  if (incomingTenantId) {
+    return { tenantId: incomingTenantId, error: null, mode: "incoming" };
+  }
+
+  if (!orgId) {
+    return { tenantId: null, error: "missing_org_id_for_tenant" };
+  }
+
+  const byId = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (!byId.error && byId.data?.id) {
+    return { tenantId: byId.data.id, error: null, mode: "tenant_id_equals_org_id" };
+  }
+
+  const candidates = ["org_id", "organization_id"];
+  for (const column of candidates) {
+    try {
+      const { data, error } = await supabase
+        .from("tenants")
+        .select("id")
+        .eq(column, orgId)
+        .maybeSingle();
+
+      if (!error && data?.id) {
+        return { tenantId: data.id, error: null, mode: `tenants.${column}` };
+      }
+    } catch {
+      // Try next possible schema.
+    }
+  }
+
+  return {
+    tenantId: null,
+    error: "tenant_not_found_for_org",
+    details: { orgId, byIdError: byId.error?.message || null },
+  };
 }
 
 function createAdminSupabase(SUPABASE_URL) {
@@ -389,9 +424,20 @@ export default async function handler(req, res) {
         return send(res, 400, { ok: false, error: "missing_required_fields" });
       }
 
-      if (!insertFields.tenant_id) {
-        insertFields.tenant_id = org_id;
+      const resolvedTenant = await resolveTenantId(supabase, {
+        orgId: org_id,
+        incomingTenantId: insertFields.tenant_id,
+      });
+
+      if (resolvedTenant.error) {
+        return send(res, 400, {
+          ok: false,
+          error: resolvedTenant.error,
+          details: resolvedTenant.details || null,
+        });
       }
+
+      insertFields.tenant_id = resolvedTenant.tenantId;
 
       if (!insertFields.geocerca_id && insertFields.geofence_id) {
         const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
@@ -514,9 +560,20 @@ export default async function handler(req, res) {
         ? updateFields.end_time
         : currentRow.end_time;
 
-      if (!updateFields.tenant_id && nextOrgId) {
-        updateFields.tenant_id = nextOrgId;
+      const resolvedTenant = await resolveTenantId(supabase, {
+        orgId: nextOrgId,
+        incomingTenantId: updateFields.tenant_id || currentRow.tenant_id,
+      });
+
+      if (resolvedTenant.error) {
+        return send(res, 400, {
+          ok: false,
+          error: resolvedTenant.error,
+          details: resolvedTenant.details || null,
+        });
       }
+
+      updateFields.tenant_id = resolvedTenant.tenantId;
 
       if (!nextStartTime || !nextEndTime) {
         return send(res, 400, {
@@ -796,6 +853,7 @@ export default async function handler(req, res) {
     return send(res, 500, {
       ok: false,
       error: error?.message || "Internal Server Error",
+      version: VERSION,
     });
   }
 }
