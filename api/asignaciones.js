@@ -195,48 +195,6 @@ async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId }) {
   return { geocercaId: gz.id, error: null };
 }
 
-async function resolveTenantId(supabase, { orgId, incomingTenantId = null }) {
-  if (incomingTenantId) {
-    return { tenantId: incomingTenantId, error: null, mode: "incoming" };
-  }
-
-  if (!orgId) {
-    return { tenantId: null, error: "missing_org_id_for_tenant" };
-  }
-
-  const byId = await supabase
-    .from("tenants")
-    .select("id")
-    .eq("id", orgId)
-    .maybeSingle();
-
-  if (!byId.error && byId.data?.id) {
-    return { tenantId: byId.data.id, error: null, mode: "tenant_id_equals_org_id" };
-  }
-
-  const candidates = ["org_id", "organization_id"];
-  for (const column of candidates) {
-    try {
-      const { data, error } = await supabase
-        .from("tenants")
-        .select("id")
-        .eq(column, orgId)
-        .maybeSingle();
-
-      if (!error && data?.id) {
-        return { tenantId: data.id, error: null, mode: `tenants.${column}` };
-      }
-    } catch {
-      // Try next possible schema.
-    }
-  }
-
-  return {
-    tenantId: null,
-    error: "tenant_not_found_for_org",
-    details: { orgId, byIdError: byId.error?.message || null },
-  };
-}
 
 function createAdminSupabase(SUPABASE_URL) {
   const serviceKey = getEnv([
@@ -424,20 +382,8 @@ export default async function handler(req, res) {
         return send(res, 400, { ok: false, error: "missing_required_fields" });
       }
 
-      const resolvedTenant = await resolveTenantId(supabase, {
-        orgId: org_id,
-        incomingTenantId: insertFields.tenant_id,
-      });
-
-      if (resolvedTenant.error) {
-        return send(res, 400, {
-          ok: false,
-          error: resolvedTenant.error,
-          details: resolvedTenant.details || null,
-        });
-      }
-
-      insertFields.tenant_id = resolvedTenant.tenantId;
+      // Universal rule: tenant_id === org_id
+      insertFields.tenant_id = org_id;
 
       if (!insertFields.geocerca_id && insertFields.geofence_id) {
         const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
@@ -560,20 +506,8 @@ export default async function handler(req, res) {
         ? updateFields.end_time
         : currentRow.end_time;
 
-      const resolvedTenant = await resolveTenantId(supabase, {
-        orgId: nextOrgId,
-        incomingTenantId: updateFields.tenant_id || currentRow.tenant_id,
-      });
-
-      if (resolvedTenant.error) {
-        return send(res, 400, {
-          ok: false,
-          error: resolvedTenant.error,
-          details: resolvedTenant.details || null,
-        });
-      }
-
-      updateFields.tenant_id = resolvedTenant.tenantId;
+      // Universal rule: tenant_id === org_id
+      updateFields.tenant_id = nextOrgId;
 
       if (!nextStartTime || !nextEndTime) {
         return send(res, 400, {
