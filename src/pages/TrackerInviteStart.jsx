@@ -270,14 +270,15 @@ export default function TrackerInviteStart() {
 
       setStatus(data?.idempotent ? "already_accepted" : "accepted");
 
-      // Redirigir pasando los datos como query params
+      // Redirigir pasando los datos como query params (con encodeURIComponent)
       const runtimeToken = data?.tracker_runtime_token;
       const resolvedTrackerUserId = data?.tracker_user_id;
       const persistedOrgId = data?.org_id;
-      navigate(
-        `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeToken)}&tracker_user_id=${encodeURIComponent(resolvedTrackerUserId)}&org_id=${encodeURIComponent(persistedOrgId)}`,
-        { replace: true }
-      );
+      const trackerGpsUrl =
+        `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeToken)}` +
+        `&tracker_user_id=${encodeURIComponent(resolvedTrackerUserId)}` +
+        `&org_id=${encodeURIComponent(persistedOrgId)}`;
+      navigate(trackerGpsUrl, { replace: true });
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
       setStatus("accept_failed");
