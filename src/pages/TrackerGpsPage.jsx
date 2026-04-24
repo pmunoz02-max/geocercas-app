@@ -87,6 +87,31 @@ function syncRuntimeSession(session) {
 }
 
 export default function TrackerGpsPage() {
+  // Lee query params y guarda en storage si existen
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+
+    const runtimeToken = params.get("tracker_runtime_token");
+    const trackerUserId = params.get("tracker_user_id");
+    const orgId = params.get("org_id");
+
+    if (runtimeToken && trackerUserId && orgId) {
+      console.log("[TRACKER_QUERY_PARAMS_FOUND]", {
+        runtimeToken: true,
+        trackerUserId: true,
+        orgId: true,
+      });
+
+      setStorageItem("tracker_runtime_token", runtimeToken);
+      setStorageItem("tracker_access_token", runtimeToken);
+      setStorageItem("tracker_user_id", trackerUserId);
+      setStorageItem("user_id", trackerUserId);
+      setStorageItem("tracker_org_id", orgId);
+      setStorageItem("org_id", orgId);
+    }
+  }, []);
   const { t } = useTranslation();
   const [msg, setMsg] = useState(() => t("tracker.gps.messageStarting"));
   const [runtimeSession, setRuntimeSession] = useState(() => {
