@@ -384,139 +384,44 @@ export default function InvitarTracker() {
     return data?.session?.access_token || null;
   }
 
-  async function onSendInvite(e) {
-    e.preventDefault();
-
-    setBusy(true);
-    setOkMsg(null);
-    setErrMsg(null);
-    setInviteLink("");
-    setInviteMeta(null);
-
+  // Nuevo handleSubmit minimal para invitación
+  const handleSubmit = async () => {
     try {
-      if (!orgId) {
-        throw new Error(
-          t("inviteTracker.errors.noOrg", {
-            defaultValue: "No se pudo determinar la organización activa.",
-          })
-        );
-      }
+      setBusy(true);
+      setErrMsg(null);
+      setOkMsg(null);
+      setInviteLink("");
+      setInviteMeta(null);
 
-      if (inviteBlockedByPlan) {
-        throw new Error(
-          t("inviteTracker.plan.genericBlockedBody", {
-            defaultValue:
-              "Las invitaciones de tracker requieren una suscripción activa compatible.",
-          })
-        );
-      }
-
-      if (trackerLimitReached) {
-        throw new Error(
-          t("inviteTracker.usage.limitReached", {
-            defaultValue: "Límite alcanzado",
-          })
-        );
-      }
-
-      if (!selectedPerson || !selectedAssignment?.id) {
-        throw new Error(
-          t("inviteTracker.errors.selectPerson", {
-            defaultValue: "Selecciona una persona con asignación activa.",
-          })
-        );
-      }
-
+      // orgId y email deben estar definidos
+      const orgId = auth?.orgId || auth?.currentOrgId || auth?.org?.id || auth?.org_id || auth?.currentOrg?.org_id || auth?.currentOrg?.id || "";
       const email = normalizeEmail(emailInput);
 
-      if (!email || !isValidEmail(email)) {
-        throw new Error(
-          t("inviteTracker.errors.invalidEmail", {
-            defaultValue: "Ingresa un email válido.",
-          })
-        );
-      }
-
-      if (!allowedEmails.has(email)) {
-        throw new Error(
-          t("inviteTracker.errors.emailMustMatchAssignedPerson", {
-            defaultValue:
-              "El email debe coincidir con el personal seleccionado con asignación activa.",
-          })
-        );
-      }
-
-      const accessToken = await getAccessToken();
-
-      if (!accessToken) {
-        throw new Error(
-          t("inviteTracker.errors.noSession", {
-            defaultValue: "No se encontró una sesión válida.",
-          })
-        );
-      }
-
-      // =========================================================
-      // IMPORTANTE:
-      // Reemplaza INVITE_API_URL por tu endpoint real de creación
-      // de invitación. Lo dejo explícito para no inventar una ruta.
-      // =========================================================
-      const INVITE_API_URL = "";
-
-      if (!INVITE_API_URL) {
-        throw new Error(
-          "Falta configurar el endpoint real de creación de invitación en InvitarTracker.jsx (INVITE_API_URL)."
-        );
-      }
-
-      const payload = {
-        org_id: orgId,
-        lang,
-        email,
-        personal_id: selectedPerson.id,
-        assignment_id: selectedAssignment.id,
-      };
-
-      const response = await fetch(INVITE_API_URL, {
+      const res = await fetch("/api/invite-tracker", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          org_id: orgId,
+          email,
+        }),
       });
 
-      const result = await response.json().catch(() => null);
+      const data = await res.json();
 
-      if (!response.ok) {
-        throw new Error(
-          result?.error ||
-            result?.message ||
-            t("inviteTracker.errors.sendFailed", {
-              defaultValue: "No se pudo enviar la invitación.",
-            })
-        );
+      if (!res.ok) {
+        throw new Error(data?.error || "invite_failed");
       }
 
-      setInviteLink(String(result?.invite_url || ""));
-      setInviteMeta({
-        invite_id: result?.invite_id || "",
-        created_at: result?.created_at || "",
-        invite_url: result?.invite_url || "",
-      });
-
-      setOkMsg(
-        t("inviteTracker.success.inviteCreated", {
-          defaultValue: "Invitación creada correctamente.",
-        })
-      );
+      setOkMsg("Invitación enviada correctamente.");
     } catch (err) {
-      console.error("[invite-tracker] send invite error", err);
-      setErrMsg(String(err?.message || err));
+      console.error("[invite-tracker]", err);
+      setErrMsg(err.message || "invite_error");
     } finally {
       setBusy(false);
     }
-  }
+  };
 
   // =========================
   // GUARDS
