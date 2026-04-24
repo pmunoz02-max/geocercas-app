@@ -127,17 +127,14 @@ export default function UsersRoles() {
     setMsg(null);
     try {
       const { email, full_name, role_name } = inviteForm;
-
       const { data, error } = await supabase.functions.invoke("send-tracker-invite-brevo", {
-        body: { org_id: null, email },
+        body: { org_id: null, email, full_name, role_name },
       });
-
       if (error) {
         const info = await extractEdgeError(error);
         console.error("[UsersRoles] invite-user ERROR:", { error, info });
         throw new Error(formatEdgeError(info));
       }
-
       if (data?.ok) {
         setMessage("success", t('admin.usersRoles.inviteSuccess', { email }));
         setInviteForm({ email: "", full_name: "", role_name: "tracker" });
@@ -160,42 +157,7 @@ export default function UsersRoles() {
     }
   }
 
-  // Solo MAGIC LINK
-  async function handleMagicLink(email, full_name) {
-    setLoading(true);
-    setMsg(null);
-    try {
-      const redirectTo = `${window.location.origin}/tracker/callback`;
-      const { data, error } = await supabase.functions.invoke("send-magic-link", {
-        body: { email, full_name, redirectTo, inviteIfNotExists: true },
-      });
 
-      if (error) {
-        const info = await extractEdgeError(error);
-        console.error("[UsersRoles] send-magic-link ERROR:", { error, info });
-        throw new Error(formatEdgeError(info));
-      }
-
-      if (data?.ok) {
-        setMessage(
-          "success",
-          data.mode === "INVITE_SENT"
-            ? t('admin.usersRoles.magicLinkSentInvite', { email })
-            : t('admin.usersRoles.magicLinkSentLink', { email })
-        );
-      } else {
-        throw new Error(data?.error || "Error enviando Magic Link");
-      }
-    } catch (e) {
-      const m = e?.message || String(e);
-      const hint = /FunctionsFetchError/i.test(m)
-        ? " Verifica que send-magic-link esté desplegada con --no-verify-jwt y responda OPTIONS con CORS."
-        : "";
-      setMessage("error", m + hint, 8000);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleAssignRole(email, full_name, role_name) {
     setLoading(true);
@@ -329,13 +291,7 @@ export default function UsersRoles() {
                     <td>{rolesById.get(p.role_id) || "—"}</td>
                     <td>{new Date(p.created_at).toLocaleString()}</td>
                     <td className="space-x-2">
-                      <button
-                        onClick={() => handleMagicLink(p.email, null)}
-                        className="px-2 py-1 border rounded hover:bg-gray-50"
-                        disabled={loading}
-                      >
-                        {t('admin.usersRoles.magicLink')}
-                      </button>
+                      {/* Botón de magic link eliminado: solo tracker invite permitido */}
                       <button
                         onClick={() => handleDeleteOrSuspend(p.email)}
                         className="px-2 py-1 border rounded text-red-700 border-red-300 hover:bg-red-50"
@@ -406,13 +362,7 @@ export default function UsersRoles() {
                       </div>
                     </td>
                     <td className="space-x-2">
-                      <button
-                        onClick={() => handleMagicLink(u.email, u.full_name)}
-                        className="px-2 py-1 border rounded hover:bg-gray-50"
-                        disabled={loading}
-                      >
-                        {t('admin.usersRoles.magicLink')}
-                      </button>
+                      {/* Botón de magic link eliminado: solo tracker invite permitido */}
                       <button
                         onClick={() => handleDeleteOrSuspend(u.email)}
                         className="px-2 py-1 border rounded text-red-700 border-red-300 hover:bg-red-50"
