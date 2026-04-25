@@ -44,13 +44,18 @@ export default function LanguageSwitcher() {
     }
   }, [current]);
 
-  function handleLanguageChange(e: React.MouseEvent<HTMLButtonElement>, code: string) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!SUPPORTED.has(code)) return;
-    setCurrent(code);
-    applyLanguageSafely(code);
-  }
+    function handleLanguageChange(e: React.MouseEvent<HTMLButtonElement>, code: string) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!SUPPORTED.has(code)) return;
+      setCurrent(code);
+      i18n.changeLanguage(code); // update i18n language
+      // Update URL ?lang= param
+      const params = new URLSearchParams(window.location.search);
+      params.set("lang", code);
+      const url = window.location.pathname + "?" + params.toString();
+      window.history.replaceState({}, "", url);
+    }
 
   const tr = (key: string, fallback: string, options = {}) =>
     t(key, { defaultValue: fallback, ...options });
