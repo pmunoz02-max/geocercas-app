@@ -928,14 +928,14 @@ export default function TrackerDashboard() {
 
   const resolvedOrgId = normalizeUuid(orgId);
 
-  const allowedAssignmentUserIds = useMemo(() => {
+  const activeTrackerUserIds = useMemo(() => {
     return new Set(
-      (assignmentTrackers || [])
-        .map((a) => a?.tracker_user_id)
+      (latestRows || [])
+        .map((r) => r?.user_id)
         .filter(Boolean)
         .map(String)
     );
-  }, [assignmentTrackers]);
+  }, [latestRows]);
 
 
   useEffect(() => {
@@ -1337,14 +1337,7 @@ export default function TrackerDashboard() {
     return { rows, error: null };
   }
 
-  function filterRowsToAssignedTrackers(rows) {
-    const sourceRows = Array.isArray(rows) ? rows : [];
-    if (!allowedAssignmentUserIds || allowedAssignmentUserIds.size === 0) return sourceRows;
-    return sourceRows.filter((row) => {
-      const uid = normalizeUuid(row?.user_id);
-      return uid ? allowedAssignmentUserIds.has(String(uid)) : false;
-    });
-  }
+  // Assignment filtering removed; use activeTrackerUserIds as needed
 
 
   async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
