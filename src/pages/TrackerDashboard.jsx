@@ -928,6 +928,8 @@ export default function TrackerDashboard() {
 
   const resolvedOrgId = normalizeUuid(orgId);
 
+  // Use the variable from tracker_latest_app data source
+  const [latestRows, setLatestRows] = useState([]);
   const activeTrackerUserIds = useMemo(() => {
     return new Set(
       (latestRows || [])
@@ -936,6 +938,8 @@ export default function TrackerDashboard() {
         .map(String)
     );
   }, [latestRows]);
+  // Set latestRows when loading tracker_latest_app data
+  // (Find the place where latestRows is loaded and setLatestRows is called)
 
 
   useEffect(() => {
