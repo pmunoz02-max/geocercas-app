@@ -13,8 +13,6 @@ import AuthGuard from "./components/AuthGuard.jsx";
 // Public pages
 import Landing from "./pages/Landing.jsx";
 import DemoGeocercas from "./pages/DemoGeocercas.jsx";
-import DemoQuito from "./pages/demo/DemoQuito.jsx";
-import DemoMwea from "./pages/demo/DemoMwea.jsx";
 import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
@@ -51,7 +49,6 @@ import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
-import PaddleCheckoutPage from "./pages/paddle-checkout.tsx";
 import PayPage from "./pages/Pay.jsx";
 import RefundPolicy from "./pages/RefundPolicy.jsx";
 
@@ -75,16 +72,10 @@ function RootEntry() {
     return <Navigate to={target} replace />;
   }
 
-  if (!auth || !auth.initialized) {
-    return null;
-  }
+  if (!auth || !auth.initialized) return null;
 
-  // Si está autenticado, ir al dashboard
-  if (auth.user) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (auth.user) return <Navigate to="/dashboard" replace />;
 
-  // Si NO está autenticado, mostrar landing pública
   return <Landing />;
 }
 
@@ -117,8 +108,12 @@ function AdminRoute({ children }) {
 
 function MainAppRoutes() {
   return (
-        <Route path="/dashboard" element={<TrackerDashboard />} />
-        <Route path="/dashboard-costs" element={<CostosDashboardPage />} />
+    <Routes>
+      <Route path="/" element={<RootEntry />} />
+
+      {/* Public */}
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/demo" element={<DemoGeocercas />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
@@ -127,12 +122,9 @@ function MainAppRoutes() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />
-
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
-
       <Route path="/pay" element={<PayPage />} />
-
       <Route path="/refund-policy" element={<RefundPolicy />} />
 
       {/* Legacy redirects */}
@@ -140,8 +132,8 @@ function MainAppRoutes() {
       <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
       <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
       <Route path="/admin" element={<Navigate to="/admins" replace />} />
-      <Route path="/costos-dashboard" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard-costos" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/costos-dashboard" element={<Navigate to="/dashboard-costs" replace />} />
+      <Route path="/dashboard-costos" element={<Navigate to="/dashboard-costs" replace />} />
 
       {/* Protected */}
       <Route
@@ -152,6 +144,33 @@ function MainAppRoutes() {
         }
       >
         <Route path="/inicio" element={<Inicio />} />
+
+        <Route
+          path="/dashboard"
+          element={
+            <RequireOrg>
+              <TrackerDashboard />
+            </RequireOrg>
+          }
+        />
+
+        <Route
+          path="/dashboard-costs"
+          element={
+            <RequireOrg>
+              <CostosDashboardPage />
+            </RequireOrg>
+          }
+        />
+
+        <Route
+          path="/tracker"
+          element={
+            <RequireOrg>
+              <TrackerDashboard />
+            </RequireOrg>
+          }
+        />
 
         <Route
           path="/billing"
@@ -231,30 +250,6 @@ function MainAppRoutes() {
           }
         />
         <Route
-          path="/dashboard"
-          element={
-            <RequireOrg>
-              <TrackerDashboard />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/dashboard-costs"
-          element={
-            <RequireOrg>
-              <CostosDashboardPage />
-            </RequireOrg>
-          }
-        />
-        <Route
-          path="/tracker"
-          element={
-            <RequireOrg>
-              <TrackerDashboard />
-            </RequireOrg>
-          }
-        />
-        <Route
           path="/invitar-tracker"
           element={
             <RequireOrg>
@@ -262,7 +257,6 @@ function MainAppRoutes() {
             </RequireOrg>
           }
         />
-
         <Route
           path="/admins"
           element={
