@@ -1865,7 +1865,7 @@
     "enterprise": {
       "title": "Enterprise",
       "subtitle": "Venta asistida",
-      "price": "A medida",
+      "price": "USD 99/mes",
       "description": "Para organizaciones que requieren condiciones comerciales especiales.",
       "features": {
         "salesOnboarding": "Atención comercial y onboarding guiado",
