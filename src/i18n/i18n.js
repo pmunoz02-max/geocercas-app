@@ -46,9 +46,14 @@ function logI18n(stage, extra = {}) {
   });
 }
 
-const initialLang = readUrlLang() || "es";
-logI18n("before-init", { initialLang });
 
+const getInitialLang = () => {
+  const params = new URLSearchParams(window.location.search);
+  const lang = params.get("lang");
+  return ["es", "en", "fr"].includes(lang) ? lang : "es";
+};
+const initialLang = getInitialLang();
+logI18n("before-init", { initialLang });
 setHtmlLang(initialLang);
 
 i18n.use(initReactI18next).init({
@@ -58,7 +63,7 @@ i18n.use(initReactI18next).init({
     fr: { translation: fr },
   },
 
-  lng: initialLang,
+  lng: getInitialLang(),
 
   fallbackLng: "es",
 

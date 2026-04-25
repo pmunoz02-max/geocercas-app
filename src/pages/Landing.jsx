@@ -1,6 +1,7 @@
 // src/pages/Landing.jsx
 import React from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 
 const plans = [
@@ -45,23 +46,24 @@ const features = [
 ];
 
 export default function Landing() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-950/90">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
           <Link to="/" className="text-lg font-bold tracking-tight text-white">
-            App Geocercas
+            {t('app.brand', 'App Geocercas')}
           </Link>
 
           <nav className="flex items-center gap-3 text-sm">
             <a href="#precios" className="hidden text-slate-300 hover:text-white sm:inline">
-              Precios
+              {t('landing.pricing', 'Precios')}
             </a>
             <Link to="/privacy" className="hidden text-slate-300 hover:text-white sm:inline">
-              Privacidad
+              {t('landing.footerPrivacy', 'Privacidad')}
             </Link>
             <Link to="/terms" className="hidden text-slate-300 hover:text-white sm:inline">
-              Términos
+              {t('landing.footerTerms', 'Términos')}
             </Link>
             <div className="relative z-50">
               <LanguageSwitcher />
@@ -70,7 +72,7 @@ export default function Landing() {
               to="/auth"
               className="rounded-2xl bg-white px-4 py-2 font-semibold text-slate-950 hover:bg-slate-200"
             >
-              Iniciar sesión
+              {t('app.header.login', 'Iniciar sesión')}
             </Link>
           </nav>
         </div>
@@ -80,15 +82,15 @@ export default function Landing() {
         <section className="mx-auto grid max-w-7xl grid-cols-1 gap-10 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
-              Plataforma SaaS para control GPS y geocercas
+              {t('landing.heroBadge', 'Plataforma SaaS para control GPS y geocercas')}
             </p>
 
             <h1 className="mt-6 max-w-4xl text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Convierte posiciones GPS en control operativo
+              {t('landing.heroTitle', 'Convierte posiciones GPS en control operativo')}
             </h1>
 
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-              App Geocercas ayuda a empresas a supervisar trackers, validar presencia en zonas definidas y consultar reportes operativos desde una plataforma web segura.
+              {t('landing.heroSubtitle', 'App Geocercas ayuda a empresas a supervisar trackers, validar presencia en zonas definidas y consultar reportes operativos desde una plataforma web segura.')}
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -96,13 +98,13 @@ export default function Landing() {
                 to="/auth"
                 className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
               >
-                Empezar ahora
+                {t('landing.ctaStart', 'Empezar ahora')}
               </Link>
               <a
                 href="#precios"
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-900"
               >
-                Ver precios
+                {t('landing.ctaPricing', 'Ver precios')}
               </a>
             </div>
           </div>
