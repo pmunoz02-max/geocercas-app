@@ -1249,7 +1249,7 @@ export default function TrackerDashboard() {
 
     const { data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts, event, source, speed, heading, battery, is_mock, device_recorded_at, created_at")
+      .select("user_id, org_id, lat, lng, accuracy, ts, event, speed, heading, battery, is_mock, device_recorded_at, created_at")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
@@ -1446,9 +1446,10 @@ export default function TrackerDashboard() {
         const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
         const latestRes = await loadLatestPositions(safeOrgId);
-        let latestRows = latestRes?.rows || [];
 
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
+        let latestRows = latestRes?.rows || [];
+        // Only filter by allowedAssignmentUserIds if assignments are present (not empty)
+        if (assignments && assignments.length > 0 && allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
           latestRows = latestRows.filter((row) =>
             allowedAssignmentUserIds.has(String(row?.user_id))
           );
