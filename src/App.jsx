@@ -117,14 +117,8 @@ function AdminRoute({ children }) {
 
 function MainAppRoutes() {
   return (
-    <Routes>
-      {/* Public */}
-      <Route path="/privacy" element={<Privacy />} />
-      <Route path="/terms" element={<Terms />} />
-      <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
-      <Route path="/" element={<Landing />} />
-      <Route path="/app" element={<RootEntry />} />
-      <Route path="/landing" element={<Landing />} />
+        <Route path="/dashboard" element={<TrackerDashboard />} />
+        <Route path="/dashboard-costs" element={<CostosDashboardPage />} />
       <Route path="/demo" element={<DemoGeocercas />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
