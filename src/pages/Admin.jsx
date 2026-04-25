@@ -7,7 +7,7 @@ import {
   listMyOrganizations,
   getMyProfile,
   adminAssignRoleOrg, // lo dejamos aunque no se use aún
-  sendMagicLink,
+  sendTrackerInvite,
 } from "@/services/admin";
 
 export default function Admin() {
@@ -58,17 +58,21 @@ export default function Admin() {
     }
   }
 
-  async function onSendMagicLink(e) {
+  async function onSendTrackerInvite(e) {
     e.preventDefault();
     setError("");
+    setLoading(true);
     try {
       if (!inviteEmail.trim()) return;
-      await sendMagicLink(inviteEmail.trim());
+      if (!me?.org_id) throw new Error("No organization ID found in profile.");
+      await sendTrackerInvite(inviteEmail.trim(), me.org_id);
       setInviteEmail("");
-      window.alert(tr("admin.messages.magicLinkSent", "Link sent."));
+      window.alert(tr("admin.messages.trackerInviteSent", "Tracker invite sent."));
     } catch (e) {
       const msg = e && e.message ? e.message : String(e);
       setError(msg);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -168,10 +172,10 @@ export default function Admin() {
 
       <section className="mb-6 rounded-lg border p-4">
         <h2 className="mb-3 text-lg font-medium">
-          {tr("admin.inviteTracker.title", "Invite tracker (Magic Link)")}
+          {tr("admin.inviteTracker.title", "Invite tracker")}
         </h2>
 
-        <form onSubmit={onSendMagicLink} className="flex gap-2">
+        <form onSubmit={onSendTrackerInvite} className="flex gap-2">
           <input
             type="email"
             value={inviteEmail}
@@ -181,10 +185,12 @@ export default function Admin() {
               "tracker@email.com"
             )}
             className="w-full rounded border px-3 py-2"
+            disabled={loading}
           />
           <button
             type="submit"
             className="rounded bg-black px-4 py-2 text-white"
+            disabled={loading}
           >
             {tr("admin.inviteTracker.submit", "Send")}
           </button>
@@ -195,7 +201,7 @@ export default function Admin() {
             "admin.inviteTracker.helpPrefix",
             "This button uses the Edge Function"
           )}{" "}
-          <code>send-magic-link</code>.
+          <code>send-tracker-invite-brevo</code>.
         </p>
       </section>
     </div>
