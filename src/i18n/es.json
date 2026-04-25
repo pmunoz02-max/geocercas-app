@@ -46,6 +46,7 @@
     "formTitleEdit": "Editar actividad",
     "formTitleNew": "Nueva actividad",
     "loading": "Cargando actividades…",
+    "goDashboard": "Ir al panel",
     "readOnlyNote": "Solo el propietario y los administradores pueden crear o editar actividades.",
     "statusActive": "Activa",
     "statusInactive": "Inactiva",

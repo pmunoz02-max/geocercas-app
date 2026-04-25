@@ -274,7 +274,8 @@
     "backToLogin": "Back to sign in",
     "errorTitle": "Authentication failed",
     "invalidOrExpiredLink": "The link is invalid, has expired, or was already used.",
-    "processing": "Authenticating...",
+           "panelTitle": "Operations panel",
+           "goDashboard": "Go to dashboard",
     "timeout": "Authentication took too long. Try again.",
     "selection": {
       "title": "Select organization",
