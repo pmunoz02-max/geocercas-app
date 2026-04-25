@@ -1,3 +1,5 @@
+import Privacy from "./pages/Privacy.jsx";
+import Terms from "./pages/Terms.jsx";
 // src/App.jsx
 import React from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -117,6 +119,8 @@ function MainAppRoutes() {
   return (
     <Routes>
       {/* Public */}
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/paddle-checkout" element={<PaddleCheckoutPage />} />
       <Route path="/" element={<Landing />} />
       <Route path="/app" element={<RootEntry />} />
