@@ -165,7 +165,7 @@ export default function TrackerDashboard() {
         }
 
         const params = new URLSearchParams({
-          action: "tracker_latest",
+          action: "report",
           org_id: resolvedOrgId,
           from: DEFAULT_FROM,
           to: new Date().toISOString(),
