@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { useOrg } from "../context/OrgProvider";
 import { supabase } from "../lib/supabaseClient";
 
 export default function TrackerDashboard() {
   const [rows, setRows] = useState([]);
+  const { currentOrgId } = useOrg();
 
   useEffect(() => {
     async function load() {
@@ -13,11 +15,18 @@ export default function TrackerDashboard() {
 
         const token = session?.access_token;
 
-        const res = await fetch("/api/reportes?action=tracker_latest", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const orgId = currentOrgId;
+        const from = "2026-01-01";
+        const to = new Date().toISOString();
+
+        const res = await fetch(
+          `/api/reportes?action=tracker_latest&org_id=${orgId}&from=${from}&to=${to}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
         if (!res.ok) {
           throw new Error("API error");
@@ -33,8 +42,10 @@ export default function TrackerDashboard() {
       }
     }
 
-    load();
-  }, []);
+    if (currentOrgId) {
+      load();
+    }
+  }, [currentOrgId]);
 
   // ============================
   // SOURCE OF TRUTH
