@@ -244,12 +244,6 @@ export default async function handler(req, res) {
     // action=costs
     // ======================
     if (action === "costs") {
-      if (process.env.VERCEL_ENV !== "preview") {
-        return res.status(403).json({
-          ok: false,
-          error: "Not available outside preview.",
-        });
-      }
 
       const start = req.query.start ? String(req.query.start) : "";
       const end = req.query.end ? String(req.query.end) : "";
