@@ -1,5 +1,6 @@
 ﻿// src/pages/Reports.jsx
 import { useEffect, useMemo, useState } from "react";
+import { authFetch } from "../lib/authFetch";
 import { useTranslation } from "react-i18next";
 import { listGeofences } from "../lib/geofencesApi";
 import { useAuth } from "@/context/auth.js";
@@ -173,7 +174,7 @@ export default function Reports() {
     "disabled:opacity-50 disabled:cursor-not-allowed";
 
   async function apiGet(url) {
-    const resp = await fetch(url, {
+    const resp = await authFetch(url, {
       method: "GET",
       credentials: "include",
       headers: {

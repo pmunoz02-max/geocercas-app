@@ -7,6 +7,7 @@
 // ✅ Sigue respetando authReady + currentOrg.id
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { authFetch } from "../lib/authFetch";
 import { supabase } from "../supabaseClient";
 import { listGeofences } from "../lib/geofencesApi";
 import { useAuth } from "@/context/auth.js";
@@ -72,7 +73,7 @@ function formatNumber(n, decimals = 2) {
 }
 
 async function apiGet(url) {
-  const resp = await fetch(url, {
+  const resp = await authFetch(url, {
     method: "GET",
     credentials: "include",
     headers: {
