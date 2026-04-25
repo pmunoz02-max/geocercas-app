@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import { supabase } from "../lib/supabaseClient";
 
 const DEFAULT_FROM = "2026-01-01T00:00:00.000Z";
@@ -275,6 +277,24 @@ export default function TrackerDashboard() {
       <h2>Trackers activos: {latestRows.length}</h2>
       {orgId ? <p>Organización: {orgId}</p> : null}
       {source ? <p>Fuente: {source}</p> : null}
+
+      <MapContainer center={[-1.8, -78]} zoom={7} style={{ height: 400, width: "100%", marginBottom: 24 }}>
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {latestRows.map((r) =>
+          Number.isFinite(r.lat) && Number.isFinite(r.lng) ? (
+            <Marker key={r.user_id} position={[r.lat, r.lng]}>
+              <Popup>
+                <div>
+                  <strong>{r.user_id}</strong>
+                  {r.recorded_at ? <div>{new Date(r.recorded_at).toLocaleString()}</div> : null}
+                </div>
+              </Popup>
+            </Marker>
+          ) : null
+        )}
+      </MapContainer>
 
       <ul>
         {latestRows.map((r) => (
