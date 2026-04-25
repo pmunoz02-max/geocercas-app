@@ -33,18 +33,18 @@ function buildTabs({ role, isAppRoot, isAdmin }) {
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
-    { path: "/dashboard", labelKey: "app.tabs.panelCostos" },
+    { path: "/dashboard-costs", labelKey: "app.tabs.panelCostos" },
   ];
 
   if (isAdmin) {
     tabs.push(
-      { path: "/tracker", labelKey: "app.tabs.tracker" },
+      { path: "/dashboard", labelKey: "app.tabs.tracker" },
       { path: "/invitar-tracker", labelKey: "app.tabs.invitarTracker" },
       { path: "/pricing", labelKey: "app.tabs.pricing" },
       { path: "/billing", labelKey: "app.tabs.billing" }
     );
   } else {
-    tabs.push({ path: "/tracker", labelKey: "app.tabs.tracker" });
+    tabs.push({ path: "/dashboard", labelKey: "app.tabs.tracker" });
   }
 
   if (isAppRoot) {
