@@ -6,9 +6,18 @@ export default function TrackerDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/tracker-latest");
-        const data = await res.json();
-
+        const res = await fetch("/api/reportes?action=tracker_latest");
+        if (!res.ok) {
+          throw new Error("API error");
+        }
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          console.error("Invalid JSON response:", text);
+          data = [];
+        }
         // fallback seguro
         const safe = Array.isArray(data) ? data : [];
         setRows(safe);
