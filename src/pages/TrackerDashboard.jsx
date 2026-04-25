@@ -1365,12 +1365,6 @@ export default function TrackerDashboard() {
       .order("recorded_at", { ascending: false, nullsFirst: false })
       .limit(500);
 
-    if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-      const allowedUserIds = assignmentTrackers
-        .map((x) => normalizeUuid(x?.user_id))
-        .filter(Boolean);
-      if (allowedUserIds.length) query = query.in("user_id", allowedUserIds);
-    }
 
     const { data, error } = await query;
     if (error) {
@@ -1479,11 +1473,6 @@ export default function TrackerDashboard() {
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
 
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          latestRows = latestRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
-        }
 
         let source = "tracker_latest_app";
         let finalRows = latestRows;
@@ -1534,11 +1523,6 @@ export default function TrackerDashboard() {
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
 
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          latestRows = latestRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
-        }
 
         console.log("[tracker-dashboard] tracker_latest_app rows:", latestRows.length);
 
@@ -1552,8 +1536,10 @@ export default function TrackerDashboard() {
           });
         }
 
+        let fallbackRows = null;
+
         if (latestRows.length === 0) {
-          const fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
+          fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
           logLiveMetric("fallback_positions_used", {
             orgId: safeOrgId,
@@ -1572,7 +1558,7 @@ export default function TrackerDashboard() {
         console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
 
         console.log("[dashboard] latestRows raw:", latestRows);
-        console.log("[dashboard] fallbackRows raw:", fallbackRows);
+        if (fallbackRows) console.log("[dashboard] fallbackRows raw:", fallbackRows);
         console.log("[dashboard] finalRows raw:", finalRows);
         console.log(
           "[dashboard] finalRows summary:",
@@ -1653,12 +1639,6 @@ export default function TrackerDashboard() {
             .order("created_at", { ascending: false })
             .limit(500);
 
-          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-            const allowedUserIds = assignmentTrackers
-              .map((x) => normalizeUuid(x?.user_id))
-              .filter(Boolean);
-            if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
-          }
 
           return await q;
         };
@@ -1666,11 +1646,6 @@ export default function TrackerDashboard() {
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
 
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          latestRows = latestRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
-        }
 
         let finalRows = [];
         let tableUsed = "tracker_latest_app";
