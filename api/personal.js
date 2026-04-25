@@ -124,11 +124,23 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     };
   }
 
-  const jwt = getCookie(req, "tg_at");
-  if (!jwt) return { ok: false, status: 401, error: "Not authenticated", details: "Missing tg_at cookie" };
+  // Accept tg_at cookie or Authorization Bearer token
+  const cookieToken = getCookie(req, "tg_at");
+  const authHeader = req.headers.authorization || "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const accessToken = cookieToken || bearerToken;
+
+  if (!accessToken) {
+    return {
+      ok: false,
+      status: 401,
+      error: "missing_auth",
+      message: "Missing authentication",
+    };
+  }
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${jwt}` } },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
