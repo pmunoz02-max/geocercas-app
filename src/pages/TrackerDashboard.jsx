@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 export default function TrackerDashboard() {
   const [rows, setRows] = useState([]);
@@ -6,19 +7,24 @@ export default function TrackerDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch("/api/reportes?action=tracker_latest");
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        const token = session?.access_token;
+
+        const res = await fetch("/api/reportes?action=tracker_latest", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
         if (!res.ok) {
           throw new Error("API error");
         }
-        const text = await res.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          console.error("Invalid JSON response:", text);
-          data = [];
-        }
-        // fallback seguro
+
+        const data = await res.json();
+
         const safe = Array.isArray(data) ? data : [];
         setRows(safe);
       } catch (err) {
