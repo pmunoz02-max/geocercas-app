@@ -60,9 +60,15 @@ export default function Landing() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
                 to={withSameSearch("/auth")}
-                className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
+                className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-lg font-bold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
               >
-                Entrar a la app
+                Empezar ahora
+              </Link>
+              <Link
+                to={withSameSearch("/auth")}
+                className="inline-flex items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-6 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-800"
+              >
+                Iniciar sesión
               </Link>
               <a
                 href="#pricing"
@@ -252,7 +258,7 @@ export default function Landing() {
           <div className="flex flex-wrap items-center justify-center gap-4 underline underline-offset-4">
             <Link to={withSameSearch("/privacy")} className="hover:text-sky-300">Política de privacidad</Link>
             <Link to={withSameSearch("/terms")} className="hover:text-sky-300">Términos y condiciones</Link>
-            <Link to={withSameSearch("/auth")} className="hover:text-sky-300">Login</Link>
+            <a href="mailto:soporte@geocercas.app" className="hover:text-sky-300">soporte@geocercas.app</a>
           </div>
         </div>
       </footer>
