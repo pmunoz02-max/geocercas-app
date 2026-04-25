@@ -260,12 +260,12 @@ export default function Landing() {
             <div className="relative z-50">
               <LanguageSwitcher />
             </div>
-            <Link
-              to="/auth"
+            <a
+              href="/auth"
               className="rounded-2xl bg-white px-4 py-2 font-semibold text-slate-950 hover:bg-slate-200"
             >
               {tr("app.header.login")}
-            </Link>
+            </a>
           </nav>
         </div>
       </header>
@@ -286,12 +286,12 @@ export default function Landing() {
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/auth"
+              <a
+                href="/auth"
                 className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
               >
                 {tr("landing.ctaStart")}
-              </Link>
+              </a>
               <a
                 href="#precios"
                 className="inline-flex items-center justify-center rounded-2xl border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-100 transition hover:bg-slate-900"
