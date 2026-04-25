@@ -928,18 +928,16 @@ export default function TrackerDashboard() {
 
   const resolvedOrgId = normalizeUuid(orgId);
 
-  // Use the variable from tracker_latest_app data source
-  const [latestRows, setLatestRows] = useState([]);
-  const activeTrackerUserIds = useMemo(() => {
+  // Safely define allowedAssignmentUserIds before use
+  const allowedAssignmentUserIds = useMemo(() => {
+    if (!assignments || assignments.length === 0) return new Set();
     return new Set(
-      (latestRows || [])
-        .map((r) => r?.user_id)
+      (assignmentTrackers || [])
+        .map((x) => x?.user_id)
         .filter(Boolean)
         .map(String)
     );
-  }, [latestRows]);
-  // Set latestRows when loading tracker_latest_app data
-  // (Find the place where latestRows is loaded and setLatestRows is called)
+  }, [assignments, assignmentTrackers]);
 
 
   useEffect(() => {
@@ -1260,11 +1258,11 @@ export default function TrackerDashboard() {
 
     console.log("[tracker-dashboard] tracker_latest_app query org:", safeOrgId);
 
-    // Fuente principal actual en producción: tracker_latest_app.
+    // Fuente principal actual en producción: tracker_latest.
     // Mantener select mínimo para evitar 400 por columnas opcionales inexistentes.
     const { data, error } = await supabase
-      .from("tracker_latest_app")
-      .select("user_id,lat,lng,accuracy,ts,created_at")
+      .from("tracker_latest")
+      .select("user_id,org_id,lat,lng,accuracy,ts,created_at")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
@@ -1483,14 +1481,15 @@ export default function TrackerDashboard() {
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
 
+        // Only filter if assignments is not empty
+        let finalRows =
+          allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0
+            ? latestRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)))
+            : latestRows;
 
-        let source = "tracker_latest_app";
-        let finalRows = latestRows;
+        let source = "tracker_latest";
 
-        console.log("[tracker-dashboard] allowedAssignmentUserIds:", allowedAssignmentUserIds);
-        console.log("[tracker-dashboard] latestRows after filter:", latestRows);
-
-        if (latestRows.length === 0) {
+        if (finalRows.length === 0) {
           finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           source = "positions";
         }
