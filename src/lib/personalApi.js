@@ -21,10 +21,12 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
     // Get access token from supabase
     const { data } = await supabase.auth.getSession();
     const token = data?.session?.access_token;
-    const headers = new Headers(options.headers || {});
-    if (token && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+    console.log("[personalApi] Token present:", !!token, token ? token.slice(0, 8) + "..." : null);
+    const headers = {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
     return await fetch(url, {
       ...options,
       headers,
@@ -100,8 +102,11 @@ async function request(method, qs = "", body) {
   // Get access token from supabase
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
-  const headers = { "Content-Type": "application/json" };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  console.log("[personalApi] Token present:", !!token, token ? token.slice(0, 8) + "..." : null);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
   const res = await fetchWithTimeout(
     url,
     {
@@ -137,7 +142,11 @@ export async function listPersonal({ q = "", onlyActive = true, limit = 500, org
   // Get access token from supabase
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  console.log("[personalApi] Token present:", !!token, token ? token.slice(0, 8) + "..." : null);
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
 
   const res = await fetch(`/api/personal?${params.toString()}`, {
     credentials: "include",
