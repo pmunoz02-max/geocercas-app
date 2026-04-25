@@ -240,6 +240,14 @@ function MainAppRoutes() {
           path="/dashboard"
           element={
             <RequireOrg>
+              <TrackerDashboard />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/dashboard-costs"
+          element={
+            <RequireOrg>
               <CostosDashboardPage />
             </RequireOrg>
           }
