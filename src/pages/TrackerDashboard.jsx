@@ -80,6 +80,15 @@ function normalizeUuid(v) {
   return isValidUuid(value) ? value : null;
 }
 
+function isRpcFunctionNotFound(error) {
+  if (!error) return false;
+  const details = [error?.code, error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .map((part) => String(part).toLowerCase())
+    .join(" ");
+  return details.includes("not found") || details.includes("could not find the function");
+}
+
 
 function replacePositionByUserId(rows, nextRow) {
   if (!nextRow?.user_id) return Array.isArray(rows) ? rows : [];
@@ -919,14 +928,18 @@ export default function TrackerDashboard() {
 
   const resolvedOrgId = normalizeUuid(orgId);
 
-  const allowedAssignmentUserIds = useMemo(() => {
+  // Use the variable from tracker_latest_app data source
+  const [latestRows, setLatestRows] = useState([]);
+  const activeTrackerUserIds = useMemo(() => {
     return new Set(
-      (assignmentTrackers || [])
-        .map((x) => normalizeUuid(x?.user_id))
+      (latestRows || [])
+        .map((r) => r?.user_id)
         .filter(Boolean)
         .map(String)
     );
-  }, [assignmentTrackers]);
+  }, [latestRows]);
+  // Set latestRows when loading tracker_latest_app data
+  // (Find the place where latestRows is loaded and setLatestRows is called)
 
 
   useEffect(() => {
@@ -1241,92 +1254,58 @@ export default function TrackerDashboard() {
   async function loadLatestPositions(currentOrgId) {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) {
-      console.warn("[tracker-dashboard] org_id missing, skip tracker_latest query", currentOrgId);
+      console.warn("[tracker-dashboard] org_id missing, skip tracker_latest_app query", currentOrgId);
       return { rows: [], error: null };
     }
 
-    console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
+    console.log("[tracker-dashboard] tracker_latest_app query org:", safeOrgId);
 
-    // Try with event, fallback to without event if error
-    let selectCols = "user_id,org_id,lat,lng,accuracy,ts,event,device_recorded_at,created_at";
-    let data, error;
-    ({ data, error } = await supabase
-      .from("tracker_latest")
-      .select(selectCols)
+    // Fuente principal actual en producción: tracker_latest_app.
+    // Mantener select mínimo para evitar 400 por columnas opcionales inexistentes.
+    const { data, error } = await supabase
+      .from("tracker_latest_app")
+      .select("user_id,lat,lng,accuracy,ts,created_at")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
-      .not("lng", "is", null));
-    if (error && selectCols.includes("event")) {
-      selectCols = "user_id,org_id,lat,lng,accuracy,ts,device_recorded_at,created_at";
-      ({ data, error } = await supabase
-        .from("tracker_latest")
-        .select(selectCols)
-        .eq("org_id", safeOrgId)
-        .not("lat", "is", null)
-        .not("lng", "is", null));
-    }
+      .not("lng", "is", null);
 
     if (error) {
-      console.warn("tracker_latest error:", error);
+      console.warn("tracker_latest_app error:", error);
       return { rows: [], error };
     }
 
-    console.log("[tracker-dashboard] tracker_latest RAW:", data);
+    console.log("[tracker-dashboard] tracker_latest_app RAW:", data);
 
     const rows = Array.isArray(data)
       ? data
           .map((row) => {
-            const mapped = mapTrackerLatestRow(row);
-            if (!mapped) return null;
+            if (!row?.user_id) return null;
+            const lat = Number(row.lat);
+            const lng = Number(row.lng);
+            if (!isValidLatLng(lat, lng)) return null;
+
+            const recordedAt = row?.ts ?? row?.created_at ?? null;
+
             return {
-              ...mapped,
-              user_id: row?.user_id ? String(row.user_id) : mapped.user_id,
-              lat: row?.lat ?? mapped.lat,
-              lng: row?.lng ?? mapped.lng,
-              accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-              recorded_at:
-                row?.ts ??
-                row?.device_recorded_at ??
-                row?.created_at ??
-                mapped.recorded_at ??
-                null,
-              ts:
-                row?.ts ??
-                row?.device_recorded_at ??
-                row?.created_at ??
-                mapped.ts ??
-                null,
-              device_recorded_at: row?.device_recorded_at ?? mapped.device_recorded_at ?? null,
-              created_at: row?.created_at ?? mapped.created_at ?? null,
-              source: row?.source ?? mapped.source ?? null,
-              speed: row?.speed ?? mapped.speed ?? null,
-              heading: row?.heading ?? mapped.heading ?? null,
-              battery: row?.battery ?? mapped.battery ?? null,
-              is_mock: row?.is_mock ?? mapped.is_mock ?? null,
+              user_id: String(row.user_id),
+              org_id: safeOrgId,
+              lat,
+              lng,
+              accuracy: row?.accuracy ?? null,
+              recorded_at: recordedAt,
+              ts: recordedAt,
+              created_at: row?.created_at ?? null,
+              source: "tracker_latest_app",
               latest: {
-                user_id: row?.user_id ? String(row.user_id) : mapped.user_id,
-                lat: row?.lat ?? mapped.lat,
-                lng: row?.lng ?? mapped.lng,
-                accuracy: row?.accuracy ?? mapped.accuracy ?? null,
-                recorded_at:
-                  row?.ts ??
-                  row?.device_recorded_at ??
-                  row?.created_at ??
-                  mapped.recorded_at ??
-                  null,
-                ts:
-                  row?.ts ??
-                  row?.device_recorded_at ??
-                  row?.created_at ??
-                  mapped.ts ??
-                  null,
-                device_recorded_at: row?.device_recorded_at ?? mapped.device_recorded_at ?? null,
-                created_at: row?.created_at ?? mapped.created_at ?? null,
-                source: row?.source ?? mapped.source ?? null,
-                speed: row?.speed ?? mapped.speed ?? null,
-                heading: row?.heading ?? mapped.heading ?? null,
-                battery: row?.battery ?? mapped.battery ?? null,
-                is_mock: row?.is_mock ?? mapped.is_mock ?? null,
+                user_id: String(row.user_id),
+                org_id: safeOrgId,
+                lat,
+                lng,
+                accuracy: row?.accuracy ?? null,
+                recorded_at: recordedAt,
+                ts: recordedAt,
+                created_at: row?.created_at ?? null,
+                source: "tracker_latest_app",
               },
             };
           })
@@ -1336,14 +1315,8 @@ export default function TrackerDashboard() {
     return { rows, error: null };
   }
 
-  function filterRowsToAssignedTrackers(rows) {
-    const sourceRows = Array.isArray(rows) ? rows : [];
-    if (!allowedAssignmentUserIds || allowedAssignmentUserIds.size === 0) return sourceRows;
-    return sourceRows.filter((row) => {
-      const uid = normalizeUuid(row?.user_id);
-      return uid ? allowedAssignmentUserIds.has(String(uid)) : false;
-    });
-  }
+
+  // Assignment filtering removed; use activeTrackerUserIds as needed
 
 
   async function loadLivePositionsFromPositions(currentOrgId, hoursBack) {
@@ -1356,59 +1329,91 @@ export default function TrackerDashboard() {
     const fromIso = new Date(Date.now() - Number(hoursBack || 6) * 60 * 60 * 1000).toISOString();
     console.log("[tracker-dashboard] positions query org:", safeOrgId);
 
-    let query = supabase
-      .from("positions")
-      .select("id, user_id, lat, lng, accuracy, recorded_at, created_at")
-      .eq("org_id", safeOrgId)
-      .gte("recorded_at", fromIso)
-      .order("recorded_at", { ascending: false, nullsFirst: false })
-      .limit(500);
+    const mapRows = (data) => {
+      const mappedRows = Array.isArray(data)
+        ? data
+            .map((p) => {
+              if (!p?.user_id) return null;
+              const lat = Number(p.lat);
+              const lng = Number(p.lng);
+              if (!isValidLatLng(lat, lng)) return null;
 
-    if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-      const allowedUserIds = assignmentTrackers
-        .map((x) => normalizeUuid(x?.user_id))
-        .filter(Boolean);
-      if (allowedUserIds.length) query = query.in("user_id", allowedUserIds);
+              const recordedAt = p.recorded_at ?? p.created_at ?? null;
+
+              return {
+                id: p.id ?? `${p.user_id}-${recordedAt || "latest"}`,
+                user_id: String(p.user_id),
+                org_id: p?.org_id ? String(p.org_id) : safeOrgId,
+                lat,
+                lng,
+                accuracy: p.accuracy ?? null,
+                recorded_at: recordedAt,
+                ts: recordedAt,
+                created_at: p.created_at ?? null,
+                source: "positions",
+                latest: {
+                  user_id: String(p.user_id),
+                  org_id: p?.org_id ? String(p.org_id) : safeOrgId,
+                  lat,
+                  lng,
+                  accuracy: p.accuracy ?? null,
+                  recorded_at: recordedAt,
+                  ts: recordedAt,
+                  created_at: p.created_at ?? null,
+                  source: "positions",
+                },
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      const latestByUser = new Map();
+      for (const row of mappedRows) {
+        const key = String(row.user_id);
+        const currentTs = getPositionTs(row);
+        const previous = latestByUser.get(key);
+        const previousTs = getPositionTs(previous);
+        if (!previous || currentTs >= previousTs) latestByUser.set(key, row);
+      }
+      return Array.from(latestByUser.values());
+    };
+
+    async function queryPositions(useTimeWindow) {
+      let query = supabase
+        .from("positions")
+        .select("id,org_id,user_id,lat,lng,accuracy,recorded_at,created_at")
+        .eq("org_id", safeOrgId)
+        .not("lat", "is", null)
+        .not("lng", "is", null)
+        .order("recorded_at", { ascending: false, nullsFirst: false })
+        .limit(1000);
+
+      if (useTimeWindow) query = query.gte("recorded_at", fromIso);
+
+      return await query;
     }
 
-    const { data, error } = await query;
+    let { data, error } = await queryPositions(true);
     if (error) {
       console.warn("positions live fallback error:", error);
       return [];
     }
 
-    const mappedRows = Array.isArray(data)
-      ? data.map((p) => ({
-          id: p.id,
-          user_id: String(p.user_id),
-          lat: Number(p.lat),
-          lng: Number(p.lng),
-          accuracy: p.accuracy ?? null,
-          recorded_at: p.recorded_at ?? p.created_at ?? null,
-          source: "positions",
-          latest: {
-            user_id: String(p.user_id),
-            lat: Number(p.lat),
-            lng: Number(p.lng),
-            accuracy: p.accuracy ?? null,
-            recorded_at: p.recorded_at ?? p.created_at ?? null,
-            source: "positions",
-          },
-        }))
-      : [];
+    let rows = mapRows(data);
+    if (rows.length > 0) return rows;
 
-    const latestByUser = new Map();
-    for (const row of mappedRows) {
-      if (!row?.user_id) continue;
-      const key = String(row.user_id);
-      const currentTs = getPositionTs(row);
-      const previous = latestByUser.get(key);
-      const previousTs = getPositionTs(previous);
-      if (!previous || currentTs >= previousTs) latestByUser.set(key, row);
+    // Fallback universal: mostrar última posición histórica aunque no esté dentro de la ventana.
+    ({ data, error } = await queryPositions(false));
+    if (error) {
+      console.warn("positions latest historical fallback error:", error);
+      return [];
     }
 
-    return Array.from(latestByUser.values());
+    rows = mapRows(data);
+    console.log("[tracker-dashboard] positions historical fallback rows:", rows.length);
+    return rows;
   }
+
 
 
   const fetchDashboardData = useCallback(
@@ -1430,13 +1435,15 @@ export default function TrackerDashboard() {
           p_org_id: safeOrgId,
         });
 
+        const trackerStatusRows = Array.isArray(statusRes.data) ? statusRes.data : [];
+
         if (statusRes.error) {
           console.error("[tracker-dashboard] rpc_tracker_dashboard_status error:", statusRes.error);
           setErrorMsg("Error loading tracker dashboard status.");
           setTrackerStatusRows([]);
           setTrackerCounts(null);
         } else {
-          setTrackerStatusRows(Array.isArray(statusRes.data) ? statusRes.data : []);
+          setTrackerStatusRows(trackerStatusRows);
         }
 
         const countsRes = await supabase.rpc("rpc_tracker_dashboard_counts", {
@@ -1444,13 +1451,29 @@ export default function TrackerDashboard() {
         });
 
         if (countsRes.error) {
-          console.error("[tracker-dashboard] rpc_tracker_dashboard_counts error:", countsRes.error);
-          setTrackerCounts(null);
+          console.warn("[tracker-dashboard] rpc not available, using fallback");
+
+          const localCounts = Array.isArray(statusRes.data)
+            ? statusRes.data.reduce(
+                (acc, row) => {
+                  const s = String(row?.status || "").toLowerCase();
+                  acc.total += 1;
+                  if (s === "online") acc.online += 1;
+                  else if (s === "stale") acc.stale += 1;
+                  else acc.offline += 1;
+                  return acc;
+                },
+                { total: 0, online: 0, stale: 0, offline: 0 }
+              )
+            : null;
+
+          setTrackerCounts(localCounts);
         } else {
           const countsRow =
             Array.isArray(countsRes.data) && countsRes.data.length > 0
               ? countsRes.data[0]
               : null;
+
           setTrackerCounts(countsRow);
         }
 
@@ -1458,21 +1481,16 @@ export default function TrackerDashboard() {
         const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
         const latestRes = await loadLatestPositions(safeOrgId);
-
-
         let latestRows = latestRes?.rows || [];
-        const finalLatestRows =
-          allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0
-            ? latestRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)))
-            : latestRows;
 
-        let source = "tracker_latest";
-        let finalRows = finalLatestRows;
+
+        let source = "tracker_latest_app";
+        let finalRows = latestRows;
 
         console.log("[tracker-dashboard] allowedAssignmentUserIds:", allowedAssignmentUserIds);
-        console.log("[tracker-dashboard] finalLatestRows after filter:", finalLatestRows);
+        console.log("[tracker-dashboard] latestRows after filter:", latestRows);
 
-        if (finalLatestRows.length === 0) {
+        if (latestRows.length === 0) {
           finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           source = "positions";
         }
@@ -1515,26 +1533,23 @@ export default function TrackerDashboard() {
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
 
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          latestRows = latestRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
-        }
 
-        console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
+        console.log("[tracker-dashboard] tracker_latest_app rows:", latestRows.length);
 
-        let source = "tracker_latest";
+        let source = "tracker_latest_app";
         let finalRows = latestRows;
 
         if (latestRows.length > 0) {
-          logLiveMetric("tracker_latest_used", {
+          logLiveMetric("tracker_latest_app_used", {
             orgId: safeOrgId,
             rows: latestRows.length,
           });
         }
 
+        let fallbackRows = null;
+
         if (latestRows.length === 0) {
-          const fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
+          fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
           logLiveMetric("fallback_positions_used", {
             orgId: safeOrgId,
@@ -1552,6 +1567,26 @@ export default function TrackerDashboard() {
 
         console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
 
+        console.log("[dashboard] latestRows raw:", latestRows);
+        if (fallbackRows) console.log("[dashboard] fallbackRows raw:", fallbackRows);
+        console.log("[dashboard] finalRows raw:", finalRows);
+        console.log(
+          "[dashboard] finalRows summary:",
+          (finalRows || []).map((r) => ({
+            user_id: r?.user_id,
+            lat: r?.lat,
+            lng: r?.lng,
+            recorded_at: r?.recorded_at,
+            ts: r?.ts,
+            latest_lat: r?.latest?.lat,
+            latest_lng: r?.latest?.lng,
+            latest_recorded_at: r?.latest?.recorded_at,
+            latest_ts: r?.latest?.ts,
+            source: r?.source,
+            latest_source: r?.latest?.source,
+          }))
+        );
+
         setPositions(finalRows);
         setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
       } finally {
@@ -1565,7 +1600,7 @@ export default function TrackerDashboard() {
   async function loadLatestPositionsSafe(currentOrgId) {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) {
-      console.warn("[tracker-dashboard] invalid org_id for tracker_latest, skipping query", currentOrgId);
+      console.warn("[tracker-dashboard] invalid org_id for tracker_latest_app, skipping query", currentOrgId);
       return [];
     }
 
@@ -1614,12 +1649,6 @@ export default function TrackerDashboard() {
             .order("created_at", { ascending: false })
             .limit(500);
 
-          if (Array.isArray(assignmentTrackers) && assignmentTrackers.length) {
-            const allowedUserIds = assignmentTrackers
-              .map((x) => normalizeUuid(x?.user_id))
-              .filter(Boolean);
-            if (allowedUserIds.length) q = q.in("user_id", allowedUserIds);
-          }
 
           return await q;
         };
@@ -1627,14 +1656,9 @@ export default function TrackerDashboard() {
         const latestRes = await loadLatestPositions(safeOrgId);
         let latestRows = latestRes?.rows || [];
 
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          latestRows = latestRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
-        }
 
         let finalRows = [];
-        let tableUsed = "tracker_latest";
+        let tableUsed = "tracker_latest_app";
 
         if (latestRows.length > 0) {
           finalRows = latestRows;
@@ -1822,7 +1846,22 @@ export default function TrackerDashboard() {
     const latestByUserId = new Map();
     (positions || []).forEach((row) => {
       const uid = normalizeUuid(row?.user_id);
-      if (uid) latestByUserId.set(String(uid), row);
+      if (!uid) return;
+
+      const key = String(uid);
+      const current = latestByUserId.get(key);
+
+      if (!current) {
+        latestByUserId.set(key, row);
+        return;
+      }
+
+      const currentTs = getPositionTs(current);
+      const nextTs = getPositionTs(row);
+
+      if (nextTs >= currentTs) {
+        latestByUserId.set(key, row);
+      }
     });
 
     const allUserIds = new Set([
@@ -1869,10 +1908,46 @@ export default function TrackerDashboard() {
         user_id ||
         "(sin nombre)";
 
+      const hasUsableLatest =
+        latest &&
+        Object.keys(latest).length > 0 &&
+        (
+          isValidLatLng(Number(latest?.lat), Number(latest?.lng)) ||
+          getPositionTs(latest) > 0
+        );
+
+      const latestRow = hasUsableLatest
+        ? latest
+        : null;
+
       const merged = {
         ...assignment,
         ...latest,
-        latest,
+        latest: latestRow,
+        lat: hasUsableLatest
+          ? Number(latest?.lat)
+          : null,
+        lng: hasUsableLatest
+          ? Number(latest?.lng)
+          : null,
+        recorded_at: hasUsableLatest
+          ? (
+              latest?.recorded_at ??
+              latest?.ts ??
+              latest?.device_recorded_at ??
+              latest?.created_at ??
+              null
+            )
+          : null,
+        ts: hasUsableLatest
+          ? (
+              latest?.ts ??
+              latest?.recorded_at ??
+              latest?.device_recorded_at ??
+              latest?.created_at ??
+              null
+            )
+          : null,
         personal: resolvedPersonal,
         profile: latestProfile,
         personal_id: personalId,
@@ -2592,17 +2667,22 @@ export default function TrackerDashboard() {
                     </thead>
                     <tbody>
                       {(trackersUi || []).map((t) => {
-                        const latestRow = t?.latest || t;
-                        const live = t?.live || getTrackerLiveStatus(latestRow);
-                        const lat = Number(t?.latest?.lat ?? t?.lat);
-                        const lng = Number(t?.latest?.lng ?? t?.lng);
-                        const ts = getPositionTs(latestRow);
+                        const latestRow = t?.latest || null;
+                        const live = t?.live || getTrackerLiveStatus(latestRow || t);
+
+                        const rawLat = latestRow?.lat;
+                        const rawLng = latestRow?.lng;
+                        const hasCoords = isValidLatLng(Number(rawLat), Number(rawLng));
+
+                        const lat = hasCoords ? Number(rawLat) : null;
+                        const lng = hasCoords ? Number(rawLng) : null;
+                        const ts = getPositionTs(latestRow || t);
                         return (
                           <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
                             <td className="px-4 py-2 text-gray-900">{getFriendlyTrackerName(t)}</td>
                             <td className="px-4 py-2 text-gray-700">{getStatusLabel(live?.status)}</td>
                             <td className="px-4 py-2 text-gray-700">
-                              {Number.isFinite(lat) && Number.isFinite(lng)
+                              {lat !== null && lng !== null
                                 ? `${lat.toFixed(6)}, ${lng.toFixed(6)}`
                                 : "—"}
                             </td>
