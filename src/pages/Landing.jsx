@@ -258,7 +258,7 @@ export default function Landing() {
           <div className="flex flex-wrap items-center justify-center gap-4 underline underline-offset-4">
             <Link to={withSameSearch("/privacy")} className="hover:text-sky-300">Política de privacidad</Link>
             <Link to={withSameSearch("/terms")} className="hover:text-sky-300">Términos y condiciones</Link>
-            <a href="mailto:soporte@geocercas.app" className="hover:text-sky-300">soporte@geocercas.app</a>
+            <a href="mailto:soporte@tugeocercas.com" className="hover:text-sky-300">soporte@tugeocercas.com</a>
           </div>
         </div>
       </footer>
