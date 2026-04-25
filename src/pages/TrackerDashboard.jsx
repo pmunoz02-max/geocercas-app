@@ -929,15 +929,21 @@ export default function TrackerDashboard() {
   const resolvedOrgId = normalizeUuid(orgId);
 
   // Use the variable from tracker_latest_app data source
-  const [latestRows, setLatestRows] = useState([]);
-  const activeTrackerUserIds = useMemo(() => {
-    return new Set(
-      (latestRows || [])
-        .map((r) => r?.user_id)
-        .filter(Boolean)
-        .map(String)
-    );
-  }, [latestRows]);
+  // ==============================
+  // FIX: Active trackers from positions (NO assignments)
+  // ==============================
+  // Usa la data que ya tienes del backend
+  const safeRows = Array.isArray(latestRows) ? latestRows : [];
+
+  // Set de trackers activos basado en positions
+  const activeTrackerUserIds = new Set(
+    safeRows.map(r => r.user_id).filter(Boolean)
+  );
+
+  // Si tienes un filtro posterior, usa esto:
+  const latestRowsFiltered = safeRows.filter(r =>
+    activeTrackerUserIds.has(r.user_id)
+  );
   // Set latestRows when loading tracker_latest_app data
   // (Find the place where latestRows is loaded and setLatestRows is called)
 
@@ -1472,12 +1478,11 @@ export default function TrackerDashboard() {
 
 
         let source = "tracker_latest_app";
-        let finalRows = latestRows;
+        let finalRows = latestRowsFiltered;
 
-        console.log("[tracker-dashboard] allowedAssignmentUserIds:", allowedAssignmentUserIds);
-        console.log("[tracker-dashboard] latestRows after filter:", latestRows);
+        console.log("[tracker-dashboard] latestRowsFiltered after filter:", latestRowsFiltered);
 
-        if (latestRows.length === 0) {
+        if (latestRowsFiltered.length === 0) {
           finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           source = "positions";
         }
@@ -1494,7 +1499,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [timeWindowId, allowedAssignmentUserIds]
+    [timeWindowId]
   );
 
 
@@ -1521,21 +1526,21 @@ export default function TrackerDashboard() {
         let latestRows = latestRes?.rows || [];
 
 
-        console.log("[tracker-dashboard] tracker_latest_app rows:", latestRows.length);
+        console.log("[tracker-dashboard] tracker_latest_app rows:", latestRowsFiltered.length);
 
         let source = "tracker_latest_app";
-        let finalRows = latestRows;
+        let finalRows = latestRowsFiltered;
 
-        if (latestRows.length > 0) {
+        if (latestRowsFiltered.length > 0) {
           logLiveMetric("tracker_latest_app_used", {
             orgId: safeOrgId,
-            rows: latestRows.length,
+            rows: latestRowsFiltered.length,
           });
         }
 
         let fallbackRows = null;
 
-        if (latestRows.length === 0) {
+        if (latestRowsFiltered.length === 0) {
           fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
           logLiveMetric("fallback_positions_used", {
@@ -1554,7 +1559,7 @@ export default function TrackerDashboard() {
 
         console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
 
-        console.log("[dashboard] latestRows raw:", latestRows);
+        console.log("[dashboard] latestRowsFiltered raw:", latestRowsFiltered);
         if (fallbackRows) console.log("[dashboard] fallbackRows raw:", fallbackRows);
         console.log("[dashboard] finalRows raw:", finalRows);
         console.log(
@@ -1580,7 +1585,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, timeWindowId, allowedAssignmentUserIds]
+    [assignmentTrackers, timeWindowId]
   );
 
 
@@ -1647,7 +1652,7 @@ export default function TrackerDashboard() {
         let finalRows = [];
         let tableUsed = "tracker_latest_app";
 
-        if (latestRows.length > 0) {
+        if (latestRowsFiltered.length > 0) {
           finalRows = latestRows;
         } else {
           tableUsed = "positions";
@@ -1692,7 +1697,7 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(false);
       }
     },
-    [assignmentTrackers, timeWindowId, allowedAssignmentUserIds]
+    [assignmentTrackers, timeWindowId]
   );
 
 
