@@ -188,6 +188,7 @@ const FALLBACKS = {
   },
 };
 
+export default function Landing() {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currentLang = String(i18n.resolvedLanguage || i18n.language || "es")
@@ -288,10 +289,10 @@ const FALLBACKS = {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href="/auth"
+                href={user ? "/dashboard" : "/auth"}
                 className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
               >
-                {tr("landing.ctaStart")}
+                {user ? t("landing.goDashboard", "Ir al panel") : tr("landing.ctaStart")}
               </a>
               <a
                 href="#precios"
