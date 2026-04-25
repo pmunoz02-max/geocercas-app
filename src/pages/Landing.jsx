@@ -311,7 +311,7 @@ export default function Landing() {
 
               <div className="relative w-full h-[320px] rounded-2xl overflow-hidden border border-slate-800">
                 <iframe
-                  src="https://app.tugeocercas.com/demo"
+                  src={`/demo?lang=${i18n.language || "es"}`}
                   className="w-full h-full"
                   loading="lazy"
                 />
