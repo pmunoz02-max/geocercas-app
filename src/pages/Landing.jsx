@@ -41,12 +41,12 @@ export default function Landing() {
             <p className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
               <span className="h-2 w-2 rounded-full bg-sky-400" />
               Plataforma SaaS para control operativo GPS
-            </p>
-
-            <div className="space-y-4">
-              <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-                Control de personal con geocercas en tiempo real
-              </h1>
+            <li>
+              <span className="font-bold">Plan Pro:</span> USD 29/mes por organización, hasta 50 trackers.
+            </li>
+            <li>
+              <span className="font-bold">Plan Empresas:</span> USD 99/mes para más de 50 trackers.
+            </li>
               <p className="max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
                 Supervisa equipos de campo, valida entradas y salidas de zonas autorizadas, revisa ubicaciones GPS y genera reportes para tu operación desde una plataforma web segura.
               </p>
