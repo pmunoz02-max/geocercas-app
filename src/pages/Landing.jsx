@@ -1,6 +1,7 @@
 // src/pages/Landing.jsx
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../context/AuthContext";
@@ -224,6 +225,10 @@ const FALLBACKS = {
 };
 
 export default function Landing() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState(null);
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const currentLang = String(i18n.resolvedLanguage || i18n.language || "es")
@@ -276,6 +281,23 @@ export default function Landing() {
     },
   ];
 
+  async function handleLogin(e) {
+    e.preventDefault();
+    setLoginError(null);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      if (data?.session?.access_token) {
+        navigate("/dashboard", { replace: true });
+      }
+    } catch (err) {
+      setLoginError(err.message || "Error de autenticación");
+    }
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <header className="border-b border-slate-800 bg-slate-950/90">
@@ -308,6 +330,33 @@ export default function Landing() {
       </header>
 
       <main>
+        <form onSubmit={handleLogin} style={{ maxWidth: 320, margin: "32px auto" }}>
+          <h2>Iniciar sesión</h2>
+          <div style={{ marginBottom: 8 }}>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              style={{ width: "100%", padding: 8 }}
+              required
+            />
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              style={{ width: "100%", padding: 8 }}
+              required
+            />
+          </div>
+          <button type="submit" style={{ width: "100%", padding: 10, background: "#0ea5e9", color: "white", border: 0, borderRadius: 6 }}>
+            Ingresar
+          </button>
+          {loginError && <div style={{ color: "red", marginTop: 8 }}>{loginError}</div>}
+        </form>
         <section className="mx-auto grid max-w-7xl grid-cols-1 gap-10 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
