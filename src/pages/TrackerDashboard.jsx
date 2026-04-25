@@ -1257,7 +1257,7 @@ export default function TrackerDashboard() {
     console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
 
     const { data, error } = await supabase
-      .from("tracker_latest")
+      .from("tracker_latest_app")
       .select(`
         user_id,
         lat,
@@ -1272,11 +1272,11 @@ export default function TrackerDashboard() {
       .not("lng", "is", null);
 
     if (error) {
-      console.warn("tracker_latest error:", error);
+      console.warn("tracker_latest_app error:", error);
       return { rows: [], error };
     }
 
-    console.log("[tracker-dashboard] tracker_latest RAW:", data);
+    console.log("[tracker-dashboard] tracker_latest_app RAW:", data);
 
     const rows = Array.isArray(data)
       ? data
@@ -1485,7 +1485,7 @@ export default function TrackerDashboard() {
           );
         }
 
-        let source = "tracker_latest";
+        let source = "tracker_latest_app";
         let finalRows = latestRows;
 
         console.log("[tracker-dashboard] allowedAssignmentUserIds:", allowedAssignmentUserIds);
@@ -1540,13 +1540,13 @@ export default function TrackerDashboard() {
           );
         }
 
-        console.log("[tracker-dashboard] tracker_latest rows:", latestRows.length);
+        console.log("[tracker-dashboard] tracker_latest_app rows:", latestRows.length);
 
-        let source = "tracker_latest";
+        let source = "tracker_latest_app";
         let finalRows = latestRows;
 
         if (latestRows.length > 0) {
-          logLiveMetric("tracker_latest_used", {
+          logLiveMetric("tracker_latest_app_used", {
             orgId: safeOrgId,
             rows: latestRows.length,
           });
@@ -1604,7 +1604,7 @@ export default function TrackerDashboard() {
   async function loadLatestPositionsSafe(currentOrgId) {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) {
-      console.warn("[tracker-dashboard] invalid org_id for tracker_latest, skipping query", currentOrgId);
+      console.warn("[tracker-dashboard] invalid org_id for tracker_latest_app, skipping query", currentOrgId);
       return [];
     }
 
@@ -1673,7 +1673,7 @@ export default function TrackerDashboard() {
         }
 
         let finalRows = [];
-        let tableUsed = "tracker_latest";
+        let tableUsed = "tracker_latest_app";
 
         if (latestRows.length > 0) {
           finalRows = latestRows;
