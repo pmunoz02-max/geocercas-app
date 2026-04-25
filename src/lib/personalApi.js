@@ -1,4 +1,6 @@
+
 // src/lib/personalApi.js
+import { supabase } from "@/lib/supabaseClient.js";
 
 const BASE = ""; // SIEMPRE relativo al mismo dominio (evita POST fantasma)
 
@@ -16,8 +18,16 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 20000) {
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    // Get access token from supabase
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    const headers = new Headers(options.headers || {});
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
     return await fetch(url, {
       ...options,
+      headers,
       signal: controller.signal,
       credentials: "include",
     });
@@ -87,25 +97,30 @@ function makeError(res, parsed) {
 
 async function request(method, qs = "", body) {
   const url = withBase(`/api/personal${qs}`);
+  // Get access token from supabase
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetchWithTimeout(
     url,
     {
       method,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     },
     20000
   );
 
-  const data = await res.json();
-  if (!res.ok || !data?.ok) {
-    const err = new Error(data?.error || "Request failed");
+  const dataRes = await res.json();
+  if (!res.ok || !dataRes?.ok) {
+    const err = new Error(dataRes?.error || "Request failed");
     err.status = res.status;
-    err.error = data?.error || "Request failed";
-    err.details = data?.details || null;
+    err.error = dataRes?.error || "Request failed";
+    err.details = dataRes?.details || null;
     throw err;
   }
-  return data;
+  return dataRes;
 }
 
 /* =========================
@@ -119,19 +134,25 @@ export async function listPersonal({ q = "", onlyActive = true, limit = 500, org
   params.set("limit", String(limit));
   if (orgId) params.set("org_id", orgId);
 
+  // Get access token from supabase
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
   const res = await fetch(`/api/personal?${params.toString()}`, {
     credentials: "include",
+    headers,
   });
 
-  const data = await res.json();
+  const dataRes = await res.json();
 
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.error || "Error loading personnel");
+  if (!res.ok || !dataRes?.ok) {
+    throw new Error(dataRes?.error || "Error loading personnel");
   }
 
   return {
-    items: Array.isArray(data.items) ? data.items : [],
-    plan: data.plan || null,
+    items: Array.isArray(dataRes.items) ? dataRes.items : [],
+    plan: dataRes.plan || null,
   };
 }
 
