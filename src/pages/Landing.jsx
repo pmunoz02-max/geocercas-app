@@ -264,7 +264,7 @@ export default function Landing() {
             </div>
             <a
               href={user ? "/dashboard" : "/auth"}
-              className="rounded-2xl bg-white px-4 py-2 font-semibold text-slate-900 hover:bg-slate-200 transition"
+              className="rounded-2xl bg-sky-500 px-4 py-2 font-semibold text-white hover:bg-sky-400 transition shadow-lg shadow-sky-900/30"
             >
               {user ? t("landing.goDashboard", "Ir al panel") : tr("app.header.login")}
             </a>
