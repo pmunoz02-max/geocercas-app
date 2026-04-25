@@ -213,14 +213,14 @@ export default function Landing() {
             <article className="rounded-3xl border border-sky-500/60 bg-sky-500/10 p-6 shadow-lg shadow-sky-950/30">
               <h3 className="text-xl font-semibold text-white">Pro</h3>
               <p className="mt-2 text-sm text-slate-300">Para organizaciones en operación.</p>
-              <p className="mt-5 text-3xl font-bold text-white">USD 9/mes</p>
+              <p className="mt-5 text-3xl font-bold text-white">USD 29/mes</p>
               <p className="mt-2 text-sm text-slate-400">Hasta 50 trackers por organización.</p>
             </article>
 
             <article className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6">
               <h3 className="text-xl font-semibold text-white">Empresas</h3>
               <p className="mt-2 text-sm text-slate-300">Para operaciones grandes.</p>
-              <p className="mt-5 text-3xl font-bold text-white">A medida</p>
+              <p className="mt-5 text-3xl font-bold text-white">USD 99 / mes</p>
               <p className="mt-2 text-sm text-slate-400">Más de 50 trackers y soporte comercial.</p>
             </article>
           </div>
