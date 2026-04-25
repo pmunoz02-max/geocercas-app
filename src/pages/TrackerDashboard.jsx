@@ -928,24 +928,29 @@ export default function TrackerDashboard() {
 
   const resolvedOrgId = normalizeUuid(orgId);
 
-  // Use the variable from tracker_latest_app data source
   // ==============================
-  // FIX: Active trackers from positions (NO assignments)
+  // SAFE SOURCE OF TRUTH
   // ==============================
-  // Usa la data que ya tienes del backend
-  const safeRows = Array.isArray(latestRows) ? latestRows : [];
 
-  // Set de trackers activos basado en positions
+  const safeRows = Array.isArray(tracker_latest_app)
+    ? tracker_latest_app
+    : [];
+
+  // ==============================
+  // ACTIVE TRACKERS (NO ASSIGNMENTS)
+  // ==============================
+
   const activeTrackerUserIds = new Set(
-    safeRows.map(r => r.user_id).filter(Boolean)
+    safeRows.map((r) => r?.user_id).filter(Boolean)
   );
 
-  // Si tienes un filtro posterior, usa esto:
-  const latestRowsFiltered = safeRows.filter(r =>
-    activeTrackerUserIds.has(r.user_id)
+  // ==============================
+  // FINAL DATASET
+  // ==============================
+
+  const latestRows = safeRows.filter((r) =>
+    activeTrackerUserIds.has(r?.user_id)
   );
-  // Set latestRows when loading tracker_latest_app data
-  // (Find the place where latestRows is loaded and setLatestRows is called)
 
 
   useEffect(() => {
@@ -1474,15 +1479,15 @@ export default function TrackerDashboard() {
         const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
         const latestRes = await loadLatestPositions(safeOrgId);
-        let latestRows = latestRes?.rows || [];
+        // latestRows (nuevo) ya está definido arriba como dataset final
 
 
         let source = "tracker_latest_app";
-        let finalRows = latestRowsFiltered;
+        let finalRows = latestRows;
 
-        console.log("[tracker-dashboard] latestRowsFiltered after filter:", latestRowsFiltered);
+        console.log("[tracker-dashboard] latestRows after filter:", latestRows);
 
-        if (latestRowsFiltered.length === 0) {
+        if (latestRows.length === 0) {
           finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           source = "positions";
         }
@@ -1523,24 +1528,24 @@ export default function TrackerDashboard() {
         const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
         const latestRes = await loadLatestPositions(safeOrgId);
-        let latestRows = latestRes?.rows || [];
+        // latestRows (nuevo) ya está definido arriba como dataset final
 
 
-        console.log("[tracker-dashboard] tracker_latest_app rows:", latestRowsFiltered.length);
+        console.log("[tracker-dashboard] tracker_latest_app rows:", latestRows.length);
 
         let source = "tracker_latest_app";
-        let finalRows = latestRowsFiltered;
+        let finalRows = latestRows;
 
-        if (latestRowsFiltered.length > 0) {
+        if (latestRows.length > 0) {
           logLiveMetric("tracker_latest_app_used", {
             orgId: safeOrgId,
-            rows: latestRowsFiltered.length,
+            rows: latestRows.length,
           });
         }
 
         let fallbackRows = null;
 
-        if (latestRowsFiltered.length === 0) {
+        if (latestRows.length === 0) {
           fallbackRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           console.log("[tracker-dashboard] positions live rows:", fallbackRows.length);
           logLiveMetric("fallback_positions_used", {
@@ -1559,7 +1564,7 @@ export default function TrackerDashboard() {
 
         console.log("[tracker-dashboard] final live source:", source, "rows:", finalRows.length, finalRows);
 
-        console.log("[dashboard] latestRowsFiltered raw:", latestRowsFiltered);
+        console.log("[dashboard] latestRows raw:", latestRows);
         if (fallbackRows) console.log("[dashboard] fallbackRows raw:", fallbackRows);
         console.log("[dashboard] finalRows raw:", finalRows);
         console.log(
@@ -1646,13 +1651,13 @@ export default function TrackerDashboard() {
         };
 
         const latestRes = await loadLatestPositions(safeOrgId);
-        let latestRows = latestRes?.rows || [];
+        // latestRows (nuevo) ya está definido arriba como dataset final
 
 
         let finalRows = [];
         let tableUsed = "tracker_latest_app";
 
-        if (latestRowsFiltered.length > 0) {
+        if (latestRows.length > 0) {
           finalRows = latestRows;
         } else {
           tableUsed = "positions";
