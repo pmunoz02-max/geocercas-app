@@ -38,18 +38,23 @@ export default function Landing() {
       <main>
         <section className="mx-auto grid w-full max-w-7xl grid-cols-1 items-center gap-10 px-6 py-16 md:grid-cols-2 lg:py-24">
           <div className="space-y-7">
-            <p className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
+
+            <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
               <span className="h-2 w-2 rounded-full bg-sky-400" />
               Plataforma SaaS para control operativo GPS
-            <li>
-              <span className="font-bold">Plan Pro:</span> USD 29/mes por organización, hasta 50 trackers.
-            </li>
-            <li>
-              <span className="font-bold">Plan Empresas:</span> USD 99/mes para más de 50 trackers.
-            </li>
-              <p className="max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-                Supervisa equipos de campo, valida entradas y salidas de zonas autorizadas, revisa ubicaciones GPS y genera reportes para tu operación desde una plataforma web segura.
-              </p>
+            </div>
+
+            <ul className="text-gray-200 space-y-1 mt-4">
+              <li>
+                <span className="font-bold">Plan Pro:</span> USD 29/mes por organización, hasta 50 trackers.
+              </li>
+              <li>
+                <span className="font-bold">Plan Empresas:</span> USD 99/mes para más de 50 trackers.
+              </li>
+            </ul>
+
+            <div className="max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg mt-4">
+              Supervisa equipos de campo, valida entradas y salidas de zonas autorizadas, revisa ubicaciones GPS y genera reportes para tu operación desde una plataforma web segura.
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">

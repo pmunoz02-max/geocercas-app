@@ -77,11 +77,13 @@ function RootEntry() {
     return null;
   }
 
+  // Si está autenticado, ir al dashboard
   if (auth.user) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <Navigate to="/login" replace />;
+  // Si NO está autenticado, mostrar landing pública
+  return <Landing />;
 }
 
 function AdminRoute({ children }) {

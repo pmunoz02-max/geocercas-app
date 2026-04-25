@@ -162,13 +162,13 @@ export async function adminAssignRoleOrg(params: {
 }
 
 /**
- * Enviar Magic Link mediante Edge Function `send-magic-link`
+ * Enviar invitación de tracker mediante Edge Function `send-tracker-invite-brevo`
  * Requiere:
  *  - VITE_SUPABASE_URL
  *  - VITE_SUPABASE_ANON_KEY
  */
-export async function sendMagicLink(email: string): Promise<{ ok: true }> {
-  const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-magic-link`;
+export async function sendTrackerInvite(email: string, org_id: string): Promise<{ ok: true }> {
+  const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-tracker-invite-brevo`;
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   const res = await fetch(fnUrl, {
@@ -177,12 +177,12 @@ export async function sendMagicLink(email: string): Promise<{ ok: true }> {
       Authorization: `Bearer ${anonKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, org_id }),
   });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`[sendMagicLink] HTTP ${res.status} ${text}`);
+    throw new Error(`[sendTrackerInvite] HTTP ${res.status} ${text}`);
   }
 
   return { ok: true };
