@@ -931,7 +931,7 @@ export default function TrackerDashboard() {
   const allowedAssignmentUserIds = useMemo(() => {
     return new Set(
       (assignmentTrackers || [])
-        .map((x) => normalizeUuid(x?.user_id))
+        .map((a) => a?.tracker_user_id)
         .filter(Boolean)
         .map(String)
     );
