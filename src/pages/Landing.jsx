@@ -301,40 +301,18 @@ export default function Landing() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-6 shadow-2xl">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-5">
-              <p className="text-sm font-semibold text-sky-300">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-4 shadow-2xl overflow-hidden">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
+              <p className="text-sm font-semibold text-sky-300 mb-3">
                 {t("landing.panelTitle", "Panel operativo")}
               </p>
 
-              <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-300">
-                    {t("landing.panelTracker", "Tracker activo")}
-                  </span>
-                  <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                    {t("landing.panelOnline", "En línea")}
-                  </span>
-                </div>
-
-                <div className="mt-5 h-36 rounded-2xl border border-slate-700 bg-slate-950 p-4">
-                  <div className="h-full rounded-xl border border-sky-500/30 bg-sky-500/10" />
-                </div>
-
-                <div className="mt-5 grid grid-cols-3 gap-3">
-                  <div className="rounded-2xl bg-slate-950 p-4">
-                    <p className="text-xs text-slate-400">{t("landing.panelZones", "Zonas")}</p>
-                    <p className="mt-2 text-xl font-bold text-white">12</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-950 p-4">
-                    <p className="text-xs text-slate-400">{t("landing.panelTrackers", "Trackers")}</p>
-                    <p className="mt-2 text-xl font-bold text-white">34</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-950 p-4">
-                    <p className="text-xs text-slate-400">{t("landing.panelAlerts", "Alertas")}</p>
-                    <p className="mt-2 text-xl font-bold text-white">3</p>
-                  </div>
-                </div>
+              <div className="relative w-full h-[320px] rounded-2xl overflow-hidden border border-slate-800">
+                <iframe
+                  src="https://app.tugeocercas.com/demo"
+                  className="w-full h-full"
+                  loading="lazy"
+                />
               </div>
             </div>
           </div>
