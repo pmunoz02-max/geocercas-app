@@ -247,3 +247,19 @@ git status
 git add docs/skills/tracker.md
 git commit -m "docs: add tracker skill [allow-docs]"
 git push origin preview
+```
+
+---
+
+## Bugfix: TrackerDashboard blank screen (preview)
+
+- **Fecha:** 2026-04-25
+- **Síntoma:** Pantalla en blanco al cargar el dashboard de trackers.
+- **Causa:** Uso de `allowedAssignmentUserIds` sin definir y filtrado inseguro de `latestRows` cuando no hay asignaciones. Además, el select de `tracker_latest` pedía columnas inexistentes.
+- **Solución:**
+  - Definir siempre `allowedAssignmentUserIds` como `Set` seguro, aunque no haya asignaciones.
+  - Solo filtrar `latestRows` si hay asignaciones.
+  - El select de `tracker_latest` debe pedir solo columnas reales: `user_id,org_id,lat,lng,accuracy,ts,created_at`.
+- **Notas:**
+  - Solo afecta branch preview.
+  - No se modificó auth ni routing.
