@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-const DEFAULT_FROM = "2026-01-01";
+const DEFAULT_FROM = "2026-01-01T00:00:00.000Z";
 
 function normalizeRows(payload) {
   if (Array.isArray(payload)) return payload;
@@ -32,6 +32,8 @@ function normalizeTrackerRow(row) {
       row.recorded_at ||
       row.ts ||
       row.device_recorded_at ||
+      row.position_at ||
+      row.tracker_latest_at ||
       row.created_at ||
       row.updated_at ||
       null,
@@ -52,7 +54,9 @@ function getStoredOrgId() {
 
   for (const key of directKeys) {
     const value = window.localStorage.getItem(key) || window.sessionStorage.getItem(key);
-    if (value && value !== "undefined" && value !== "null") return value.replaceAll('"', "");
+    if (value && value !== "undefined" && value !== "null") {
+      return value.replaceAll('"', "");
+    }
   }
 
   for (const storage of [window.localStorage, window.sessionStorage]) {
@@ -133,11 +137,35 @@ async function resolveOrgId(userId) {
   return null;
 }
 
+async function queryTrackerLatestApp(orgId) {
+  const { data, error } = await supabase
+    .from("tracker_latest_app")
+    .select("*")
+    .eq("org_id", orgId);
+
+  if (error) throw error;
+  return normalizeRows(data);
+}
+
+async function queryLatestPositions(orgId) {
+  const { data, error } = await supabase
+    .from("positions")
+    .select("user_id, org_id, lat, lng, accuracy, recorded_at, created_at, source")
+    .eq("org_id", orgId)
+    .gte("recorded_at", DEFAULT_FROM)
+    .order("recorded_at", { ascending: false })
+    .limit(500);
+
+  if (error) throw error;
+  return normalizeRows(data);
+}
+
 export default function TrackerDashboard() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [orgId, setOrgId] = useState(null);
+  const [source, setSource] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,10 +179,9 @@ export default function TrackerDashboard() {
           data: { session },
         } = await supabase.auth.getSession();
 
-        const token = session?.access_token;
         const userId = session?.user?.id;
 
-        if (!token || !userId) {
+        if (!userId) {
           throw new Error("No hay sesión activa para consultar trackers.");
         }
 
@@ -164,40 +191,23 @@ export default function TrackerDashboard() {
           throw new Error("No se pudo resolver la organización activa.");
         }
 
-        const params = new URLSearchParams({
-          action: "report",
-          org_id: resolvedOrgId,
-          from: DEFAULT_FROM,
-          to: new Date().toISOString(),
-        });
-
-        const res = await fetch(`/api/reportes?${params.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        });
-
-        const text = await res.text();
-        let payload = null;
+        let rawRows = [];
+        let dataSource = "tracker_latest_app";
 
         try {
-          payload = text ? JSON.parse(text) : null;
-        } catch {
-          throw new Error(`Respuesta no JSON desde /api/reportes: ${text.slice(0, 120)}`);
+          rawRows = await queryTrackerLatestApp(resolvedOrgId);
+        } catch (trackerLatestError) {
+          console.warn("tracker_latest_app unavailable, fallback to positions", trackerLatestError);
+          dataSource = "positions";
+          rawRows = await queryLatestPositions(resolvedOrgId);
         }
 
-        if (!res.ok) {
-          throw new Error(payload?.error || payload?.message || `API error ${res.status}`);
-        }
-
-        const safeRows = normalizeRows(payload)
-          .map(normalizeTrackerRow)
-          .filter(Boolean);
+        const safeRows = rawRows.map(normalizeTrackerRow).filter(Boolean);
 
         if (!cancelled) {
           setOrgId(resolvedOrgId);
           setRows(safeRows);
+          setSource(dataSource);
         }
       } catch (err) {
         console.error("Error loading tracker data", err);
@@ -224,7 +234,14 @@ export default function TrackerDashboard() {
 
     for (const row of Array.isArray(rows) ? rows : []) {
       if (!row?.user_id) continue;
-      byUser.set(row.user_id, row);
+
+      const prev = byUser.get(row.user_id);
+      const prevTs = prev?.recorded_at ? Date.parse(prev.recorded_at) : 0;
+      const currTs = row?.recorded_at ? Date.parse(row.recorded_at) : 0;
+
+      if (!prev || currTs >= prevTs) {
+        byUser.set(row.user_id, row);
+      }
     }
 
     return Array.from(byUser.values());
@@ -248,6 +265,7 @@ export default function TrackerDashboard() {
       <div style={{ padding: 20 }}>
         <h3>No hay datos de trackers</h3>
         {orgId ? <p>Organización: {orgId}</p> : null}
+        {source ? <p>Fuente: {source}</p> : null}
       </div>
     );
   }
@@ -256,6 +274,7 @@ export default function TrackerDashboard() {
     <div style={{ padding: 20 }}>
       <h2>Trackers activos: {latestRows.length}</h2>
       {orgId ? <p>Organización: {orgId}</p> : null}
+      {source ? <p>Fuente: {source}</p> : null}
 
       <ul>
         {latestRows.map((r) => (
