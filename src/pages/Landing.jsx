@@ -3,6 +3,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { useAuth } from "../context/AuthContext";
 
 const FALLBACKS = {
   "app.brand": {
@@ -187,8 +188,8 @@ const FALLBACKS = {
   },
 };
 
-export default function Landing() {
   const { t, i18n } = useTranslation();
+  const { user } = useAuth();
   const currentLang = String(i18n.resolvedLanguage || i18n.language || "es")
     .toLowerCase()
     .slice(0, 2);
@@ -261,10 +262,10 @@ export default function Landing() {
               <LanguageSwitcher />
             </div>
             <a
-              href="/auth"
-              className="rounded-2xl bg-white px-4 py-2 font-semibold text-slate-950 hover:bg-slate-200"
+              href={user ? "/dashboard" : "/auth"}
+              className="rounded-2xl bg-white px-4 py-2 font-semibold text-slate-900 hover:bg-slate-200 transition"
             >
-              {tr("app.header.login")}
+              {user ? t("landing.goDashboard", "Ir al panel") : tr("app.header.login")}
             </a>
           </nav>
         </div>
