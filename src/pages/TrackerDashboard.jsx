@@ -1247,12 +1247,24 @@ export default function TrackerDashboard() {
 
     console.log("[tracker-dashboard] tracker_latest query org:", safeOrgId);
 
-    const { data, error } = await supabase
+    // Try with event, fallback to without event if error
+    let selectCols = "user_id,org_id,lat,lng,accuracy,ts,event,device_recorded_at,created_at";
+    let data, error;
+    ({ data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id, org_id, lat, lng, accuracy, ts, event, speed, heading, battery, is_mock, device_recorded_at, created_at")
+      .select(selectCols)
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
-      .not("lng", "is", null);
+      .not("lng", "is", null));
+    if (error && selectCols.includes("event")) {
+      selectCols = "user_id,org_id,lat,lng,accuracy,ts,device_recorded_at,created_at";
+      ({ data, error } = await supabase
+        .from("tracker_latest")
+        .select(selectCols)
+        .eq("org_id", safeOrgId)
+        .not("lat", "is", null)
+        .not("lng", "is", null));
+    }
 
     if (error) {
       console.warn("tracker_latest error:", error);
@@ -1447,21 +1459,20 @@ export default function TrackerDashboard() {
 
         const latestRes = await loadLatestPositions(safeOrgId);
 
+
         let latestRows = latestRes?.rows || [];
-        // Only filter by allowedAssignmentUserIds if assignments are present (not empty)
-        if (assignments && assignments.length > 0 && allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          latestRows = latestRows.filter((row) =>
-            allowedAssignmentUserIds.has(String(row?.user_id))
-          );
-        }
+        const finalLatestRows =
+          allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0
+            ? latestRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)))
+            : latestRows;
 
         let source = "tracker_latest";
-        let finalRows = latestRows;
+        let finalRows = finalLatestRows;
 
         console.log("[tracker-dashboard] allowedAssignmentUserIds:", allowedAssignmentUserIds);
-        console.log("[tracker-dashboard] latestRows after filter:", latestRows);
+        console.log("[tracker-dashboard] finalLatestRows after filter:", finalLatestRows);
 
-        if (latestRows.length === 0) {
+        if (finalLatestRows.length === 0) {
           finalRows = await loadLivePositionsFromPositions(safeOrgId, selectedWindowHours);
           source = "positions";
         }
