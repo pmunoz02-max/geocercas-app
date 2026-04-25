@@ -16,6 +16,11 @@ const FALLBACKS = {
     en: "Sign in",
     fr: "Se connecter",
   },
+  "landing.goDashboard": {
+    es: "Ir al panel",
+    en: "Go to dashboard",
+    fr: "Aller au tableau",
+  },
   "landing.pricing": {
     es: "Precios",
     en: "Pricing",
@@ -60,6 +65,36 @@ const FALLBACKS = {
     es: "Panel operativo",
     en: "Operations panel",
     fr: "Panneau opérationnel",
+  },
+  "landing.demoBadge": {
+    es: "Monitoreo GPS con geocercas en tiempo real",
+    en: "Real-time GPS monitoring with geofences",
+    fr: "Suivi GPS en temps réel avec géorepères",
+  },
+  "landing.demoTitle": {
+    es: "Visualiza personal, rutas y eventos dentro de tus geocercas.",
+    en: "Visualize staff, routes, and events inside your geofences.",
+    fr: "Visualisez le personnel, les itinéraires et les événements dans vos géorepères.",
+  },
+  "landing.demoSubtitle": {
+    es: "App Geocercas convierte posiciones GPS en una vista operativa clara para tu equipo.",
+    en: "App Geofences turns GPS positions into a clear operational view for your team.",
+    fr: "App Géorepères transforme les positions GPS en une vue opérationnelle claire pour votre équipe.",
+  },
+  "landing.demoMapLabel": {
+    es: "Mapa en vivo",
+    en: "Live map",
+    fr: "Carte en direct",
+  },
+  "landing.demoEventsLabel": {
+    es: "Eventos",
+    en: "Events",
+    fr: "Événements",
+  },
+  "landing.demoReportsLabel": {
+    es: "Reportes",
+    en: "Reports",
+    fr: "Rapports",
   },
   "landing.featureGeofencesTitle": {
     es: "Geocercas operativas",
@@ -266,7 +301,7 @@ export default function Landing() {
               href={user ? "/dashboard" : "/auth"}
               className="rounded-2xl bg-sky-500 px-4 py-2 font-semibold text-white hover:bg-sky-400 transition shadow-lg shadow-sky-900/30"
             >
-              {user ? t("landing.goDashboard", "Ir al panel") : tr("app.header.login")}
+              {user ? tr("landing.goDashboard") : tr("app.header.login")}
             </a>
           </nav>
         </div>
@@ -292,7 +327,7 @@ export default function Landing() {
                 href={user ? "/dashboard" : "/auth"}
                 className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
               >
-                {user ? t("landing.goDashboard", "Ir al panel") : tr("landing.ctaStart")}
+                {user ? tr("landing.goDashboard") : tr("landing.ctaStart")}
               </a>
               <a
                 href="#precios"
@@ -306,15 +341,52 @@ export default function Landing() {
           <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-4 shadow-2xl overflow-hidden">
             <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
               <p className="text-sm font-semibold text-sky-300 mb-3">
-                {t("landing.panelTitle", "Panel operativo")}
+                {tr("landing.panelTitle")}
               </p>
 
-              <div className="relative w-full h-[320px] rounded-2xl overflow-hidden border border-slate-800">
-                <iframe
-                  src={`/demo?lang=${i18n.language || "es"}`}
-                  className="w-full h-full"
-                  loading="lazy"
-                />
+              <div className="relative w-full overflow-hidden rounded-2xl border border-slate-800 bg-white text-slate-950">
+                <div className="m-4 rounded-[2rem] bg-sky-50 p-6 sm:p-8">
+                  <p className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-semibold text-sky-700">
+                    <span className="h-3 w-3 rounded-full bg-sky-500" />
+                    {tr("landing.demoBadge")}
+                  </p>
+
+                  <h3 className="mt-7 max-w-xl text-3xl font-bold leading-tight text-slate-950 sm:text-4xl">
+                    {tr("landing.demoTitle")}
+                  </h3>
+
+                  <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600">
+                    {tr("landing.demoSubtitle")}
+                  </p>
+
+                  <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {tr("landing.demoMapLabel")}
+                      </p>
+                      <div className="mt-3 h-16 rounded-xl bg-sky-100" />
+                    </div>
+                    <div className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {tr("landing.demoEventsLabel")}
+                      </p>
+                      <div className="mt-3 space-y-2">
+                        <div className="h-2 rounded-full bg-sky-200" />
+                        <div className="h-2 w-2/3 rounded-full bg-sky-100" />
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-sky-100 bg-white p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {tr("landing.demoReportsLabel")}
+                      </p>
+                      <div className="mt-3 flex items-end gap-2">
+                        <div className="h-8 w-4 rounded bg-sky-200" />
+                        <div className="h-12 w-4 rounded bg-sky-300" />
+                        <div className="h-6 w-4 rounded bg-sky-100" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
