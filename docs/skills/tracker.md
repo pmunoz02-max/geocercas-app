@@ -340,3 +340,7 @@ Producción usa geofence_events, no tracker_geofence_events. Si falla la consulta
 ### Fix: geofence_events schema real
 Se elimina personal_id de la consulta. Solo columnas reales. Eventos nunca rompen dashboard (fallback vacío).
 
+
+### Fix: disable geofence events
+Se desactiva geofence_events en dashboard para evitar errores de schema. No es crítico para tracking.
+

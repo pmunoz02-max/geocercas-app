@@ -1709,25 +1709,8 @@ export default function TrackerDashboard() {
 
 
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
-    const safeOrgId = normalizeUuid(currentOrgId);
-    if (!safeOrgId) return;
-
-    let events = [];
-    try {
-      const { data, error } = await supabase
-        .from("geofence_events")
-        .select("id,user_id,geocerca_nombre,event_type,lat,lng,created_at")
-        .eq("org_id", safeOrgId)
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (!error && data) {
-        events = data;
-      }
-    } catch (e) {
-      console.warn("geofence_events fallback empty");
-    }
-    setGeofenceEvents(Array.isArray(events) ? events : []);
+    // Geofence events query disabled. Always return empty events array.
+    setGeofenceEvents([]);
   }, []);
 
   useEffect(() => {
