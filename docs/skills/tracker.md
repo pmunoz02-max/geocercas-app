@@ -336,3 +336,7 @@ En producción tracker_latest no tiene created_at. El dashboard consulta solo use
 ### Fix: geofence events table name
 Producción usa geofence_events, no tracker_geofence_events. Si falla la consulta de eventos, dashboard continúa sin bloquear.
 
+
+### Fix: geofence_events schema real
+Se elimina personal_id de la consulta. Solo columnas reales. Eventos nunca rompen dashboard (fallback vacío).
+

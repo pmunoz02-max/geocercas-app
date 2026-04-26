@@ -1712,25 +1712,22 @@ export default function TrackerDashboard() {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) return;
 
+    let events = [];
     try {
       const { data, error } = await supabase
         .from("geofence_events")
-        .select("id, user_id, personal_id, geocerca_nombre, event_type, lat, lng, created_at")
+        .select("id,user_id,geocerca_nombre,event_type,lat,lng,created_at")
         .eq("org_id", safeOrgId)
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (error) {
-        // No logging, just return empty to keep dashboard usable
-        setGeofenceEvents([]);
-        return;
+      if (!error && data) {
+        events = data;
       }
-
-      setGeofenceEvents(Array.isArray(data) ? data : []);
     } catch (e) {
-      // No logging, just return empty to keep dashboard usable
-      setGeofenceEvents([]);
+      console.warn("geofence_events fallback empty");
     }
+    setGeofenceEvents(Array.isArray(events) ? events : []);
   }, []);
 
   useEffect(() => {
