@@ -6,8 +6,8 @@ function getInviteParams() {
   const url = new URL(window.location.href);
 
   const inviteToken =
-    url.searchParams.get("inviteToken") ||
     url.searchParams.get("invite_token") ||
+    url.searchParams.get("inviteToken") ||
     url.searchParams.get("t") ||
     url.searchParams.get("token") ||
     url.searchParams.get("access_token") ||
