@@ -914,6 +914,7 @@ export default function TrackerDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [assignmentTrackers, setAssignmentTrackers] = useState([]);
   const [personalRows, setPersonalRows] = useState([]);
+  const [orgOwnerId, setOrgOwnerId] = useState(null);
   const [trackerStatusRows, setTrackerStatusRows] = useState([]);
   const [trackerCounts, setTrackerCounts] = useState(null);
   const [positions, setPositions] = useState([]);
@@ -948,6 +949,7 @@ export default function TrackerDashboard() {
     setAssignments([]);
     setAssignmentTrackers([]);
     setPersonalRows([]);
+    setOrgOwnerId(null);
     setTrackerStatusRows([]);
     setTrackerCounts(null);
     setPositions([]);
@@ -1235,7 +1237,25 @@ export default function TrackerDashboard() {
 
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) return;
+    if (!safeOrgId) {
+      setPersonalRows([]);
+      setOrgOwnerId(null);
+      return;
+    }
+
+    const { data: orgRow, error: orgError } = await supabase
+      .from("organizations")
+      .select("owner_id")
+      .eq("id", safeOrgId)
+      .maybeSingle();
+
+    if (orgError) {
+      console.warn("[tracker-dashboard] owner lookup failed", orgError);
+      setOrgOwnerId(null);
+    } else {
+      setOrgOwnerId(normalizeUuid(orgRow?.owner_id));
+    }
+
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -1814,8 +1834,30 @@ export default function TrackerDashboard() {
   }, [trackerStatusRows]);
 
 
-  // --- NUEVA CONSTRUCCIÓN trackersUi: merge assignment + latest + joins, display_name amigable ---
+  // --- Construcción trackersUi: fuente única = personal activo de la org.
+  // La tabla NO debe construirse desde owner, assignments o positions sueltos.
+  // assignments y latest position solo complementan datos de cada persona.
   const trackersUi = useMemo(() => {
+    const ownerUid = normalizeUuid(orgOwnerId);
+
+    const isActivePersonal = (p) => {
+      if (!p) return false;
+      if (p.is_deleted === true) return false;
+      if (p.deleted_at) return false;
+      if (p.active === false) return false;
+      if (p.is_active === false) return false;
+      return true;
+    };
+
+    const safePersonalRows = (personalRows || []).filter((p) => {
+      if (!isActivePersonal(p)) return false;
+
+      const uid = normalizeUuid(p?.user_id);
+      if (ownerUid && uid && uid === ownerUid) return false;
+
+      return true;
+    });
+
     const assignmentsByUserId = new Map();
     (assignmentTrackers || []).forEach((a) => {
       const uid = normalizeUuid(a?.user_id);
@@ -1843,49 +1885,10 @@ export default function TrackerDashboard() {
       }
     });
 
-    const allUserIds = new Set([
-      ...Array.from(assignmentsByUserId.keys()),
-      ...Array.from(latestByUserId.keys()),
-    ]);
-
-    const result = [];
-    for (const user_id of allUserIds) {
-      const assignment = assignmentsByUserId.get(user_id) || {};
-      const latest = latestByUserId.get(user_id) || {};
-
-      const personalFromUser = personalByUserId.get(String(user_id)) || null;
-      const personalId =
-        latest?.personal_id ||
-        assignment?.personal_id ||
-        latest?.personal?.id ||
-        assignment?.personal?.id ||
-        null;
-      const personalFromId = personalId ? personalById.get(String(personalId)) || null : null;
-      const latestPersonal = latest?.personal || null;
-      const assignmentPersonal = assignment?.personal || null;
-      const latestProfile = latest?.profile || null;
-
-      const resolvedPersonal =
-        personalFromUser ||
-        personalFromId ||
-        latestPersonal ||
-        assignmentPersonal ||
-        null;
-
-      const resolvedLabel =
-        assignment?.display_name ||
-        assignment?.name ||
-        latest?.display_name ||
-        latest?.name ||
-        resolvedPersonal?.full_name ||
-        resolvedPersonal?.nombre ||
-        latestProfile?.full_name ||
-        latestProfile?.nombre ||
-        assignment?.email ||
-        latest?.email ||
-        (isValidUuid(user_id) ? undefined : user_id) ||
-        user_id ||
-        "(sin nombre)";
+    const result = safePersonalRows.map((person) => {
+      const user_id = normalizeUuid(person?.user_id);
+      const assignment = user_id ? assignmentsByUserId.get(String(user_id)) || {} : {};
+      const latest = user_id ? latestByUserId.get(String(user_id)) || {} : {};
 
       const hasUsableLatest =
         latest &&
@@ -1895,20 +1898,26 @@ export default function TrackerDashboard() {
           getPositionTs(latest) > 0
         );
 
-      const latestRow = hasUsableLatest
-        ? latest
-        : null;
+      const latestRow = hasUsableLatest ? latest : null;
+
+      const resolvedLabel =
+        person?.full_name ||
+        [person?.nombre, person?.apellido].filter(Boolean).join(" ").trim() ||
+        person?.name ||
+        person?.email ||
+        assignment?.display_name ||
+        assignment?.name ||
+        latest?.display_name ||
+        latest?.name ||
+        user_id ||
+        "(sin nombre)";
 
       const merged = {
         ...assignment,
         ...latest,
         latest: latestRow,
-        lat: hasUsableLatest
-          ? Number(latest?.lat)
-          : null,
-        lng: hasUsableLatest
-          ? Number(latest?.lng)
-          : null,
+        lat: hasUsableLatest ? Number(latest?.lat) : null,
+        lng: hasUsableLatest ? Number(latest?.lng) : null,
         recorded_at: hasUsableLatest
           ? (
               latest?.recorded_at ??
@@ -1927,19 +1936,20 @@ export default function TrackerDashboard() {
               null
             )
           : null,
-        personal: resolvedPersonal,
-        profile: latestProfile,
-        personal_id: personalId,
+        personal: person,
+        personal_id: person?.id || null,
         display_name: resolvedLabel,
         label: resolvedLabel,
         baseLabel: resolvedLabel,
         trackerLabel: resolvedLabel,
+        email: person?.email || assignment?.email || latest?.email || null,
       };
 
-      const backendHealth = healthByUserId.get(String(user_id));
+      const backendHealth = user_id ? healthByUserId.get(String(user_id)) : null;
       const live = backendHealth
         ? { status: (backendHealth.status || "offline"), ageSec: null }
-        : getTrackerLiveStatus(latest);
+        : getTrackerLiveStatus(latestRow || merged);
+
       merged.live = live;
       merged.statusPriority = getTrackerStatusPriority(live.status);
 
@@ -1947,12 +1957,12 @@ export default function TrackerDashboard() {
       const lng = Number(merged?.lng);
       merged.hasValidCoords = Number.isFinite(lat) && Number.isFinite(lng) && isValidLatLng(lat, lng);
 
-      merged.key = merged.tracker_key || merged.user_id || user_id;
-      merged.tracker_key = merged.tracker_key || merged.user_id || user_id;
-      merged.user_id = merged.user_id || user_id;
+      merged.user_id = user_id;
+      merged.key = user_id || person?.id;
+      merged.tracker_key = user_id || person?.id;
 
-      result.push(merged);
-    }
+      return merged;
+    });
 
     return result.sort((a, b) => {
       const priorityDelta = (a.statusPriority ?? 2) - (b.statusPriority ?? 2);
@@ -1961,7 +1971,7 @@ export default function TrackerDashboard() {
       if (ageDelta !== 0) return ageDelta;
       return String(a.label || a.display_name || "").localeCompare(String(b.label || b.display_name || ""));
     });
-  }, [positions, assignmentTrackers, personalById, personalByUserId, healthByUserId]);
+  }, [positions, assignmentTrackers, personalRows, orgOwnerId, healthByUserId]);
 
   const searchNeedle = normalizeSearchText(trackerSearch);
 
