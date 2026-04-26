@@ -294,3 +294,26 @@ Se implementa fallback basado en organizations.plan:
 - enterprise: 9999
 
 Nunca se permite fallback a 0.
+### Fix: accept tracker limit crash + fallback
+
+Problema:
+- tracker_limit = 0
+- crash por doble declaración de trackerLimit
+
+Causa:
+- lógica duplicada en accept-tracker-invite
+- falta de fallback cuando no existe org_billing
+
+Solución:
+- eliminar duplicación de trackerLimit
+- resolver límite desde:
+  1) org_billing si existe
+  2) fallback a organizations.plan
+
+Límites:
+- starter: 1
+- pro: 10
+- business: 50
+- enterprise: 9999
+
+Nunca permitir fallback a 0.
