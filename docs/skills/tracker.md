@@ -317,3 +317,6 @@ Límites:
 - enterprise: 9999
 
 Nunca permitir fallback a 0.
+### Fix: tracker limit override cero
+No se permite tracker_limit_override = 0 o negativo. Solo se usa override si es mayor a 0; si no, se usa fallback por plan: starter 1, pro 10, business 50, enterprise 9999.
+

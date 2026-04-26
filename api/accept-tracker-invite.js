@@ -42,7 +42,11 @@ function getTrackerLimitFromBillingRow(billingRow) {
   };
   const fallback = limits[planCode] ?? 1;
   const override = Number(billingRow?.tracker_limit_override);
-  return Number.isFinite(override) ? override : fallback;
+  // Only use override if > 0
+  if (Number.isFinite(override) && override > 0) {
+    return override;
+  }
+  return fallback;
 }
 
 const RUNTIME_SESSION_HOURS = 24 * 7;
