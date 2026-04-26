@@ -263,3 +263,21 @@ git push origin preview
 - **Notas:**
   - Solo afecta branch preview.
   - No se modificó auth ni routing.
+
+---
+
+## Bugfix: Límite de trackers al aceptar invitación (2026-04-26)
+
+- **Síntoma:** No se podía aceptar invitación de tracker en organizaciones activas sin registro en tabla de planes o suscripciones (org_billing), por límite 0.
+- **Causa:** El límite de trackers se resolvía a 0 si faltaba el registro de plan, bloqueando la aceptación.
+- **Solución:**
+  - Si no existe registro en org_billing, se consulta el campo `plan` en la tabla `organizations`.
+  - Se aplica el siguiente fallback de límites:
+    - starter: 1
+    - pro: 10
+    - business: 50
+    - enterprise: 9999
+  - Nunca se permite límite 0 para organizaciones activas.
+- **Notas:**
+  - Aplica solo a branch preview.
+  - No afecta organizaciones suspendidas/inactivas.

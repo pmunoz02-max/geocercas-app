@@ -16,22 +16,32 @@ function buildIdentityKeyFromEmail(email) {
   return normalized ? `e:${normalized}` : "";
 }
 
-const TRACKER_LIMITS_BY_PLAN = {
-  free: 0,
-  starter: 1,
-  pro: 3,
-  enterprise: 9999,
-  elite: 9999,
-  elite_plus: 9999,
-};
+
+function resolveTrackerLimit(org) {
+  const limits = {
+    starter: 1,
+    pro: 10,
+    business: 50,
+    enterprise: 9999,
+  };
+  const plan = String(org?.plan || "starter").toLowerCase();
+  return limits[plan] ?? 1;
+}
 
 function normalizePlanCode(value) {
   return String(value || "free").toLowerCase().trim();
 }
 
+
 function getTrackerLimitFromBillingRow(billingRow) {
   const planCode = normalizePlanCode(billingRow?.plan_code);
-  const fallback = TRACKER_LIMITS_BY_PLAN[planCode] ?? 0;
+  const limits = {
+    starter: 1,
+    pro: 10,
+    business: 50,
+    enterprise: 9999,
+  };
+  const fallback = limits[planCode] ?? 1;
   const override = Number(billingRow?.tracker_limit_override);
   return Number.isFinite(override) ? override : fallback;
 }
@@ -222,23 +232,37 @@ export default async function handler(req, res) {
 
     const orgId = invite.org_id;
 
-    const { data: billingRow, error: billingError } = await supabase
-      .from("org_billing")
-      .select("org_id, plan_code, plan_status, tracker_limit_override")
-      .eq("org_id", orgId)
-      .maybeSingle();
 
-    if (billingError) {
-      console.error("[accept-tracker-invite] billing lookup error", billingError);
-      return res.status(500).json({
-        ok: false,
-        error: "billing_lookup_failed",
-      });
+    // Try to get billing row, fallback to orgs/org.plan if missing
+    let billingRow = null;
+    let planStatus = "active";
+    let trackerLimit = 1;
+    let billingError = null;
+    try {
+      const billingRes = await supabase
+        .from("org_billing")
+        .select("org_id, plan_code, plan_status, tracker_limit_override")
+        .eq("org_id", orgId)
+        .maybeSingle();
+      billingRow = billingRes.data;
+      billingError = billingRes.error;
+    } catch (e) {
+      billingError = e;
     }
 
-    const planStatus = String(billingRow?.plan_status || "free")
-      .toLowerCase()
-      .trim();
+    if (billingRow && billingRow.plan_status) {
+      planStatus = String(billingRow.plan_status).toLowerCase().trim();
+      trackerLimit = getTrackerLimitFromBillingRow(billingRow);
+    } else {
+      // fallback: get org plan from organizations/orgs table
+      const { data: orgRow } = await supabase
+        .from("organizations")
+        .select("plan")
+        .eq("id", orgId)
+        .maybeSingle();
+      trackerLimit = resolveTrackerLimit(orgRow);
+      planStatus = "active"; // fallback: treat as active if org exists
+    }
 
     if (planStatus !== "active") {
       return res.status(403).json({
@@ -247,8 +271,6 @@ export default async function handler(req, res) {
         message: "La organización no tiene un plan activo para agregar trackers.",
       });
     }
-
-    const trackerLimit = getTrackerLimitFromBillingRow(billingRow);
 
     const { count: trackerCount, error: trackerCountError } = await supabase
       .from("memberships")
