@@ -328,3 +328,7 @@ Se restauran campos tracker_runtime_token, tracker_user_id, org_id, invite_id.
 ### Fix: runtime JWT secret
 accept-tracker-invite usa TRACKER_RUNTIME_JWT_SECRET con fallback JWT_SECRET para firmar tracker_runtime_token.
 
+
+### Fix: tracker_latest sin created_at
+En producción tracker_latest no tiene created_at. El dashboard consulta solo user_id, org_id, lat, lng, accuracy y ts; positions queda como fallback.
+

@@ -1262,7 +1262,7 @@ export default function TrackerDashboard() {
     // Mantener select mínimo para evitar 400 por columnas opcionales inexistentes.
     const { data, error } = await supabase
       .from("tracker_latest")
-      .select("user_id,org_id,lat,lng,accuracy,ts,created_at")
+      .select("user_id,org_id,lat,lng,accuracy,ts")
       .eq("org_id", safeOrgId)
       .not("lat", "is", null)
       .not("lng", "is", null);
