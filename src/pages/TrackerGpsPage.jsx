@@ -3,252 +3,227 @@ import { useTranslation } from "react-i18next";
 
 function getStorageItem(key) {
   try {
-    const localValue = localStorage.getItem(key);
-    if (localValue) return localValue;
-
-    const sessionValue = sessionStorage.getItem(key);
-    if (sessionValue) return sessionValue;
-
-    return null;
+    return localStorage.getItem(key) || sessionStorage.getItem(key) || null;
   } catch {
     return null;
   }
 }
 
 function setStorageItem(key, value) {
+  if (!value) return;
   try {
-    if (value == null || value === "") return;
     localStorage.setItem(key, value);
     sessionStorage.setItem(key, value);
   } catch {
-    // no-op
+    // ignore storage errors
   }
 }
 
 function readRuntimeSessionFromStorage() {
-  try {
-    const runtimeToken =
+  return {
+    runtimeToken:
       getStorageItem("tracker_runtime_token") ||
       getStorageItem("tracker_access_token") ||
-      (typeof window !== "undefined" ? window.runtimeInviteToken || null : null);
-
-    const trackerUserId =
+      "",
+    trackerUserId:
       getStorageItem("tracker_user_id") ||
       getStorageItem("user_id") ||
-      (typeof window !== "undefined" ? window.trackerUserId || null : null);
-
-    const orgId =
+      "",
+    orgId:
       getStorageItem("tracker_org_id") ||
       getStorageItem("org_id") ||
-      (typeof window !== "undefined" ? window.orgId || null : null);
-
-    return {
-      runtimeToken: runtimeToken || null,
-      trackerUserId: trackerUserId || null,
-      orgId: orgId || null,
-    };
-  } catch {
-    return { runtimeToken: null, trackerUserId: null, orgId: null };
-  }
+      "",
+  };
 }
 
 function syncRuntimeSession(session) {
+  if (!session) return;
+  setStorageItem("tracker_runtime_token", session.runtimeToken);
+  setStorageItem("tracker_access_token", session.runtimeToken);
+  setStorageItem("tracker_user_id", session.trackerUserId);
+  setStorageItem("user_id", session.trackerUserId);
+  setStorageItem("tracker_org_id", session.orgId);
+  setStorageItem("org_id", session.orgId);
+}
+
+function readRuntimeSessionFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+
+  return {
+    runtimeToken:
+      params.get("tracker_runtime_token") ||
+      params.get("runtimeToken") ||
+      params.get("token") ||
+      "",
+    trackerUserId:
+      params.get("tracker_user_id") ||
+      params.get("trackerUserId") ||
+      params.get("user_id") ||
+      "",
+    orgId:
+      params.get("org_id") ||
+      params.get("orgId") ||
+      "",
+  };
+}
+
+function getNativeBridge() {
+  if (typeof window === "undefined") return null;
+  return window.AndroidBridge || window.Android || null;
+}
+
+function callNativeBridge(bridge, session) {
+  if (!bridge || !session?.runtimeToken || !session?.orgId) return false;
+
+  const { runtimeToken, trackerUserId, orgId } = session;
+
+  console.log("[TRACKER] bridge exists?", {
+    bridgeType: typeof bridge,
+    hasSaveTrackerSession: typeof bridge.saveTrackerSession === "function",
+    hasSaveSession: typeof bridge.saveSession === "function",
+    hasSetTrackerSession: typeof bridge.setTrackerSession === "function",
+    hasRequestStartTracking: typeof bridge.requestStartTracking === "function",
+    hasStartTracking: typeof bridge.startTracking === "function",
+    runtimeToken: !!runtimeToken,
+    trackerUserId: !!trackerUserId,
+    orgId: !!orgId,
+  });
+
   try {
-    const runtimeToken = session?.runtimeToken || null;
-    const trackerUserId = session?.trackerUserId || null;
-    const orgId = session?.orgId || null;
+    if (typeof bridge.saveTrackerSession === "function") {
+      bridge.saveTrackerSession(runtimeToken, trackerUserId || "", orgId);
+    } else if (typeof bridge.saveSession === "function") {
+      bridge.saveSession(runtimeToken, trackerUserId || "", orgId);
+    } else if (typeof bridge.setTrackerSession === "function") {
+      bridge.setTrackerSession(runtimeToken, trackerUserId || "", orgId);
+    }
 
-    if (runtimeToken) {
-      setStorageItem("tracker_runtime_token", runtimeToken);
-      setStorageItem("tracker_access_token", runtimeToken);
-      if (typeof window !== "undefined") {
-        window.runtimeInviteToken = runtimeToken;
+    if (typeof bridge.requestStartTracking === "function") {
+      bridge.requestStartTracking();
+    } else if (typeof bridge.startTracking === "function") {
+      try {
+        bridge.startTracking(runtimeToken, trackerUserId || "", orgId);
+      } catch {
+        bridge.startTracking(runtimeToken, "");
       }
     }
 
-    if (trackerUserId) {
-      setStorageItem("tracker_user_id", trackerUserId);
-      setStorageItem("user_id", trackerUserId);
-      if (typeof window !== "undefined") {
-        window.trackerUserId = trackerUserId;
-      }
-    }
-
-    if (orgId) {
-      setStorageItem("tracker_org_id", orgId);
-      setStorageItem("org_id", orgId);
-      if (typeof window !== "undefined") {
-        window.orgId = orgId;
-      }
-    }
-  } catch {
-    // no-op
+    return true;
+  } catch (err) {
+    console.error("[TRACKER] native bridge call failed", err);
+    return false;
   }
 }
 
 export default function TrackerGpsPage() {
-  // Lee query params y guarda en storage si existen
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const params = new URLSearchParams(window.location.search);
-
-    const runtimeToken = params.get("tracker_runtime_token");
-    const trackerUserId = params.get("tracker_user_id");
-    const orgId = params.get("org_id");
-
-    if (runtimeToken && trackerUserId && orgId) {
-      console.log("[TRACKER_QUERY_PARAMS_FOUND]", {
-        runtimeToken: true,
-        trackerUserId: true,
-        orgId: true,
-      });
-
-      setStorageItem("tracker_runtime_token", runtimeToken);
-      setStorageItem("tracker_access_token", runtimeToken);
-      setStorageItem("tracker_user_id", trackerUserId);
-      setStorageItem("user_id", trackerUserId);
-      setStorageItem("tracker_org_id", orgId);
-      setStorageItem("org_id", orgId);
-    }
-  }, []);
   const { t } = useTranslation();
-  const [msg, setMsg] = useState(() => t("tracker.gps.messageStarting"));
+
   const [runtimeSession, setRuntimeSession] = useState(() => {
-    const initial = readRuntimeSessionFromStorage();
-    syncRuntimeSession(initial);
-    return initial;
+    const fromStorage = readRuntimeSessionFromStorage();
+    return fromStorage;
   });
 
-  const [debugInfo, setDebugInfo] = useState(() => ({
+  const [msg, setMsg] = useState(() => t("tracker.gps.messageStarting"));
+
+  const [debugInfo, setDebugInfo] = useState({
     hasRuntimeToken: false,
     hasTrackerUserId: false,
     hasOrgId: false,
     nativeMode: true,
+    bridgeFound: false,
     lastCheckAt: null,
     lastError: null,
-  }));
+  });
 
-  const bootstrapTimerRef = useRef(null);
-  const pollTimerRef = useRef(null);
   const disposedRef = useRef(false);
+  const pollTimerRef = useRef(null);
 
   const ready = useMemo(() => {
-    return Boolean(
-      runtimeSession.runtimeToken &&
-        runtimeSession.orgId,
-    );
+    return Boolean(runtimeSession.runtimeToken && runtimeSession.orgId);
   }, [runtimeSession]);
 
-  function refreshRuntimeSessionState(nextMsgWhenMissing = null) {
-    const stored = readRuntimeSessionFromStorage();
-    syncRuntimeSession(stored);
-    setRuntimeSession(stored);
+  useEffect(() => {
+    disposedRef.current = false;
 
-    const hasBootstrapSession = Boolean(
-      stored.runtimeToken && stored.orgId,
+    const fromUrl = readRuntimeSessionFromUrl();
+    const fromStorage = readRuntimeSessionFromStorage();
+
+    const merged = {
+      runtimeToken: fromUrl.runtimeToken || fromStorage.runtimeToken || "",
+      trackerUserId: fromUrl.trackerUserId || fromStorage.trackerUserId || "",
+      orgId: fromUrl.orgId || fromStorage.orgId || "",
+    };
+
+    if (merged.runtimeToken || merged.trackerUserId || merged.orgId) {
+      console.log("[TRACKER_QUERY_PARAMS_FOUND]", {
+        runtimeToken: !!merged.runtimeToken,
+        trackerUserId: !!merged.trackerUserId,
+        orgId: !!merged.orgId,
+      });
+
+      syncRuntimeSession(merged);
+      setRuntimeSession(merged);
+    }
+
+    return () => {
+      disposedRef.current = true;
+      if (pollTimerRef.current) {
+        window.clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!ready || disposedRef.current) return;
+
+    console.log("[TRACKER] JS tracking disabled, using native service only");
+
+    const bridge = getNativeBridge();
+    const bridgeStarted = callNativeBridge(bridge, runtimeSession);
+
+    setMsg(
+      runtimeSession.runtimeToken && runtimeSession.orgId
+        ? t("tracker.gps.messageActive")
+        : t("tracker.gps.messagePreparing"),
     );
 
     setDebugInfo((prev) => ({
       ...prev,
-      hasRuntimeToken: !!stored.runtimeToken,
-      hasTrackerUserId: !!stored.trackerUserId,
-      hasOrgId: !!stored.orgId,
+      hasRuntimeToken: !!runtimeSession.runtimeToken,
+      hasTrackerUserId: !!runtimeSession.trackerUserId,
+      hasOrgId: !!runtimeSession.orgId,
       nativeMode: true,
+      bridgeFound: !!bridge,
       lastCheckAt: new Date().toISOString(),
+      lastError: bridgeStarted || bridge ? null : "native_bridge_not_found",
     }));
 
-    console.log("[TRACKER_SESSION_STATE]", {
-      hasRuntimeToken: !!stored.runtimeToken,
-      hasTrackerUserId: !!stored.trackerUserId,
-      hasOrgId: !!stored.orgId,
-      ready: hasBootstrapSession,
-      nativeMode: true,
+    console.log("[TRACKER_FINAL_SESSION_SNAPSHOT]", {
+      hasRuntimeToken: !!runtimeSession.runtimeToken,
+      hasTrackerUserId: !!runtimeSession.trackerUserId,
+      hasOrgId: !!runtimeSession.orgId,
+      bridgeFound: !!bridge,
+      bridgeStarted,
     });
+  }, [ready, runtimeSession, t]);
 
-    if (hasBootstrapSession) {
-      setMsg(t("tracker.gps.messageActive"));
-    } else if (nextMsgWhenMissing) {
-      setMsg(nextMsgWhenMissing);
-    }
+  useEffect(() => {
+    if (ready) return;
 
-    if (!ready) return;
-    if (disposedRef.current) return;
+    let cancelled = false;
 
-    console.log("[TRACKER] JS tracking disabled, using native service only");
+    const poll = () => {
+      if (cancelled || disposedRef.current) return;
 
-    try {
-      const bridge = typeof window !== "undefined" ? window.AndroidBridge : null;
-      const { runtimeToken, trackerUserId, orgId } = runtimeSession;
-
-      console.log("[TRACKER] bridge exists?", {
-        hasAndroidBridge: !!bridge,
-        bridgeType: typeof bridge,
-        hasSaveSession: !!bridge?.saveSession,
-        hasSetTrackerSession: !!bridge?.setTrackerSession,
-        hasStartTracking: !!bridge?.startTracking,
-        runtimeToken: !!runtimeToken,
-        trackerUserId: !!trackerUserId,
-        orgId: !!orgId,
-      });
-
-      // --- ANDROID INTERFACE LOGIC ---
-      if (typeof window !== "undefined") {
-        if (window.Android) {
-          console.log("[TRACKER] window.Android exists", window.Android);
-          if (typeof window.Android.startTracking === "function") {
-            try {
-              window.Android.startTracking();
-              console.log("[TRACKER] Called window.Android.startTracking()");
-            } catch (e) {
-              console.warn("[TRACKER] Error calling window.Android.startTracking", e);
-            }
-          } else {
-            console.warn("[TRACKER] window.Android.startTracking not a function");
-          }
-        } else {
-          console.log("[TRACKER] window.Android does not exist");
-        }
-      }
-      // --- END ANDROID INTERFACE LOGIC ---
-
-      if (bridge && runtimeToken && trackerUserId && orgId) {
-        console.log("[TRACKER] calling AndroidBridge.saveTrackerSession");
-        bridge.saveTrackerSession(runtimeToken, trackerUserId, orgId);
-
-        if (bridge?.requestStartTracking) {
-          console.log("[TRACKER] calling AndroidBridge.requestStartTracking");
-          bridge.requestStartTracking();
-        } else {
-          console.warn(
-            "[TRACKER] AndroidBridge.requestStartTracking not available",
-          );
-        }
-      } else {
-        console.warn("[TRACKER] missing required tracker bootstrap fields", {
-          hasRuntimeToken: !!runtimeToken,
-          hasTrackerUserId: !!trackerUserId,
-          hasOrgId: !!orgId,
-        });
-      }
-    } catch (err) {
-      console.error("[TRACKER] error in AndroidBridge bootstrap", err);
-    }
+      const stored = readRuntimeSessionFromStorage();
+      const hasSession = Boolean(stored.runtimeToken && stored.orgId);
 
       if (hasSession) {
         console.log("[TRACKER_POLL] runtime session detected");
         syncRuntimeSession(stored);
         setRuntimeSession(stored);
         setMsg(t("tracker.gps.messageActive"));
-        setDebugInfo((prev) => ({
-          ...prev,
-          hasRuntimeToken: true,
-          hasTrackerUserId: !!stored.trackerUserId,
-          hasOrgId: true,
-          nativeMode: true,
-          lastCheckAt: new Date().toISOString(),
-          lastError: null,
-        }));
         return;
       }
 
@@ -265,73 +240,7 @@ export default function TrackerGpsPage() {
         pollTimerRef.current = null;
       }
     };
-  }, [ready]);
-
-  useEffect(() => {
-    if (!ready) return;
-    if (disposedRef.current) return;
-
-    console.log("[TRACKER] JS tracking disabled, using native service only");
-
-    try {
-      const bridge = typeof window !== "undefined" ? window.AndroidBridge : null;
-      const { runtimeToken, trackerUserId, orgId } = runtimeSession;
-
-      console.log("[TRACKER] bridge exists?", {
-        hasAndroidBridge: !!bridge,
-        bridgeType: typeof bridge,
-        hasSaveSession: !!bridge?.saveSession,
-        hasSetTrackerSession: !!bridge?.setTrackerSession,
-        hasStartTracking: !!bridge?.startTracking,
-        runtimeToken: !!runtimeToken,
-        trackerUserId: !!trackerUserId,
-        orgId: !!orgId,
-      });
-
-      if (bridge && runtimeToken && trackerUserId && orgId) {
-        console.log("[TRACKER] calling AndroidBridge.saveTrackerSession");
-        bridge.saveTrackerSession(runtimeToken, trackerUserId, orgId);
-
-        if (bridge?.requestStartTracking) {
-          console.log("[TRACKER] calling AndroidBridge.requestStartTracking");
-          bridge.requestStartTracking();
-        } else {
-          console.warn(
-            "[TRACKER] AndroidBridge.requestStartTracking not available",
-          );
-        }
-      } else {
-        console.warn("[TRACKER] missing required tracker bootstrap fields", {
-          hasRuntimeToken: !!runtimeToken,
-          hasTrackerUserId: !!trackerUserId,
-          hasOrgId: !!orgId,
-        });
-      }
-
-      if (runtimeToken && trackerUserId && orgId) {
-        setMsg(t("tracker.gps.messageActive"));
-      } else {
-        setMsg(t("tracker.gps.messagePreparing"));
-      }
-
-      setDebugInfo((prev) => ({
-        ...prev,
-        hasRuntimeToken: !!runtimeToken,
-        hasTrackerUserId: !!trackerUserId,
-        hasOrgId: !!orgId,
-        nativeMode: true,
-        lastCheckAt: new Date().toISOString(),
-        lastError: null,
-      }));
-    } catch (err) {
-      console.error("[TRACKER] native bootstrap failed", err);
-      setDebugInfo((prev) => ({
-        ...prev,
-        lastError: String(err?.message || err || "native bootstrap failed"),
-        lastCheckAt: new Date().toISOString(),
-      }));
-    }
-  }, [ready, runtimeSession]);
+  }, [ready, t]);
 
   const pageStyle = {
     minHeight: "100vh",
@@ -404,12 +313,12 @@ export default function TrackerGpsPage() {
   return (
     <div style={pageStyle}>
       <div style={cardStyle}>
-        <div style={iconStyle(ready)}>
-          {ready ? "✅" : "📍"}
-        </div>
+        <div style={iconStyle(ready)}>{ready ? "✅" : "📍"}</div>
 
         <div style={titleStyle}>
-          {ready ? t("tracker.gps.titleActive") : t("tracker.gps.titleStarting")}
+          {ready
+            ? t("tracker.gps.titleActive")
+            : t("tracker.gps.titleStarting")}
         </div>
 
         <div style={subtitleStyle}>
@@ -419,14 +328,22 @@ export default function TrackerGpsPage() {
         </div>
 
         <div style={badgeStyle(ready)}>
-          <span>{ready ? t("tracker.gps.badgeActive") : t("tracker.gps.badgeInitializing")}</span>
+          <span>
+            {ready
+              ? t("tracker.gps.badgeActive")
+              : t("tracker.gps.badgeInitializing")}
+          </span>
         </div>
 
         {!!msg && (
           <div style={noteStyle}>
-            {ready
-              ? t("tracker.gps.noteUpdated")
-              : t("tracker.gps.noteWait")}
+            {ready ? t("tracker.gps.noteUpdated") : t("tracker.gps.noteWait")}
+          </div>
+        )}
+
+        {debugInfo.lastError && (
+          <div style={{ ...noteStyle, color: "#b45309" }}>
+            {debugInfo.lastError}
           </div>
         )}
       </div>
