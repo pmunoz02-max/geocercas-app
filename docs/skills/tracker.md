@@ -324,3 +324,7 @@ No se permite tracker_limit_override = 0 o negativo. Solo se usa override si es 
 ### Fix: accept runtime response
 Se restauran campos tracker_runtime_token, tracker_user_id, org_id, invite_id.
 
+
+### Fix: runtime JWT secret
+accept-tracker-invite usa TRACKER_RUNTIME_JWT_SECRET con fallback JWT_SECRET para firmar tracker_runtime_token.
+

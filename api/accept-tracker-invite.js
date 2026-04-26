@@ -54,8 +54,22 @@ function extractBearerToken(req) {
   return h.startsWith("Bearer ") ? h.slice(7).trim() : "";
 }
 
+
+function getTrackerRuntimeJwtSecret() {
+  const secret =
+    process.env.TRACKER_RUNTIME_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    "";
+
+  if (!secret) {
+    throw new Error("Missing tracker runtime JWT secret");
+  }
+
+  return secret;
+}
+
 function createRuntimeJwt(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, {
+  return jwt.sign(payload, getTrackerRuntimeJwtSecret(), {
     expiresIn: "7d",
   });
 }
