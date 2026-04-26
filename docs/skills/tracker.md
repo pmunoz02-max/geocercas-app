@@ -332,3 +332,7 @@ accept-tracker-invite usa TRACKER_RUNTIME_JWT_SECRET con fallback JWT_SECRET par
 ### Fix: tracker_latest sin created_at
 En producción tracker_latest no tiene created_at. El dashboard consulta solo user_id, org_id, lat, lng, accuracy y ts; positions queda como fallback.
 
+
+### Fix: geofence events table name
+Producción usa geofence_events, no tracker_geofence_events. Si falla la consulta de eventos, dashboard continúa sin bloquear.
+

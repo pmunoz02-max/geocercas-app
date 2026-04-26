@@ -1710,25 +1710,25 @@ export default function TrackerDashboard() {
 
   const fetchGeofenceEvents = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) return;
+    if (!safeOrgId) return;
 
     try {
       const { data, error } = await supabase
-        .from("tracker_geofence_events")
+        .from("geofence_events")
         .select("id, user_id, personal_id, geocerca_nombre, event_type, lat, lng, created_at")
         .eq("org_id", safeOrgId)
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (error) {
-        console.error("Error loading geofence events:", error);
+        // No logging, just return empty to keep dashboard usable
         setGeofenceEvents([]);
         return;
       }
 
       setGeofenceEvents(Array.isArray(data) ? data : []);
     } catch (e) {
-      console.error("Unexpected error loading events:", e);
+      // No logging, just return empty to keep dashboard usable
       setGeofenceEvents([]);
     }
   }, []);
