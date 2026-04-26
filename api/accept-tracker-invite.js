@@ -2,21 +2,12 @@ import crypto from "node:crypto";
 import jwt from "jsonwebtoken";
 import { createClient } from "@supabase/supabase-js";
 
-export const config = {
-  runtime: "nodejs",
-};
+export const config = { runtime: "nodejs" };
 
-// --- Normalizadores ---
-function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+function normalizeEmail(v) {
+  return String(v || "").trim().toLowerCase();
 }
 
-function buildIdentityKeyFromEmail(email) {
-  const normalized = normalizeEmail(email);
-  return normalized ? `e:${normalized}` : "";
-}
-
-// 🔥 FIX CENTRAL
 function resolveTrackerLimit(org) {
   const limits = {
     starter: 1,
@@ -28,103 +19,45 @@ function resolveTrackerLimit(org) {
   return limits[plan] ?? 1;
 }
 
-function normalizePlanCode(value) {
-  return String(value || "starter").toLowerCase().trim();
-}
-
 function getTrackerLimitFromBillingRow(billingRow) {
-  const planCode = normalizePlanCode(billingRow?.plan_code);
   const limits = {
     starter: 1,
     pro: 10,
     business: 50,
     enterprise: 9999,
   };
-  const fallback = limits[planCode] ?? 1;
+
+  const fallback = limits[String(billingRow?.plan_code || "starter")] ?? 1;
   const override = Number(billingRow?.tracker_limit_override);
-  // Only use override if > 0
+
   if (Number.isFinite(override) && override > 0) {
     return override;
   }
+
   return fallback;
 }
 
-const RUNTIME_SESSION_HOURS = 24 * 7;
-
-function sha256Hex(value) {
-  return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function getTrackerRuntimeJwtSecret() {
-  const secret =
-    process.env.TRACKER_RUNTIME_JWT_SECRET ||
-    process.env.JWT_SECRET ||
-    "";
-
-  if (!secret) {
-    throw new Error("Missing tracker runtime JWT secret");
-  }
-
-  return secret;
-}
-
-function createRuntimeJwt({ trackerUserId, orgId, inviteId, frequencyMinutes }) {
-  const secret = getTrackerRuntimeJwtSecret();
-  const expiresInSeconds = RUNTIME_SESSION_HOURS * 60 * 60;
-
-  const token = jwt.sign(
-    {
-      sub: String(trackerUserId),
-      org_id: String(orgId),
-      invite_id: inviteId ? String(inviteId) : null,
-      type: "tracker_runtime",
-      frequency_minutes: frequencyMinutes,
-    },
-    secret,
-    {
-      algorithm: "HS256",
-      expiresIn: expiresInSeconds,
-    }
-  );
-
-  const decoded = jwt.decode(token);
-
-  return {
-    token,
-    exp:
-      decoded && typeof decoded === "object" && decoded.exp
-        ? Number(decoded.exp)
-        : null,
-  };
+function sha256Hex(v) {
+  return crypto.createHash("sha256").update(v).digest("hex");
 }
 
 function getSupabase() {
-  const supabaseUrl =
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    "";
-
-  const serviceRoleKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "";
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Missing Supabase server envs");
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  return createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    { auth: { persistSession: false } }
+  );
 }
 
 function extractBearerToken(req) {
-  const authHeader =
-    req.headers?.authorization ||
-    req.headers?.Authorization ||
-    "";
+  const h = req.headers.authorization || "";
+  return h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+}
 
-  if (!authHeader.startsWith("Bearer ")) return "";
-  return authHeader.slice(7).trim();
+function createRuntimeJwt(payload) {
+  return jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn: "7d",
+  });
 }
 
 export default async function handler(req, res) {
@@ -141,7 +74,7 @@ export default async function handler(req, res) {
     const supabase = getSupabase();
     const tokenHash = sha256Hex(inviteToken);
 
-    let { data: invite } = await supabase
+    const { data: invite } = await supabase
       .from("tracker_invites")
       .select("*")
       .eq("invite_token_hash", tokenHash)
@@ -153,7 +86,7 @@ export default async function handler(req, res) {
 
     const orgId = invite.org_id;
 
-    // 🔥 LÓGICA LIMPIA (SIN DUPLICADOS)
+    // 🔥 FIX límite
     let trackerLimit = 1;
     let planStatus = "active";
 
@@ -176,7 +109,7 @@ export default async function handler(req, res) {
 
         trackerLimit = resolveTrackerLimit(orgRow);
       }
-    } catch (e) {
+    } catch {
       const { data: orgRow } = await supabase
         .from("organizations")
         .select("plan")
@@ -187,10 +120,7 @@ export default async function handler(req, res) {
     }
 
     if (planStatus !== "active") {
-      return res.status(403).json({
-        ok: false,
-        error: "plan_inactive",
-      });
+      return res.status(403).json({ ok: false });
     }
 
     const { count: trackerCount } = await supabase
@@ -208,9 +138,24 @@ export default async function handler(req, res) {
       });
     }
 
-    // resto del flujo intacto...
+    // 🔥 CONTINÚA FLUJO (clave)
+    const trackerUserId = invite.used_by_user_id || invite.created_by_user_id;
 
-    return res.status(200).json({ ok: true });
+    const runtimeToken = createRuntimeJwt({
+      sub: trackerUserId,
+      org_id: orgId,
+      invite_id: invite.id,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      tracker_runtime_token: runtimeToken,
+      tracker_user_id: trackerUserId,
+      org_id: orgId,
+      invite_id: invite.id,
+      frequency_minutes: 1,
+      expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+    });
   } catch (e) {
     return res.status(500).json({
       ok: false,
