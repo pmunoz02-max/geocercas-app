@@ -172,48 +172,68 @@ export default function TrackerGpsPage() {
       setMsg(nextMsgWhenMissing);
     }
 
-    return stored;
-  }
+    if (!ready) return;
+    if (disposedRef.current) return;
 
-  useEffect(() => {
-    disposedRef.current = false;
+    console.log("[TRACKER] JS tracking disabled, using native service only");
 
-    const stored = refreshRuntimeSessionState(t("tracker.gps.messagePreparing"));
+    try {
+      const bridge = typeof window !== "undefined" ? window.AndroidBridge : null;
+      const { runtimeToken, trackerUserId, orgId } = runtimeSession;
 
-    if (!stored.runtimeToken || !stored.trackerUserId || !stored.orgId) {
-      bootstrapTimerRef.current = window.setTimeout(() => {
-        if (disposedRef.current) return;
-        const latest = refreshRuntimeSessionState(
-          t("tracker.gps.messagePreparing"),
-        );
+      console.log("[TRACKER] bridge exists?", {
+        hasAndroidBridge: !!bridge,
+        bridgeType: typeof bridge,
+        hasSaveSession: !!bridge?.saveSession,
+        hasSetTrackerSession: !!bridge?.setTrackerSession,
+        hasStartTracking: !!bridge?.startTracking,
+        runtimeToken: !!runtimeToken,
+        trackerUserId: !!trackerUserId,
+        orgId: !!orgId,
+      });
 
-        if (!latest.runtimeToken || !latest.trackerUserId || !latest.orgId) {
-          setMsg(t("tracker.gps.messagePreparing"));
+      // --- ANDROID INTERFACE LOGIC ---
+      if (typeof window !== "undefined") {
+        if (window.Android) {
+          console.log("[TRACKER] window.Android exists", window.Android);
+          if (typeof window.Android.startTracking === "function") {
+            try {
+              window.Android.startTracking();
+              console.log("[TRACKER] Called window.Android.startTracking()");
+            } catch (e) {
+              console.warn("[TRACKER] Error calling window.Android.startTracking", e);
+            }
+          } else {
+            console.warn("[TRACKER] window.Android.startTracking not a function");
+          }
+        } else {
+          console.log("[TRACKER] window.Android does not exist");
         }
-      }, 300);
-    }
-
-    return () => {
-      disposedRef.current = true;
-
-      if (bootstrapTimerRef.current) {
-        window.clearTimeout(bootstrapTimerRef.current);
-        bootstrapTimerRef.current = null;
       }
-    };
-  }, []);
+      // --- END ANDROID INTERFACE LOGIC ---
 
-  useEffect(() => {
-    if (ready) return;
+      if (bridge && runtimeToken && trackerUserId && orgId) {
+        console.log("[TRACKER] calling AndroidBridge.saveTrackerSession");
+        bridge.saveTrackerSession(runtimeToken, trackerUserId, orgId);
 
-    let cancelled = false;
-
-    const poll = () => {
-      if (cancelled || disposedRef.current) return;
-
-      const stored = readRuntimeSessionFromStorage();
-      const hasSession =
-        !!stored.runtimeToken && !!stored.orgId;
+        if (bridge?.requestStartTracking) {
+          console.log("[TRACKER] calling AndroidBridge.requestStartTracking");
+          bridge.requestStartTracking();
+        } else {
+          console.warn(
+            "[TRACKER] AndroidBridge.requestStartTracking not available",
+          );
+        }
+      } else {
+        console.warn("[TRACKER] missing required tracker bootstrap fields", {
+          hasRuntimeToken: !!runtimeToken,
+          hasTrackerUserId: !!trackerUserId,
+          hasOrgId: !!orgId,
+        });
+      }
+    } catch (err) {
+      console.error("[TRACKER] error in AndroidBridge bootstrap", err);
+    }
 
       if (hasSession) {
         console.log("[TRACKER_POLL] runtime session detected");
