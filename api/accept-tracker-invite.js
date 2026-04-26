@@ -264,6 +264,40 @@ export default async function handler(req, res) {
       planStatus = "active"; // fallback: treat as active if org exists
     }
 
+      // Tracker limit resolution: billing table or fallback to organizations.plan
+      let trackerLimit = 1;
+      let planStatus = "active";
+      let billingRow = null;
+      try {
+        const billingRes = await supabase
+          .from("org_billing")
+          .select("org_id, plan_code, plan_status, tracker_limit_override")
+          .eq("org_id", orgId)
+          .maybeSingle();
+        billingRow = billingRes.data;
+        if (billingRow && billingRow.plan_status) {
+          planStatus = String(billingRow.plan_status).toLowerCase().trim();
+          trackerLimit = getTrackerLimitFromBillingRow(billingRow);
+        } else {
+          const { data: orgRow } = await supabase
+            .from("organizations")
+            .select("plan")
+            .eq("id", orgId)
+            .maybeSingle();
+          trackerLimit = resolveTrackerLimit(orgRow);
+          planStatus = "active";
+        }
+      } catch (e) {
+        // fallback: treat as active, use organizations.plan
+        const { data: orgRow } = await supabase
+          .from("organizations")
+          .select("plan")
+          .eq("id", orgId)
+          .maybeSingle();
+        trackerLimit = resolveTrackerLimit(orgRow);
+        planStatus = "active";
+      }
+
     if (planStatus !== "active") {
       return res.status(403).json({
         ok: false,
@@ -287,7 +321,7 @@ export default async function handler(req, res) {
       });
     }
 
-    if ((trackerCount || 0) >= trackerLimit) {
+      if ((trackerCount ?? 0) >= trackerLimit) {
       return res.status(403).json({
         ok: false,
         error: "tracker_limit_reached",
@@ -362,7 +396,7 @@ export default async function handler(req, res) {
         .eq("role", "tracker")
         .is("revoked_at", null);
 
-      if ((trackerCountNow || 0) >= trackerLimit) {
+        if ((trackerCountNow ?? 0) >= trackerLimit) {
         return res.status(403).json({
           ok: false,
           error: "tracker_limit_race_condition",

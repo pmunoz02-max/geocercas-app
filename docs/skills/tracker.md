@@ -281,3 +281,16 @@ git push origin preview
 - **Notas:**
   - Aplica solo a branch preview.
   - No afecta organizaciones suspendidas/inactivas.
+  ### Fix: tracker_limit_reached = 0
+
+Problema:
+La aceptación de invitaciones devolvía límite 0 cuando no existían tablas plans/subscriptions.
+
+Solución:
+Se implementa fallback basado en organizations.plan:
+- starter: 1
+- pro: 10
+- business: 50
+- enterprise: 9999
+
+Nunca se permite fallback a 0.
