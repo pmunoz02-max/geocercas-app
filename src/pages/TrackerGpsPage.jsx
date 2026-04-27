@@ -98,14 +98,10 @@ function callNativeBridge(bridge, session) {
       bridge.setTrackerSession(runtimeToken, trackerUserId || "", orgId);
     }
 
-    if (typeof bridge.requestStartTracking === "function") {
+    if (typeof bridge.startTracking === "function") {
+      bridge.startTracking(runtimeToken, trackerUserId || "", orgId);
+    } else if (typeof bridge.requestStartTracking === "function") {
       bridge.requestStartTracking();
-    } else if (typeof bridge.startTracking === "function") {
-      try {
-        bridge.startTracking(runtimeToken, trackerUserId || "", orgId);
-      } catch {
-        bridge.startTracking(runtimeToken, "");
-      }
     }
 
     return true;
