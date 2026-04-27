@@ -187,9 +187,25 @@ export default async function handler(req, res) {
     }
 
     const runtimeToken = createRuntimeJwt({
+
       tracker_user_id: trackerUserId,
       org_id: orgId,
       invite_id: invite.id,
+    });
+
+    // Insertar sesión activa en tracker_runtime_sessions
+    const access_token_hash = sha256Hex(runtimeToken);
+    const issued_at = new Date();
+    const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await supabase.from("tracker_runtime_sessions").insert({
+      org_id: orgId,
+      tracker_user_id: trackerUserId,
+      access_token_hash,
+      token_version: 1,
+      source: "tracker-native-android",
+      active: true,
+      issued_at: issued_at.toISOString(),
+      expires_at: expires_at.toISOString(),
     });
 
     return res.status(200).json({

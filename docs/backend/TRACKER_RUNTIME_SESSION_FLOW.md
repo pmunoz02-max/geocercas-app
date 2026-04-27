@@ -72,3 +72,27 @@ const token = jwt.sign(
   }
 );
 ```
+## Fix Abril 2026 — runtime session obligatoria
+
+El `tracker_runtime_token` es tratado como opaco y no se decodifica en `/api/send-position`.
+
+Para que el sistema funcione correctamente, es obligatorio registrar una sesión en `tracker_runtime_sessions` al momento de aceptar la invitación.
+
+Campos requeridos:
+
+- org_id
+- tracker_user_id
+- access_token_hash = sha256(token)
+- token_version = 1
+- source = tracker-native-android
+- active = true
+- issued_at
+- expires_at
+
+La Edge Function `send_position` resuelve la identidad del tracker a partir de esta tabla, no desde el JWT.
+
+Sin este registro:
+
+- user_id → null
+- tracker_user_id → null
+- No hay inserts en positions
