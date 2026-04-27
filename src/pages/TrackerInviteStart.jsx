@@ -313,12 +313,15 @@ export default function TrackerInviteStart() {
       const runtimeToken = data?.tracker_runtime_token;
       const resolvedTrackerUserId = data?.tracker_user_id;
       const persistedOrgId = data?.org_id || resolvedOrgId;
-      const trackerGpsUrl =
-        `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeToken)}` +
-        `&tracker_user_id=${encodeURIComponent(resolvedTrackerUserId)}` +
-        `&org_id=${encodeURIComponent(persistedOrgId)}`;
 
-      navigate(trackerGpsUrl, { replace: true });
+      if (window.Android?.startTracking) {
+        console.log("[TrackerInviteStart] Android bridge disponible, iniciando tracking");
+        window.Android.startTracking(runtimeToken, resolvedTrackerUserId, persistedOrgId);
+      } else {
+        console.warn("[TrackerInviteStart] Android bridge no disponible, fallback web");
+        const url = `/tracker-gps?inviteToken=${encodeURIComponent(runtimeToken)}&org_id=${encodeURIComponent(persistedOrgId)}`;
+        window.location.href = url;
+      }
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
       setStatus("accept_failed");
