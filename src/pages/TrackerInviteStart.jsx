@@ -2,24 +2,51 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+const INVITE_TOKEN_KEYS = [
+  "token",
+  "invite_token",
+  "inviteToken",
+  "t",
+  "access_token",
+];
+
+const ORG_ID_KEYS = ["org_id", "organization_id", "orgId"];
+
+function readParamFromSearchAndHash(keys) {
+  if (typeof window === "undefined") return "";
+
+  const sources = [
+    window.location.search || "",
+    window.location.hash?.includes("?")
+      ? window.location.hash.slice(window.location.hash.indexOf("?"))
+      : "",
+    window.location.hash?.startsWith("#")
+      ? `?${window.location.hash.slice(1)}`
+      : "",
+  ];
+
+  for (const source of sources) {
+    if (!source) continue;
+
+    try {
+      const params = new URLSearchParams(source.startsWith("?") ? source : `?${source}`);
+      for (const key of keys) {
+        const value = params.get(key);
+        if (value && value.trim()) return value.trim();
+      }
+    } catch {
+      // keep checking other sources
+    }
+  }
+
+  return "";
+}
+
 function getInviteParams() {
-  const params = new URLSearchParams(window.location.search);
-
-  const inviteToken =
-    params.get("invite_token") ||
-    params.get("inviteToken") ||
-    params.get("t") ||
-    params.get("token") ||
-    params.get("access_token") ||
-    "";
-
-  const orgId =
-    params.get("org_id") ||
-    params.get("organization_id") ||
-    params.get("orgId") ||
-    "";
-
-  return { inviteToken, orgId };
+  return {
+    inviteToken: readParamFromSearchAndHash(INVITE_TOKEN_KEYS),
+    orgId: readParamFromSearchAndHash(ORG_ID_KEYS),
+  };
 }
 
 function setStorageItem(key, value) {
@@ -29,6 +56,14 @@ function setStorageItem(key, value) {
     sessionStorage.setItem(key, value);
   } catch {
     // no-op
+  }
+}
+
+function getStorageItem(key) {
+  try {
+    return localStorage.getItem(key) || sessionStorage.getItem(key) || "";
+  } catch {
+    return "";
   }
 }
 
@@ -125,37 +160,52 @@ export default function TrackerInviteStart() {
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  const initialInviteParams = useMemo(() => getInviteParams(), []);
+
   const [acceptError, setAcceptError] = useState("");
   const [status, setStatus] = useState("ready");
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const { inviteToken, orgId } = getInviteParams();
+  const [inviteToken, setInviteToken] = useState(initialInviteParams.inviteToken || "");
+  const [orgId, setOrgId] = useState(initialInviteParams.orgId || "");
 
   useEffect(() => {
-    if (inviteToken) {
-      localStorage.setItem("inviteToken", inviteToken);
-      sessionStorage.setItem("inviteToken", inviteToken);
-      console.log("[tracker] inviteToken saved", inviteToken);
-    } else {
-      console.warn("[tracker] inviteToken missing in URL");
+    const latest = getInviteParams();
+
+    if (latest.inviteToken && latest.inviteToken !== inviteToken) {
+      setInviteToken(latest.inviteToken);
     }
 
-    if (orgId) {
-      localStorage.setItem("tracker_org_id", orgId);
-      sessionStorage.setItem("tracker_org_id", orgId);
-      console.log("[tracker] orgId saved", orgId);
-    } else {
-      console.warn("[tracker] orgId missing in URL");
+    if (latest.orgId && latest.orgId !== orgId) {
+      setOrgId(latest.orgId);
     }
+
+    console.log("INVITE_TOKEN", latest.inviteToken || inviteToken || null);
+    console.log("INVITE_ORG_ID", latest.orgId || orgId || null);
   }, [inviteToken, orgId]);
+
+  useEffect(() => {
+    if (!inviteToken) {
+      setStatus("missing_invite_token");
+      setAcceptError(t("tracker.invite.errors.missingToken"));
+      return;
+    }
+
+    setStorageItem("inviteToken", inviteToken);
+    console.log("[tracker] inviteToken saved", inviteToken);
+
+    if (orgId) {
+      setStorageItem("tracker_org_id", orgId);
+      console.log("[tracker] orgId saved", orgId);
+    }
+  }, [inviteToken, orgId, t]);
 
   const authToken = inviteToken || null;
 
   const resolvedOrgId =
     orgId ||
-    localStorage.getItem("tracker_org_id") ||
-    sessionStorage.getItem("tracker_org_id") ||
+    getStorageItem("tracker_org_id") ||
+    getStorageItem("org_id") ||
     (typeof window !== "undefined" ? window.orgId || null : null);
 
   const isAndroid = useMemo(
@@ -179,10 +229,7 @@ export default function TrackerInviteStart() {
   async function persistTrackerSessionFromResponse(data) {
     const runtimeToken = data?.tracker_runtime_token || null;
     const resolvedTrackerUserId = data?.tracker_user_id || null;
-    const persistedOrgId =
-      data?.org_id ||
-      resolvedOrgId ||
-      null;
+    const persistedOrgId = data?.org_id || resolvedOrgId || null;
     const inviteId = data?.invite_id || null;
 
     if (!runtimeToken || !resolvedTrackerUserId || !persistedOrgId) {
@@ -210,13 +257,6 @@ export default function TrackerInviteStart() {
       window.orgId = persistedOrgId;
     }
 
-    console.log("[tracker] final session snapshot", {
-      tracker_runtime_token: localStorage.getItem("tracker_runtime_token"),
-      tracker_user_id: localStorage.getItem("tracker_user_id"),
-      tracker_org_id: localStorage.getItem("tracker_org_id"),
-      inviteToken: localStorage.getItem("inviteToken"),
-    });
-
     console.log("[TRACKER_RUNTIME_PERSISTED]", {
       hasRuntimeToken: !!runtimeToken,
       hasTrackerUserId: !!resolvedTrackerUserId,
@@ -237,11 +277,10 @@ export default function TrackerInviteStart() {
       setAcceptError("");
       setStatus("accepting");
 
-      // Limpiar storage para evitar contaminación futura
-      localStorage.removeItem("inviteToken");
-      sessionStorage.removeItem("inviteToken");
-
-      console.log("inviteToken usado:", authToken);
+      console.log("[tracker-invite] accepting invite", {
+        hasInviteToken: !!authToken,
+        hasOrgId: !!resolvedOrgId,
+      });
 
       const response = await fetch("/api/accept-tracker-invite", {
         method: "POST",
@@ -251,6 +290,7 @@ export default function TrackerInviteStart() {
         },
         body: JSON.stringify({
           inviteToken: authToken,
+          token: authToken,
           org_id: resolvedOrgId || null,
         }),
       });
@@ -270,14 +310,14 @@ export default function TrackerInviteStart() {
 
       setStatus(data?.idempotent ? "already_accepted" : "accepted");
 
-      // Redirigir pasando los datos como query params (con encodeURIComponent)
       const runtimeToken = data?.tracker_runtime_token;
       const resolvedTrackerUserId = data?.tracker_user_id;
-      const persistedOrgId = data?.org_id;
+      const persistedOrgId = data?.org_id || resolvedOrgId;
       const trackerGpsUrl =
         `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeToken)}` +
         `&tracker_user_id=${encodeURIComponent(resolvedTrackerUserId)}` +
         `&org_id=${encodeURIComponent(persistedOrgId)}`;
+
       navigate(trackerGpsUrl, { replace: true });
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
@@ -379,9 +419,7 @@ export default function TrackerInviteStart() {
         </h1>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 leading-6">
-          <p>
-            {t("tracker.invite.intro")}
-          </p>
+          <p>{t("tracker.invite.intro")}</p>
           <p className="mt-2">
             {t("tracker.invite.introStep.before")} <strong>{t("tracker.invite.introStep.allow")}</strong>{t("tracker.invite.introStep.after")}
           </p>
@@ -412,7 +450,7 @@ export default function TrackerInviteStart() {
           <button
             type="button"
             onClick={startPermissionStep}
-            disabled={submitting}
+            disabled={submitting || !authToken}
             className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
           >
             {submitting && status === "accepting"
@@ -508,7 +546,9 @@ export default function TrackerInviteStart() {
           <div className="mt-3 text-sm text-red-600">{acceptError}</div>
         ) : null}
 
-        <p className="mt-4 text-xs text-slate-500">{t("tracker.invite.statusLabel")}: {status}</p>
+        <p className="mt-4 text-xs text-slate-500">
+          {t("tracker.invite.statusLabel")}: {status}
+        </p>
       </div>
     </div>
   );
