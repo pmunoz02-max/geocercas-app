@@ -1,38 +1,27 @@
-// Helper para pedir permisos de geolocalización
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+// Helper para pedir permisos de geolocalización.
 async function requestLocationPermission() {
-  if (!navigator?.permissions?.query) return false;
+  if (typeof navigator === "undefined" || !navigator.geolocation) return false;
+
   try {
-    const result = await navigator.permissions.query({ name: "geolocation" });
-    if (result.state === "granted") return true;
-    return new Promise((resolve) => {
+    if (navigator.permissions?.query) {
+      const result = await navigator.permissions.query({ name: "geolocation" });
+      if (result.state === "granted") return true;
+    }
+
+    return await new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         () => resolve(true),
         () => resolve(false),
-        { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 }
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 },
       );
     });
   } catch {
     return false;
   }
 }
-import { useEffect, useMemo, useRef, useState } from "react";
-
-// Al cargar, si hay inviteToken en la URL, iniciar permisos y tracking nativo
-useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const inviteToken = params.get("inviteToken");
-  if (inviteToken) {
-    (async () => {
-      await requestLocationPermission();
-      const bridge = getNativeBridge();
-      if (bridge && typeof bridge.startTracking === "function") {
-        const session = readRuntimeSessionFromStorage();
-        bridge.startTracking(session.runtimeToken || "", session.trackerUserId || "", session.orgId || "");
-      }
-    })();
-  }
-}, []);
-import { useTranslation } from "react-i18next";
 
 function getStorageItem(key) {
   try {
@@ -83,6 +72,7 @@ function readRuntimeSessionFromUrl() {
   const params = new URLSearchParams(window.location.search);
 
   return {
+    inviteToken: params.get("inviteToken") || params.get("invite_token") || "",
     runtimeToken:
       params.get("tracker_runtime_token") ||
       params.get("runtimeToken") ||
@@ -166,6 +156,7 @@ export default function TrackerGpsPage() {
 
   const disposedRef = useRef(false);
   const pollTimerRef = useRef(null);
+  const permissionRequestedRef = useRef(false);
 
   const ready = useMemo(() => {
     return Boolean(runtimeSession.runtimeToken && runtimeSession.orgId);
@@ -182,6 +173,13 @@ export default function TrackerGpsPage() {
       trackerUserId: fromUrl.trackerUserId || fromStorage.trackerUserId || "",
       orgId: fromUrl.orgId || fromStorage.orgId || "",
     };
+
+    if (fromUrl.inviteToken && !permissionRequestedRef.current) {
+      permissionRequestedRef.current = true;
+      requestLocationPermission().then((granted) => {
+        console.log("[TRACKER_LOCATION_PERMISSION]", { granted });
+      });
+    }
 
     if (merged.runtimeToken || merged.trackerUserId || merged.orgId) {
       console.log("[TRACKER_QUERY_PARAMS_FOUND]", {
@@ -206,35 +204,52 @@ export default function TrackerGpsPage() {
   useEffect(() => {
     if (!ready || disposedRef.current) return;
 
-    console.log("[TRACKER] JS tracking disabled, using native service only");
+    let cancelled = false;
 
-    const bridge = getNativeBridge();
-    const bridgeStarted = callNativeBridge(bridge, runtimeSession);
+    const startNativeTracking = async () => {
+      if (!permissionRequestedRef.current) {
+        permissionRequestedRef.current = true;
+        await requestLocationPermission();
+      }
 
-    setMsg(
-      runtimeSession.runtimeToken && runtimeSession.orgId
-        ? t("tracker.gps.messageActive")
-        : t("tracker.gps.messagePreparing"),
-    );
+      if (cancelled || disposedRef.current) return;
 
-    setDebugInfo((prev) => ({
-      ...prev,
-      hasRuntimeToken: !!runtimeSession.runtimeToken,
-      hasTrackerUserId: !!runtimeSession.trackerUserId,
-      hasOrgId: !!runtimeSession.orgId,
-      nativeMode: true,
-      bridgeFound: !!bridge,
-      lastCheckAt: new Date().toISOString(),
-      lastError: bridgeStarted || bridge ? null : "native_bridge_not_found",
-    }));
+      console.log("[TRACKER] JS tracking disabled, using native service only");
 
-    console.log("[TRACKER_FINAL_SESSION_SNAPSHOT]", {
-      hasRuntimeToken: !!runtimeSession.runtimeToken,
-      hasTrackerUserId: !!runtimeSession.trackerUserId,
-      hasOrgId: !!runtimeSession.orgId,
-      bridgeFound: !!bridge,
-      bridgeStarted,
-    });
+      const bridge = getNativeBridge();
+      const bridgeStarted = callNativeBridge(bridge, runtimeSession);
+
+      setMsg(
+        runtimeSession.runtimeToken && runtimeSession.orgId
+          ? t("tracker.gps.messageActive")
+          : t("tracker.gps.messagePreparing"),
+      );
+
+      setDebugInfo((prev) => ({
+        ...prev,
+        hasRuntimeToken: !!runtimeSession.runtimeToken,
+        hasTrackerUserId: !!runtimeSession.trackerUserId,
+        hasOrgId: !!runtimeSession.orgId,
+        nativeMode: true,
+        bridgeFound: !!bridge,
+        lastCheckAt: new Date().toISOString(),
+        lastError: bridgeStarted || bridge ? null : "native_bridge_not_found",
+      }));
+
+      console.log("[TRACKER_FINAL_SESSION_SNAPSHOT]", {
+        hasRuntimeToken: !!runtimeSession.runtimeToken,
+        hasTrackerUserId: !!runtimeSession.trackerUserId,
+        hasOrgId: !!runtimeSession.orgId,
+        bridgeFound: !!bridge,
+        bridgeStarted,
+      });
+    };
+
+    startNativeTracking();
+
+    return () => {
+      cancelled = true;
+    };
   }, [ready, runtimeSession, t]);
 
   useEffect(() => {
