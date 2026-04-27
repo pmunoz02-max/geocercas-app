@@ -396,21 +396,25 @@ export default function TrackerInviteStart() {
     await handleGrantLocation();
   }
 
-  function openApp() {
-    // Intento de abrir la app Android vía intent/deep link
-    const intentUrl = "intent://tracker#Intent;scheme=https;package=com.fenice.geocercas;end";
-    const deepLinkUrl = "geocercas://tracker";
-    // Primero intenta intent, luego deep link, luego fallback
-    window.location.href = intentUrl;
-    setTimeout(() => {
-      window.location.href = deepLinkUrl;
-    }, 500);
-  }
 
-  function openPlayStore() {
-    // URL de instalación Play Store o PWA
-    window.location.href = "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
-  }
+  const handleOpenApp = () => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get("inviteToken");
+    const orgId = params.get("org_id");
+
+    let url = "/tracker-gps";
+
+    if (inviteToken && orgId) {
+      url += `?inviteToken=${inviteToken}&org_id=${orgId}`;
+    }
+
+    window.location.href = url;
+  };
+
+
+  const handleInstall = () => {
+    window.location.href = "/tracker-gps";
+  };
 
   const showPermissionCard =
     status === "geo_permission_step" ||
@@ -521,7 +525,7 @@ export default function TrackerInviteStart() {
               <>
                 <button
                   type="button"
-                  onClick={openApp}
+                  onClick={handleOpenApp}
                   className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
                   {t("common.actions.openApp")}
@@ -529,7 +533,7 @@ export default function TrackerInviteStart() {
 
                 <button
                   type="button"
-                  onClick={openPlayStore}
+                  onClick={handleInstall}
                   className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
                   {t("common.actions.installApp")}
