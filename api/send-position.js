@@ -180,41 +180,43 @@ export default async function handler(req, res) {
     const geomWkt = buildPointWkt(numericLng, numericLat);
 
 
-    // Insert position using service role client and tracker_user_id from JWT
-    const positionPayload = {
-      org_id: org_id_from_jwt,
-      user_id: tracker_user_id,
-      lat: numericLat,
-      lng: numericLng,
-      accuracy: accuracy ?? null,
-      speed: speed ?? null,
-      heading: heading ?? null,
-      battery: battery ?? null,
-      is_mock: is_mock ?? false,
-      source: runtimeSource,
-      recorded_at: recordedAt,
-    };
 
-    console.log("[send-position] positions insert payload", {
-      org_id,
-      user_id: tracker_user_id,
-      lat: numericLat,
-      lng: numericLng,
-      recorded_at: recordedAt,
-    });
-
-    const { data: positionRow, error: positionError } = await adminClient
-      .from("positions")
-      .insert([positionPayload])
-      .select()
-      .single();
-
-    if (positionError || !positionRow) {
-      console.error("[send-position] positions insert error", positionError);
+    // Forward to Supabase Edge Function
+    try {
+      const edgeRes = await fetch(
+        `${process.env.SUPABASE_URL}/functions/v1/send_position`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            user_id: tracker_user_id,
+            org_id: org_id_from_jwt,
+            lat: numericLat,
+            lng: numericLng,
+            source: "tracker-native-android",
+          }),
+        }
+      );
+      const edgeJson = await edgeRes.json();
+      if (!edgeRes.ok) {
+        return res.status(edgeRes.status).json({
+          ok: false,
+          error: "edge_function_error",
+          detail: edgeJson,
+        });
+      }
+      return res.status(200).json({
+        ok: true,
+        edge: edgeJson,
+      });
+    } catch (err) {
       return res.status(500).json({
         ok: false,
-        error: "positions_insert_failed",
-        detail: positionError?.message || "no insert result",
+        error: "edge_function_request_failed",
+        detail: String(err?.message || err),
       });
     }
 
