@@ -152,8 +152,31 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔥 CONTINÚA FLUJO (clave)
-    const trackerUserId = invite.used_by_user_id || invite.created_by_user_id;
+    // Resolve tracker_user_id from personal table using invite email and org_id, create if missing
+    let trackerUserId = invite.used_by_user_id || invite.created_by_user_id;
+    let personalRow = null;
+    const inviteEmail = normalizeEmail(invite.email);
+    if (inviteEmail && orgId) {
+      const { data: foundPersonal } = await supabase
+        .from("personal")
+        .select("id")
+        .eq("email", inviteEmail)
+        .eq("org_id", orgId)
+        .maybeSingle();
+      if (foundPersonal && foundPersonal.id) {
+        trackerUserId = foundPersonal.id;
+      } else {
+        // Create personal row if missing
+        const { data: insertedPersonal, error: insertError } = await supabase
+          .from("personal")
+          .insert({ email: inviteEmail, org_id: orgId })
+          .select("id")
+          .maybeSingle();
+        if (insertedPersonal && insertedPersonal.id) {
+          trackerUserId = insertedPersonal.id;
+        }
+      }
+    }
 
     const runtimeToken = createRuntimeJwt({
       sub: trackerUserId,
