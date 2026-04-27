@@ -397,12 +397,19 @@ export default function TrackerInviteStart() {
   }
 
   function openApp() {
-    window.location.href = window.location.href;
+    // Intento de abrir la app Android vía intent/deep link
+    const intentUrl = "intent://tracker#Intent;scheme=https;package=com.fenice.geocercas;end";
+    const deepLinkUrl = "geocercas://tracker";
+    // Primero intenta intent, luego deep link, luego fallback
+    window.location.href = intentUrl;
+    setTimeout(() => {
+      window.location.href = deepLinkUrl;
+    }, 500);
   }
 
   function openPlayStore() {
-    window.location.href =
-      "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
+    // URL de instalación Play Store o PWA
+    window.location.href = "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
   }
 
   const showPermissionCard =
