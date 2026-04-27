@@ -1,3 +1,35 @@
+// Helper para pedir permisos de geolocalización
+async function requestLocationPermission() {
+  if (!navigator?.permissions?.query) return false;
+  try {
+    const result = await navigator.permissions.query({ name: "geolocation" });
+    if (result.state === "granted") return true;
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        () => resolve(true),
+        () => resolve(false),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 60000 }
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+  // Al cargar, si hay inviteToken en la URL, iniciar permisos y tracking nativo
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get("inviteToken");
+    if (inviteToken) {
+      (async () => {
+        await requestLocationPermission();
+        const bridge = getNativeBridge();
+        if (bridge && typeof bridge.startTracking === "function") {
+          const session = readRuntimeSessionFromStorage();
+          bridge.startTracking(session.runtimeToken || "", session.trackerUserId || "", session.orgId || "");
+        }
+      })();
+    }
+  }, []);
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
