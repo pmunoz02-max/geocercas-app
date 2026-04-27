@@ -101,7 +101,8 @@ export default async function handler(req, res) {
       return res.status(401).json({ ok: false, error: "empty_token" });
     }
 
-    // Verify tracker runtime JWT
+
+    // Verify and decode tracker runtime JWT
     let decodedJwt = null;
     try {
       decodedJwt = jwt.verify(token, getTrackerRuntimeJwtSecret());
@@ -110,42 +111,23 @@ export default async function handler(req, res) {
       return res.status(401).json({ ok: false, error: "invalid_token_jwt", detail: String(e?.message || e) });
     }
 
+    // Extract tracker_user_id and org_id from JWT
+    const tracker_user_id = decodedJwt.sub || decodedJwt.tracker_user_id;
+    const org_id_from_jwt = decodedJwt.org_id;
+    if (!tracker_user_id || !org_id_from_jwt) {
+      return res.status(401).json({ ok: false, error: "missing_claims_in_jwt" });
+    }
+
+    // Prefer org_id from JWT for all logic below
+    // Overwrite org_id from body with JWT value
+    body.org_id = org_id_from_jwt;
+    // ...existing code...
+
     const tokenHash = sha256Hex(token);
     const nowIso = new Date().toISOString();
     const todayUtc = todayUtcDateString();
 
-    console.log("[send-position] runtime lookup start", {
-      org_id,
-      tokenHashPrefix: tokenHash.slice(0, 12),
-    });
-
-    const { data: runtimeSession, error: runtimeError } = await adminClient
-      .from("tracker_runtime_sessions")
-      .select("id, org_id, tracker_user_id, active, expires_at")
-      .eq("org_id", org_id)
-      .eq("access_token_hash", tokenHash)
-      .eq("active", true)
-      .gt("expires_at", nowIso)
-      .maybeSingle();
-
-    if (runtimeError) {
-      console.error("[send-position] runtime lookup error", runtimeError);
-      return res.status(500).json({
-        ok: false,
-        error: "runtime_lookup_failed",
-        detail: runtimeError.message,
-      });
-    }
-
-    if (!runtimeSession) {
-      console.warn("[send-position] invalid runtime token", {
-        org_id,
-        tokenHashPrefix: tokenHash.slice(0, 12),
-      });
-      return res.status(401).json({ ok: false, error: "invalid_token" });
-    }
-
-    const tracker_user_id = runtimeSession.tracker_user_id;
+    // ...existing code...
 
     const { data: assignmentRows, error: assignmentError } = await adminClient
       .from("tracker_assignments")
@@ -197,8 +179,10 @@ export default async function handler(req, res) {
     const numericLng = Number(lng);
     const geomWkt = buildPointWkt(numericLng, numericLat);
 
+
+    // Insert position using service role client and tracker_user_id from JWT
     const positionPayload = {
-      org_id,
+      org_id: org_id_from_jwt,
       user_id: tracker_user_id,
       lat: numericLat,
       lng: numericLng,
