@@ -3,20 +3,20 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 function getInviteParams() {
-  const url = new URL(window.location.href);
+  const params = new URLSearchParams(window.location.search);
 
   const inviteToken =
-    url.searchParams.get("invite_token") ||
-    url.searchParams.get("inviteToken") ||
-    url.searchParams.get("t") ||
-    url.searchParams.get("token") ||
-    url.searchParams.get("access_token") ||
+    params.get("invite_token") ||
+    params.get("inviteToken") ||
+    params.get("t") ||
+    params.get("token") ||
+    params.get("access_token") ||
     "";
 
   const orgId =
-    url.searchParams.get("org_id") ||
-    url.searchParams.get("organization_id") ||
-    url.searchParams.get("orgId") ||
+    params.get("org_id") ||
+    params.get("organization_id") ||
+    params.get("orgId") ||
     "";
 
   return { inviteToken, orgId };
