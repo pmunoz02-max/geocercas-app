@@ -1,5 +1,15 @@
+
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { createClient } from "@supabase/supabase-js";
+function getTrackerRuntimeJwtSecret() {
+  const secret =
+    process.env.TRACKER_RUNTIME_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    "";
+  if (!secret) throw new Error("Missing tracker runtime JWT secret");
+  return secret;
+}
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -35,6 +45,7 @@ function buildPointWkt(lng, lat) {
 }
 
 export default async function handler(req, res) {
+
   const authHeader = req.headers.authorization || req.headers.Authorization;
 
   console.log("[send-position] request started", {
@@ -75,6 +86,7 @@ export default async function handler(req, res) {
       service_running,
     } = body || {};
 
+
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ ok: false, error: "missing_bearer_token" });
     }
@@ -83,9 +95,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "invalid_payload" });
     }
 
+
     const token = authHeader.replace("Bearer ", "").trim();
     if (!token) {
       return res.status(401).json({ ok: false, error: "empty_token" });
+    }
+
+    // Verify tracker runtime JWT
+    let decodedJwt = null;
+    try {
+      decodedJwt = jwt.verify(token, getTrackerRuntimeJwtSecret());
+    } catch (e) {
+      console.warn("[send-position] invalid tracker runtime JWT", e?.message || e);
+      return res.status(401).json({ ok: false, error: "invalid_token_jwt", detail: String(e?.message || e) });
     }
 
     const tokenHash = sha256Hex(token);
