@@ -13,12 +13,14 @@ export default function AuthGuard({ children }) {
   const location = useLocation();
   const { t } = useTranslation();
 
-  // BYPASS: Allow tracker routes to skip all auth checks
-  if (
-    location.pathname.startsWith("/tracker-gps") ||
-    location.pathname.startsWith("/tracker-accept")
-  ) {
-    console.log("[AuthGuard] HARD BYPASS for tracker route", location.pathname);
+  // BYPASS: Allow /tracker-accept to skip all auth checks and preserve query params
+  if (location.pathname.startsWith("/tracker-accept")) {
+    console.log("[AuthGuard] BYPASS for /tracker-accept", location.pathname);
+    return children || <Outlet />;
+  }
+  // BYPASS: Allow tracker-gps to skip all auth checks
+  if (location.pathname.startsWith("/tracker-gps")) {
+    console.log("[AuthGuard] BYPASS for /tracker-gps", location.pathname);
     return children || <Outlet />;
   }
   const missingProviderLoggedRef = useRef(false);
