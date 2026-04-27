@@ -13,7 +13,8 @@
     "i18n:audit": "node scripts/i18n-audit.mjs",
     "i18n:sync": "node scripts/i18n-sync.mjs --mode=sync",
     "i18n:validate": "node scripts/i18n-validate.mjs",
-    "i18n:translate": "node scripts/i18n-translate.mjs"
+    "i18n:translate": "node scripts/i18n-translate.mjs",
+    "prepush:check": "node scripts/pre-push-check.mjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
