@@ -1,5 +1,3 @@
-import jwt from "jsonwebtoken";
-
 export const config = { runtime: "nodejs" };
 
 const SUPABASE_URL =
@@ -7,18 +5,20 @@ const SUPABASE_URL =
 
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-function getTrackerRuntimeJwtSecret() {
-  const secret =
-    process.env.TRACKER_RUNTIME_JWT_SECRET ||
-    process.env.JWT_SECRET ||
-    "";
-
-  if (!secret) throw new Error("Missing tracker runtime JWT secret");
-  return secret;
-}
-
 function isFiniteNumber(value) {
   return Number.isFinite(Number(value));
+}
+
+function parseBody(req) {
+  if (!req.body) return {};
+  if (typeof req.body === "string") {
+    try {
+      return JSON.parse(req.body);
+    } catch {
+      return {};
+    }
+  }
+  return req.body;
 }
 
 export default async function handler(req, res) {
@@ -47,36 +47,17 @@ export default async function handler(req, res) {
       });
     }
 
-    const token = authHeader.replace("Bearer ", "").trim();
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, getTrackerRuntimeJwtSecret());
-    } catch (err) {
-      console.error("[api/send-position] invalid runtime token", err);
+    // Runtime tracker token is opaque. Do NOT validate it as JWT here.
+    // Validation belongs to the Supabase Edge Function / runtime session layer.
+    const runtimeToken = authHeader.replace("Bearer ", "").trim();
+    if (!runtimeToken) {
       return res.status(401).json({
         ok: false,
-        error: "invalid_runtime_token",
-        detail: String(err?.message || err),
+        error: "empty_runtime_token",
       });
     }
 
-    const trackerUserId =
-      decoded.tracker_user_id ||
-      decoded.user_id ||
-      decoded.sub;
-
-    const orgId = decoded.org_id;
-
-    if (!trackerUserId || !orgId) {
-      return res.status(401).json({
-        ok: false,
-        error: "missing_runtime_claims",
-      });
-    }
-
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
-
+    const body = parseBody(req);
     const lat = body.lat;
     const lng = body.lng;
 
@@ -89,17 +70,17 @@ export default async function handler(req, res) {
 
     const payload = {
       ...body,
-      user_id: trackerUserId,
-      tracker_user_id: trackerUserId,
-      org_id: orgId,
       lat: Number(lat),
       lng: Number(lng),
       source: body.source || "tracker-native-android",
+      tracker_runtime_token: body.tracker_runtime_token || runtimeToken,
     };
 
     console.log("[api/send-position] proxy_payload", {
-      user_id: payload.user_id,
-      org_id: payload.org_id,
+      has_runtime_token: !!runtimeToken,
+      user_id: payload.user_id || null,
+      tracker_user_id: payload.tracker_user_id || null,
+      org_id: payload.org_id || null,
       lat: payload.lat,
       lng: payload.lng,
       source: payload.source,
@@ -112,6 +93,7 @@ export default async function handler(req, res) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "x-tracker-runtime-token": runtimeToken,
       },
       body: JSON.stringify(payload),
     });
