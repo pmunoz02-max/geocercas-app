@@ -45,6 +45,10 @@ Se introduce un flujo correcto de runtime:
 Los invites previos al fix no deben reutilizarse.
 Siempre generar uno nuevo.
 
+### Fix identidad tracker
+
+El `tracker_user_id` debe mapearse siempre a `personal.user_id` (que referencia `auth.users.id`) y nunca a `personal.id`.
+
 ---
 
 ## Fix Abril 2026 — claim sub obligatorio

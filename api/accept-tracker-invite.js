@@ -167,21 +167,21 @@ export default async function handler(req, res) {
     if (inviteEmail && orgId) {
       const { data: foundPersonal } = await supabase
         .from("personal")
-        .select("id")
+        .select("id,user_id")
         .eq("email", inviteEmail)
         .eq("org_id", orgId)
         .maybeSingle();
-      if (foundPersonal && foundPersonal.id) {
-        trackerUserId = foundPersonal.id;
+      if (foundPersonal?.user_id) {
+        trackerUserId = foundPersonal.user_id;
       } else {
         // Create personal row if missing
         const { data: insertedPersonal, error: insertError } = await supabase
           .from("personal")
           .insert({ email: inviteEmail, org_id: orgId })
-          .select("id")
+          .select("id,user_id")
           .maybeSingle();
-        if (insertedPersonal && insertedPersonal.id) {
-          trackerUserId = insertedPersonal.id;
+        if (insertedPersonal?.user_id) {
+          trackerUserId = insertedPersonal.user_id;
         }
       }
     }
