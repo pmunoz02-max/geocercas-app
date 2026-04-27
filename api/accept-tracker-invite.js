@@ -69,9 +69,17 @@ function getTrackerRuntimeJwtSecret() {
 }
 
 function createRuntimeJwt(payload) {
-  return jwt.sign(payload, getTrackerRuntimeJwtSecret(), {
-    expiresIn: "7d",
-  });
+  // Forzar claim sub usando tracker_user_id
+  return jwt.sign(
+    {
+      sub: payload.tracker_user_id,
+      ...payload,
+    },
+    getTrackerRuntimeJwtSecret(),
+    {
+      expiresIn: "7d",
+    }
+  );
 }
 
 export default async function handler(req, res) {
@@ -179,7 +187,7 @@ export default async function handler(req, res) {
     }
 
     const runtimeToken = createRuntimeJwt({
-      sub: trackerUserId,
+      tracker_user_id: trackerUserId,
       org_id: orgId,
       invite_id: invite.id,
     });

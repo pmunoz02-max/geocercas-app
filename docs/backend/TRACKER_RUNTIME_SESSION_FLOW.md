@@ -44,3 +44,31 @@ Se introduce un flujo correcto de runtime:
 
 Los invites previos al fix no deben reutilizarse.
 Siempre generar uno nuevo.
+
+---
+
+## Fix Abril 2026 — claim sub obligatorio
+
+El `tracker_runtime_token` debe incluir siempre:
+
+- `sub = tracker_user_id`
+- `tracker_user_id`
+- `org_id`
+
+Esto permite que `auth.uid()` y la lógica de `send_position` resuelvan correctamente el usuario tracker.
+
+Código canónico:
+
+```js
+const token = jwt.sign(
+  {
+    sub: tracker_user_id,
+    tracker_user_id,
+    org_id,
+  },
+  JWT_SECRET,
+  {
+    expiresIn: "7d",
+  }
+);
+```
