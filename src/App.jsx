@@ -20,6 +20,7 @@ import UpdatePassword from "./pages/UpdatePassword.jsx";
 
 import TrackerInviteStart from "./pages/TrackerInviteStart.jsx";
 import TrackerOpen from "./pages/TrackerOpen.jsx";
+import TrackerInstall from "./pages/TrackerInstall.jsx";
 
 // Public tracker runtime page
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
@@ -283,7 +284,15 @@ function MainAppRoutes() {
         />
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* El redirect global no debe atrapar rutas tracker-open, tracker-gps, tracker-install */}
+      <Route
+        path="*"
+        element={
+          ["/tracker-open", "/tracker-gps", "/tracker-install"].some((r) => window.location.pathname.startsWith(r))
+            ? null
+            : <Navigate to="/" replace />
+        }
+      />
     </Routes>
   );
 }
@@ -299,10 +308,12 @@ function MainApp() {
 export default function App() {
   return (
     <Routes>
+      {/* Rutas públicas para tracker */}
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+      <Route path="/tracker-open" element={<TrackerOpen />} />
+      <Route path="/tracker-install" element={<TrackerInstall />} />
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/accept-invite" element={<TrackerInviteStart />} />
-      <Route path="/tracker-open" element={<TrackerOpen />} />
       <Route path="/pay" element={<PayPage />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
