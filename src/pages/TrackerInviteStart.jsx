@@ -1,3 +1,10 @@
+  const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() => typeof window !== "undefined" && !!window.Android);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setAndroidBridgeAvailable(!!window.Android);
+    }
+  }, []);
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -466,16 +473,30 @@ export default function TrackerInviteStart() {
         </label>
 
         {!showPermissionCard && !showBlockedCard && (
-          <button
-            type="button"
-            onClick={startPermissionStep}
-            disabled={submitting || !authToken}
-            className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
-          >
-            {submitting && status === "accepting"
-              ? t("tracker.invite.processing")
-              : t("tracker.invite.acceptContinue")}
-          </button>
+          androidBridgeAvailable ? (
+            <button
+              type="button"
+              onClick={startPermissionStep}
+              disabled={submitting || !authToken}
+              className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
+            >
+              {submitting && status === "accepting"
+                ? t("tracker.invite.processing")
+                : t("tracker.invite.acceptContinue")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                const token = inviteToken || authToken;
+                const org = orgId || resolvedOrgId;
+                window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
+              }}
+              className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium"
+            >
+              {t("tracker.invite.openAppButton")}
+            </button>
+          )
         )}
 
         {showPermissionCard && (
