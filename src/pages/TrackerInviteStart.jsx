@@ -451,17 +451,21 @@ export default function TrackerInviteStart() {
   }
 
 
-  const handleOpenApp = () => {
-    const token = inviteToken || authToken || getInviteParams().inviteToken;
-    const org = orgId || resolvedOrgId || getInviteParams().orgId;
 
-    if (!token || !org) {
+  const handleOpenApp = () => {
+    // Usar los valores persistidos en storage para runtimeToken, trackerUserId y orgId
+    const runtimeToken = getStorageItem("tracker_runtime_token") || getStorageItem("tracker_access_token") || inviteToken || authToken;
+    const trackerUserId = getStorageItem("tracker_user_id") || getStorageItem("user_id") || "";
+    const org = getStorageItem("tracker_org_id") || getStorageItem("org_id") || orgId || resolvedOrgId || "";
+
+    if (!runtimeToken || !trackerUserId || !org) {
       setStatus("missing_invite_token");
       setAcceptError(t("tracker.invite.errors.missingToken"));
       return;
     }
 
-    openAndroidApp(token, org);
+    const url = `geocercas://tracker?token=${encodeURIComponent(runtimeToken)}&userId=${encodeURIComponent(trackerUserId)}&orgId=${encodeURIComponent(org)}`;
+    window.location.href = url;
   };
 
 
