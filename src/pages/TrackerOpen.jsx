@@ -1,33 +1,200 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
+const PLAY_STORE_WEB_URL = "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
+
+function saveTrackerRuntime({ token, orgId, userId }) {
+  localStorage.setItem("tracker_token", token || "");
+  localStorage.setItem("tracker_org_id", orgId || "");
+  localStorage.setItem("tracker_user_id", userId || "");
+}
+
+function buildNativeDeepLink({ token, orgId, userId }) {
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  if (orgId) params.set("org_id", orgId);
+  if (userId) params.set("userId", userId);
+  return `geocercas://tracker?${params.toString()}`;
+}
 
 export default function TrackerOpen() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const [mode, setMode] = useState("opening");
+
+  const token = params.get("token") || "";
+  const orgId = params.get("org_id") || "";
+  const userId = params.get("userId") || "";
+
+  const nativeDeepLink = useMemo(
+    () => buildNativeDeepLink({ token, orgId, userId }),
+    [token, orgId, userId]
+  );
 
   useEffect(() => {
-    const token = params.get("token");
-    const orgId = params.get("org_id");
-    const userId = params.get("userId");
-
     if (!token) {
-      console.warn("missing token");
+      console.warn("tracker_open_missing_token");
+      setMode("missing_token");
       return;
     }
 
-    localStorage.setItem("tracker_token", token);
-    localStorage.setItem("tracker_org_id", orgId || "");
-    localStorage.setItem("tracker_user_id", userId || "");
+    saveTrackerRuntime({ token, orgId, userId });
 
-    const query = window.location.search || "";
-
-    if (!window.Android?.startTracking) {
-      navigate(`/tracker-install${query}`, { replace: true });
+    // Dentro de la app Android/WebView existe window.Android.startTracking.
+    // En ese caso seguimos al runtime GPS para pedir permisos y activar tracking.
+    if (window.Android?.startTracking) {
+      navigate("/tracker-gps", { replace: true });
       return;
     }
 
-    navigate("/tracker-gps", { replace: true });
-  }, []);
+    // Si no hay bridge nativo, estamos en navegador.
+    // No redirigir a /tracker-gps para evitar native_bridge_not_found.
+    setMode("install");
+  }, [token, orgId, userId, navigate]);
 
-  return <div>Abriendo app...</div>;
+  const openApp = () => {
+    window.location.href = nativeDeepLink;
+  };
+
+  const installApp = () => {
+    window.location.href = PLAY_STORE_URL;
+  };
+
+  if (mode === "opening") {
+    return (
+      <main style={styles.page}>
+        <section style={styles.card}>
+          <div style={styles.icon}>📍</div>
+          <h1 style={styles.title}>Abriendo Geocercas...</h1>
+          <p style={styles.text}>Estamos preparando tu invitación de seguimiento.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (mode === "missing_token") {
+    return (
+      <main style={styles.page}>
+        <section style={styles.card}>
+          <div style={styles.icon}>⚠️</div>
+          <h1 style={styles.title}>Invitación inválida</h1>
+          <p style={styles.text}>El enlace no contiene un token válido. Solicita una nueva invitación.</p>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main style={styles.page}>
+      <section style={styles.card}>
+        <div style={styles.icon}>✅</div>
+        <h1 style={styles.title}>Activa tu seguimiento</h1>
+        <p style={styles.text}>
+          Para compartir tu ubicación necesitas abrir este enlace desde la app Geocercas.
+        </p>
+
+        <div style={styles.actions}>
+          <button type="button" style={styles.primaryButton} onClick={openApp}>
+            Ya tengo la app, abrir Geocercas
+          </button>
+
+          <button type="button" style={styles.secondaryButton} onClick={installApp}>
+            Instalar desde Google Play
+          </button>
+        </div>
+
+        <p style={styles.note}>
+          Si Google Play muestra “Item not found”, la app todavía no está disponible para tu cuenta de prueba.
+          Instálala desde Android Studio y vuelve a tocar “Ya tengo la app”.
+        </p>
+
+        <p style={styles.debug}>
+          tracker_open_browser_fallback
+        </p>
+      </section>
+    </main>
+  );
 }
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+    background: "#f8fafc",
+    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  },
+  card: {
+    width: "100%",
+    maxWidth: 440,
+    padding: 24,
+    borderRadius: 20,
+    background: "#ffffff",
+    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+    textAlign: "center",
+  },
+  icon: {
+    width: 72,
+    height: 72,
+    margin: "0 auto 16px",
+    borderRadius: 999,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#dcfce7",
+    fontSize: 34,
+  },
+  title: {
+    margin: "0 0 10px",
+    color: "#0f172a",
+    fontSize: 26,
+    lineHeight: 1.15,
+  },
+  text: {
+    margin: "0 auto 20px",
+    color: "#475569",
+    fontSize: 16,
+    lineHeight: 1.5,
+  },
+  actions: {
+    display: "grid",
+    gap: 12,
+    marginTop: 18,
+  },
+  primaryButton: {
+    width: "100%",
+    border: 0,
+    borderRadius: 999,
+    padding: "14px 18px",
+    background: "#16a34a",
+    color: "#ffffff",
+    fontWeight: 700,
+    fontSize: 16,
+    cursor: "pointer",
+  },
+  secondaryButton: {
+    width: "100%",
+    border: "1px solid #cbd5e1",
+    borderRadius: 999,
+    padding: "14px 18px",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontWeight: 700,
+    fontSize: 16,
+    cursor: "pointer",
+  },
+  note: {
+    margin: "18px 0 0",
+    color: "#64748b",
+    fontSize: 13,
+    lineHeight: 1.45,
+  },
+  debug: {
+    margin: "16px 0 0",
+    color: "#c2410c",
+    fontSize: 12,
+  },
+};
