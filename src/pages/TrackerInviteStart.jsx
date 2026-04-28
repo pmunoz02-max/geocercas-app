@@ -1,12 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-
-const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() => typeof window !== "undefined" && !!window.Android);
-
-useEffect(() => {
-  if (typeof window !== "undefined") {
-    setAndroidBridgeAvailable(!!window.Android);
-  }
-}, []);
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -164,9 +156,22 @@ async function ensureGeolocationPermissionByPrompt(t) {
   }
 }
 
+function openNativeTrackerApp(runtimeToken, trackerUserId, orgId) {
+  if (typeof window === "undefined") return;
+  const qs = new URLSearchParams();
+  if (runtimeToken) qs.set("token", runtimeToken);
+  if (trackerUserId) qs.set("userId", trackerUserId);
+  if (orgId) qs.set("org_id", orgId);
+  window.location.href = `geocercas://tracker?${qs.toString()}`;
+}
+
 export default function TrackerInviteStart() {
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() =>
+    typeof window !== "undefined" && !!window.Android?.startTracking,
+  );
 
   const initialInviteParams = useMemo(() => getInviteParams(), []);
 
@@ -191,6 +196,13 @@ export default function TrackerInviteStart() {
     console.log("INVITE_TOKEN", latest.inviteToken || inviteToken || null);
     console.log("INVITE_ORG_ID", latest.orgId || orgId || null);
   }, [inviteToken, orgId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const available = !!window.Android?.startTracking;
+    setAndroidBridgeAvailable(available);
+    console.log("[TrackerInviteStart] Android bridge available", available);
+  }, []);
 
   useEffect(() => {
     if (!inviteToken) {
@@ -322,7 +334,7 @@ export default function TrackerInviteStart() {
       const resolvedTrackerUserId = data?.tracker_user_id;
       const persistedOrgId = data?.org_id || resolvedOrgId;
 
-      if (window.Android?.startTracking) {
+      if (typeof window !== "undefined" && window.Android?.startTracking) {
         console.log("[TrackerInviteStart] Android bridge disponible, llamando startTracking", {
           runtimeToken,
           trackerUserId: resolvedTrackerUserId,
@@ -331,9 +343,8 @@ export default function TrackerInviteStart() {
         window.Android.startTracking(runtimeToken, resolvedTrackerUserId, persistedOrgId);
         console.log("[TrackerInviteStart] Android bridge: startTracking llamado");
       } else {
-        console.warn("[TrackerInviteStart] Android bridge no disponible, fallback web");
-        const url = `/tracker-gps?inviteToken=${encodeURIComponent(runtimeToken)}&org_id=${encodeURIComponent(persistedOrgId)}`;
-        window.location.href = url;
+        console.warn("[TrackerInviteStart] Android bridge no disponible, abriendo app nativa");
+        openNativeTrackerApp(runtimeToken, resolvedTrackerUserId, persistedOrgId);
       }
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
@@ -414,17 +425,11 @@ export default function TrackerInviteStart() {
 
 
   const handleOpenApp = () => {
-    const params = new URLSearchParams(window.location.search);
-    const inviteToken = params.get("inviteToken");
-    const orgId = params.get("org_id");
-
-    let url = "/tracker-gps";
-
-    if (inviteToken && orgId) {
-      url += `?inviteToken=${inviteToken}&org_id=${orgId}`;
-    }
-
-    window.location.href = url;
+    openNativeTrackerApp(
+      getStorageItem("tracker_runtime_token") || getStorageItem("tracker_access_token") || authToken,
+      getStorageItem("tracker_user_id") || getStorageItem("user_id"),
+      getStorageItem("org_id") || getStorageItem("tracker_org_id") || resolvedOrgId,
+    );
   };
 
 
@@ -488,14 +493,11 @@ export default function TrackerInviteStart() {
           ) : (
             <button
               type="button"
-              onClick={() => {
-                const token = inviteToken || authToken;
-                const org = orgId || resolvedOrgId;
-                window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
-              }}
-              className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium"
+              onClick={acceptInviteAndContinue}
+              disabled={submitting || !authToken}
+              className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium disabled:opacity-60"
             >
-              {t("tracker.invite.openAppButton")}
+              {submitting ? t("tracker.invite.processing") : t("tracker.invite.openAppButton")}
             </button>
           )
         )}
