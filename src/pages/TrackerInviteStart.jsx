@@ -315,8 +315,13 @@ export default function TrackerInviteStart() {
       const persistedOrgId = data?.org_id || resolvedOrgId;
 
       if (window.Android?.startTracking) {
-        console.log("[TrackerInviteStart] Android bridge disponible, iniciando tracking");
+        console.log("[TrackerInviteStart] Android bridge disponible, llamando startTracking", {
+          runtimeToken,
+          trackerUserId: resolvedTrackerUserId,
+          orgId: persistedOrgId,
+        });
         window.Android.startTracking(runtimeToken, resolvedTrackerUserId, persistedOrgId);
+        console.log("[TrackerInviteStart] Android bridge: startTracking llamado");
       } else {
         console.warn("[TrackerInviteStart] Android bridge no disponible, fallback web");
         const url = `/tracker-gps?inviteToken=${encodeURIComponent(runtimeToken)}&org_id=${encodeURIComponent(persistedOrgId)}`;
