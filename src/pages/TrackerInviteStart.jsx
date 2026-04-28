@@ -156,6 +156,33 @@ async function ensureGeolocationPermissionByPrompt(t) {
   }
 }
 
+function buildAndroidAppIntentUrl(token, orgId) {
+  const safeToken = encodeURIComponent(token || "");
+  const safeOrg = encodeURIComponent(orgId || "");
+  const fallback = encodeURIComponent(
+    `/tracker-gps?inviteToken=${safeToken}&org_id=${safeOrg}`
+  );
+
+  return `intent://tracker?token=${safeToken}&org_id=${safeOrg}#Intent;scheme=geocercas;package=com.fenice.geocercas;S.browser_fallback_url=${fallback};end`;
+}
+
+function openAndroidApp(token, orgId) {
+  if (typeof window === "undefined") return;
+
+  if (!token || !orgId) {
+    window.location.href = "/tracker-gps";
+    return;
+  }
+
+  const intentUrl = buildAndroidAppIntentUrl(token, orgId);
+  console.log("[TrackerInviteStart] opening Android app intent", {
+    hasToken: !!token,
+    orgId,
+    intentUrl,
+  });
+  window.location.href = intentUrl;
+}
+
 export default function TrackerInviteStart() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -428,14 +455,13 @@ export default function TrackerInviteStart() {
     const token = inviteToken || authToken || getInviteParams().inviteToken;
     const org = orgId || resolvedOrgId || getInviteParams().orgId;
 
-    if (typeof window === "undefined") return;
-
-    if (token && org) {
-      window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
+    if (!token || !org) {
+      setStatus("missing_invite_token");
+      setAcceptError(t("tracker.invite.errors.missingToken"));
       return;
     }
 
-    window.location.href = "/tracker-gps";
+    openAndroidApp(token, org);
   };
 
 
@@ -499,19 +525,10 @@ export default function TrackerInviteStart() {
           ) : (
             <button
               type="button"
-              onClick={() => {
-                const token = inviteToken || authToken || getInviteParams().inviteToken;
-                const org = orgId || resolvedOrgId || getInviteParams().orgId;
-                if (token && org) {
-                  window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
-                } else {
-                  setStatus("missing_invite_token");
-                  setAcceptError(t("tracker.invite.errors.missingToken"));
-                }
-              }}
+              onClick={handleOpenApp}
               className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium"
             >
-              {t("tracker.invite.openAppButton")}
+              {t("tracker.invite.openAppButton", "Abrir en app")}
             </button>
           )
         )}
@@ -574,7 +591,7 @@ export default function TrackerInviteStart() {
                   onClick={handleOpenApp}
                   className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
-                  {t("common.actions.openApp")}
+                  {t("common.actions.openApp", "Abrir en app")}
                 </button>
 
                 <button
@@ -582,14 +599,14 @@ export default function TrackerInviteStart() {
                   onClick={handleInstall}
                   className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
                 >
-                  {t("common.actions.installApp")}
+                  {t("common.actions.installApp", "Abrir seguimiento web")}
                 </button>
               </>
             ) : null}
 
             {isInAppBrowser ? (
               <p className="mt-3 text-xs text-red-500">
-                {t("tracker.invite.inAppBrowserHint.before")} <strong>{t("common.actions.openApp")}</strong>.
+                {t("tracker.invite.inAppBrowserHint.before")} <strong>{t("common.actions.openApp", "Abrir en app")}</strong>.
               </p>
             ) : null}
 
