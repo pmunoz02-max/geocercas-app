@@ -121,7 +121,7 @@ export default function TrackerOpen() {
         </p>
 
         <p style={styles.debug}>
-          tracker_open_browser_fallback
+          tracker_open_browser_fallback_v3
         </p>
       </section>
     </main>
