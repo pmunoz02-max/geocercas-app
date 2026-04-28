@@ -156,22 +156,34 @@ async function ensureGeolocationPermissionByPrompt(t) {
   }
 }
 
+function buildNativeTrackerDeepLink(runtimeToken, trackerUserId, orgId) {
+  const params = new URLSearchParams();
+  params.set("token", runtimeToken || "");
+  params.set("tracker_runtime_token", runtimeToken || "");
+  params.set("userId", trackerUserId || "");
+  params.set("tracker_user_id", trackerUserId || "");
+  params.set("org_id", orgId || "");
+  params.set("orgId", orgId || "");
+  return `geocercas://tracker?${params.toString()}`;
+}
+
 function openNativeTrackerApp(runtimeToken, trackerUserId, orgId) {
   if (typeof window === "undefined") return;
-  const qs = new URLSearchParams();
-  if (runtimeToken) qs.set("token", runtimeToken);
-  if (trackerUserId) qs.set("userId", trackerUserId);
-  if (orgId) qs.set("org_id", orgId);
-  window.location.href = `geocercas://tracker?${qs.toString()}`;
+
+  const deepLink = buildNativeTrackerDeepLink(runtimeToken, trackerUserId, orgId);
+  console.log("[TrackerInviteStart] opening native deep link", {
+    deepLink: deepLink.replace(runtimeToken || "", "***"),
+    hasRuntimeToken: !!runtimeToken,
+    trackerUserId,
+    orgId,
+  });
+
+  window.location.assign(deepLink);
 }
 
 export default function TrackerInviteStart() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-
-  const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() =>
-    typeof window !== "undefined" && !!window.Android?.startTracking,
-  );
 
   const initialInviteParams = useMemo(() => getInviteParams(), []);
 
@@ -181,6 +193,13 @@ export default function TrackerInviteStart() {
   const [submitting, setSubmitting] = useState(false);
   const [inviteToken, setInviteToken] = useState(initialInviteParams.inviteToken || "");
   const [orgId, setOrgId] = useState(initialInviteParams.orgId || "");
+  const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setAndroidBridgeAvailable(!!window.Android?.startTracking || !!window.Android?.saveTrackerSession);
+    }
+  }, []);
 
   useEffect(() => {
     const latest = getInviteParams();
@@ -196,13 +215,6 @@ export default function TrackerInviteStart() {
     console.log("INVITE_TOKEN", latest.inviteToken || inviteToken || null);
     console.log("INVITE_ORG_ID", latest.orgId || orgId || null);
   }, [inviteToken, orgId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const available = !!window.Android?.startTracking;
-    setAndroidBridgeAvailable(available);
-    console.log("[TrackerInviteStart] Android bridge available", available);
-  }, []);
 
   useEffect(() => {
     if (!inviteToken) {
@@ -283,6 +295,8 @@ export default function TrackerInviteStart() {
       hasOrgId: !!persistedOrgId,
       inviteId: inviteId || null,
     });
+
+    return { runtimeToken, trackerUserId: resolvedTrackerUserId, orgId: persistedOrgId };
   }
 
   async function acceptInviteAndContinue() {
@@ -300,6 +314,8 @@ export default function TrackerInviteStart() {
       console.log("[tracker-invite] accepting invite", {
         hasInviteToken: !!authToken,
         hasOrgId: !!resolvedOrgId,
+        bridgeAvailable: androidBridgeAvailable,
+        isAndroid,
       });
 
       const response = await fetch("/api/accept-tracker-invite", {
@@ -326,26 +342,35 @@ export default function TrackerInviteStart() {
         );
       }
 
-      await persistTrackerSessionFromResponse(data);
+      const session = await persistTrackerSessionFromResponse(data);
 
       setStatus(data?.idempotent ? "already_accepted" : "accepted");
 
-      const runtimeToken = data?.tracker_runtime_token;
-      const resolvedTrackerUserId = data?.tracker_user_id;
-      const persistedOrgId = data?.org_id || resolvedOrgId;
+      if (typeof window !== "undefined" && window.Android?.saveTrackerSession) {
+        console.log("[TrackerInviteStart] Android bridge saveTrackerSession available");
+        window.Android.saveTrackerSession(session.runtimeToken, session.trackerUserId, session.orgId);
+        if (window.Android?.requestStartTracking) {
+          window.Android.requestStartTracking();
+        }
+        navigate("/tracker-gps", { replace: true });
+        return;
+      }
 
       if (typeof window !== "undefined" && window.Android?.startTracking) {
-        console.log("[TrackerInviteStart] Android bridge disponible, llamando startTracking", {
-          runtimeToken,
-          trackerUserId: resolvedTrackerUserId,
-          orgId: persistedOrgId,
-        });
-        window.Android.startTracking(runtimeToken, resolvedTrackerUserId, persistedOrgId);
-        console.log("[TrackerInviteStart] Android bridge: startTracking llamado");
-      } else {
-        console.warn("[TrackerInviteStart] Android bridge no disponible, abriendo app nativa");
-        openNativeTrackerApp(runtimeToken, resolvedTrackerUserId, persistedOrgId);
+        console.log("[TrackerInviteStart] Android bridge startTracking available");
+        window.Android.startTracking(session.runtimeToken, session.trackerUserId, session.orgId);
+        navigate("/tracker-gps", { replace: true });
+        return;
       }
+
+      if (isAndroid) {
+        setStatus("opening_native_app");
+        openNativeTrackerApp(session.runtimeToken, session.trackerUserId, session.orgId);
+        return;
+      }
+
+      const webUrl = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
+      window.location.assign(webUrl);
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
       setStatus("accept_failed");
@@ -368,6 +393,13 @@ export default function TrackerInviteStart() {
     if (!authToken) {
       setStatus("missing_invite_token");
       setAcceptError(t("tracker.invite.errors.missingToken"));
+      return;
+    }
+
+    // In Android outside the WebView, do NOT request browser geolocation.
+    // Accept invite first, then open native app with runtime token.
+    if (isAndroid && !androidBridgeAvailable) {
+      await acceptInviteAndContinue();
       return;
     }
 
@@ -423,15 +455,18 @@ export default function TrackerInviteStart() {
     await handleGrantLocation();
   }
 
-
   const handleOpenApp = () => {
-    openNativeTrackerApp(
-      getStorageItem("tracker_runtime_token") || getStorageItem("tracker_access_token") || authToken,
-      getStorageItem("tracker_user_id") || getStorageItem("user_id"),
-      getStorageItem("org_id") || getStorageItem("tracker_org_id") || resolvedOrgId,
-    );
-  };
+    const runtimeToken = getStorageItem("tracker_runtime_token") || getStorageItem("tracker_access_token");
+    const trackerUserId = getStorageItem("tracker_user_id") || getStorageItem("user_id");
+    const storedOrgId = getStorageItem("org_id") || getStorageItem("tracker_org_id") || resolvedOrgId;
 
+    if (runtimeToken && trackerUserId && storedOrgId) {
+      openNativeTrackerApp(runtimeToken, trackerUserId, storedOrgId);
+      return;
+    }
+
+    acceptInviteAndContinue();
+  };
 
   const handleInstall = () => {
     window.location.href = "/tracker-gps";
@@ -442,6 +477,12 @@ export default function TrackerInviteStart() {
     status === "requesting_geo_permission";
 
   const showBlockedCard = status === "geo_permission_required";
+
+  const mainButtonLabel = (() => {
+    if (submitting || status === "accepting") return t("tracker.invite.processing");
+    if (isAndroid && !androidBridgeAvailable) return t("tracker.invite.openAppButton");
+    return t("tracker.invite.acceptContinue");
+  })();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-slate-100">
@@ -479,27 +520,14 @@ export default function TrackerInviteStart() {
         </label>
 
         {!showPermissionCard && !showBlockedCard && (
-          androidBridgeAvailable ? (
-            <button
-              type="button"
-              onClick={startPermissionStep}
-              disabled={submitting || !authToken}
-              className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
-            >
-              {submitting && status === "accepting"
-                ? t("tracker.invite.processing")
-                : t("tracker.invite.acceptContinue")}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={acceptInviteAndContinue}
-              disabled={submitting || !authToken}
-              className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium disabled:opacity-60"
-            >
-              {submitting ? t("tracker.invite.processing") : t("tracker.invite.openAppButton")}
-            </button>
-          )
+          <button
+            type="button"
+            onClick={startPermissionStep}
+            disabled={submitting || !authToken}
+            className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
+          >
+            {mainButtonLabel}
+          </button>
         )}
 
         {showPermissionCard && (
