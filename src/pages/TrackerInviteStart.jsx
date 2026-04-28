@@ -1,11 +1,12 @@
-  const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() => typeof window !== "undefined" && !!window.Android);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setAndroidBridgeAvailable(!!window.Android);
-    }
-  }, []);
 import { useEffect, useMemo, useState } from "react";
+
+const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() => typeof window !== "undefined" && !!window.Android);
+
+useEffect(() => {
+  if (typeof window !== "undefined") {
+    setAndroidBridgeAvailable(!!window.Android);
+  }
+}, []);
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
