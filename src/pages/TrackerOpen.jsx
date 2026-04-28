@@ -6,7 +6,7 @@ function buildAndroidIntentUrl({ token, orgId, userId }) {
   const fallbackUrl = encodeURIComponent(window.location.href);
   return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=com.fenice.geocercas;S.browser_fallback_url=${fallbackUrl};end`;
 }
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.fenice.geocercas";
@@ -20,7 +20,10 @@ function saveTrackerRuntime({ token, orgId, userId }) {
 
 function buildNativeDeepLink({ token, orgId, userId }) {
   const params = new URLSearchParams();
-  if (token) params.set("token", token);
+  if (token) {
+    params.set("token", token);
+    params.set("tracker_runtime_token", token);
+  }
   if (orgId) params.set("org_id", orgId);
   if (userId) params.set("userId", userId);
   return `geocercas://tracker?${params.toString()}`;
@@ -29,40 +32,71 @@ function buildNativeDeepLink({ token, orgId, userId }) {
 export default function TrackerOpen() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [mode, setMode] = useState("opening");
 
+  const [mode, setMode] = useState("opening");
+  const [runtimeToken, setRuntimeToken] = useState("");
+  const [runtimeUserId, setRuntimeUserId] = useState("");
   const token = params.get("token") || "";
   const orgId = params.get("org_id") || "";
   const userId = params.get("userId") || "";
 
+  // Construye el intent y deep link usando el runtimeToken y runtimeUserId si existen
+  const effectiveToken = runtimeToken || token;
+  const effectiveUserId = runtimeUserId || userId;
+
   const nativeDeepLink = useMemo(
-    () => buildNativeDeepLink({ token, orgId, userId }),
-    [token, orgId, userId]
+    () => buildNativeDeepLink({ token: effectiveToken, orgId, userId: effectiveUserId }),
+    [effectiveToken, orgId, effectiveUserId]
   );
 
-  useEffect(() => {
+
+  // Llama a /api/accept-tracker-invite y actualiza runtimeToken y runtimeUserId
+  const acceptInvite = useCallback(async () => {
     if (!token) {
-      console.warn("tracker_open_missing_token");
       setMode("missing_token");
       return;
     }
-
-    saveTrackerRuntime({ token, orgId, userId });
-
-    // Dentro de la app Android/WebView existe window.Android.startTracking.
-    // En ese caso seguimos al runtime GPS para pedir permisos y activar tracking.
-    if (window.Android?.startTracking) {
-      navigate("/tracker-gps", { replace: true });
-      return;
+    try {
+      const res = await fetch(`/api/accept-tracker-invite?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(orgId)}`);
+      if (!res.ok) throw new Error("invite_api_error");
+      const data = await res.json();
+      if (data?.tracker_runtime_token) {
+        setRuntimeToken(data.tracker_runtime_token);
+        if (data.user_id) setRuntimeUserId(data.user_id);
+        saveTrackerRuntime({ token: data.tracker_runtime_token, orgId, userId: data.user_id || userId });
+        return { token: data.tracker_runtime_token, userId: data.user_id || userId };
+      }
+      // fallback: usa el token original
+      setRuntimeToken(token);
+      setRuntimeUserId(userId);
+      saveTrackerRuntime({ token, orgId, userId });
+      return { token, userId };
+    } catch (e) {
+      setMode("missing_token");
+      return { token, userId };
     }
+  }, [token, orgId, userId]);
 
-    // Si no hay bridge nativo, estamos en navegador.
-    // No redirigir a /tracker-gps para evitar native_bridge_not_found.
-    setMode("install");
-  }, [token, orgId, userId, navigate]);
+  useEffect(() => {
+    (async () => {
+      if (!token) {
+        setMode("missing_token");
+        return;
+      }
+      // Llama a la API antes de cualquier navegación
+      const { token: t, userId: u } = await acceptInvite();
+
+      // Si estamos en la app Android/WebView
+      if (window.Android?.startTracking) {
+        navigate("/tracker-gps", { replace: true });
+        return;
+      }
+      setMode("install");
+    })();
+  }, [token, orgId, userId, navigate, acceptInvite]);
 
 
-  const intentUrl = useMemo(() => buildAndroidIntentUrl({ token, orgId, userId }), [token, orgId, userId]);
+  const intentUrl = useMemo(() => buildAndroidIntentUrl({ token: effectiveToken, orgId, userId: effectiveUserId }), [effectiveToken, orgId, effectiveUserId]);
 
   const installApp = () => {
     window.location.href = PLAY_STORE_URL;
