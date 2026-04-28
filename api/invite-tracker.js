@@ -1,6 +1,54 @@
 import { createClient } from "@supabase/supabase-js";
 
+function getOrigin(req) {
+  const proto =
+    req.headers["x-forwarded-proto"] ||
+    (process.env.VERCEL_ENV === "production" ? "https" : "https");
+
+  const host =
+    req.headers["x-forwarded-host"] ||
+    req.headers.host ||
+    process.env.NEXT_PUBLIC_APP_HOST ||
+    process.env.VITE_PUBLIC_APP_HOST ||
+    "preview.tugeocercas.com";
+
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
+function buildTrackerLinks({ req, org_id, inviteToken, runtimeToken, trackerUserId }) {
+  const origin = getOrigin(req);
+
+  const token = runtimeToken || inviteToken || "";
+  const params = new URLSearchParams();
+
+  if (token) params.set("token", token);
+  if (org_id) params.set("org_id", org_id);
+  if (trackerUserId) params.set("userId", trackerUserId);
+
+  const nativeDeepLink = `geocercas://tracker?${params.toString()}`;
+
+  const webParams = new URLSearchParams();
+  if (inviteToken) webParams.set("inviteToken", inviteToken);
+  if (org_id) webParams.set("org_id", org_id);
+
+  const webFallbackUrl = `${origin}/tracker-accept?${webParams.toString()}`;
+
+  return {
+    native_deep_link: nativeDeepLink,
+    web_fallback_url: webFallbackUrl,
+    android_package: "com.fenice.geocercas",
+  };
+}
+
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({
+      ok: false,
+      error: "method_not_allowed",
+    });
+  }
+
   try {
     const { org_id, email } = req.body || {};
 
@@ -11,10 +59,17 @@ export default async function handler(req, res) {
       });
     }
 
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return res.status(500).json({
+        ok: false,
+        error: "missing_supabase_env",
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // ===============================
     // 🔒 VALIDAR PLAN (source of truth)
@@ -84,18 +139,33 @@ export default async function handler(req, res) {
       (req.headers.authorization || "").replace("Bearer ", "");
 
     // ===============================
-    // 🚀 EDGE FUNCTION (envío email)
+    // 🚀 EDGE FUNCTION (crea invitación + envío email)
     // ===============================
-    const edgeUrl = `${process.env.SUPABASE_URL}/functions/v1/send-tracker-invite-brevo`;
+    const edgeUrl = `${supabaseUrl}/functions/v1/send-tracker-invite-brevo`;
+
+    const origin = getOrigin(req);
 
     const upstreamRes = await fetch(edgeUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        Authorization: `Bearer ${serviceRoleKey}`,
         "x-user-jwt": userJwt,
       },
-      body: JSON.stringify({ org_id, email }),
+      body: JSON.stringify({
+        org_id,
+        email,
+
+        // Native-first tracker onboarding.
+        // La Edge Function debe usar estos valores para armar el email:
+        // Abrir app: geocercas://tracker?token=...&org_id=...&userId=...
+        // Respaldo web: https://.../tracker-accept?inviteToken=...&org_id=...
+        native_scheme: "geocercas",
+        native_host: "tracker",
+        android_package: "com.fenice.geocercas",
+        web_origin: origin,
+        web_fallback_path: "/tracker-accept",
+      }),
     });
 
     const upstreamText = await upstreamRes.text();
@@ -119,9 +189,36 @@ export default async function handler(req, res) {
       });
     }
 
+    const inviteToken =
+      upstreamJson?.inviteToken ||
+      upstreamJson?.invite_token ||
+      upstreamJson?.token ||
+      null;
+
+    const runtimeToken =
+      upstreamJson?.tracker_runtime_token ||
+      upstreamJson?.runtimeToken ||
+      upstreamJson?.runtime_token ||
+      null;
+
+    const trackerUserId =
+      upstreamJson?.tracker_user_id ||
+      upstreamJson?.trackerUserId ||
+      upstreamJson?.userId ||
+      null;
+
+    const trackerLinks = buildTrackerLinks({
+      req,
+      org_id,
+      inviteToken,
+      runtimeToken,
+      trackerUserId,
+    });
+
     return res.status(200).json({
       ok: true,
       ...(upstreamJson || {}),
+      tracker_links: trackerLinks,
     });
   } catch (err) {
     console.error("[api/invite-tracker] fatal", err);
