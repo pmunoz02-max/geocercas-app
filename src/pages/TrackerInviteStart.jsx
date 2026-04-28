@@ -177,6 +177,7 @@ export default function TrackerInviteStart() {
   const [status, setStatus] = useState("ready");
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [nativeLaunchUrl, setNativeLaunchUrl] = useState("");
   const [inviteToken, setInviteToken] = useState(initialInviteParams.inviteToken || "");
   const [orgId, setOrgId] = useState(initialInviteParams.orgId || "");
   const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(
@@ -353,27 +354,28 @@ export default function TrackerInviteStart() {
     return true;
   }
 
-  function openNativeApp(session) {
+  function buildNativeLaunchUrl(session) {
     const url = buildNativeIntentUrl(
       session?.runtimeToken,
       session?.trackerUserId,
       session?.orgId,
     );
 
-    console.log("[TrackerInviteStart] opening native app intent", {
+    console.log("[TrackerInviteStart] native app intent ready", {
       hasRuntimeToken: !!session?.runtimeToken,
       trackerUserId: session?.trackerUserId,
       orgId: session?.orgId,
       url,
     });
 
-    window.location.assign(url);
+    return url;
   }
 
   async function acceptInviteAndContinue() {
     try {
       setSubmitting(true);
       setAcceptError("");
+      setNativeLaunchUrl("");
       setStatus("accepting");
 
       const session = await acceptInvite();
@@ -385,8 +387,11 @@ export default function TrackerInviteStart() {
       }
 
       if (isAndroid) {
-        setStatus("opening_native_app");
-        openNativeApp(session);
+        // Chrome/Custom Tabs can block intent:// if fired after an async fetch.
+        // Render a real link so the next tap is a fresh user gesture.
+        const launchUrl = buildNativeLaunchUrl(session);
+        setNativeLaunchUrl(launchUrl);
+        setStatus("ready_to_open_native_app");
         return;
       }
 
@@ -488,6 +493,7 @@ export default function TrackerInviteStart() {
     status === "requesting_geo_permission";
 
   const showBlockedCard = status === "geo_permission_required";
+  const showNativeOpenCard = status === "ready_to_open_native_app" && !!nativeLaunchUrl;
 
   const primaryLabel = submitting
     ? t("tracker.invite.processing")
@@ -530,7 +536,7 @@ export default function TrackerInviteStart() {
           <span>{t("tracker.invite.consentLabel")}</span>
         </label>
 
-        {!showPermissionCard && !showBlockedCard && (
+        {!showPermissionCard && !showBlockedCard && !showNativeOpenCard && (
           <button
             type="button"
             onClick={startPermissionStep}
@@ -539,6 +545,33 @@ export default function TrackerInviteStart() {
           >
             {primaryLabel}
           </button>
+        )}
+
+        {showNativeOpenCard && (
+          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
+            <p className="text-green-800 font-semibold">
+              {t("tracker.invite.nativeReadyTitle", "Invitación aceptada")}
+            </p>
+            <p className="mt-2 text-sm text-green-700">
+              {t("tracker.invite.nativeReadyBody", "Ahora toca el botón para abrir la app e iniciar el seguimiento.")}
+            </p>
+            <a
+              href={nativeLaunchUrl}
+              className="block w-full mt-3 rounded-lg bg-blue-600 text-center text-white py-3 font-medium"
+            >
+              {t("tracker.invite.openAppButton")}
+            </a>
+            <button
+              type="button"
+              onClick={() => navigate("/tracker-gps", { replace: true })}
+              className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
+            >
+              {t("common.actions.continueInBrowser", "Continuar en navegador")}
+            </button>
+            <p className="mt-3 text-xs text-green-700">
+              {t("tracker.invite.nativeReadyHint", "Si Android pregunta con qué app abrir, elige Geocercas.")}
+            </p>
+          </div>
         )}
 
         {showPermissionCard && (
