@@ -29,3 +29,19 @@ if (unstaged) {
 }
 
 console.log("\nOK: Hay cambios reales para revisar antes de commit.");
+
+// --- BLOCK main/master branch and report changes ---
+if (branch === "main" || branch === "master") {
+  console.error("\x1b[31m[PRE-PUSH BLOCKED]\x1b[0m Pushes to main/master are not allowed. Please use a feature or release branch.");
+  process.exit(1);
+}
+
+if (staged || unstaged) {
+  if (staged) {
+    console.error("\x1b[33m[PRE-PUSH WARNING]\x1b[0m Staged changes detected:\n" + staged);
+  }
+  if (unstaged) {
+    console.error("\x1b[33m[PRE-PUSH WARNING]\x1b[0m Unstaged changes detected:\n" + unstaged);
+  }
+  process.exit(1);
+}

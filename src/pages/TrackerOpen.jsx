@@ -19,8 +19,14 @@ export default function TrackerOpen() {
     localStorage.setItem("tracker_org_id", orgId || "");
     localStorage.setItem("tracker_user_id", userId || "");
 
-    // redirigir a GPS
-    navigate("/tracker-gps");
+    const query = window.location.search || "";
+
+    if (!window.Android?.startTracking) {
+      navigate(`/tracker-install${query}`, { replace: true });
+      return;
+    }
+
+    navigate("/tracker-gps", { replace: true });
   }, []);
 
   return <div>Abriendo app...</div>;

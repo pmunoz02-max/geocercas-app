@@ -3,10 +3,25 @@
 ## Descripción
 El endpoint `/api/invite-tracker` valida plan y delega el envío de invitaciones a la Edge Function `send-tracker-invite-brevo`.
 
-## Deep Link
-El flujo utiliza deep link nativo:
 
-geocercas://tracker?token=RUNTIME_TOKEN&org_id=ORG_ID
+## Link de invitación (OBLIGATORIO)
+
+https://app.tugeocercas.com/tracker-open?token=RUNTIME_TOKEN&org_id=ORG_ID&userId=USER_ID
+
+## Flujo real
+
+Email → tracker-open → tracker-gps → Android.startTracking
+
+## Comportamiento
+
+- Si la app está instalada:
+	→ abre WebView → ejecuta startTracking
+
+- Si la app NO está instalada:
+	→ redirige a /tracker-install
 
 ## Nota
-El link final enviado al usuario se genera en la Edge Function, no en este endpoint.
+
+- NO usar geocercas://tracker como link principal
+- NO usar preview domain para invitaciones
+- El deep link nativo se usa solo como fallback interno

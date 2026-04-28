@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const BUILD_TAG = "send-tracker-invite-brevo-2026-04-24-invite-token-only-v13"
+const BUILD_TAG = "send-tracker-invite-brevo-2026-04-28-tracker-open-v16-used-at-fix"
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -193,6 +193,21 @@ async function insertFreshInvite(
     created_by_user_id: string | null
   },
 ) {
+
+  // Desactivar invitaciones pendientes (used_at null) por org_id y email (ilike)
+  const nowIso = new Date().toISOString();
+  await supabaseAdmin
+    .from("tracker_invites")
+    .update({
+      is_active: false,
+      used_at: nowIso,
+      brevo_last_status: "replaced_by_new_invite",
+      brevo_last_event_at: nowIso,
+    })
+    .eq("org_id", payload.org_id)
+    .ilike("email", payload.email)
+    .is("used_at", null);
+
   return await supabaseAdmin
     .from("tracker_invites")
     .insert({
@@ -367,7 +382,7 @@ Deno.serve(async (req) => {
     const rawToken = randomTokenHex(32)
     const inviteTokenHash = await sha256Hex(rawToken)
     const expiresAt = new Date(Date.now() + inviteTtlHours * 60 * 60 * 1000).toISOString()
-    const invitePath = `/tracker-accept?inviteToken=${encodeURIComponent(rawToken)}&org_id=${encodeURIComponent(orgId)}&lang=${encodeURIComponent(String(body?.lang || "es"))}`
+    const invitePath = `/tracker-open?token=${encodeURIComponent(rawToken)}&org_id=${encodeURIComponent(orgId)}&userId=${encodeURIComponent(actingUser.user.id)}`
     const inviteUrl = `${inviteBase.baseUrl}${invitePath}`
 
     const insertResult = await createInviteRow(supabaseAdmin, {
