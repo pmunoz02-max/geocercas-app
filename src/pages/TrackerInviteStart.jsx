@@ -156,31 +156,35 @@ async function ensureGeolocationPermissionByPrompt(t) {
   }
 }
 
-function buildAndroidAppIntentUrl(token, orgId) {
+function buildAndroidAppUrl(token, userId, orgId) {
   const safeToken = encodeURIComponent(token || "");
-  const safeOrg = encodeURIComponent(orgId || "");
-  const fallback = encodeURIComponent(
-    `/tracker-gps?inviteToken=${safeToken}&org_id=${safeOrg}`
-  );
+  const safeUserId = encodeURIComponent(userId || "");
+  const safeOrgId = encodeURIComponent(orgId || "");
 
-  return `intent://tracker?token=${safeToken}&org_id=${safeOrg}#Intent;scheme=geocercas;package=com.fenice.geocercas;S.browser_fallback_url=${fallback};end`;
+  return `geocercas://tracker?token=${safeToken}&userId=${safeUserId}&orgId=${safeOrgId}`;
 }
 
-function openAndroidApp(token, orgId) {
-  if (typeof window === "undefined") return;
+function openAndroidApp(token, userId, orgId) {
+  if (typeof window === "undefined") return false;
 
-  if (!token || !orgId) {
-    window.location.href = "/tracker-gps";
-    return;
+  if (!token || !userId || !orgId) {
+    console.warn("[TrackerInviteStart] cannot open app, missing runtime fields", {
+      hasToken: !!token,
+      hasUserId: !!userId,
+      hasOrgId: !!orgId,
+    });
+    return false;
   }
 
-  const intentUrl = buildAndroidAppIntentUrl(token, orgId);
-  console.log("[TrackerInviteStart] opening Android app intent", {
+  const appUrl = buildAndroidAppUrl(token, userId, orgId);
+  console.log("[TrackerInviteStart] opening Android app deep link", {
     hasToken: !!token,
+    userId,
     orgId,
-    intentUrl,
+    appUrl,
   });
-  window.location.href = intentUrl;
+  window.location.assign(appUrl);
+  return true;
 }
 
 export default function TrackerInviteStart() {
@@ -369,9 +373,12 @@ export default function TrackerInviteStart() {
         window.Android.startTracking(runtimeToken, resolvedTrackerUserId, persistedOrgId);
         console.log("[TrackerInviteStart] Android bridge: startTracking llamado");
       } else {
-        console.warn("[TrackerInviteStart] Android bridge no disponible, fallback web");
-        const url = `/tracker-gps?inviteToken=${encodeURIComponent(runtimeToken)}&org_id=${encodeURIComponent(persistedOrgId)}`;
-        window.location.href = url;
+        console.warn("[TrackerInviteStart] Android bridge no disponible, abriendo app por deep link");
+        const opened = openAndroidApp(runtimeToken, resolvedTrackerUserId, persistedOrgId);
+        if (!opened) {
+          setStatus("native_deeplink_failed");
+          setAcceptError(t("tracker.invite.errors.openAppFailed", "No se pudo abrir la app. Abre Geocercas manualmente y vuelve a intentar."));
+        }
       }
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
@@ -453,19 +460,19 @@ export default function TrackerInviteStart() {
 
 
 
-  const handleOpenApp = () => {
-    const runtimeToken = getStorageItem("tracker_runtime_token") || getStorageItem("tracker_access_token") || inviteToken || authToken;
+  const handleOpenApp = async () => {
+    const runtimeToken =
+      getStorageItem("tracker_runtime_token") ||
+      getStorageItem("tracker_access_token");
     const trackerUserId = getStorageItem("tracker_user_id") || getStorageItem("user_id") || "";
     const org = getStorageItem("tracker_org_id") || getStorageItem("org_id") || orgId || resolvedOrgId || "";
 
-    if (!runtimeToken || !trackerUserId || !org) {
-      setStatus("missing_invite_token");
-      setAcceptError(t("tracker.invite.errors.missingToken"));
+    if (runtimeToken && trackerUserId && org) {
+      openAndroidApp(runtimeToken, trackerUserId, org);
       return;
     }
 
-    const url = `intent://tracker?token=${encodeURIComponent(runtimeToken)}&userId=${encodeURIComponent(trackerUserId)}&orgId=${encodeURIComponent(org)}#Intent;scheme=geocercas;package=com.fenice.geocercas;end`;
-    window.location.href = url;
+    await startPermissionStep();
   };
 
 
@@ -515,26 +522,18 @@ export default function TrackerInviteStart() {
         </label>
 
         {!showPermissionCard && !showBlockedCard && (
-          androidBridgeAvailable ? (
-            <button
-              type="button"
-              onClick={startPermissionStep}
-              disabled={submitting || !authToken}
-              className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
-            >
-              {submitting && status === "accepting"
-                ? t("tracker.invite.processing")
-                : t("tracker.invite.acceptContinue")}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleOpenApp}
-              className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium"
-            >
-              {t("tracker.invite.openAppButton", "Abrir en app")}
-            </button>
-          )
+          <button
+            type="button"
+            onClick={androidBridgeAvailable ? startPermissionStep : handleOpenApp}
+            disabled={submitting || !authToken}
+            className={`w-full mt-5 rounded-xl ${androidBridgeAvailable ? "bg-black" : "bg-blue-600"} text-white py-3 font-medium disabled:opacity-60`}
+          >
+            {submitting && status === "accepting"
+              ? t("tracker.invite.processing")
+              : androidBridgeAvailable
+                ? t("tracker.invite.acceptContinue")
+                : t("tracker.invite.openAppButton", "Aceptar y abrir app")}
+          </button>
         )}
 
         {showPermissionCard && (
