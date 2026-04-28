@@ -1,12 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-
-const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() => typeof window !== "undefined" && !!window.Android);
-
-useEffect(() => {
-  if (typeof window !== "undefined") {
-    setAndroidBridgeAvailable(!!window.Android);
-  }
-}, []);
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -176,6 +168,25 @@ export default function TrackerInviteStart() {
   const [submitting, setSubmitting] = useState(false);
   const [inviteToken, setInviteToken] = useState(initialInviteParams.inviteToken || "");
   const [orgId, setOrgId] = useState(initialInviteParams.orgId || "");
+  const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !!window.Android?.startTracking;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const checkBridge = () => {
+      const available = !!window.Android?.startTracking;
+      setAndroidBridgeAvailable(available);
+      console.log("[TrackerInviteStart] Android bridge status", { available });
+    };
+
+    checkBridge();
+    const timer = window.setTimeout(checkBridge, 500);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const latest = getInviteParams();
@@ -322,7 +333,7 @@ export default function TrackerInviteStart() {
       const resolvedTrackerUserId = data?.tracker_user_id;
       const persistedOrgId = data?.org_id || resolvedOrgId;
 
-      if (window.Android?.startTracking) {
+      if (typeof window !== "undefined" && window.Android?.startTracking) {
         console.log("[TrackerInviteStart] Android bridge disponible, llamando startTracking", {
           runtimeToken,
           trackerUserId: resolvedTrackerUserId,
@@ -414,17 +425,17 @@ export default function TrackerInviteStart() {
 
 
   const handleOpenApp = () => {
-    const params = new URLSearchParams(window.location.search);
-    const inviteToken = params.get("inviteToken");
-    const orgId = params.get("org_id");
+    const token = inviteToken || authToken || getInviteParams().inviteToken;
+    const org = orgId || resolvedOrgId || getInviteParams().orgId;
 
-    let url = "/tracker-gps";
+    if (typeof window === "undefined") return;
 
-    if (inviteToken && orgId) {
-      url += `?inviteToken=${inviteToken}&org_id=${orgId}`;
+    if (token && org) {
+      window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
+      return;
     }
 
-    window.location.href = url;
+    window.location.href = "/tracker-gps";
   };
 
 
@@ -489,9 +500,14 @@ export default function TrackerInviteStart() {
             <button
               type="button"
               onClick={() => {
-                const token = inviteToken || authToken;
-                const org = orgId || resolvedOrgId;
-                window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
+                const token = inviteToken || authToken || getInviteParams().inviteToken;
+                const org = orgId || resolvedOrgId || getInviteParams().orgId;
+                if (token && org) {
+                  window.location.href = `geocercas://tracker?token=${encodeURIComponent(token)}&org_id=${encodeURIComponent(org)}`;
+                } else {
+                  setStatus("missing_invite_token");
+                  setAcceptError(t("tracker.invite.errors.missingToken"));
+                }
               }}
               className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium"
             >
