@@ -1,3 +1,23 @@
+## Regla: No duplicar documentación
+
+Antes de crear un nuevo archivo .md:
+
+1. Buscar si ya existe un documento relacionado en /docs/skills
+2. Si existe → ACTUALIZARLO
+3. NO crear archivos duplicados para el mismo flujo o feature
+
+Objetivo:
+- Mantener una única fuente de verdad
+- Evitar inconsistencias
+- Reducir errores en arquitectura
+
+Aplicación obligatoria en:
+- Flujos críticos (auth, tracker, billing, tracking)
+- Cambios de backend
+- Cambios de rutas o contratos frontend
+
+Regla práctica:
+"Si ya hay un .md parecido → se edita, no se crea otro"
 Estrategia Universal de Uso (Costo + Eficiencia)
 🎯 Objetivo
 
