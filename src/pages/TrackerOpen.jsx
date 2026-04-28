@@ -61,11 +61,8 @@ export default function TrackerOpen() {
     setMode("install");
   }, [token, orgId, userId, navigate]);
 
-  const openApp = () => {
-    window.location.assign(
-      buildAndroidIntentUrl({ token, orgId, userId })
-    );
-  };
+
+  const intentUrl = useMemo(() => buildAndroidIntentUrl({ token, orgId, userId }), [token, orgId, userId]);
 
   const installApp = () => {
     window.location.href = PLAY_STORE_URL;
@@ -105,9 +102,13 @@ export default function TrackerOpen() {
         </p>
 
         <div style={styles.actions}>
-          <button type="button" style={styles.primaryButton} onClick={openApp}>
+          <a
+            href={intentUrl}
+            style={{ ...styles.primaryButton, display: 'block', textAlign: 'center', textDecoration: 'none', color: '#fff', lineHeight: '44px', fontWeight: 600 }}
+            rel="noopener noreferrer"
+          >
             Ya tengo la app
-          </button>
+          </a>
 
           <button type="button" style={styles.secondaryButton} onClick={installApp}>
             Instalar desde Google Play
