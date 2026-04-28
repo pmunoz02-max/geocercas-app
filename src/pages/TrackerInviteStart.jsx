@@ -520,14 +520,36 @@ export default function TrackerInviteStart() {
         </label>
 
         {!showPermissionCard && !showBlockedCard && (
-          <button
-            type="button"
-            onClick={startPermissionStep}
-            disabled={submitting || !authToken}
-            className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
-          >
-            {mainButtonLabel}
-          </button>
+          androidBridgeAvailable ? (
+            <button
+              type="button"
+              onClick={startPermissionStep}
+              disabled={submitting || !authToken}
+              className="w-full mt-5 rounded-xl bg-black text-white py-3 font-medium disabled:opacity-60"
+            >
+              {mainButtonLabel}
+            </button>
+          ) : (
+            (() => {
+              const runtimeToken = getStorageItem("tracker_runtime_token") || getStorageItem("tracker_access_token") || inviteToken || authToken || "";
+              const trackerUserId = getStorageItem("tracker_user_id") || getStorageItem("user_id") || "";
+              const orgId = getStorageItem("org_id") || getStorageItem("tracker_org_id") || resolvedOrgId || "";
+              const href = `geocercas://tracker?token=${encodeURIComponent(runtimeToken)}&userId=${encodeURIComponent(trackerUserId)}&orgId=${encodeURIComponent(orgId)}`;
+              return (
+                <a
+                  href={href}
+                  style={{ display: "block" }}
+                >
+                  <button
+                    type="button"
+                    className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium"
+                  >
+                    {t("tracker.invite.openAppButton")}
+                  </button>
+                </a>
+              );
+            })()
+          )
         )}
 
         {showPermissionCard && (
