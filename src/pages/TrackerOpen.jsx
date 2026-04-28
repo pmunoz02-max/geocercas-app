@@ -1,3 +1,11 @@
+function buildAndroidIntentUrl({ token, orgId, userId }) {
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  if (orgId) params.set("org_id", orgId);
+  if (userId) params.set("userId", userId);
+  const fallbackUrl = encodeURIComponent(window.location.href);
+  return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=com.fenice.geocercas;S.browser_fallback_url=${fallbackUrl};end`;
+}
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 
@@ -54,7 +62,9 @@ export default function TrackerOpen() {
   }, [token, orgId, userId, navigate]);
 
   const openApp = () => {
-    window.location.href = nativeDeepLink;
+    window.location.assign(
+      buildAndroidIntentUrl({ token, orgId, userId })
+    );
   };
 
   const installApp = () => {
@@ -96,7 +106,7 @@ export default function TrackerOpen() {
 
         <div style={styles.actions}>
           <button type="button" style={styles.primaryButton} onClick={openApp}>
-            Ya tengo la app, abrir Geocercas
+            Ya tengo la app
           </button>
 
           <button type="button" style={styles.secondaryButton} onClick={installApp}>
