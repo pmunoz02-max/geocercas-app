@@ -17,7 +17,9 @@ import Login from "./pages/Login.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import UpdatePassword from "./pages/UpdatePassword.jsx";
+
 import TrackerInviteStart from "./pages/TrackerInviteStart.jsx";
+import TrackerOpen from "./pages/TrackerOpen.jsx";
 
 // Public tracker runtime page
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
@@ -300,6 +302,7 @@ export default function App() {
       <Route path="/tracker-gps" element={<TrackerGpsPage />} />
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/accept-invite" element={<TrackerInviteStart />} />
+      <Route path="/tracker-open" element={<TrackerOpen />} />
       <Route path="/pay" element={<PayPage />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
