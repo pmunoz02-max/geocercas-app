@@ -51,3 +51,5 @@ Debug temporal preview: send-position registra token_hash_prefix seguro para com
 - Nunca se debe usar `owner_id`, ni ningún valor proveniente de `userId` del query o del body como fuente de identidad.
 - Si existe un registro en `personal` pero no tiene `user_id`, la invitación falla con error controlado (`tracker_identity_missing`).
 - Solo si no existe registro en `personal`, se consideran otros campos explícitos del body o la invitación, pero nunca `owner_id` ni `userId` del query.
+
+Preview update: TrackerDashboard prioriza tracker_positions como fuente can�nica y usa positions/tracker_latest solo como fallback.
