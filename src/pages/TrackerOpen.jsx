@@ -346,18 +346,50 @@ export default function TrackerOpen() {
             resolved_tracker_user_id_present: Boolean(trackerUserId),
           });
 
-          // Si existe window.Android, llama saveTrackerSession y startTracking antes de navegar
-          if (typeof window !== "undefined" && window.Android) {
-            try {
-              if (typeof window.Android.saveTrackerSession === "function") {
-                window.Android.saveTrackerSession(runtimeToken, trackerUserId || "", resolvedOrgId || "");
+          // Bridge nativo: window.Android || window.AndroidBridge
+          const nativeBridge =
+            typeof window !== "undefined"
+              ? window.Android || window.AndroidBridge
+              : null;
+
+          const hasAndroidBridge = !!nativeBridge;
+          let nativeBridgeCalled = false;
+          let nativeStartCalled = false;
+
+          try {
+            if (nativeBridge && runtimeToken) {
+              if (typeof nativeBridge.saveTrackerSession === "function") {
+                nativeBridge.saveTrackerSession(
+                  runtimeToken,
+                  trackerUserId || "",
+                  resolvedOrgId || ""
+                );
+                nativeBridgeCalled = true;
               }
-              if (typeof window.Android.startTracking === "function") {
-                window.Android.startTracking(runtimeToken, trackerUserId || "", resolvedOrgId || "");
+
+              if (typeof nativeBridge.startTracking === "function") {
+                nativeBridge.startTracking(
+                  runtimeToken,
+                  trackerUserId || "",
+                  resolvedOrgId || ""
+                );
+                nativeStartCalled = true;
               }
-            } catch (err) {
-              patchDebug({ android_bridge_error: String(err) });
             }
+
+            patchDebug({
+              has_android_bridge: hasAndroidBridge,
+              native_bridge_called: nativeBridgeCalled,
+              native_start_called: nativeStartCalled,
+              runtime_token_prefix: runtimeToken ? runtimeToken.slice(0, 8) : null,
+            });
+          } catch (err) {
+            patchDebug({
+              has_android_bridge: hasAndroidBridge,
+              native_bridge_called: nativeBridgeCalled,
+              native_start_called: nativeStartCalled,
+              android_bridge_error: String(err?.message || err),
+            });
           }
         }
 
