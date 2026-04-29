@@ -52,4 +52,59 @@ Debug temporal preview: send-position registra token_hash_prefix seguro para com
 - Si existe un registro en `personal` pero no tiene `user_id`, la invitación falla con error controlado (`tracker_identity_missing`).
 - Solo si no existe registro en `personal`, se consideran otros campos explícitos del body o la invitación, pero nunca `owner_id` ni `userId` del query.
 
-Preview update: TrackerDashboard prioriza tracker_positions como fuente can�nica y usa positions/tracker_latest solo como fallback.
+Preview update: TrackerDashboard prioriza tracker_positions como fuente can�nica y usa positions/tracker_latest solo como fallback.
+
+## Regla permanente de fuente y asociación (dashboard)
+
+- **tracker_positions** es la única fuente canónica de posiciones para el dashboard.
+- **positions** y **tracker_latest** solo se usan como fallback si tracker_positions no tiene datos.
+- La asociación de posiciones a trackers debe hacerse únicamente por **personal.user_id** o **tracker_assignments.tracker_user_id**.
+- **Nunca** se debe usar **owner_id** para asociar posiciones a trackers en el dashboard ni en ningún endpoint.
+
+## Cierre exitoso del flujo Tracker Invite Android (preview)
+
+Flujo completo validado en entorno preview:
+
+1. **invite**: Usuario recibe invitación por email con link seguro.
+2. **tracker-open**: El usuario abre el link, se valida el token y se muestra la pantalla de aceptación.
+3. **accept runtime**: El usuario acepta la invitación; el backend crea una sesión runtime y retorna un token opaco.
+4. **AndroidBridge**: La app Android recibe el runtime token y lo almacena de forma segura.
+5. **ForegroundLocationService**: El servicio inicia el tracking en background y obtiene permisos.
+6. **/api/send-position**: La app envía posiciones firmadas con el runtime token; el backend valida la sesión.
+7. **tracker_positions**: Las posiciones se insertan en la tabla canónica tracker_positions.
+8. **Dashboard actualizado**: El dashboard muestra la última posición del tracker en tiempo real, priorizando tracker_positions.
+
+**Notas:**
+- El flujo es exitoso si el dashboard refleja la posición enviada desde Android sin errores y con source=tracker_positions.
+- El runtime token nunca se expone en logs ni se reutiliza fuera de la sesión activa.
+- El flujo debe ser validado con HTTP 200 en todos los endpoints y visualización en dashboard.
+
+## Bugs corregidos en el flujo Tracker Invite (preview)
+
+- **Invite token usado como runtime:**
+  - Antes: El token de invitación se usaba directamente como token de tracking en Android, exponiendo riesgos de seguridad y sesiones inválidas.
+  - Ahora: El backend genera un runtime token opaco y solo este se usa para tracking.
+
+- **Cola Android infinita:**
+  - Antes: El AndroidBridge podía dejar posiciones encoladas indefinidamente si fallaba la sesión o el envío.
+  - Ahora: La cola se limpia correctamente al recibir confirmación o error definitivo, evitando acumulación infinita.
+
+- **Permisos foreground service:**
+  - Antes: El servicio de tracking podía iniciar sin permisos completos, causando fallos silenciosos o posiciones perdidas.
+  - Ahora: Se valida y solicita correctamente el permiso de foreground service antes de iniciar el tracking.
+
+- **user_id owner vs tracker:**
+  - Antes: Se usaba owner_id o userId del query/body como fuente de identidad para el tracker, generando asociaciones incorrectas.
+  - Ahora: Solo se usa personal.user_id o assignment.tracker_user_id como fuente canónica.
+
+- **Dashboard priorizando fuente incorrecta:**
+  - Antes: El dashboard mostraba posiciones de positions o tracker_latest como principal, ignorando tracker_positions.
+  - Ahora: Siempre prioriza tracker_positions y solo usa las otras tablas como fallback.
+
+## Checklist final de validación (Tracker Invite Android)
+
+- [ ] **/api/send-position responde 200** tras envío desde Android.
+- [ ] **Insert en tabla tracker_positions** confirmado en la base de datos.
+- [ ] **runtime tracker_user_id correcto**: el user_id insertado corresponde a personal.user_id o tracker_assignments.tracker_user_id.
+- [ ] **SQL espejo dashboard OK**: la consulta SQL que alimenta el dashboard refleja correctamente los datos de tracker_positions.
+- [ ] **Dashboard actualiza H M**: el dashboard muestra la posición en tiempo real (Hora y Minuto) tras el envío desde Android.
