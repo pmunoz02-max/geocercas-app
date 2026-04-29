@@ -110,6 +110,7 @@ export default async function handler(req, res) {
     }
 
     const runtimeToken = authHeader.replace("Bearer ", "").trim();
+    const runtimeTokenHashPrefix = sha256Hex(runtimeToken).slice(0, 12);
     const body = await readBody(req);
 
     const session = await resolveRuntimeSession(runtimeToken);
@@ -167,6 +168,7 @@ export default async function handler(req, res) {
 
     console.log("[api/send-position] proxy_payload", {
       has_runtime_token: true,
+      token_hash_prefix: runtimeTokenHashPrefix,
       user_id: payload.user_id,
       tracker_user_id: payload.tracker_user_id,
       org_id: payload.org_id,

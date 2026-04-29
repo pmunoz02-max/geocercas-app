@@ -42,3 +42,5 @@ Validación esperada:
 - [api/send-position] proxy_end ... status: 200
 
 No cerrar este flujo ni generar AAB hasta confirmar envío real de posición.
+
+Debug temporal preview: send-position registra token_hash_prefix seguro para comparar runtime token Android vs tracker_runtime_sessions.
