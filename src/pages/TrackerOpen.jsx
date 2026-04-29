@@ -273,16 +273,8 @@ export default function TrackerOpen() {
     orgId: "",
     trackerUserId: "",
   });
-  const [debug, setDebug] = useState({
-    build: BUILD_TAG,
-    invite_token_present: Boolean(inviteToken),
-    runtime_param_present: Boolean(runtimeTokenFromUrl),
-    org_id_present: Boolean(orgIdFromUrl),
-    user_id_present: Boolean(userIdFromUrl),
-  });
-
+  // Debug UI y estado eliminados. Se conservan logs internos si existen.
   const patchDebug = useCallback((patch) => {
-    setDebug((prev) => ({ ...prev, ...patch }));
     console.log("[TrackerOpen]", patch);
   }, []);
 
@@ -470,7 +462,7 @@ export default function TrackerOpen() {
           <div style={styles.icon}>📍</div>
           <h1 style={styles.title}>Abriendo Geocercas...</h1>
           <p style={styles.text}>Estamos preparando tu invitación de seguimiento.</p>
-          <DebugBlock debug={debug} />
+          {/* Debug UI eliminado */}
         </section>
       </main>
     );
@@ -483,7 +475,7 @@ export default function TrackerOpen() {
           <div style={styles.icon}>⚠️</div>
           <h1 style={styles.title}>Invitación inválida</h1>
           <p style={styles.text}>El enlace no contiene un token válido. Solicita una nueva invitación.</p>
-          <DebugBlock debug={debug} />
+          {/* Debug UI eliminado */}
         </section>
       </main>
     );
@@ -502,7 +494,7 @@ export default function TrackerOpen() {
           <button type="button" style={styles.secondaryButton} onClick={installApp}>
             Instalar desde Google Play
           </button>
-          <DebugBlock debug={debug} />
+          {/* Debug UI eliminado */}
         </section>
       </main>
     );
@@ -537,21 +529,13 @@ export default function TrackerOpen() {
           Instálala desde Android Studio y vuelve a tocar “Ya tengo la app”.
         </p>
 
-        <p style={styles.debug}>tracker_open_browser_fallback_runtime_v6</p>
-        <p style={styles.hiddenDebug}>{nativeDeepLink ? "native_deeplink_ready" : "native_deeplink_missing"}</p>
-        <DebugBlock debug={debug} />
+        {/* Debug UI eliminado */}
       </section>
     </main>
   );
 }
 
-function DebugBlock({ debug }) {
-  return (
-    <pre style={styles.debugBox}>
-      {JSON.stringify(debug, null, 2)}
-    </pre>
-  );
-}
+
 
 const styles = {
   page: {
@@ -639,26 +623,5 @@ const styles = {
     textAlign: "left",
     wordBreak: "break-word",
   },
-  debug: {
-    margin: "16px 0 0",
-    color: "#c2410c",
-    fontSize: 12,
-  },
-  hiddenDebug: {
-    margin: "4px 0 0",
-    color: "#94a3b8",
-    fontSize: 11,
-  },
-  debugBox: {
-    margin: "14px 0 0",
-    padding: 10,
-    borderRadius: 12,
-    background: "#0f172a",
-    color: "#e2e8f0",
-    fontSize: 11,
-    lineHeight: 1.4,
-    textAlign: "left",
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-  },
+
 };

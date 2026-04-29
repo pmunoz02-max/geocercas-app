@@ -237,34 +237,79 @@ async function createInviteRow(
     created_by_user_id: string | null
   },
 ) {
+  // Buscar invitación por org_id + email_norm (activa o no)
+  const { data: existing, error: lookupError } = await supabaseAdmin
+    .from("tracker_invites")
+    .select("id, is_active, used_at, accepted_at, invite_token_hash, expires_at")
+    .eq("org_id", payload.org_id)
+    .eq("email_norm", payload.email_norm)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (lookupError) {
+    return { data: null, error: { message: lookupError.message, code: "INVITE_LOOKUP_FAILED" } };
+  }
+
+  const nowIso = new Date().toISOString();
+  if (existing) {
+    if (existing.is_active && !existing.used_at && !existing.accepted_at) {
+      // Renovar la invitación pendiente
+      const updateRes = await supabaseAdmin
+        .from("tracker_invites")
+        .update({
+          invite_token_hash: payload.invite_token_hash,
+          expires_at: payload.expires_at,
+          email: payload.email, // usar email original, no solo email_norm
+          email_norm: payload.email_norm,
+          role: "tracker",
+          is_active: true,
+          used_at: null,
+          accepted_at: null,
+          brevo_last_status: "renewed_token",
+          brevo_last_event_at: nowIso,
+        })
+        .eq("id", existing.id)
+        .select("id, created_at")
+        .maybeSingle();
+      if (updateRes.error) {
+        return { data: null, error: { message: updateRes.error.message, code: "INVITE_RENEW_FAILED" } };
+      }
+      return { data: updateRes.data ?? null, error: null };
+    }
+    if (existing.is_active && (existing.used_at || existing.accepted_at)) {
+      // Si la invitación activa ya fue usada o aceptada, desactivar y crear nueva
+      let updateFields: Record<string, unknown> = {
+        is_active: false,
+        brevo_last_status: "deactivated_used_or_accepted",
+        brevo_last_event_at: nowIso,
+      };
+      if (!existing.used_at) {
+        updateFields.used_at = nowIso;
+      }
+      const deactivateRes = await supabaseAdmin
+        .from("tracker_invites")
+        .update(updateFields)
+        .eq("id", existing.id);
+      if (deactivateRes.error) {
+        return { data: null, error: { message: deactivateRes.error.message, code: "INVITE_DEACTIVATE_FAILED" } };
+      }
+      // Insertar nueva invitación
+      return await insertFreshInvite(supabaseAdmin, payload);
+    }
+  }
+
+  // Si no hay invitación activa, cerrar posibles conflictos y crear nueva
   const preClose = await closeExistingConflictingInvites(
     supabaseAdmin,
     payload.org_id,
     payload.email,
     payload.email_norm,
-  )
-
+  );
   if (preClose.error) {
-    return { data: null, error: { message: preClose.error, code: "APP_REPLACE_ACTIVE_INVITE_FAILED" } }
+    return { data: null, error: { message: preClose.error, code: "APP_REPLACE_ACTIVE_INVITE_FAILED" } };
   }
-
-  let insertAttempt = await insertFreshInvite(supabaseAdmin, payload)
-
-  if (insertAttempt.error?.code === "23505") {
-    const retryClose = await closeExistingConflictingInvites(
-      supabaseAdmin,
-      payload.org_id,
-      payload.email,
-      payload.email_norm,
-    )
-
-    if (retryClose.error) {
-      return { data: null, error: { message: retryClose.error, code: "APP_REPLACE_ACTIVE_INVITE_FAILED" } }
-    }
-
-    insertAttempt = await insertFreshInvite(supabaseAdmin, payload)
-  }
-
+  const insertAttempt = await insertFreshInvite(supabaseAdmin, payload);
   if (insertAttempt.error) {
     return {
       data: null,
@@ -274,10 +319,9 @@ async function createInviteRow(
         hint: insertAttempt.error.hint,
         code: insertAttempt.error.code,
       },
-    }
+    };
   }
-
-  return { data: insertAttempt.data ?? null, error: null }
+  return { data: insertAttempt.data ?? null, error: null };
 }
 
 async function sendViaBrevo(args: {

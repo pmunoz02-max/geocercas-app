@@ -108,3 +108,11 @@ Flujo completo validado en entorno preview:
 - [ ] **runtime tracker_user_id correcto**: el user_id insertado corresponde a personal.user_id o tracker_assignments.tracker_user_id.
 - [ ] **SQL espejo dashboard OK**: la consulta SQL que alimenta el dashboard refleja correctamente los datos de tracker_positions.
 - [ ] **Dashboard actualiza H M**: el dashboard muestra la posición en tiempo real (Hora y Minuto) tras el envío desde Android.
+
+## Idempotencia de send-tracker-invite-brevo
+
+- El endpoint es idempotente respecto a invitaciones por org_id + email_norm.
+- Si existe una invitación activa pendiente (is_active=true, used_at=null, accepted_at=null), la renueva (actualiza token, expiración y datos).
+- Si existe una invitación activa ya usada o aceptada, la desactiva antes de crear una nueva.
+- Si no hay invitación activa, crea una nueva.
+- Nunca falla por duplicado normal ni devuelve PENDING_INVITE_NOT_FOUND.
