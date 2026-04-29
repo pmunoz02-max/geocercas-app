@@ -345,6 +345,20 @@ export default function TrackerOpen() {
             resolved_org_id_present: Boolean(resolvedOrgId),
             resolved_tracker_user_id_present: Boolean(trackerUserId),
           });
+
+          // Si existe window.Android, llama saveTrackerSession y startTracking antes de navegar
+          if (typeof window !== "undefined" && window.Android) {
+            try {
+              if (typeof window.Android.saveTrackerSession === "function") {
+                window.Android.saveTrackerSession(runtimeToken, trackerUserId || "", resolvedOrgId || "");
+              }
+              if (typeof window.Android.startTracking === "function") {
+                window.Android.startTracking(runtimeToken, trackerUserId || "", resolvedOrgId || "");
+              }
+            } catch (err) {
+              patchDebug({ android_bridge_error: String(err) });
+            }
+          }
         }
 
         if (!nextSession.runtimeToken) {
