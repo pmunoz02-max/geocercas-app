@@ -25,22 +25,29 @@ Email â†’ tracker-open â†’ tracker-gps â†’ Android.startTracking
 - NO usar geocercas://tracker como link principal
 - NO usar preview domain para invitaciones
 - El deep link nativo se usa solo como fallback interno
-## Tracker Invite Flow V2 — runtime session public accept fix
+## Tracker Invite Flow V2 ï¿½ runtime session public accept fix
 
-Estado: en preview, pendiente validación final con HTTP 200.
+Estado: en preview, pendiente validaciï¿½n final con HTTP 200.
 
 Cambio backend aplicado:
-- api/accept-tracker-invite.js ahora debe permitir activación pública desde /tracker-open.
+- api/accept-tracker-invite.js ahora debe permitir activaciï¿½n pï¿½blica desde /tracker-open.
 - El invite token puede llegar por Authorization Bearer, body, query o x-invite-token.
 - El invite token NO debe enviarse a Android como token de tracking.
 - El endpoint debe crear un runtime token opaco, guardar sha256(runtimeToken) en tracker_runtime_sessions.access_token_hash y devolver tracker_runtime_token.
 - /api/send-position debe recibir ese runtime token y resolver hasSession=true.
 
-Validación esperada:
+Validaciï¿½n esperada:
 - [api/accept-tracker-invite] runtime session created
 - [api/send-position] proxy_payload ... hasSession: true
 - [api/send-position] proxy_end ... status: 200
 
-No cerrar este flujo ni generar AAB hasta confirmar envío real de posición.
+No cerrar este flujo ni generar AAB hasta confirmar envï¿½o real de posiciï¿½n.
 
 Debug temporal preview: send-position registra token_hash_prefix seguro para comparar runtime token Android vs tracker_runtime_sessions.
+
+## Regla de identidad canÃ³nica para tracker_user_id
+
+- El endpoint `accept-tracker-invite` resuelve el `tracker_user_id` Ãºnicamente desde `personal.user_id` asociado al email y organizaciÃ³n de la invitaciÃ³n.
+- Nunca se debe usar `owner_id`, ni ningÃºn valor proveniente de `userId` del query o del body como fuente de identidad.
+- Si existe un registro en `personal` pero no tiene `user_id`, la invitaciÃ³n falla con error controlado (`tracker_identity_missing`).
+- Solo si no existe registro en `personal`, se consideran otros campos explÃ­citos del body o la invitaciÃ³n, pero nunca `owner_id` ni `userId` del query.

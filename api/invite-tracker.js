@@ -201,11 +201,21 @@ export default async function handler(req, res) {
       upstreamJson?.runtime_token ||
       null;
 
-    const trackerUserId =
-      upstreamJson?.tracker_user_id ||
-      upstreamJson?.trackerUserId ||
-      upstreamJson?.userId ||
-      null;
+    // Asegurar que userId sea personal.user_id del invitado si existe
+    let trackerUserId = null;
+    if (upstreamJson?.personal && upstreamJson.personal.user_id) {
+      trackerUserId = upstreamJson.personal.user_id;
+    } else if (upstreamJson?.tracker_user_id) {
+      trackerUserId = upstreamJson.tracker_user_id;
+    } else {
+      trackerUserId = null;
+    }
+
+    // Si no existe user_id válido, omitir userId en el deep link y respuesta
+    if (!trackerUserId) {
+      // Opcional: devolver error controlado si es obligatorio
+      // return res.status(409).json({ ok: false, error: "tracker_identity_missing" });
+    }
 
     const trackerLinks = buildTrackerLinks({
       req,
@@ -215,11 +225,23 @@ export default async function handler(req, res) {
       trackerUserId,
     });
 
-    return res.status(200).json({
+    // Construir respuesta sin userId si no existe
+    const response = {
       ok: true,
       ...(upstreamJson || {}),
       tracker_links: trackerLinks,
-    });
+    };
+    if (trackerUserId) {
+      response.tracker_user_id = trackerUserId;
+      response.user_id = trackerUserId;
+      response.userId = trackerUserId;
+    } else {
+      delete response.tracker_user_id;
+      delete response.user_id;
+      delete response.userId;
+    }
+
+    return res.status(200).json(response);
   } catch (err) {
     console.error("[api/invite-tracker] fatal", err);
 

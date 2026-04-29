@@ -147,15 +147,17 @@ async function resolvePlanAndLimit(supabase, orgId) {
 }
 
 function resolveTrackerUserId({ invite, body, personalRow }) {
+  // Si existe personalRow, solo aceptar si tiene user_id
+  if (personalRow) {
+    if (personalRow.user_id) return personalRow.user_id;
+    return null; // No usar personal.id como tracker_user_id
+  }
+  // Si no hay personal, usar los campos explícitos del body o invite
   return (
     body?.tracker_user_id ||
     body?.trackerUserId ||
-    body?.user_id ||
-    body?.userId ||
-    invite?.used_by_user_id ||
-    personalRow?.user_id ||
-    personalRow?.id ||
     invite?.tracker_user_id ||
+    invite?.used_by_user_id ||
     invite?.created_for_user_id ||
     invite?.created_by_user_id ||
     null
@@ -398,6 +400,34 @@ export default async function handler(req, res) {
     const personalRow = await findOrCreatePersonalRow(supabase, invite, orgId);
     const trackerUserId = resolveTrackerUserId({ invite, body, personalRow });
 
+    // Log seguro de resolución de tracker_user_id
+    let resolvedTrackerUserIdSource = null;
+    if (personalRow && personalRow.user_id) {
+      resolvedTrackerUserIdSource = "personal.user_id";
+    } else if (personalRow) {
+      resolvedTrackerUserIdSource = "personal.missing_user_id";
+    } else if (invite?.tracker_user_id) {
+      resolvedTrackerUserIdSource = "invite.tracker_user_id";
+    } else if (invite?.used_by_user_id) {
+      resolvedTrackerUserIdSource = "invite.used_by_user_id";
+    } else if (invite?.created_for_user_id) {
+      resolvedTrackerUserIdSource = "invite.created_for_user_id";
+    } else if (invite?.created_by_user_id) {
+      resolvedTrackerUserIdSource = "invite.created_by_user_id";
+    } else {
+      resolvedTrackerUserIdSource = "other";
+    }
+
+    console.log("[api/accept-tracker-invite] resolved tracker user id", {
+      resolved_tracker_user_id_source: resolvedTrackerUserIdSource,
+      invite_email: invite?.email || null,
+      org_id: orgId,
+    });
+
+    // Si existe personal pero no tiene user_id, error 409
+    if (personalRow && !personalRow.user_id) {
+      return res.status(409).json({ ok: false, error: "tracker_identity_missing" });
+    }
     if (!trackerUserId) {
       return res.status(400).json({ ok: false, error: "missing_tracker_user_id" });
     }
