@@ -115,12 +115,10 @@ export default async function handler(req, res) {
 
     const session = await resolveRuntimeSession(runtimeToken);
 
-    const trackerUserId =
-      body.user_id ||
+    // Usar solo user_id (no tracker_user_id) para la tabla tracker_positions
+    const userId =
       body.tracker_user_id ||
-      body.trackerUserId ||
-      getHeader(req, "x-tracker-user-id") ||
-      getHeader(req, "x-user-id") ||
+      body.user_id ||
       session?.tracker_user_id ||
       null;
 
@@ -134,7 +132,7 @@ export default async function handler(req, res) {
     const lat = body.lat ?? body.latitude;
     const lng = body.lng ?? body.longitude;
 
-    if (!trackerUserId) {
+    if (!userId) {
       return res.status(400).json({ ok: false, error: "missing_user_id" });
     }
 
@@ -146,67 +144,67 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "invalid_coordinates" });
     }
 
-    const payload = {
-      ...body,
-      user_id: trackerUserId,
-      tracker_user_id: trackerUserId,
+    // Insert directo a tracker_positions
+    const insertPayload = {
       org_id: orgId,
+      user_id: userId,
       lat: Number(lat),
       lng: Number(lng),
       accuracy: body.accuracy == null ? null : Number(body.accuracy),
-      speed: body.speed == null ? null : Number(body.speed),
-      heading: body.heading == null ? null : Number(body.heading),
-      battery: body.battery == null ? null : Number(body.battery),
-      is_mock: body.is_mock ?? body.isMock ?? null,
       recorded_at:
         body.recorded_at ||
         body.recordedAt ||
         body.timestamp ||
         new Date().toISOString(),
       source: body.source || "tracker-native-android",
+      created_at: new Date().toISOString(),
     };
 
-    console.log("[api/send-position] proxy_payload", {
-      has_runtime_token: true,
-      token_hash_prefix: runtimeTokenHashPrefix,
-      user_id: payload.user_id,
-      tracker_user_id: payload.tracker_user_id,
-      org_id: payload.org_id,
-      lat: payload.lat,
-      lng: payload.lng,
-      source: payload.source,
-      hasSession: !!session,
-    });
+    const supabaseUrl = SUPABASE_URL.replace(/\/$/, "");
+    const insertUrl = `${supabaseUrl}/rest/v1/tracker_positions`;
 
-    const edgeUrl = `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/send_position`;
-
-    const edgeResponse = await fetch(edgeUrl, {
+    const insertResponse = await fetch(insertUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
         Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-        "x-runtime-token": runtimeToken,
-        "x-proxy-source": "vercel-api-send-position",
+        Prefer: "return=representation",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify([insertPayload]),
     });
 
-    const responseText = await edgeResponse.text();
+    const responseText = await insertResponse.text();
     let responseJson;
-
     try {
       responseJson = JSON.parse(responseText);
     } catch {
       responseJson = { raw: responseText };
     }
 
-    console.log("[api/send-position] proxy_end", {
-      status: edgeResponse.status,
-      ok: edgeResponse.ok,
-      body: responseJson,
+    let positionId = null;
+    if (Array.isArray(responseJson) && responseJson.length > 0 && responseJson[0].id) {
+      positionId = responseJson[0].id;
+    }
+
+    console.log("[api/send-position] insert_end", {
+      insert_table: "tracker_positions",
+      position_id: positionId,
+      status: insertResponse.status,
+      ok: insertResponse.ok,
     });
 
-    return res.status(edgeResponse.status).json(responseJson);
+    if (insertResponse.ok && positionId) {
+      return res.status(200).json({ ok: true });
+    }
+
+    // Log seguro de error
+    console.error("[api/send-position] tracker_position_insert_failed", {
+      insert_table: "tracker_positions",
+      status: insertResponse.status,
+      body: Array.isArray(responseJson) ? responseJson : (typeof responseJson === 'object' ? JSON.stringify(responseJson).slice(0, 300) : String(responseJson).slice(0, 300)),
+    });
+    return res.status(500).json({ ok: false, error: "tracker_position_insert_failed" });
   } catch (error) {
     console.error("[api/send-position] fatal", error);
     return res.status(500).json({
