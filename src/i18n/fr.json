@@ -1118,7 +1118,7 @@
       "managePlan": "Gérer le plan",
       "managePlanBody": "Vous pouvez accéder à la page Billing pour voir et gérer votre abonnement.",
       "goToBilling": "Aller à Billing",
-      "previewNote": "Note : PREVIEW/TEST. N’affecte pas la production."
+      "previewNote": ""
     }
   },
   "inviteTracker": {
@@ -1876,8 +1876,7 @@
   },
   "billing": {
     "errors": {
-      "pendingChange": "Un changement est déjà programmé pour cet abonnement. Veuillez attendre avant de modifier le plan.",
-      "generic": "Impossible de traiter la demande. Veuillez réessayer."
+      "loadPlanStatus": "Impossible de charger l’état du plan."
     },
     "cancel": {
       "title": "Paiement annulé",
@@ -1890,7 +1889,7 @@
     "previewNotice": {
       "prefix": "Monétisation en",
       "middle": "(Flux d'abonnement).",
-      "suffix": "N’affecte pas la production."
+      "suffix": ""
     },
     "actions": {
       "viewPlans": "Voir les plans"
@@ -1904,9 +1903,6 @@
     },
     "states": {
       "loadingPlanStatus": "Chargement de l’état du plan..."
-    },
-    "errors": {
-      "loadPlanStatus": "Impossible de charger l’état du plan."
     },
     "cards": {
       "currentPlan": "Plan actuel",

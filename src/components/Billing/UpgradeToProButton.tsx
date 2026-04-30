@@ -114,7 +114,6 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       )}
       {isPreviewEnv && (
         <p className="mt-2 text-xs text-slate-500">
-          Nota: PREVIEW/TEST. No afecta producción.
         </p>
       )}
     </div>

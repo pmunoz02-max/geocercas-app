@@ -112,17 +112,17 @@
       "admins": "Administrators",
       "asignaciones": "Assignments",
       "dashboard": "Cost panel",
-      "dashboardCost\u006fs": "Cost panel",
-      "panelCost\u006fs": "Cost panel",
+      "dashboardCostos": "Cost panel",
+      "panelCostos": "Cost panel",
       "geocerca": "Geofence",
-      "geo\u0063ercas": "Geofences",
+      "geocercas": "Geofences",
       "home": "Home",
       "inicio": "Home",
       "invitar_tracker": "Invite tracker",
       "invitarTracker": "Invite tracker",
       "nuevaGeocerca": "New geofence",
       "personal": "Staff",
-      "pric\u0069ng": "Pricing",
+      "pricing": "Pricing",
       "reportes": "Reports",
       "billing": "Billing",
       "tracker": "Tracker"
@@ -274,8 +274,8 @@
     "backToLogin": "Back to sign in",
     "errorTitle": "Authentication failed",
     "invalidOrExpiredLink": "The link is invalid, has expired, or was already used.",
-           "panelTitle": "Operations panel",
-           "goDashboard": "Go to dashboard",
+    "panelTitle": "Operations panel",
+    "goDashboard": "Go to dashboard",
     "timeout": "Authentication took too long. Try again.",
     "selection": {
       "title": "Select organization",
@@ -514,7 +514,7 @@
     "subtitle": "View aggregated costs by person, activity and geofence.",
     "title": "Cost panel"
   },
-  "dashboardCost\u006fs": {
+  "dashboardCostos": {
     "title": "Cost panel",
     "subtitle": "Visualize KPIs and cost charts by person, activity and geofence.",
     "currentOrganization": "Current organization",
@@ -546,13 +546,13 @@
     "chartTypePie": "Pie",
     "colActividad": "Activity",
     "colCategoria": "Category",
-    "colCost\u006f": "Cost",
+    "colCosto": "Cost",
     "colFecha": "Date",
     "colGeocerca": "Geofence",
-    "colHor\u0061s": "Hours",
+    "colHoras": "Hours",
     "colMoneda": "Currency",
     "colPersona": "Person",
-    "colReg\u0069stros": "Records",
+    "colRegistros": "Records",
     "colTarifaPromedio": "Avg. rate",
     "dimensionActividad": "Activity",
     "dimensionFecha": "Date",
@@ -602,7 +602,7 @@
     "tip": "Tip: if the link fails, generate a new one and open it in an incognito window.",
     "title": "Reset password"
   },
-  "geo\u0063ercas": {
+  "geocercas": {
     "buttonClearCanvas": "Clear map",
     "buttonDeleteSelected": "Delete selected",
     "buttonDrawByCoords": "Draw by coordinates",
@@ -1118,7 +1118,7 @@
       "managePlan": "Manage plan",
       "managePlanBody": "You can go to the Billing page to view and manage your subscription.",
       "goToBilling": "Go to Billing",
-      "previewNote": "Note: PREVIEW/TEST. Does not affect production."
+      "previewNote": ""
     }
   },
   "inviteTracker": {
@@ -1193,8 +1193,8 @@
     "brandTagline": "Personnel control with geofences",
     "bulletCostsBody": "Consult Power BI-style panels with costs by person, activity and geofence.",
     "bulletCostsTitle": "Costs",
-    "bulletGeo\u0063ercasBody": "Create and manage geofences for your fields, farms, plants or service points.",
-    "bulletGeo\u0063ercasTitle": "Geofences",
+    "bulletGeocercasBody": "Create and manage geofences for your fields, farms, plants or service points.",
+    "bulletGeocercasTitle": "Geofences",
     "bulletPersonalBody": "Register your personnel and assign them to activities and specific areas.",
     "bulletPersonalTitle": "Personnel",
     "ctaLogin": "Go to control panel",
@@ -1414,19 +1414,19 @@
     "activityNoName": "Unnamed activity",
     "buttonDownloadCsv": "Download CSV",
     "colActividad": "Activity",
-    "colCost\u006f": "Cost",
+    "colCosto": "Cost",
     "colFin": "End",
     "colGeocerca": "Geofence",
-    "colHor\u0061s": "Hours",
+    "colHoras": "Hours",
     "colInicio": "Start",
     "colMoneda": "Currency",
     "colPersona": "Person",
     "colTarifa": "Rate/hour",
     "csvHeaderActividad": "Activity",
-    "csvHeaderCost\u006f": "Total_cost",
+    "csvHeaderCosto": "Total_cost",
     "csvHeaderFin": "End",
     "csvHeaderGeocerca": "Geofence",
-    "csvHeaderHor\u0061s": "Hours",
+    "csvHeaderHoras": "Hours",
     "csvHeaderInicio": "Start",
     "csvHeaderMoneda": "Currency",
     "csvHeaderPersona": "Person",
@@ -1438,7 +1438,7 @@
     "errorLoadFilters": "Error loading filters (people, activities, geofences).",
     "errorLoadReport": "Error loading the cost report.",
     "errorRangeInvalid": "The \"From\" date cannot be later than the \"To\" date.",
-    "errorViewMissing": "The view v_cost\u006fs_detalle has not been created in Supabase yet.",
+    "errorViewMissing": "The view v_costos_detalle has not been created in Supabase yet.",
     "exportNoData": "No data to export.",
     "filters": {
       "activityLabel": "Activity",
@@ -1799,7 +1799,7 @@
         "previewTag": "PREVIEW",
         "middle": "and uses the subscription flow in",
         "testTag": "TEST",
-        "suffix": "It does not affect production."
+        "suffix": ""
       }
     },
     "summary": {
@@ -1876,8 +1876,7 @@
   },
   "billing": {
     "errors": {
-      "pendingChange": "There is already a scheduled change for this subscription. Please wait before modifying the plan.",
-      "generic": "Unable to process the request. Please try again."
+      "loadPlanStatus": "Could not load plan status."
     },
     "cancel": {
       "title": "Checkout cancelled",
@@ -1890,7 +1889,7 @@
     "previewNotice": {
       "prefix": "Monetization in",
       "middle": "(Subscription flow).",
-      "suffix": "Does not affect production."
+      "suffix": ""
     },
     "actions": {
       "viewPlans": "View plans"
@@ -1904,9 +1903,6 @@
     },
     "states": {
       "loadingPlanStatus": "Loading plan status..."
-    },
-    "errors": {
-      "loadPlanStatus": "Could not load plan status."
     },
     "cards": {
       "currentPlan": "Current plan",
@@ -2087,20 +2083,20 @@
       "title": "Administration Panel",
       "configRequired": "Configuration required",
       "modules": {
-        "geo\u0063ercas": "Geofences",
-        "geo\u0063ercasV2": "Geofences V2",
+        "geocercas": "Geofences",
+        "geocercasV2": "Geofences V2",
         "personal": "Personnel",
         "reports": "Reports"
       },
       "modulesDescriptions": {
-        "geo\u0063ercas": "Manage your organization's geofences",
-        "geo\u0063ercasV2": "Enhanced geofences with new interface",
+        "geocercas": "Manage your organization's geofences",
+        "geocercasV2": "Enhanced geofences with new interface",
         "personal": "Manage field personnel",
         "reports": "View reports and events"
       },
       "logout": "Sign out"
     },
-    "geo\u0063ercasV2": {
+    "geocercasV2": {
       "title": "Geofences",
       "showAll": "Show all",
       "back": "← Back",

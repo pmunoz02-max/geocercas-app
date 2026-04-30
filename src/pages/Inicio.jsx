@@ -235,7 +235,6 @@ export default function Inicio() {
     <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
       {isPreviewEnv && (
         <p className="mb-4 px-4 py-2 rounded-lg bg-yellow-100 text-yellow-900 border border-yellow-300 text-sm font-medium">
-          Nota: PREVIEW/TEST. No afecta producción.
         </p>
       )}
       {/* Bienvenida + logout */}
