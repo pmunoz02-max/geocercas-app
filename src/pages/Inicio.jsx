@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
+import useOrgEntitlements from "@/hooks/useOrgEntitlements";
 
 function HelpCard({ title, description, cta, to }) {
   const navigate = useNavigate();
@@ -318,21 +319,10 @@ export default function Inicio() {
           <h2 className="text-lg font-semibold text-slate-900">
             {t("dashboard.managePlan")}
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            {t("inicio.billing.managePlanBody")}
-          </p>
-          <div className="mt-4">
-            <UpgradeToProButton
-              orgId={currentOrgId}
-              plan="pro"
-              className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
-            />
-          </div>
-          <div className="mt-3 text-xs text-slate-500">
-            {t("inicio.billing.previewNote")}
-          </div>
+          <PlanSection currentOrgId={currentOrgId} />
         </div>
       </div>
+
 
       {/* Help Center */}
       <div>
@@ -352,6 +342,47 @@ export default function Inicio() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// --- PlanSection ---
+function PlanSection({ currentOrgId }) {
+  const {
+    entitlements,
+    planCode,
+    loading: entitlementsLoading,
+  } = useOrgEntitlements();
+
+  const currentPlan = String(
+    entitlements?.effective_plan_code ||
+    entitlements?.plan_code ||
+    entitlements?.billing_plan_code ||
+    planCode ||
+    "starter"
+  ).toLowerCase();
+
+  const nextPlan = currentPlan === "pro" ? "enterprise" : "pro";
+  const canUpgrade = currentPlan !== "enterprise";
+
+  if (entitlementsLoading) {
+    return <div className="mt-2 text-slate-500">Cargando información de plan…</div>;
+  }
+
+  return (
+    <div>
+      <div className="mb-2 text-sm text-slate-700">
+        <b>Plan actual:</b> <span>{planLabel}</span>
+      </div>
+      {canUpgrade ? (
+        <UpgradeToProButton
+          orgId={currentOrgId}
+          plan={nextPlan}
+          className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
+        />
+      ) : (
+        <div className="mt-3 text-green-700 font-semibold">Tu organización ya tiene el plan máximo (Enterprise).</div>
+      )}
     </div>
   );
 }

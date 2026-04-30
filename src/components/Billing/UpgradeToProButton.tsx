@@ -101,7 +101,11 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
         disabled={loading}
         className={className}
       >
-        {loading ? "Abriendo checkout..." : "Suscribirme a PRO"}
+        {loading
+          ? "Abriendo checkout..."
+          : plan === "enterprise"
+            ? "Suscribirme a Enterprise"
+            : "Suscribirme a PRO"}
       </button>
       {errorMsg && (
         <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
