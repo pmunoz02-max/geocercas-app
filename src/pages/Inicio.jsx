@@ -361,6 +361,8 @@ function PlanSection({ currentOrgId }) {
     planCode ||
     "starter"
   ).toLowerCase();
+  const planLabel = currentPlan === "enterprise" ? "Enterprise" : currentPlan === "pro" ? "Pro" : "Starter";
+
 
   const nextPlan = currentPlan === "pro" ? "enterprise" : "pro";
   const canUpgrade = currentPlan !== "enterprise";
