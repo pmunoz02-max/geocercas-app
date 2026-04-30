@@ -111,8 +111,14 @@ Flujo completo validado en entorno preview:
 
 ## Idempotencia de send-tracker-invite-brevo
 
-- El endpoint es idempotente respecto a invitaciones por org_id + email_norm.
-- Si existe una invitación activa pendiente (is_active=true, used_at=null, accepted_at=null), la renueva (actualiza token, expiración y datos).
+- El endpoint es idempotente respecto a invitaciones por `org_id + email_norm`.
+- Si existe una invitación activa pendiente (`is_active=true`, `used_at=null`, `accepted_at=null`), la renueva actualizando token, expiración y datos.
 - Si existe una invitación activa ya usada o aceptada, la desactiva antes de crear una nueva.
 - Si no hay invitación activa, crea una nueva.
-- Nunca falla por duplicado normal ni devuelve PENDING_INVITE_NOT_FOUND.
+- Nunca debe fallar por duplicado normal ni devolver `PENDING_INVITE_NOT_FOUND`.
+
+## Espejo y reglas de asignaciones
+
+- La tabla `asignaciones` es la fuente operativa principal para la gestión de asignaciones visuales y de negocio.
+- La tabla `tracker_assignments` es un espejo runtime, sincronizado solo cuando existe un `user_id` válido en la entidad `personal`.
+- No se envía invitación de tracker ni se sincroniza a `tracker_assignments` si `personal.user_id` es null; en ese caso, la asignación visual se crea pero la integración tracker queda pendiente hasta que se resuelva la identidad.

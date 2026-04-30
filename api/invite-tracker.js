@@ -96,6 +96,28 @@ export default async function handler(req, res) {
     }
 
     // ===============================
+    // 🔒 VALIDAR IDENTIDAD TRACKER (personal.email+org_id y user_id)
+    // ===============================
+    const { data: personalRow, error: personalError } = await supabase
+      .from("personal")
+      .select("id, user_id")
+      .eq("org_id", org_id)
+      .eq("email", email)
+      .maybeSingle();
+
+    if (personalError) {
+      throw personalError;
+    }
+
+    if (!personalRow || !personalRow.user_id) {
+      return res.status(409).json({
+        ok: false,
+        error: "tracker_identity_required",
+        message: "No se encontró user_id para el email y organización dados.",
+      });
+    }
+
+    // ===============================
     // 🔒 OBTENER LÍMITES DEL PLAN
     // ===============================
     const { data: planLimits, error: limitsError } = await supabase

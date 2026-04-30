@@ -215,6 +215,7 @@ async function syncTrackerAssignment(adminSupabase, row) {
     return { ok: false, error: "missing_service_role_key" };
   }
 
+
   const orgId = row?.org_id || null;
   const trackerUserId = row?.user_id || null;
   const geofenceId = row?.geofence_id || null;
@@ -224,7 +225,16 @@ async function syncTrackerAssignment(adminSupabase, row) {
   const active = normalizeActiveStatus(row);
   const frequencyMinutes = normalizeFrequencyMinutes(row);
 
-  if (!orgId || !trackerUserId || !geofenceId || !startDate || !endDate) {
+  // Si no hay user_id, no sincronizar tracker_assignments, solo advertir
+  if (!trackerUserId) {
+    return {
+      ok: false,
+      error: "tracker_identity_pending",
+      warning: "tracker_identity_pending",
+    };
+  }
+
+  if (!orgId || !geofenceId || !startDate || !endDate) {
     return {
       ok: false,
       error: "missing_sync_fields",
@@ -454,19 +464,22 @@ export default async function handler(req, res) {
         return send(res, 500, { ok: false, error: error.message });
       }
 
-      const syncResult = await syncTrackerAssignment(adminSupabase, data);
-      if (!syncResult.ok) {
-        console.warn("[SYNC SKIPPED POST]", syncResult.error, syncResult.details || null);
-      }
-
-      return send(res, 201, {
-        ok: true,
-        asignacion: data,
-        tracker_sync_ok: syncResult.ok,
-        tracker_sync_error: syncResult.ok ? null : syncResult.error,
-        tracker_sync_mode: syncResult.mode || null,
-        tracker_assignment_id: syncResult.id || null,
-      });
+        const syncResult = await syncTrackerAssignment(adminSupabase, data);
+        let response = {
+          ok: true,
+          asignacion: data,
+          tracker_sync_ok: syncResult.ok,
+          tracker_sync_error: syncResult.ok ? null : syncResult.error,
+          tracker_sync_mode: syncResult.mode || null,
+          tracker_assignment_id: syncResult.id || null,
+        };
+        if (syncResult.warning === "tracker_identity_pending") {
+          response.tracker_sync_warning = "tracker_identity_pending";
+        }
+        if (!syncResult.ok && syncResult.error !== "tracker_identity_pending") {
+          console.warn("[SYNC SKIPPED POST]", syncResult.error, syncResult.details || null);
+        }
+        return send(res, 201, response);
     }
 
     if (method === "PATCH") {
