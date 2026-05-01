@@ -226,6 +226,54 @@ function featureFromCoords(lngLatPairs) {
   return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
 }
 
+
+function circlePolygonFeatureFromLatLng(latlng, radiusMeters, steps = 72) {
+  const centerLat = Number(latlng?.lat);
+  const centerLng = Number(latlng?.lng);
+  const radius = Number(radiusMeters);
+
+  if (!Number.isFinite(centerLat) || !Number.isFinite(centerLng) || !Number.isFinite(radius) || radius <= 0) {
+    return null;
+  }
+
+  const earthRadiusMeters = 6378137;
+  const lat1 = (centerLat * Math.PI) / 180;
+  const lng1 = (centerLng * Math.PI) / 180;
+  const angularDistance = radius / earthRadiusMeters;
+  const safeSteps = Math.max(24, Math.min(180, Number(steps) || 72));
+  const ring = [];
+
+  for (let i = 0; i <= safeSteps; i += 1) {
+    const bearing = (2 * Math.PI * i) / safeSteps;
+    const sinLat1 = Math.sin(lat1);
+    const cosLat1 = Math.cos(lat1);
+    const sinDistance = Math.sin(angularDistance);
+    const cosDistance = Math.cos(angularDistance);
+
+    const lat2 = Math.asin(
+      sinLat1 * cosDistance + cosLat1 * sinDistance * Math.cos(bearing)
+    );
+    const lng2 =
+      lng1 +
+      Math.atan2(
+        Math.sin(bearing) * sinDistance * cosLat1,
+        cosDistance - sinLat1 * Math.sin(lat2)
+      );
+
+    ring.push([(lng2 * 180) / Math.PI, (lat2 * 180) / Math.PI]);
+  }
+
+  return {
+    type: "Feature",
+    properties: {
+      shape: "circle",
+      radius_m: radius,
+      center: { lat: centerLat, lng: centerLng },
+    },
+    geometry: { type: "Polygon", coordinates: [ring] },
+  };
+}
+
 function getLastGeomanLayer(map) {
   if (!map) return null;
   let last = null;
@@ -565,6 +613,94 @@ export default function NuevaGeocerca() {
     showOk(t("geocercas.coordsReady", { defaultValue: "Shape created from coordinates." }));
   }, [coordText, clearCanvas, t, showErr, showOk, scheduleFitToGeo]);
 
+  const handleDrawCircleByRadius = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) {
+      showErr(t("geocercas.errorMapNotReady", { defaultValue: "The map is not ready yet." }));
+      return;
+    }
+
+    const orgId = currentOrg?.id || null;
+    if (!orgId) {
+      showErr(t("geocercas.manage.noOrgTitle", { defaultValue: "Org not available." }));
+      return;
+    }
+
+    if (hasFiniteGeofenceLimit && !canCreateGeofence) {
+      showWarn(
+        t("geocercas.plan.limitReached", {
+          defaultValue: "You have reached the geofence limit of your current plan. Upgrade to PRO to continue.",
+        })
+      );
+      return;
+    }
+
+    const radiusInput = window.prompt(
+      t("geocercas.circleRadiusPrompt", { defaultValue: "Circle radius in meters:" }),
+      "100"
+    );
+
+    if (radiusInput === null) return;
+
+    const radiusMeters = Number(String(radiusInput).replace(",", "."));
+    if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
+      showErr(t("geocercas.circleRadiusInvalid", { defaultValue: "Invalid radius. Enter a number greater than 0." }));
+      return;
+    }
+
+    try {
+      map.pm?.disableDraw?.();
+    } catch {}
+
+    try {
+      map.getContainer().style.cursor = "crosshair";
+    } catch {}
+
+    showOk(
+      t("geocercas.circleClickCenter", {
+        defaultValue: "Click once on the map to place the circle center.",
+      })
+    );
+
+    map.once("click", (event) => {
+      try {
+        map.getContainer().style.cursor = "";
+      } catch {}
+
+      const feature = circlePolygonFeatureFromLatLng(event?.latlng, radiusMeters);
+      if (!feature) {
+        showErr(t("geocercas.circleCreateError", { defaultValue: "Could not create the circle." }));
+        return;
+      }
+
+      clearCanvas();
+      setDraftFeature(feature);
+      setDraftId((x) => x + 1);
+      setViewFeature(null);
+      setViewCentroid(null);
+      selectedLayerRef.current = null;
+      lastCreatedLayerRef.current = null;
+      scheduleFitToGeo(feature);
+
+      showOk(
+        t("geocercas.circleReady", {
+          radius: Math.round(radiusMeters),
+          defaultValue: `Circle created with radius ${Math.round(radiusMeters)} m. Enter a name and save it.`,
+        })
+      );
+    });
+  }, [
+    currentOrg?.id,
+    hasFiniteGeofenceLimit,
+    canCreateGeofence,
+    clearCanvas,
+    scheduleFitToGeo,
+    showErr,
+    showOk,
+    showWarn,
+    t,
+  ]);
+
   const handleSave = useCallback(async () => {
     try {
       const nm = String(geofenceName || "").trim();
@@ -624,11 +760,13 @@ export default function NuevaGeocerca() {
         return unique;
       });
 
+      const radiusMetersToSave = Number(fc?.features?.[0]?.properties?.radius_m || 0);
+
       await upsertGeofence({
         name: nm,
         polygon_geojson: fc,
         geojson: fc,
-        radius_m: 0,
+        radius_m: Number.isFinite(radiusMetersToSave) ? radiusMetersToSave : 0,
       });
 
       clearCanvas();
@@ -881,7 +1019,7 @@ export default function NuevaGeocerca() {
               onChange={(e) => setGeofenceName(e.target.value)}
             />
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button
                 onClick={() => {
                   setCoordText("");
@@ -891,6 +1029,19 @@ export default function NuevaGeocerca() {
                 type="button"
               >
                 {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
+              </button>
+
+              <button
+                onClick={handleDrawCircleByRadius}
+                disabled={entitlementsLoading || !canCreateGeofence}
+                className={`pointer-events-auto rounded-xl px-3 py-2.5 text-sm font-semibold ${
+                  entitlementsLoading || !canCreateGeofence
+                    ? "cursor-not-allowed border border-slate-700 bg-slate-800 text-slate-400"
+                    : "border border-cyan-500/50 bg-cyan-950/60 text-cyan-100 hover:bg-cyan-900/70"
+                }`}
+                type="button"
+              >
+                {t("geocercas.buttonCircleByRadius", { defaultValue: "Circle by radius" })}
               </button>
 
               <button
@@ -994,6 +1145,20 @@ export default function NuevaGeocerca() {
               top: 140px !important;
             }
           }
+
+          /* Geoman circle drawing is intentionally disabled.
+             The app uses the external "Circle by radius" button instead,
+             because Geoman's native circle UX does not allow exact radius input. */
+          .leaflet-pm-icon-circle,
+          .leaflet-pm-icon-circle-marker,
+          .leaflet-pm-draw-circle,
+          .leaflet-pm-draw-circle-marker,
+          .leaflet-pm-toolbar .button-container:has(.leaflet-pm-icon-circle),
+          .leaflet-pm-toolbar .button-container:has(.leaflet-pm-icon-circle-marker),
+          .leaflet-pm-toolbar .button-container:has([title="Draw Circle"]),
+          .leaflet-pm-toolbar .button-container:has([title="Draw Circle Marker"]) {
+            display: none !important;
+          }
         `}</style>
 
         <div className="absolute inset-0 z-0">
@@ -1058,7 +1223,7 @@ export default function NuevaGeocerca() {
                   drawText: false,
                   drawRectangle: true,
                   drawPolygon: true,
-                  drawCircle: true,
+                  drawCircle: false,
                   editMode: true,
                   dragMode: true,
                   removalMode: true,
