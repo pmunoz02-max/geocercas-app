@@ -40,24 +40,31 @@ Este archivo es la **fuente única de verdad** para el tracking tracker en Andro
 
 ---
 
-## 3. Arquitectura vigente
+## 3. Arquitectura vigente: cadena de verdad tracker (2026-05-01)
 
-La arquitectura actual del tracker Android se compone de estas piezas:
+El flujo y la fuente de verdad para trackers es la siguiente:
 
-### Entry point Android
-- `WebViewActivity.java`
+1. **auth.users**: Usuario autenticado en Supabase Auth.
+2. **users_public**: Sincronización pública y canónica del usuario, con rol `tracker` si corresponde.
+3. **personal.user_id**: Identidad canónica del tracker en la organización. Si es null, el flujo se detiene.
+4. **asignaciones**: Asignaciones visuales y de negocio. Solo operativas, no usadas directamente en runtime.
+5. **tracker_assignments**: Espejo runtime de asignaciones activas, sincronizado automáticamente tras enlazar `personal.user_id`.
+6. **tracker_positions**: Única fuente canónica de posiciones para dashboard y reportes.
 
-### Puente WebView → Android
-- `AndroidBridge.java`
+### Diagrama de flujo
 
-### Servicio nativo vigente
-- `ForegroundLocationService.kt`
+```mermaid
+graph TD;
+  A[auth.users] --> B[users_public];
+  B --> C[personal.user_id];
+  C --> D[asignaciones activas];
+  D --> E[tracker_assignments];
+  E --> F[tracker_positions];
+```
 
-### Reinicio automático del servicio
-- `BootReceiver.kt`
-
-### Configuración de app links
-- `AndroidManifest.xml`
+- El dashboard y los reportes solo deben consultar tracker_positions.
+- No se debe usar owner_id ni userId del query/body en ningún punto del flujo.
+- Si personal.user_id es null, el tracker no puede operar.
 
 ---
 

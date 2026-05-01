@@ -1,18 +1,28 @@
+﻿> ⚠️ SUPERSEDED / HISTÓRICO
+>
+> Este documento queda como referencia histórica.  
+> La fuente viva actual del flujo invite/tracker es:
+>
+> docs/skills/invite-tracker.md
+>
+> Regla vigente: signaciones = fuente operativa/UI, 	racker_assignments = espejo runtime Android, 	racker_positions = fuente canónica de posiciones dashboard.
+
+---
 # Tracker Runtime Session Flow (Final Fix)
 
 ## Problema previo
 
-El flujo de invitación estaba devolviendo el `invite_token` como:
+El flujo de invitaciÃ³n estaba devolviendo el `invite_token` como:
 
-- tracker_runtime_token ❌
+- tracker_runtime_token âŒ
 
 Esto causaba:
 
 - ERROR invalid_token en /api/send-position
-- tracker nunca aparecía como activo
-- desalineación entre invite, runtime y tracking
+- tracker nunca aparecÃ­a como activo
+- desalineaciÃ³n entre invite, runtime y tracking
 
-## Solución implementada
+## SoluciÃ³n implementada
 
 Se introduce un flujo correcto de runtime:
 
@@ -29,13 +39,13 @@ Se introduce un flujo correcto de runtime:
    - calcula hash
    - valida contra tracker_runtime_sessions
    - verifica assignment activa
-   - inserta posición
+   - inserta posiciÃ³n
    - actualiza tracker_latest
    - actualiza tracker_health
 
 ## Resultado esperado
 
-- tracker válido aparece como ACTIVE
+- tracker vÃ¡lido aparece como ACTIVE
 - dashboard refleja estado real
 - desaparece invalid_token
 - flujo tipo Uber funcional
@@ -51,7 +61,7 @@ El `tracker_user_id` debe mapearse siempre a `personal.user_id` (que referencia 
 
 ---
 
-## Fix Abril 2026 — claim sub obligatorio
+## Fix Abril 2026 â€” claim sub obligatorio
 
 El `tracker_runtime_token` debe incluir siempre:
 
@@ -59,9 +69,9 @@ El `tracker_runtime_token` debe incluir siempre:
 - `tracker_user_id`
 - `org_id`
 
-Esto permite que `auth.uid()` y la lógica de `send_position` resuelvan correctamente el usuario tracker.
+Esto permite que `auth.uid()` y la lÃ³gica de `send_position` resuelvan correctamente el usuario tracker.
 
-Código canónico:
+CÃ³digo canÃ³nico:
 
 ```js
 const token = jwt.sign(
@@ -76,11 +86,11 @@ const token = jwt.sign(
   }
 );
 ```
-## Fix Abril 2026 — runtime session obligatoria
+## Fix Abril 2026 â€” runtime session obligatoria
 
 El `tracker_runtime_token` es tratado como opaco y no se decodifica en `/api/send-position`.
 
-Para que el sistema funcione correctamente, es obligatorio registrar una sesión en `tracker_runtime_sessions` al momento de aceptar la invitación.
+Para que el sistema funcione correctamente, es obligatorio registrar una sesiÃ³n en `tracker_runtime_sessions` al momento de aceptar la invitaciÃ³n.
 
 Campos requeridos:
 
@@ -97,6 +107,6 @@ La Edge Function `send_position` resuelve la identidad del tracker a partir de e
 
 Sin este registro:
 
-- user_id → null
-- tracker_user_id → null
+- user_id â†’ null
+- tracker_user_id â†’ null
 - No hay inserts en positions

@@ -1,3 +1,13 @@
+﻿> ⚠️ SUPERSEDED / HISTÓRICO
+>
+> Este documento queda como referencia histórica.  
+> La fuente viva actual del flujo invite/tracker es:
+>
+> docs/skills/invite-tracker.md
+>
+> Regla vigente: signaciones = fuente operativa/UI, 	racker_assignments = espejo runtime Android, 	racker_positions = fuente canónica de posiciones dashboard.
+
+---
 # Tracker Runtime User ID Fix
 
 ## Problema
@@ -14,29 +24,29 @@ en lugar de:
 
 Esto provocaba:
 
-- asociación incorrecta del `tracker_user_id`
+- asociaciÃ³n incorrecta del `tracker_user_id`
 - tracker activo incorrecto en dashboard
-- desalineación entre invite, runtime token y tracker health
+- desalineaciÃ³n entre invite, runtime token y tracker health
 - posibles errores `invalid_token` en Android tracking
 
-## Solución aplicada
+## SoluciÃ³n aplicada
 
-Se actualizó la resolución del tracker para usar:
+Se actualizÃ³ la resoluciÃ³n del tracker para usar:
 
 - `personal.user_id`
 
-y se agregó validación explícita cuando `personal.user_id` falta.
+y se agregÃ³ validaciÃ³n explÃ­cita cuando `personal.user_id` falta.
 
 ## Efecto esperado
 
 - el tracker invitado correcto queda asociado al runtime
 - `tracker_health` se registra para el usuario correcto
 - el dashboard muestra el tracker correcto en lugar del owner
-- se reduce la desalineación entre JWT y `tracker_user_id`
+- se reduce la desalineaciÃ³n entre JWT y `tracker_user_id`
 
 ## Nota operativa
 
-Después de este fix se recomienda:
+DespuÃ©s de este fix se recomienda:
 
 - generar un invite nuevo
 - no reutilizar invites previos

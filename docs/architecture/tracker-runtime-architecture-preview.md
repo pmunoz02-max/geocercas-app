@@ -1,3 +1,13 @@
+﻿> ⚠️ SUPERSEDED / HISTÓRICO
+>
+> Este documento queda como referencia histórica.  
+> La fuente viva actual del flujo invite/tracker es:
+>
+> docs/skills/invite-tracker.md
+>
+> Regla vigente: signaciones = fuente operativa/UI, 	racker_assignments = espejo runtime Android, 	racker_positions = fuente canónica de posiciones dashboard.
+
+---
 # Tracker Runtime Architecture (Preview)
 
 
@@ -20,10 +30,10 @@ This document describes the canonical architecture for tracker runtime authentic
 
 ## 2. Tracker Client (Android/WebView)
 - Stores the **tracker runtime token opaco** and `org_id` locally (e.g., localStorage o almacenamiento seguro).
-- Para cada actualización de posición, envía un POST a `/api/send-position` con:
+- Para cada actualizaciÃ³n de posiciÃ³n, envÃ­a un POST a `/api/send-position` con:
   - `Authorization: Bearer <tracker runtime token opaco>`
   - Cuerpo JSON: `{ org_id, lat, lng, ... }`
-- **El tracker nunca usa autenticación de usuario, sesión web ni magic link. Solo el token runtime es necesario para autenticar y enviar posiciones.**
+- **El tracker nunca usa autenticaciÃ³n de usuario, sesiÃ³n web ni magic link. Solo el token runtime es necesario para autenticar y enviar posiciones.**
 
 ---
 
@@ -77,3 +87,4 @@ graph TD
 ---
 
 _Last updated: 2026-04-11_
+

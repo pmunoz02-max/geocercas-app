@@ -330,17 +330,43 @@ accept-tracker-invite usa TRACKER_RUNTIME_JWT_SECRET con fallback JWT_SECRET par
 
 
 ### Fix: tracker_latest sin created_at
-En producci髇 tracker_latest no tiene created_at. El dashboard consulta solo user_id, org_id, lat, lng, accuracy y ts; positions queda como fallback.
+En producci锟絥 tracker_latest no tiene created_at. El dashboard consulta solo user_id, org_id, lat, lng, accuracy y ts; positions queda como fallback.
 
 
 ### Fix: geofence events table name
-Producci髇 usa geofence_events, no tracker_geofence_events. Si falla la consulta de eventos, dashboard contin鷄 sin bloquear.
+Producci锟絥 usa geofence_events, no tracker_geofence_events. Si falla la consulta de eventos, dashboard contin锟絘 sin bloquear.
 
 
 ### Fix: geofence_events schema real
-Se elimina personal_id de la consulta. Solo columnas reales. Eventos nunca rompen dashboard (fallback vac韔).
+Se elimina personal_id de la consulta. Solo columnas reales. Eventos nunca rompen dashboard (fallback vac锟給).
 
 
 ### Fix: disable geofence events
-Se desactiva geofence_events en dashboard para evitar errores de schema. No es cr韙ico para tracking.
+Se desactiva geofence_events en dashboard para evitar errores de schema. No es cr锟絫ico para tracking.
+
+---
+
+# Fuente viva: Tracker (2026)
+
+Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.
+
+## Arquitectura y fuentes de verdad
+
+- **asignaciones**: Tabla operativa principal. Aqu铆 se gestionan las asignaciones visuales y de negocio para trackers. No es usada directamente en runtime.
+- **tracker_assignments**: Espejo runtime de asignaciones activas. El backend sincroniza esta tabla autom谩ticamente tras enlazar `personal.user_id` y mediante el procedimiento `bootstrap_tracker_assignment_current_user`. Toda la l贸gica de tracking en tiempo real y validaci贸n de sesi贸n usa esta tabla.
+- **tracker_positions**: 脷nica fuente can贸nica de posiciones para dashboard y reportes. El dashboard solo debe consultar esta tabla para mostrar posiciones y recorridos de trackers.
+
+## Reglas clave
+
+- El runtime (validaci贸n de tracking, sesiones, l贸gica de env铆o de posiciones) usa exclusivamente `tracker_assignments`.
+- La tabla `asignaciones` es solo operativa y de gesti贸n, nunca fuente directa para runtime ni dashboard.
+- El dashboard y reportes obtienen posiciones 煤nicamente de `tracker_positions`.
+- No se debe usar `owner_id` ni `userId` del query/body para asociar posiciones o asignaciones.
+
+## Notas
+
+- Si `personal.user_id` es null, el tracker no puede operar ni enviar posiciones.
+- Toda la l贸gica de invitaci贸n, asignaci贸n y tracking debe seguir el flujo y reglas descritas en este documento y en la fuente viva de invite-tracker.
+
+---
 

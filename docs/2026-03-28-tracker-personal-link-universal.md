@@ -1,8 +1,18 @@
-# Final Architecture: Tracker–Personal Linkage and Assignment Resolution
+﻿> ⚠️ SUPERSEDED / HISTÓRICO
+>
+> Este documento queda como referencia histórica.  
+> La fuente viva actual del flujo invite/tracker es:
+>
+> docs/skills/invite-tracker.md
+>
+> Regla vigente: signaciones = fuente operativa/UI, 	racker_assignments = espejo runtime Android, 	racker_positions = fuente canónica de posiciones dashboard.
+
+---
+# Final Architecture: Trackerâ€“Personal Linkage and Assignment Resolution
 
 ## Core Linkage Chain
 
-- **tracker_user_id → personal.user_id → tracker_assignments**
+- **tracker_user_id â†’ personal.user_id â†’ tracker_assignments**
     - Every tracker (user) is linked to a `personal` record via `personal.user_id`.
     - All assignment resolution and permissions are based on this linkage.
 
@@ -31,7 +41,7 @@
 
 ## Summary
 
-- All tracker operations and assignment resolution must use the chain: `tracker_user_id → personal.user_id → tracker_assignments`.
+- All tracker operations and assignment resolution must use the chain: `tracker_user_id â†’ personal.user_id â†’ tracker_assignments`.
 - The invite-tracker endpoint is responsible for ensuring this linkage is always established and never left incomplete.
 - Email-based lookups are no longer supported except for explicit, one-time migration scripts.
 
@@ -100,14 +110,14 @@ WHERE (u.email_count > 1 OR (p.user_id IS NOT NULL AND p.user_id <> u.user_ids[1
 - If no `tracker_user_id` is available from the invite or user creation process, the request **must fail** and no changes to `personal` are allowed.
 - This ensures that `personal.user_id` is only ever set when a valid, persistent auth user exists, preventing orphaned or inconsistent links.
 
-## Resolución de tracker_user_id en invite-tracker
+## ResoluciÃ³n de tracker_user_id en invite-tracker
 
-El endpoint `invite-tracker` debe resolver un `tracker_user_id` válido antes de hacer patch de `personal.user_id`.
+El endpoint `invite-tracker` debe resolver un `tracker_user_id` vÃ¡lido antes de hacer patch de `personal.user_id`.
 
 Orden obligatorio:
 1. intentar obtener `tracker_user_id` desde la respuesta del invite
 2. si el invite no devuelve user id, resolver el usuario existente en `auth.users` por email
 3. si ninguno de los dos caminos devuelve `tracker_user_id`, fallar la solicitud
-4. solo después actualizar `personal.user_id`
+4. solo despuÃ©s actualizar `personal.user_id`
 
 Esto evita continuar el flujo con identidad incompleta.
