@@ -15,12 +15,53 @@ declare
   v_updated integer := 0;
   v_rowcount integer := 0;
 begin
+
   if p_user_id is null or p_org_id is null then
     return jsonb_build_object(
       'ok', false,
       'reason', 'missing_user_or_org'
     );
   end if;
+
+  -- Sincronizar users_public desde auth.users y personal, role 'tracker'
+  -- No escribir period ni period_tstz
+  insert into public.users_public (
+    id,
+    email,
+    full_name,
+    role,
+    tenant_id,
+    created_at
+  )
+  select
+    u.id,
+    lower(u.email),
+    coalesce(
+      nullif(trim(concat_ws(' ', p.nombre, p.apellido)), ''),
+      u.email
+    ) as full_name,
+    'tracker'::app_role,
+    case
+      when exists (
+        select 1
+        from public.tenants t
+        where t.id = p.org_id
+      )
+      then p.org_id
+      else null
+    end as tenant_id,
+    now()
+  from auth.users u
+  join public.personal p
+    on p.user_id = u.id
+  where u.id = p_user_id
+    and p.org_id = p_org_id
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    full_name = coalesce(public.users_public.full_name, excluded.full_name),
+    role = 'tracker'::app_role,
+    tenant_id = coalesce(public.users_public.tenant_id, excluded.tenant_id);
 
   for r in
     with raw_candidates as (

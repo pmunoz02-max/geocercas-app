@@ -132,3 +132,5 @@ El procedimiento `bootstrap_tracker_assignment_current_user` se invoca después 
 - Se llama automáticamente tras enlazar un registro `personal` con el usuario (`user_id`).
 - Garantiza que el usuario tenga una asignación activa válida en `tracker_assignments` acorde a su estado de invitación y acceso.
 - El procedimiento es seguro para múltiples ejecuciones (idempotente).
+
+- 2026-05-01: bootstrap_tracker_assignment_current_user asegura users_public desde auth.users + personal y sincroniza asignaciones activas hacia tracker_assignments despu�s de resolver personal.user_id.
