@@ -134,3 +134,5 @@ El procedimiento `bootstrap_tracker_assignment_current_user` se invoca despuÃ©s 
 - El procedimiento es seguro para mÃºltiples ejecuciones (idempotente).
 
 - 2026-05-01: bootstrap_tracker_assignment_current_user asegura users_public desde auth.users + personal y sincroniza asignaciones activas hacia tracker_assignments después de resolver personal.user_id.
+
+- 2026-05-01: bootstrap_tracker_assignment_current_user asegura users_public desde auth.users + personal y sincroniza asignaciones activas hacia tracker_assignments después de resolver personal.user_id.
