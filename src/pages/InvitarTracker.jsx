@@ -460,6 +460,16 @@ export default function InvitarTracker() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok) {
+        // Si el error es tracker_identity_required, mostrar mensaje amigable
+        if (
+          result?.error === "tracker_identity_required" ||
+          result?.error === "tracker_identity_missing"
+        ) {
+          setErrMsg(
+            "El tracker aún no ha creado su cuenta. Pídele que instale la app e ingrese una vez con este correo. Luego podrás enviar la invitación."
+          );
+          return;
+        }
         throw new Error(
           result?.message ||
             result?.error ||

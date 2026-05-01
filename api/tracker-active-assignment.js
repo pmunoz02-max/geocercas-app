@@ -641,6 +641,32 @@ export default async function handler(req, res) {
       } else if (updated) {
         console.log('[taa] step: successfully linked personal.user_id', { personal_id: updated.id, user_id: updated.user_id });
         personalRecord.user_id = updated.user_id;
+
+        // Segunda llamada idempotente al RPC después de enlazar personal.user_id
+        try {
+          const { data: rpc2, error: rpc2Err } = await supabase
+            .rpc('bootstrap_tracker_assignment_current_user', {
+              p_user_id: trackerUserId,
+              p_org_id: org_id,
+            });
+          if (rpc2Err) {
+            console.log('[taa] BOOTSTRAP RPC (2) ERROR (non-fatal, continuing)', {
+              code: rpc2Err.code,
+              message: rpc2Err.message,
+              hint: rpc2Err.hint,
+              auth_user_id: trackerUserId,
+              org_id,
+            });
+          } else {
+            console.log('[taa] BOOTSTRAP RPC (2) OK', {
+              auth_user_id: trackerUserId,
+              org_id,
+              result: rpc2 ?? '(no data returned)',
+            });
+          }
+        } catch (rpc2Catch) {
+          console.log('[taa] BOOTSTRAP RPC (2) EXCEPTION', rpc2Catch);
+        }
       }
     }
     

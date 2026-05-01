@@ -122,3 +122,13 @@ Flujo completo validado en entorno preview:
 - La tabla `asignaciones` es la fuente operativa principal para la gestión de asignaciones visuales y de negocio.
 - La tabla `tracker_assignments` es un espejo runtime, sincronizado solo cuando existe un `user_id` válido en la entidad `personal`.
 - No se envía invitación de tracker ni se sincroniza a `tracker_assignments` si `personal.user_id` es null; en ese caso, la asignación visual se crea pero la integración tracker queda pendiente hasta que se resuelva la identidad.
+
+---
+
+### Sincronización de asignaciones activas
+
+El procedimiento `bootstrap_tracker_assignment_current_user` se invoca después de resolver y enlazar `personal.user_id` (si era necesario). Esta función sincroniza las asignaciones activas en la tabla `tracker_assignments` para el usuario autenticado y la organización actual, asegurando que el estado sea consistente e idempotente.
+
+- Se llama automáticamente tras enlazar un registro `personal` con el usuario (`user_id`).
+- Garantiza que el usuario tenga una asignación activa válida en `tracker_assignments` acorde a su estado de invitación y acceso.
+- El procedimiento es seguro para múltiples ejecuciones (idempotente).
