@@ -324,6 +324,80 @@ export default function GeoMap({
       }
 
       const layer = e.layer;
+
+      // Manejo especial para círculos creados con Geoman
+      if (e.shape === "Circle" && layer?.getLatLng && layer?.getRadius) {
+        const meta = getNewFeatureMeta?.() || {};
+        const color = meta.color || "#2563eb";
+        const nombreMeta = meta.nombre?.trim();
+
+        const nombre =
+          nombreMeta || window.prompt("Nombre de la geocerca:") || "Geocerca";
+
+        const initialRadius = Math.round(layer.getRadius() || 0);
+        const suggestedRadius = initialRadius > 5 ? initialRadius : 100;
+
+        const radiusInput = window.prompt(
+          "Radio del círculo en metros:",
+          String(suggestedRadius)
+        );
+
+        if (radiusInput === null) {
+          layer?.remove?.();
+          return;
+        }
+
+        const radiusMeters = Number(String(radiusInput).replace(",", "."));
+
+        if (!Number.isFinite(radiusMeters) || radiusMeters <= 0) {
+          alert("Radio inválido. Ingresa un número mayor a 0.");
+          layer?.remove?.();
+          return;
+        }
+
+        layer.setRadius(radiusMeters);
+
+        const center = layer.getLatLng();
+
+        if (layer.setStyle) layer.setStyle({ color });
+
+        layer.bindTooltip(`${nombre} · radio ${Math.round(radiusMeters)} m`, {
+          sticky: true,
+        });
+
+        console.log("[GeoMap] circle_created", {
+          lat: center.lat,
+          lng: center.lng,
+          radiusMeters,
+        });
+
+        try {
+          if (typeof onCreateFeature === "function") {
+            const result = await onCreateFeature({
+              orgId,
+              nombre,
+              color,
+              type: "circle",
+              center: { lat: center.lat, lng: center.lng },
+              radius_m: radiusMeters,
+              geojson: layer.toGeoJSON(),
+              layer,
+            });
+
+            if (result?.id) layer._dbId = result.id;
+          } else {
+            layer._draft = true;
+          }
+
+          fg.addLayer(layer);
+        } catch (err) {
+          alert("No se pudo guardar la geocerca.");
+          layer?.remove?.();
+        }
+
+        return;
+      }
+
       const gj = layer.toGeoJSON(); // Feature completo
       const polygon = polygonLegacyFromFeature(gj);
 
