@@ -261,7 +261,7 @@ export default function GeoMap({
         position: "topleft",
         drawMarker: false,
         drawCircleMarker: false,
-        drawCircle: false,
+        drawCircle: true,
         drawPolyline: false,
         drawRectangle: true,
         drawPolygon: true,
