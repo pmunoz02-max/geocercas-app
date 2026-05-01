@@ -1,3 +1,46 @@
+// Auxiliar para resolver fallbackLng correctamente
+function resolveFallbackLng(i18nInstance) {
+  const fallbackLng = i18nInstance?.options?.fallbackLng;
+
+  if (typeof fallbackLng === "function") {
+    const resolved = fallbackLng(i18nInstance.language);
+    if (Array.isArray(resolved)) return resolved[0] || "es";
+    if (typeof resolved === "string") return resolved;
+    if (resolved && typeof resolved === "object") {
+      if (Array.isArray(resolved.default)) return resolved.default[0] || "es";
+      if (typeof resolved.default === "string") {
+        if (resolved.default.length === 1) return "es";
+        return resolved.default;
+      }
+      return "es";
+    }
+    return "es";
+  }
+
+  if (Array.isArray(fallbackLng)) {
+    return fallbackLng[0] || "es";
+  }
+
+  if (typeof fallbackLng === "string") {
+    return fallbackLng;
+  }
+
+  if (fallbackLng && typeof fallbackLng === "object") {
+    const current = i18nInstance.language;
+    const byCurrent = fallbackLng[current];
+
+    if (Array.isArray(byCurrent)) return byCurrent[0] || "es";
+    if (typeof byCurrent === "string") return byCurrent;
+
+    if (Array.isArray(fallbackLng.default)) return fallbackLng.default[0] || "es";
+    if (typeof fallbackLng.default === "string") {
+      if (fallbackLng.default.length === 1) return "es";
+      return fallbackLng.default;
+    }
+  }
+
+  return "es";
+}
 // src/i18n/i18n.js
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
@@ -108,7 +151,9 @@ if (import.meta.env.DEV) {
   i18n.t = function (key, options = {}) {
     const result = originalT(key, options);
     const lang = normalizeLang(i18n.language) || "es";
-    const fallbackChain = i18n.options.fallbackLng(lang);
+    const fallbackLng = resolveFallbackLng(i18n);
+    // fallbackLng puede ser string o array
+    const fallbackChain = Array.isArray(fallbackLng) ? fallbackLng : [fallbackLng];
 
     for (const fallbackLang of fallbackChain) {
       const exists = i18n.exists(key, { lng: fallbackLang });
