@@ -612,7 +612,7 @@
     "buttonShowSelected": "Show selected",
     "cardListBody": "Soon you will be able to see the list of existing geofences and their details here. For now, use the New geofence option to create and edit.",
     "cardListTitle": "Geofence list",
-    "cardNewBody": "Create a new geofence on the map and assign it to your personnel or activities.",
+    "cardNewBody": "Create a new geofence on the map and assign it to your staff or activities.",
     "cardNewCta": "Go to New geofence →",
     "cardNewTitle": "New geofence",
     "currentOrgLabel": "Current organization:",
@@ -643,7 +643,7 @@
     "placeholderName": "Geofence name",
     "pointsLabel": "Pts",
     "savedOk": "Geofence saved successfully.",
-    "subtitleNew": "Draw a geofence on the map and assign it to your personnel or activities.",
+    "subtitleNew": "Draw a geofence on the map and assign it to your staff or activities.",
     "titleNew": "New geofence",
     "coordsReady": "Shape created from coordinates.",
     "errorSave": "Could not save the geofence. Try again.",
@@ -677,6 +677,14 @@
       "limitReachedBody": "To create more geofences, upgrade your organization to PRO.",
       "freeHint": "FREE plan active. When you reach the limit, you can upgrade to PRO from here.",
       "activePaidHint": "Your organization has a plan with higher capacity enabled."
+    },
+    "new": {
+      "title": "New geofence",
+      "subtitle": "Draw a geofence on the map and assign it to your staff or activities.",
+      "placeholderName": "Zone name",
+      "buttonDrawByCoords": "Draw by coordinates",
+      "buttonCircleByRadius": "Circle by radius",
+      "buttonSave": "Save geofence"
     }
   },
   "help": {
