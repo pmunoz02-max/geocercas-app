@@ -33,15 +33,15 @@
     "errorMissingRate": "Hourly rate is required.",
     "errorMissingTenant": "User organization not found (tenant_id/org_id).",
     "errorNameRequired": "Activity name is required.",
-    "errorRatePositive": "Hourly rate must be greater than 0.",
+    "errorRatePositive": "The hourly cost must be greater than 0.",
     "errorSave": "Could not save the activity.",
     "errorToggle": "Could not change the activity status.",
     "fieldCurrency": "Currency",
     "fieldDescription": "Description",
-    "fieldDescriptionPlaceholder": "Brief description of the activity…",
+    "fieldDescriptionPlaceholder": "Brief description of the activity...",
     "fieldHourlyRate": "Hourly rate",
     "fieldHourlyRatePlaceholder": "E.g. 3.50",
-    "fieldName": "Activity name",
+    "fieldName": "Name",
     "fieldNamePlaceholder": "E.g. Sowing, Irrigation, Harvest",
     "formTitleEdit": "Edit activity",
     "formTitleNew": "New activity",
@@ -56,7 +56,15 @@
     "thDescription": "Description",
     "thName": "Activity",
     "thStatus": "Status",
-    "title": "Activities"
+    "title": "Activities",
+    "subtitle": "Activity catalog with hourly cost.",
+    "fieldNameLabel": "Name",
+    "fieldHourlyRateLabel": "Hourly cost",
+    "fieldCurrencyLabel": "Currency",
+    "fieldDescriptionLabel": "Description (optional)",
+    "fieldDescriptionOptional": "Description (optional)",
+    "perHour": "per hour",
+    "errorRateInvalid": "Enter a valid hourly cost."
   },
   "admins": {
     "actions": {
@@ -2287,5 +2295,10 @@
     "actions": {
       "links": "Links"
     }
+  },
+  "currencies": {
+    "USD": "US dollar",
+    "CAD": "Canadian dollar",
+    "BRL": "Brazilian real"
   }
 }
