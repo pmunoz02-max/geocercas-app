@@ -568,18 +568,18 @@
     "title": "Réinitialiser le mot de passe"
   },
   "geocercas": {
-    "buttonClearCanvas": "Limpiar mapa",
-    "buttonDeleteSelected": "Eliminar seleccionadas",
-    "buttonDrawByCoords": "Dibujar por coordenadas",
-    "buttonSave": "Enregistrer la zone",
+    "buttonClearCanvas": "Effacer la carte",
+    "buttonDeleteSelected": "Supprimer la sélection",
+    "buttonDrawByCoords": "Dessiner par coordonnées",
+    "buttonSave": "Enregistrer la géofence",
     "buttonShowAll": "Mostrar todas",
-    "buttonShowOnMap": "Mostrar en mapa",
+    "buttonShowOnMap": "Afficher sur la carte",
     "buttonShowSelected": "Mostrar seleccionadas",
-    "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar.",
+    "cardListBody": "Vous pourrez bientôt voir ici la liste des géofences existantes et leurs détails. Pour l’instant, utilisez l’option Nouvelle géofence pour créer et modifier.",
     "cardListTitle": "Listado de geocercas",
-    "cardNewBody": "Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
-    "cardNewCta": "Ir a Nueva geocerca →",
-    "cardNewTitle": "Nueva geocerca",
+    "cardNewBody": "Créez une nouvelle géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+    "cardNewCta": "Aller à Nouvelle géofence →",
+    "cardNewTitle": "Nouvelle géofence",
     "currentOrgLabel": "Organización actual:",
     "currentUserLabel": "Usuario:",
     "cursorHint": "Mueve el mouse sobre el mapa",
@@ -589,7 +589,7 @@
     "errorCoordsInvalid": "Coordenadas inválidas. Usa formato: lat,lng (una por línea).",
     "errorNameRequired": "Escribe un nombre para la geocerca.",
     "errorNoGeojson": "No se encontró el GeoJSON de la geocerca.",
-    "errorNoShape": "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
+    "errorNoShape": "Dessinez une géofence ou créez-en une par coordonnées avant d’enregistrer.",
     "errorSelectAtLeastOne": "Selecciona al menos una geocerca.",
     "lat": "Lat",
     "lng": "Lng",
@@ -608,8 +608,8 @@
     "placeholderName": "Nom de la zone",
     "pointsLabel": "Pts",
     "savedOk": "Zone enregistrée avec succès.",
-    "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
-    "titleNew": "Nouvelle zone",
+    "subtitleNew": "Dessinez une géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+    "titleNew": "Nouvelle géofence",
     "coordsReady": "Figura creada desde coordenadas.",
     "errorSave": "Impossible d'enregistrer la zone. Réessayez.",
     "deleteError": "No se pudo eliminar. Intenta nuevamente.",
@@ -642,6 +642,14 @@
       "limitReachedBody": "Para crear más geocercas, actualiza tu organización a PRO.",
       "freeHint": "Plan FREE activo. Cuando alcances el límite, podrás hacer mejora de plan a PRO desde aquí.",
       "activePaidHint": "Tu organización tiene un plan con mayor capacidad habilitada."
+    },
+    "new": {
+      "title": "Nouvelle géofence",
+      "subtitle": "Dessinez une géofence sur la carte et assignez-la à votre personnel ou à vos activités.",
+      "placeholderName": "Nom de la zone",
+      "buttonDrawByCoords": "Dessiner par coordonnées",
+      "buttonCircleByRadius": "Cercle par rayon",
+      "buttonSave": "Enregistrer la géofence"
     }
   },
   "help": {
@@ -1679,7 +1687,7 @@
       "labelSelected": "Geocercas: {{count}}",
       "searchPlaceholder": "Buscar geocerca…",
       "showAll": "Mostrar todas",
-      "hideAll": "Ocultar todas",
+      "hideAll": "Tout masquer",
       "noResults": "Sin resultados…",
       "close": "Cerrar"
     }
@@ -2193,7 +2201,7 @@
     }
   },
   "geofenceForm": {
-    "title": "Nueva geocerca",
+    "title": "Nouvelle géofence",
     "fields": {
       "name": "Nombre",
       "coordinates": "Coordenadas",
@@ -2208,7 +2216,7 @@
       "coordinates": "Coordenadas (lat,lng por línea)"
     },
     "actions": {
-      "save": "Guardar geocerca",
+      "save": "Enregistrer la géofence",
       "saving": "Guardando..."
     },
     "hints": {
