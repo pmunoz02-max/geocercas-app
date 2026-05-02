@@ -483,7 +483,10 @@
       "dateToLabel": "Hasta"
     },
     "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
-    "title": "panel de costos"
+    "title": "panel de costos",
+    "currentPlan": "Plan actuel",
+    "maxPlanEnterprise": "Votre organisation dispose déjà du plan maximal (Enterprise).",
+    "subscribeEnterprise": "S’abonner à Enterprise"
   },
   "dashboardCostos": {
     "title": "Tableau de bord des coûts",

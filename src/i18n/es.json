@@ -512,7 +512,10 @@
       "dateToLabel": "Hasta"
     },
     "subtitle": "Visualiza los costos agregados por persona, actividad y geocerca.",
-    "title": "panel de costos"
+    "title": "panel de costos",
+    "currentPlan": "Plan actual",
+    "maxPlanEnterprise": "Tu organización ya tiene el plan máximo (Enterprise).",
+    "subscribeEnterprise": "Suscribirme a Enterprise"
   },
   "dashboardCostos": {
     "title": "Panel de costos",

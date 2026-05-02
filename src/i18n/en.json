@@ -520,7 +520,10 @@
       "dateToLabel": "To"
     },
     "subtitle": "View aggregated costs by person, activity and geofence.",
-    "title": "Cost panel"
+    "title": "Cost panel",
+    "currentPlan": "Current plan",
+    "maxPlanEnterprise": "Your organization already has the maximum plan (Enterprise).",
+    "subscribeEnterprise": "Subscribe to Enterprise"
   },
   "dashboardCostos": {
     "title": "Cost panel",
