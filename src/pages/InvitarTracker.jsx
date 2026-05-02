@@ -58,6 +58,7 @@ export default function InvitarTracker() {
   const [errMsg, setErrMsg] = useState(null);
   const [inviteLink, setInviteLink] = useState("");
   const [inviteMeta, setInviteMeta] = useState(null);
+  const [trackerIdentityBlocked, setTrackerIdentityBlocked] = useState(false);
 
   // =========================
   // DERIVADOS BASE
@@ -82,6 +83,7 @@ export default function InvitarTracker() {
 
   // =========================
   // MEMOS
+  // =========================
   // =========================
   const orgId = useMemo(() => {
     const id =
@@ -262,6 +264,7 @@ export default function InvitarTracker() {
     async function loadInviteSources() {
       setLoadingPeople(true);
       setErrMsg(null);
+      setTrackerIdentityBlocked(false);
 
       if (!orgId) {
         if (!cancelled) {
@@ -350,10 +353,12 @@ export default function InvitarTracker() {
   useEffect(() => {
     if (!selectedPerson) {
       setEmailInput("");
+      setTrackerIdentityBlocked(false);
       return;
     }
 
     setEmailInput(String(selectedPerson?.email || ""));
+    setTrackerIdentityBlocked(false);
   }, [selectedPerson]);
 
   // =========================
@@ -369,12 +374,36 @@ export default function InvitarTracker() {
     return data?.session?.access_token || null;
   }
 
+  function buildTrackerOnboardingMessage() {
+    const email = normalizeEmail(emailInput) || "[correo]";
+
+    return `Hola, primero debes instalar la app Geocercas GPS y crear una cuenta usando este mismo correo: ${email}.
+
+Después de crear la cuenta, entra una vez a la app. No tienes que configurar nada todavía.
+
+Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como tracker.`;
+  }
+
+  async function copyTrackerOnboardingInstructions() {
+    const text = buildTrackerOnboardingMessage();
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setOkMsg("Instrucciones copiadas para WhatsApp.");
+      setErrMsg(null);
+    } catch (error) {
+      console.error("[invite-tracker] clipboard error", error);
+      setErrMsg("No se pudo copiar el texto. Copia las instrucciones manualmente.");
+    }
+  }
+
   async function onSendInvite(event) {
-    event.preventDefault();
+    event?.preventDefault?.();
 
     setBusy(true);
     setOkMsg(null);
     setErrMsg(null);
+    setTrackerIdentityBlocked(false);
     setInviteLink("");
     setInviteMeta(null);
 
@@ -460,14 +489,14 @@ export default function InvitarTracker() {
       const result = await response.json().catch(() => null);
 
       if (!response.ok) {
-        // Si el error es tracker_identity_required, mostrar mensaje amigable
+        // Si el tracker aún no tiene identidad auth/personal.user_id,
+        // no es un error técnico para el admin: mostramos onboarding accionable.
         if (
           result?.error === "tracker_identity_required" ||
           result?.error === "tracker_identity_missing"
         ) {
-          setErrMsg(
-            "El tracker aún no ha creado su cuenta. Pídele que instale la app e ingrese una vez con este correo. Luego podrás enviar la invitación."
-          );
+          setTrackerIdentityBlocked(true);
+          setErrMsg(null);
           return;
         }
         throw new Error(
@@ -643,6 +672,71 @@ export default function InvitarTracker() {
           </button>
         </div>
 
+        {trackerIdentityBlocked ? (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+            <div className="text-base font-semibold">
+              {t("inviteTracker.identity.title", {
+                defaultValue: "Esta persona aún no tiene cuenta",
+              })}
+            </div>
+
+            <p className="mt-2 text-sm">
+              {t("inviteTracker.identity.body", {
+                defaultValue:
+                  "Antes de enviar la invitación, el tracker debe crear su cuenta e ingresar una vez con el mismo correo.",
+              })}
+            </p>
+
+            <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
+              <li>
+                {t("inviteTracker.identity.stepInstall", {
+                  defaultValue: "Instalar Geocercas GPS.",
+                })}
+              </li>
+              <li>
+                {t("inviteTracker.identity.stepCreate", {
+                  defaultValue: "Crear cuenta con este mismo correo.",
+                })}
+              </li>
+              <li>
+                {t("inviteTracker.identity.stepOpen", {
+                  defaultValue: "Entrar una vez a la app.",
+                })}
+              </li>
+              <li>
+                {t("inviteTracker.identity.stepInvite", {
+                  defaultValue: "Luego el administrador podrá enviar la invitación.",
+                })}
+              </li>
+            </ol>
+
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                className="rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                onClick={copyTrackerOnboardingInstructions}
+              >
+                {t("inviteTracker.identity.copyWhatsapp", {
+                  defaultValue: "Copiar instrucciones para WhatsApp",
+                })}
+              </button>
+
+              <button
+                type="button"
+                className="rounded-lg border border-blue-400 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => onSendInvite()}
+                disabled={busy}
+              >
+                {busy
+                  ? t("common.sending", { defaultValue: "Enviando..." })
+                  : t("inviteTracker.identity.retry", {
+                      defaultValue: "Revisar y enviar invitación nuevamente",
+                    })}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {errMsg ? (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {errMsg}
@@ -773,6 +867,7 @@ export default function InvitarTracker() {
                 setSelectedPersonKey(event.target.value);
                 setOkMsg(null);
                 setErrMsg(null);
+                setTrackerIdentityBlocked(false);
               }}
               disabled={loadingPeople || !hasActiveAssignmentsInOrg || inviteOptions.length === 0}
             >
@@ -810,6 +905,7 @@ export default function InvitarTracker() {
                 setEmailInput(event.target.value);
                 setOkMsg(null);
                 setErrMsg(null);
+                setTrackerIdentityBlocked(false);
               }}
               placeholder={t("inviteTracker.emailPlaceholder", { defaultValue: "tracker@ejemplo.com" })}
               autoComplete="email"
