@@ -988,12 +988,12 @@ export default function NuevaGeocerca() {
       <div className="flex items-start justify-between gap-3 p-3 sm:p-4">
         <div className="min-w-0">
           <h1 className="text-lg sm:text-xl font-semibold leading-tight">
-            {t("geocercas.titleNew", { defaultValue: "New geofence" })}
+              {t("geocercas.new.title", { defaultValue: "Nueva geocerca" })}
           </h1>
           <p className="mt-1 text-[11px] sm:text-xs text-slate-300">
-            {t("geocercas.subtitleNew", {
-              defaultValue: "Draw a geofence on the map and save it to your organization.",
-            })}
+              {t("geocercas.new.subtitle", {
+                defaultValue: "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
+              })}
           </p>
         </div>
 
@@ -1014,7 +1014,7 @@ export default function NuevaGeocerca() {
             <input
               type="text"
               className="pointer-events-auto w-full rounded-xl border border-emerald-400/60 bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-              placeholder={t("geocercas.placeholderName", { defaultValue: "Geofence name" })}
+                placeholder={t("geocercas.new.placeholderName", { defaultValue: "Nombre de la zona" })}
               value={geofenceName}
               onChange={(e) => setGeofenceName(e.target.value)}
             />
@@ -1028,7 +1028,7 @@ export default function NuevaGeocerca() {
                 className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 hover:bg-slate-700"
                 type="button"
               >
-                {t("geocercas.buttonDrawByCoords", { defaultValue: "Draw by coordinates" })}
+                {t("geocercas.new.buttonDrawByCoords", { defaultValue: "Dibujar por coordenadas" })}
               </button>
 
               <button
@@ -1041,7 +1041,7 @@ export default function NuevaGeocerca() {
                 }`}
                 type="button"
               >
-                {t("geocercas.buttonCircleByRadius", { defaultValue: "Circle by radius" })}
+                {t("geocercas.new.buttonCircleByRadius", { defaultValue: "Circle by radius" })}
               </button>
 
               <button
@@ -1054,7 +1054,7 @@ export default function NuevaGeocerca() {
                 }`}
                 type="button"
               >
-                {t("geocercas.buttonSave", { defaultValue: "Save geofence" })}
+                {t("geocercas.new.buttonSave", { defaultValue: "Guardar geocerca" })}
               </button>
             </div>
           </div>
