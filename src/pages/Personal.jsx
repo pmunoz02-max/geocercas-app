@@ -303,7 +303,7 @@ export default function Personal() {
                     onClick={goToUpgrade}
                     className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                   >
-                    Upgrade ahora
+                    {t("personal.upgradeNow", { defaultValue: "Upgrade now" })}
                   </button>
                 </div>
               </div>
@@ -401,7 +401,7 @@ export default function Personal() {
               : "bg-blue-600 text-white hover:bg-blue-700"
           }`}
         >
-          Upgrade 🚀
+          {t("personal.upgrade", { defaultValue: "Upgrade 🚀" })}
         </button>
         <button
           onClick={() => setOpenNew(true)}
@@ -412,7 +412,7 @@ export default function Personal() {
               : "bg-slate-900 text-white"
           }`}
         >
-          + Nuevo
+          {t("personal.buttonNew", { defaultValue: "+ New" })}
         </button>
       </div>
       <div className="flex items-start justify-between gap-4">
@@ -612,7 +612,7 @@ export default function Personal() {
                     onClick={goToUpgrade}
                     className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                   >
-                    Upgrade ahora
+                    {t("personal.upgradeNow", { defaultValue: "Upgrade now" })}
                   </button>
                 </div>
               </div>
