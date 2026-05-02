@@ -1,39 +1,3 @@
-  // Agrupa posiciones visibles por tracker para dibujar rutas históricas
-  const allTrackerPaths = useMemo(() => {
-    if (selectedTrackerId !== "all") return [];
-
-    const groups = new Map();
-
-    (visiblePositions || []).forEach((p) => {
-      const key = p.user_id || p.tracker_user_id || p.tracker_key || p.personal_id;
-      const lat = Number(p.lat);
-      const lng = Number(p.lng);
-
-      if (!key || !isValidLatLng(lat, lng)) return;
-
-      if (!groups.has(key)) groups.set(key, []);
-
-      groups.get(key).push({
-        ...p,
-        lat,
-        lng,
-        ts: getPositionTs(p),
-      });
-    });
-
-    return Array.from(groups.entries()).map(([trackerId, rows], idx) => {
-      const sorted = rows
-        .slice()
-        .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
-
-      return {
-        trackerId,
-        color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
-        latlngs: sorted.map((p) => [p.lat, p.lng]),
-        points: sorted,
-      };
-    });
-  }, [selectedTrackerId, visiblePositions]);
 // Devuelve el nombre amigable del tracker según prioridad solicitada
 // Nombre amigable de tracker según prioridad estricta
 function getFriendlyTrackerName(tracker) {
@@ -2293,6 +2257,76 @@ export default function TrackerDashboard() {
       return live.status === statusFilter;
     });
   }, [allTrackerMarkers, selectedTrackerId, statusFilter]);
+
+
+  const allTrackerPaths = useMemo(() => {
+    if (selectedTrackerId !== "all") return [];
+
+    const visibleMarkerByKey = new Map();
+    (filteredAllTrackerMarkers || []).forEach((marker) => {
+      const keys = [
+        marker?.key,
+        marker?.tracker_key,
+        marker?.user_id,
+        marker?.latest?.tracker_key,
+        marker?.latest?.user_id,
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      keys.forEach((key) => {
+        if (!visibleMarkerByKey.has(key)) visibleMarkerByKey.set(key, marker);
+      });
+    });
+
+    if (!visibleMarkerByKey.size) return [];
+
+    const groups = new Map();
+
+    (positions || []).forEach((p) => {
+      const trackerId = getTrackerKey(p);
+      if (!trackerId) return;
+
+      const key = String(trackerId);
+      const marker = visibleMarkerByKey.get(key);
+      if (!marker) return;
+
+      const lat = Number(p?.lat);
+      const lng = Number(p?.lng);
+      if (!isValidLatLng(lat, lng)) return;
+
+      if (!groups.has(key)) {
+        groups.set(key, {
+          trackerId: key,
+          marker,
+          points: [],
+        });
+      }
+
+      groups.get(key).points.push({
+        ...p,
+        lat,
+        lng,
+        ts: getPositionTs(p),
+      });
+    });
+
+    return Array.from(groups.values())
+      .map((group, idx) => {
+        const sorted = group.points
+          .slice()
+          .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
+          .slice(-MAX_HISTORY_PER_TRACKER);
+
+        return {
+          trackerId: group.trackerId,
+          color: group.marker?.color || TRACKER_COLORS[idx % TRACKER_COLORS.length],
+          latlngs: sorted.map((p) => [p.lat, p.lng]),
+          points: sorted,
+        };
+      })
+      .filter((route) => route.latlngs.length > 1);
+  }, [filteredAllTrackerMarkers, positions, selectedTrackerId]);
 
   const trackerStatusSummary = useMemo(() => {
     if (trackerCounts) {
