@@ -9,7 +9,7 @@ import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import { useAuthSafe } from "@/auth/AuthProvider.jsx";
 import { useTranslation } from "react-i18next";
 
-import { supabase } from "@/lib/supabaseClient.js";
+
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 
@@ -409,17 +409,11 @@ export default function NuevaGeocerca() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from("geofences")
-      .select("id, org_id, name, geojson, polygon_geojson, geom, bbox, lat, lng, radius_m, active, is_default, created_at, updated_at")
-      .eq("org_id", orgId)
-      .eq("active", true)
-      .order("is_default", { ascending: false })
-      .order("updated_at", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("[refreshGeofenceList] supabase error:", error);
+    let data = [];
+    try {
+      data = await listGeofences(orgId, true);
+    } catch (error) {
+      console.error("[refreshGeofenceList] listGeofences error:", error);
       setGeofenceList([]);
       return;
     }
