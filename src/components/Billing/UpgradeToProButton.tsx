@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 // Detectar entorno preview para mostrar nota (solo preview.* o *.vercel.app)
 const hostname = typeof window !== "undefined" ? window.location.hostname : "";
@@ -8,11 +9,13 @@ import { getPaddleEnv } from "@/config/paddleEnv";
 
 type Props = {
   orgId: string;
-  plan: "pro" | "enterprise";
+  plan?: "pro" | "enterprise";
   className?: string;
 };
 
 export default function UpgradeToProButton({ orgId, plan, className = "" }: Props) {
+  const checkoutPlan = plan || "pro";
+  const { t } = useTranslation();
   const { activeOrgId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -22,6 +25,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
     e.stopPropagation();
 
     console.clear();
+
 
     try {
       setLoading(true);
@@ -38,7 +42,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       console.log("[UpgradeToProButton] click", {
         normalizedOrgId,
         activeOrgId,
-        plan: "pro",
+        plan: checkoutPlan,
       });
 
       if (!normalizedOrgId) {
@@ -48,7 +52,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
       const payload = {
         org_id: normalizedOrgId,
         orgId: normalizedOrgId,
-        plan: "pro",
+        plan: checkoutPlan,
       };
 
       const { data, error } = await supabase.functions.invoke(
@@ -93,6 +97,11 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
     }
   };
 
+  const buttonLabel =
+    checkoutPlan === "enterprise"
+      ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
+      : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" });
+
   return (
     <div>
       <button
@@ -101,11 +110,7 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
         disabled={loading}
         className={className}
       >
-        {loading
-          ? "Abriendo checkout..."
-          : plan === "enterprise"
-            ? "Suscribirme a Enterprise"
-            : "Suscribirme a PRO"}
+        {loading ? t("dashboard.openingCheckout", { defaultValue: "Opening checkout..." }) : buttonLabel}
       </button>
       {errorMsg && (
         <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
