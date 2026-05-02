@@ -299,17 +299,17 @@
       "invalidLinkDetail": "Esto pasa si el enlace expirÃ³ o si fue abierto o escaneado antes, por ejemplo por una previsualizaciÃ³n del correo o si se abriÃ³ dos veces.",
       "invalidLinkTipLatest": "Usa el correo mÃ¡s reciente y Ã¡brelo solo una vez.",
       "invalidLinkTipBrowser": "Evita abrirlo dentro de un navegador interno del correo. Si puedes, usa Abrir en Chrome.",
-      "invalidLinkTipOwner": "Si vuelve a fallar, pide al Owner que reenvÃ­e la invitaciÃ³n.",
+      "invalidLinkTipOwner": "Si vuelve a fallar, pide al Owner que reenvíe la invitación.",
       "loginFailedTitle": "No se pudo completar el login",
-      "loginFailedDetail": "No se pudo establecer la sesiÃ³n desde el callback. Esto suele ocurrir si el enlace fue consumido, expirÃ³ o fue procesado con el cliente incorrecto.",
+      "loginFailedDetail": "No se pudo establecer la sesión desde el callback. Esto suele ocurrir si el enlace fue consumido, expiró o fue procesado con el cliente incorrecto.",
       "loginFailedTipRetry": "Reintenta con un enlace nuevo.",
       "loginFailedTipDevice": "Abre el enlace en el mismo dispositivo donde lo recibiste.",
-      "confirmingSession": "Confirmando sesiÃ³nâ€¦",
-      "exchangingCode": "Intercambiando cÃ³digoâ€¦",
-      "restoringSession": "Restaurando sesiÃ³nâ€¦",
+      "confirmingSession": "Confirmando sesión…",
+      "exchangingCode": "Intercambiando código…",
+      "restoringSession": "Restaurando sesión…",
       "noSessionFromCallback": "No se pudo establecer sesiÃ³n desde el callback.",
-      "creatingSecureCookies": "Creando cookies segurasâ€¦",
-      "redirecting": "Redirigiendoâ€¦"
+      "creatingSecureCookies": "Creando cookies seguras…",
+      "redirecting": "Redirigiendo…"
     },
     "signup": {
       "title": "Crear cuenta",
@@ -327,12 +327,12 @@
         "create": "Crear cuenta con Magic Link"
       },
       "errors": {
-        "invalidEmail": "Ingresa un correo vÃ¡lido.",
-        "mustAcceptTerms": "Debes aceptar los TÃ©rminos y la PolÃ­tica de Privacidad.",
+        "invalidEmail": "Ingresa un correo válido.",
+        "mustAcceptTerms": "Debes aceptar los Términos y la Política de Privacidad.",
         "sendFailed": "No se pudo enviar el Magic Link: {{message}}",
         "unknown": "Error desconocido{{#if message}}: {{message}}{{/if}}",
         "googleFailed": "No se pudo iniciar con Google: {{message}}",
-        "googleNoUrl": "No se obtuvo URL de redirecciÃ³n de Google.",
+        "googleNoUrl": "No se obtuvo URL de redirección de Google.",
         "googleUnknown": "Error desconocido con Google OAuth{{#if message}}: {{message}}{{/if}}"
       },
       "messages": {
@@ -344,7 +344,7 @@
         "and": "y la",
         "privacy": "PolÃ­tica de Privacidad"
       },
-      "alreadyHaveAccount": "Â¿Ya tienes cuenta?",
+      "alreadyHaveAccount": "¿Ya tienes cuenta?",
       "loginLink": "Inicia sesiÃ³n",
       "separator": "o",
       "oauthGoogle": "Registrarse con Google"
@@ -352,17 +352,17 @@
   },
   "authInvite": {
     "continue": "Continuar",
-    "expiredOrUsed": "La invitaciÃ³n es invÃ¡lida, ya expirÃ³ o fue utilizada.",
+    "expiredOrUsed": "La invitación es inválida, ya expiró o fue utilizada.",
     "goToLogin": "Ir a iniciar sesiÃ³n",
     "notInviteLink": "Este enlace no es una invitaciÃ³n vÃ¡lida. Usa el enlace de invitaciÃ³n que recibiste por correo.",
-    "processing": "Validando invitaciÃ³nâ€¦",
-    "timeout": "La validaciÃ³n de la invitaciÃ³n tardÃ³ demasiado. Intenta nuevamente.",
+    "processing": "Validando invitación…",
+    "timeout": "La validación de la invitación tardó demasiado. Intenta nuevamente.",
     "title": "Has sido invitado"
   },
   "accountPage": {
     "title": "Cuenta",
     "loading": "Cargando cuenta...",
-    "noActiveSession": "No hay sesiÃ³n activa",
+    "noActiveSession": "No hay sesión activa",
     "sessionStatus": "Estado de sesiÃ³n",
     "user": "Usuario",
     "currentOrganization": "OrganizaciÃ³n actual",
@@ -372,7 +372,7 @@
   "errors": {
     "notAuthorized": {
       "title": "Acceso denegado",
-      "body": "No tienes permisos para acceder a esta secciÃ³n. Contacta al administrador si crees que es un error."
+      "body": "No tienes permisos para acceder a esta sección. Contacta al administrador si crees que es un error."
     }
   },
   "common": {
@@ -385,12 +385,12 @@
       "installApp": "Instalar app",
       "loading": "Cargando...",
       "no": "No",
-      "logout": "Cerrar sesiÃ³n",
+      "logout": "Cerrar sesión",
       "openApp": "Abrir app",
       "processing": "Saliendo...",
       "retry": "Reintentar",
       "save": "Guardar",
-      "yes": "SÃ­"
+      "yes": "Sí"
     },
     "back": "Volver",
     "createOrganization": "Crear organizaciÃ³n",
@@ -400,9 +400,9 @@
       "noOrg": "Sin organizaciÃ³n"
     },
     "language": {
-      "en": "InglÃ©s",
-      "es": "EspaÃ±ol",
-      "fr": "FrancÃ©s"
+      "en": "Inglés",
+      "es": "Español",
+      "fr": "Francés"
     },
     "orgNamePlaceholder": "Nombre de la organizaciÃ³n (ej. Finca A)",
     "refreshContext": "Refrescar contexto",
@@ -421,14 +421,14 @@
     "loading": "Cargando",
     "search": "Buscar",
     "noResults": "Sin resultados",
-    "separator": "â€”",
+    "separator": "—",
     "zoom": "Zoom",
     "refresh": "Actualizar",
     "ok": "OK",
-    "openArrow": "Abrir â†’",
-    "debug": "DepuraciÃ³n",
+    "openArrow": "Abrir →",
+    "debug": "Depuración",
     "pagination": {
-      "pageOf": "PÃ¡gina {{page}} de {{total}}",
+      "pageOf": "Página {{page}} de {{total}}",
       "prev": "Anterior",
       "next": "Siguiente"
     },
@@ -440,7 +440,7 @@
   },
   "dashboard": {
     "welcome": "Bienvenido a App Geocercas",
-    "sessionAs": "SesiÃ³n iniciada como {{role}}",
+    "sessionAs": "Sesión iniciada como {{role}}",
     "email": "Correo",
     "organizationId": "OrganizaciÃ³n ID",
     "goToDashboard": "Ir al panel",
@@ -467,8 +467,8 @@
       }
     },
     "adminPanel": {
-      "title": "Panel de AdministraciÃ³n",
-      "description": "Gestione usuarios, roles y organizaciones desde aquÃ­.",
+      "title": "Panel de Administración",
+      "description": "Gestione usuarios, roles y organizaciones desde aquí.",
       "sections": {
         "users": "Usuarios",
         "roles": "Roles",
@@ -478,16 +478,16 @@
         "name": "Nombre",
         "email": "Email",
         "role": "Rol",
-        "createdAt": "Fecha CreaciÃ³n",
+        "createdAt": "Fecha Creación",
         "description": "DescripciÃ³n"
       }
     },
     "adminTools": {
       "title": "Herramientas de administrador",
-      "protectedPanel": "Selecciona un mÃ³dulo para administrar tu app. Este panel estÃ¡ protegido para usuarios con rol owner o admin."
+      "protectedPanel": "Selecciona un módulo para administrar tu app. Este panel está protegido para usuarios con rol owner o admin."
     },
     "administracion": {
-      "title": "AdministraciÃ³n"
+      "title": "Administración"
     },
     "adminReportes": {
       "title": "Reportes"
@@ -502,7 +502,7 @@
       "costByActivity": "Costo por actividad",
       "costByGeofence": "Costo por geocerca",
       "costByPerson": "Costo por persona",
-      "hoursByDay": "Horas por dÃ­a"
+      "hoursByDay": "Horas por día"
     },
     "errorLoad": "Error al cargar el panel de costos.",
     "filters": {
@@ -516,8 +516,8 @@
   },
   "dashboardCostos": {
     "title": "Panel de costos",
-    "subtitle": "Visualiza KPIs y grÃ¡ficos de costos por persona, actividad y geocerca.",
-    "currentOrganization": "OrganizaciÃ³n actual",
+    "subtitle": "Visualiza KPIs y gráficos de costos por persona, actividad y geocerca.",
+    "currentOrganization": "Organización actual",
     "actions": {
       "refresh": "Refrescar datos",
       "exportData": "Exportar datos",
@@ -530,22 +530,22 @@
       "avgRate": "Tarifa promedio"
     },
     "errors": {
-      "invalidAction": "AcciÃ³n invÃ¡lida",
+      "invalidAction": "Acción inválida",
       "missingDates": "Debes seleccionar un rango de fechas",
       "invalidDateRange": "La fecha \"Desde\" no puede ser posterior a la fecha \"Hasta\"",
       "load": "Error al cargar el panel de costos"
     },
-    "loading": "Refrescandoâ€¦",
-    "chartDimension": "DimensiÃ³n",
-    "chartMetric": "MÃ©trica",
-    "chartTitle": "GrÃ¡fico de costos",
-    "chartType": "Tipo de grÃ¡fico",
-    "chartTypeArea": "Ãrea",
+    "loading": "Refrescando…",
+    "chartDimension": "Dimensión",
+    "chartMetric": "Métrica",
+    "chartTitle": "Gráfico de costos",
+    "chartType": "Tipo de gráfico",
+    "chartTypeArea": "Área",
     "chartTypeBar": "Barras",
-    "chartTypeLine": "LÃ­neas",
+    "chartTypeLine": "Líneas",
     "chartTypePie": "Pastel",
     "colActividad": "Actividad",
-    "colCategoria": "CategorÃ­a",
+    "colCategoria": "Categoría",
     "colCosto": "Costo",
     "colFecha": "Fecha",
     "colGeocerca": "Geocerca",
@@ -585,22 +585,22 @@
     "currenciesSummaryTitle": "Resumen por moneda",
     "labelHours": "horas",
     "exportNoData": "No hay datos para exportar",
-    "exportChartError": "No se pudo exportar el grÃ¡fico"
+    "exportChartError": "No se pudo exportar el gráfico"
   },
   "forgot": {
     "back": "Volver a iniciar sesiÃ³n",
     "email": "Correo",
     "emailPh": "tu@correo.com",
-    "errorEmail": "Ingresa un correo vÃ¡lido.",
+    "errorEmail": "Ingresa un correo válido.",
     "errorGeneric": "No se pudo enviar el correo.",
-    "noteDesc": "El enlace entrarÃ¡ por /auth/callback y te enviarÃ¡ a /reset-contraseÃ±a para crear la nueva contraseÃ±a.",
+    "noteDesc": "El enlace entrará por /auth/callback y te enviará a /reset-contraseña para crear la nueva contraseña.",
     "noteTitle": "Nota",
     "send": "Enviar enlace",
-    "sending": "Enviandoâ€¦",
+    "sending": "Enviando…",
     "subtitle": "Te enviaremos un enlace para crear una nueva contraseÃ±a. Si no te llega, revisa SPAM.",
-    "success": "âœ… Si el correo existe, te llegarÃ¡ un enlace para crear una nueva contraseÃ±a. Revisa SPAM y Ã¡brelo en el mismo navegador.",
-    "tip": "Tip: si el enlace falla, genera uno nuevo y Ã¡brelo en una ventana de incÃ³gnito.",
-    "title": "Restablecer contraseÃ±a"
+    "success": "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador.",
+    "tip": "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
+    "title": "Restablecer contraseña"
   },
   "geocercas": {
     "buttonClearCanvas": "Limpiar mapa",
