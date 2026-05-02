@@ -21,7 +21,8 @@
       "USD": "Dollar américain",
       "CAD": "Dollar canadien",
       "BRL": "Réal brésilien"
-    }
+    },
+    "fieldDescriptionOptional": "Description (facultative)"
   },
   "admins": {
     "actions": {
