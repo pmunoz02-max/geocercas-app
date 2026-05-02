@@ -8,14 +8,16 @@ import { supabase } from "@/lib/supabaseClient";
 import { getPaddleEnv } from "@/config/paddleEnv";
 
 type Props = {
-  orgId: string;
+  orgId?: string;
   plan?: "pro" | "enterprise";
   className?: string;
+  label?: string;
 };
 
-export default function UpgradeToProButton({ orgId, plan, className = "" }: Props) {
-  const checkoutPlan = plan || "pro";
+
+export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
   const { t } = useTranslation();
+  const checkoutPlan = plan || "pro";
   const { activeOrgId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -98,9 +100,10 @@ export default function UpgradeToProButton({ orgId, plan, className = "" }: Prop
   };
 
   const buttonLabel =
-    checkoutPlan === "enterprise"
+    label ||
+    (checkoutPlan === "enterprise"
       ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
-      : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" });
+      : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" }));
 
   return (
     <div>

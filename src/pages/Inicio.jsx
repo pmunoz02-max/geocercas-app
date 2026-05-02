@@ -347,6 +347,7 @@ export default function Inicio() {
 
 // --- PlanSection ---
 function PlanSection({ currentOrgId }) {
+  const { t } = useTranslation();
   const {
     entitlements,
     planCode,
@@ -360,7 +361,12 @@ function PlanSection({ currentOrgId }) {
     planCode ||
     "starter"
   ).toLowerCase();
-  const planLabel = currentPlan === "enterprise" ? "Enterprise" : currentPlan === "pro" ? "Pro" : "Starter";
+  const planLabel =
+    currentPlan === "enterprise"
+      ? t("dashboard.planEnterprise", { defaultValue: "Enterprise" })
+      : currentPlan === "pro"
+      ? t("dashboard.planPro", { defaultValue: "Pro" })
+      : t("dashboard.planStarter", { defaultValue: "Starter" });
 
 
   const nextPlan = currentPlan === "pro" ? "enterprise" : "pro";
@@ -373,16 +379,21 @@ function PlanSection({ currentOrgId }) {
   return (
     <div>
       <div className="mb-2 text-sm text-slate-700">
-        <b>Plan actual:</b> <span>{planLabel}</span>
+        <b>{t("dashboard.currentPlan", { defaultValue: "Current plan" })}:</b> <span>{planLabel}</span>
       </div>
       {canUpgrade ? (
         <UpgradeToProButton
           orgId={currentOrgId}
           plan={nextPlan}
           className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
+          label={
+            nextPlan === "enterprise"
+              ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
+              : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" })
+          }
         />
       ) : (
-        <div className="mt-3 text-green-700 font-semibold">Tu organización ya tiene el plan máximo (Enterprise).</div>
+        <div className="mt-3 text-green-700 font-semibold">{t("dashboard.maxPlanEnterprise", { defaultValue: "Your organization already has the maximum plan (Enterprise)." })}</div>
       )}
     </div>
   );
