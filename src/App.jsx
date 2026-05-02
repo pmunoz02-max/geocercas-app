@@ -14,6 +14,7 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import Landing from "./pages/Landing.jsx";
 import DemoGeocercas from "./pages/DemoGeocercas.jsx";
 import Login from "./pages/Login.tsx";
+import SignUp from "./pages/SignUp.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
 import ForgotPassword from "./pages/ForgotPassword.jsx";
 import UpdatePassword from "./pages/UpdatePassword.jsx";
@@ -122,6 +123,7 @@ function MainAppRoutes() {
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/demo/mitidja" element={<Navigate to="/demos/mitidja-geofence-demo.html" replace />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<SignUp />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<UpdatePassword />} />

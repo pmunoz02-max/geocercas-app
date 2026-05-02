@@ -316,33 +316,40 @@ export default function Landing() {
       </header>
 
       <main>
-        <form onSubmit={handleLogin} style={{ maxWidth: 320, margin: "32px auto" }}>
+        <div style={{ maxWidth: 320, margin: "32px auto", textAlign: "center" }}>
           <h2>Iniciar sesión</h2>
-          <div style={{ marginBottom: 8 }}>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              style={{ width: "100%", padding: 8 }}
-              required
-            />
+          <a
+            href="/login?mode=magic"
+            style={{
+              display: "block",
+              width: "100%",
+              padding: 10,
+              background: "#0ea5e9",
+              color: "white",
+              border: 0,
+              borderRadius: 6,
+              textDecoration: "none",
+              fontWeight: 600,
+              marginBottom: 12,
+              marginTop: 12,
+              transition: "background 0.2s"
+            }}
+          >
+            Entrar con link mágico
+          </a>
+          <div style={{ marginTop: 8, marginBottom: 8 }}>
+            <span style={{ color: "#cbd5e1" }}>¿No tienes cuenta? </span>
+            <a href="/signup" style={{ color: "#0ea5e9", fontWeight: 500, textDecoration: "underline" }}>
+              Crear cuenta
+            </a>
           </div>
-          <div style={{ marginBottom: 8 }}>
-            <input
-              type="password"
-              placeholder="Contraseña"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              style={{ width: "100%", padding: 8 }}
-              required
-            />
+          <div style={{ marginTop: 8 }}>
+            <span style={{ color: "#cbd5e1" }}>¿Ya tienes contraseña? </span>
+            <a href="/login?mode=password" style={{ color: "#0ea5e9", fontWeight: 500, textDecoration: "underline" }}>
+              Entrar con contraseña
+            </a>
           </div>
-          <button type="submit" style={{ width: "100%", padding: 10, background: "#0ea5e9", color: "white", border: 0, borderRadius: 6 }}>
-            Ingresar
-          </button>
-          {loginError && <div style={{ color: "red", marginTop: 8 }}>{loginError}</div>}
-        </form>
+        </div>
         <section className="mx-auto grid max-w-7xl grid-cols-1 gap-10 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold tracking-wide text-sky-300">
