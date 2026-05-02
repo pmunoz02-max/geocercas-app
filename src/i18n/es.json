@@ -1,4 +1,4 @@
-﻿{
+{
   "actividades": {
     "actionActivate": "Activar",
     "actionDeactivate": "Desactivar",
@@ -11,11 +11,11 @@
     "buttonCreate": "Crear actividad",
     "buttonSave": "Guardar cambios",
     "buttonUpdate": "Actualizar actividad",
-    "confirmDelete": "Â¿Seguro que deseas eliminar la actividad \"{{name}}\"?",
+    "confirmDelete": "¿Seguro que deseas eliminar la actividad \"{{name}}\"?",
     "currencies": {
       "ARS": "Peso argentino",
-      "BRL": "Real brasileÃ±o",
-      "CAD": "DÃ³lar canadiense",
+      "BRL": "Real brasileño",
+      "CAD": "Dólar canadiense",
       "CLP": "Peso chileno",
       "COP": "Peso colombiano",
       "EUR": "Euro",
@@ -23,7 +23,7 @@
       "LOCAL": "Moneda local",
       "MXN": "Peso mexicano",
       "PEN": "Sol peruano",
-      "USD": "DÃ³lar estadounidense"
+      "USD": "Dólar estadounidense"
     },
     "empty": "No hay actividades registradas.",
     "errorDelete": "No se pudo eliminar la actividad.",
@@ -31,21 +31,21 @@
     "errorMissingCurrency": "La moneda es obligatoria.",
     "errorMissingName": "El nombre de la actividad es obligatorio.",
     "errorMissingRate": "La tarifa por hora es obligatoria.",
-    "errorMissingTenant": "No se encontrÃ³ la organizaciÃ³n del usuario (tenant_id/org_id).",
+    "errorMissingTenant": "No se encontró la organización del usuario (tenant_id/org_id).",
     "errorNameRequired": "El nombre de la actividad es obligatorio.",
     "errorRatePositive": "La tarifa por hora debe ser mayor que 0.",
     "errorSave": "No se pudo guardar la actividad.",
     "errorToggle": "No se pudo cambiar el estado de la actividad.",
     "fieldCurrency": "Moneda",
-    "fieldDescription": "DescripciÃ³n",
-    "fieldDescriptionPlaceholder": "DescripciÃ³n breve de la actividadâ€¦",
+    "fieldDescription": "Descripción",
+    "fieldDescriptionPlaceholder": "Descripción breve de la actividad…",
     "fieldHourlyRate": "Tarifa por hora",
     "fieldHourlyRatePlaceholder": "Ej. 3.50",
     "fieldName": "Nombre de la actividad",
     "fieldNamePlaceholder": "Ej. Siembra, Riego, Cosecha",
     "formTitleEdit": "Editar actividad",
     "formTitleNew": "Nueva actividad",
-    "loading": "Cargando actividadesâ€¦",
+    "loading": "Cargando actividades…",
     "goDashboard": "Ir al panel",
     "readOnlyNote": "Solo el propietario y los administradores pueden crear o editar actividades.",
     "statusActive": "Activa",
@@ -54,7 +54,7 @@
     "tableTitle": "Listado de actividades",
     "thActions": "Acciones",
     "thCost": "Costo",
-    "thDescription": "DescripciÃ³n",
+    "thDescription": "Descripción",
     "thName": "Actividad",
     "thStatus": "Estado",
     "title": "Actividades"
@@ -66,26 +66,26 @@
       "remove": "Eliminar acceso"
     },
     "banner": {
-      "invitationSent": "InvitaciÃ³n enviada correctamente.",
-      "removed": "Administrador eliminado de la organizaciÃ³n.",
+      "invitationSent": "Invitación enviada correctamente.",
+      "removed": "Administrador eliminado de la organización.",
       "roleUpdated": "Rol actualizado."
     },
     "error": {
-      "invite": "No se pudo enviar la invitaciÃ³n.",
+      "invite": "No se pudo enviar la invitación.",
       "load": "Error al cargar la lista de administradores.",
       "remove": "No se pudo eliminar al administrador.",
       "updateRole": "No se pudo actualizar el rol."
     },
     "form": {
-      "buttonInvite": "Enviar invitaciÃ³n",
-      "emailLabel": "Correo electrÃ³nico",
+      "buttonInvite": "Enviar invitación",
+      "emailLabel": "Correo electrónico",
       "inviteTitle": "Invitar nuevo administrador",
       "roleLabel": "Rol"
     },
-    "subtitle": "Gestiona los administradores de tu organizaciÃ³n y sus roles.",
+    "subtitle": "Gestiona los administradores de tu organización y sus roles.",
     "table": {
       "actions": "Acciones",
-      "email": "Correo electrÃ³nico",
+      "email": "Correo electrónico",
       "name": "Nombre",
       "noResults": "No hay administradores registrados.",
       "role": "Rol",
@@ -97,13 +97,13 @@
     "brand": "App Geocercas",
     "header": {
       "goToPanel": "Ir al panel",
-      "loggedAs": "SesiÃ³n iniciada como",
-      "login": "Iniciar sesiÃ³n",
-      "loginMagic": "Link mÃ¡gico",
+      "loggedAs": "Sesión iniciada como",
+      "login": "Iniciar sesión",
+      "loginMagic": "Link mágico",
       "logout": "Salir",
-      "organizationAriaLabel": "Seleccionar organizaciÃ³n",
-      "organizationLabel": "OrganizaciÃ³n",
-      "organizationNone": "Sin organizaciÃ³n",
+      "organizationAriaLabel": "Seleccionar organización",
+      "organizationLabel": "Organización",
+      "organizationNone": "Sin organización",
       "roleAdmin": "Administrador",
       "roleOwner": "Propietario",
       "roleTracker": "Tracker"
@@ -136,34 +136,34 @@
       "deactivate": "Desactivar",
       "delete": "Eliminar",
       "edit": "Editar",
-      "save": "Guardar asignaciÃ³n",
-      "update": "Actualizar asignaciÃ³n",
+      "save": "Guardar asignación",
+      "update": "Actualizar asignación",
       "cancel": "Cancelar"
     },
     "banner": {
-      "created": "AsignaciÃ³n creada correctamente.",
-      "deleted": "AsignaciÃ³n eliminada.",
-      "updated": "AsignaciÃ³n actualizada."
+      "created": "Asignación creada correctamente.",
+      "deleted": "Asignación eliminada.",
+      "updated": "Asignación actualizada."
     },
     "error": {
-      "delete": "No se pudo eliminar la asignaciÃ³n.",
+      "delete": "No se pudo eliminar la asignación.",
       "endBeforeStart": "La fecha/hora de fin no puede ser anterior a la fecha/hora de inicio.",
       "invalidFrequency": "La frecuencia debe ser mayor que 0.",
-      "invalidPerson": "Debe seleccionar una persona vÃ¡lida.",
+      "invalidPerson": "Debe seleccionar una persona válida.",
       "load": "Error al cargar las asignaciones.",
       "missingActivity": "Debe seleccionar una actividad.",
       "missingEnd": "Debe ingresar fecha/hora de fin.",
       "missingGeofence": "Debe seleccionar una geocerca.",
-      "noActiveOrg": "No hay organizaciÃ³n activa.",
+      "noActiveOrg": "No hay organización activa.",
       "personMissingUserId": "La persona seleccionada no tiene user_id. No se puede vincular como tracker.",
       "missingPerson": "Debe seleccionar una persona.",
       "missingStart": "Debe ingresar fecha/hora de inicio.",
-      "save": "No se pudo guardar la asignaciÃ³n.",
-      "update": "Error al actualizar asignaciÃ³n."
+      "save": "No se pudo guardar la asignación.",
+      "update": "Error al actualizar asignación."
     },
     "filters": {
       "refresh": "Refrescar",
-      "refreshLoading": "Actualizandoâ€¦",
+      "refreshLoading": "Actualizando…",
       "status": {
         "activo": "Activos",
         "inactivo": "Inactivos",
@@ -193,64 +193,64 @@
       "activityPlaceholder": "Selecciona una actividad",
       "select": "Seleccionar",
       "buttonCancel": "Cancelar",
-      "buttonCreate": "Crear asignaciÃ³n",
-      "buttonUpdate": "Actualizar asignaciÃ³n",
-      "cancelEditButton": "Cancelar ediciÃ³n",
-      "editTitle": "Editar asignaciÃ³n",
+      "buttonCreate": "Crear asignación",
+      "buttonUpdate": "Actualizar asignación",
+      "cancelEditButton": "Cancelar edición",
+      "editTitle": "Editar asignación",
       "endLabel": "Fecha/hora fin",
       "endOptionalHint": "Opcional",
       "frequencyLabel": "Frecuencia (minutos)",
       "geofenceLabel": "Geocerca",
       "geofencePlaceholder": "Selecciona una geocerca",
-      "newTitle": "Nueva asignaciÃ³n",
+      "newTitle": "Nueva asignación",
       "personLabel": "Persona",
       "personPlaceholder": "Selecciona una persona",
       "quickActivity": {
         "newButton": "Nueva actividad",
         "newNamePlaceholder": "Nombre de la nueva actividad",
-        "noActivitiesHint": "No hay actividades (cree una en el mÃ³dulo Actividades o aquÃ­ abajo).",
+        "noActivitiesHint": "No hay actividades (cree una en el módulo Actividades o aquí abajo).",
         "saveButton": "Guardar actividad",
-        "saving": "Guardandoâ€¦"
+        "saving": "Guardando…"
       },
-      "saveButton": "Guardar asignaciÃ³n",
+      "saveButton": "Guardar asignación",
       "startLabel": "Fecha/hora inicio",
       "statusActive": "Activa",
       "statusInactive": "Inactiva",
       "statusLabel": "Estado",
-      "updateButton": "Actualizar asignaciÃ³n",
+      "updateButton": "Actualizar asignación",
       "newActivityPlaceholder": "Nombre de la nueva actividad",
       "saveActivityButton": "Guardar actividad",
-      "savingActivity": "Guardandoâ€¦",
+      "savingActivity": "Guardando…",
       "cancelButton": "Cancelar",
       "startDateLabel": "Fecha inicio",
       "startDatePlaceholder": "DD/MM/AAAA HH:MM o 2025-11-13T09:11",
       "endDateLabel": "Fecha fin (opcional)",
       "endDatePlaceholder": "DD/MM/AAAA HH:MM o 2025-11-14T19:17",
-      "activityOptional": "(Opcional) Seleccioneâ€¦",
-      "createButtonLabel": "Crear asignaciÃ³n"
+      "activityOptional": "(Opcional) Seleccione…",
+      "createButtonLabel": "Crear asignación"
     },
     "messages": {
-      "catalogError": "Error al cargar catÃ¡logos (personal, geocercas, actividades).",
-      "confirmDelete": "Â¿Seguro que deseas eliminar esta asignaciÃ³n?",
-      "createGenericError": "No se pudo crear la asignaciÃ³n.",
-      "createSuccess": "AsignaciÃ³n creada correctamente.",
-      "deleteError": "No se pudo eliminar la asignaciÃ³n.",
-      "deleteSuccess": "AsignaciÃ³n eliminada correctamente.",
-      "activatedSuccess": "AsignaciÃ³n activada correctamente.",
-      "deactivatedSuccess": "AsignaciÃ³n desactivada correctamente.",
-      "toggleStatusError": "Error al cambiar estado de asignaciÃ³n.",
+      "catalogError": "Error al cargar catálogos (personal, geocercas, actividades).",
+      "confirmDelete": "¿Seguro que deseas eliminar esta asignación?",
+      "createGenericError": "No se pudo crear la asignación.",
+      "createSuccess": "Asignación creada correctamente.",
+      "deleteError": "No se pudo eliminar la asignación.",
+      "deleteSuccess": "Asignación eliminada correctamente.",
+      "activatedSuccess": "Asignación activada correctamente.",
+      "deactivatedSuccess": "Asignación desactivada correctamente.",
+      "toggleStatusError": "Error al cambiar estado de asignación.",
       "frequencyInvalidRange": "La frecuencia debe estar entre 5 minutos y 12 horas.",
-      "frequencyTooLow": "La frecuencia mÃ­nima permitida es de 5 minutos.",
+      "frequencyTooLow": "La frecuencia mínima permitida es de 5 minutos.",
       "loadError": "Error al cargar las asignaciones.",
-      "loadingData": "Cargando datos de asignacionesâ€¦",
+      "loadingData": "Cargando datos de asignaciones…",
       "noActivities": "No hay actividades creadas. Crea al menos una Actividad para poder asignar.",
-      "noPersonal": "No hay personal vigente en esta organizaciÃ³n. Reactiva o crea al menos una persona.",
-      "overlapError": "La persona ya tiene una asignaciÃ³n activa que se solapa en ese rango de fechas.",
-      "saveGenericError": "OcurriÃ³ un error al guardar la asignaciÃ³n.",
+      "noPersonal": "No hay personal vigente en esta organización. Reactiva o crea al menos una persona.",
+      "overlapError": "La persona ya tiene una asignación activa que se solapa en ese rango de fechas.",
+      "saveGenericError": "Ocurrió un error al guardar la asignación.",
       "selectDates": "Debes ingresar fecha y hora de inicio y de fin.",
       "selectPersonAndFence": "Debes seleccionar una persona y una geocerca.",
-      "updateGenericError": "No se pudo actualizar la asignaciÃ³n.",
-      "updateSuccess": "AsignaciÃ³n actualizada correctamente."
+      "updateGenericError": "No se pudo actualizar la asignación.",
+      "updateSuccess": "Asignación actualizada correctamente."
     },
     "table": {
       "actions": "Acciones",
@@ -272,32 +272,32 @@
     }
   },
   "auth": {
-    "backToLogin": "Volver a iniciar sesiÃ³n",
+    "backToLogin": "Volver a iniciar sesión",
     "errorTitle": "No se pudo autenticar",
-    "invalidOrExpiredLink": "El enlace es invÃ¡lido, ya expirÃ³ o fue utilizado.",
-    "processing": "Autenticandoâ€¦",
-    "timeout": "La autenticaciÃ³n tardÃ³ demasiado. Intenta nuevamente.",
+    "invalidOrExpiredLink": "El enlace es inválido, ya expiró o fue utilizado.",
+    "processing": "Autenticando…",
+    "timeout": "La autenticación tardó demasiado. Intenta nuevamente.",
     "selection": {
-      "title": "Seleccionar organizaciÃ³n",
+      "title": "Seleccionar organización",
       "loading": "Cargando organizaciones asociadas a tu usuario...",
-      "invalidSessionTitle": "SesiÃ³n no vÃ¡lida",
-      "invalidSessionBody": "No hay sesiÃ³n activa. Inicia sesiÃ³n nuevamente.",
-      "noOrganizationsBody": "Has iniciado sesiÃ³n correctamente, pero no encontramos organizaciones asociadas a tu usuario.",
-      "noOrganizationsHelp": "Contacta al administrador para que te asigne una organizaciÃ³n o crea una nueva desde el panel de administraciÃ³n.",
-      "subtitle": "Has iniciado sesiÃ³n correctamente. Ahora elige la organizaciÃ³n con la que deseas trabajar en este momento.",
+      "invalidSessionTitle": "Sesión no válida",
+      "invalidSessionBody": "No hay sesión activa. Inicia sesión nuevamente.",
+      "noOrganizationsBody": "Has iniciado sesión correctamente, pero no encontramos organizaciones asociadas a tu usuario.",
+      "noOrganizationsHelp": "Contacta al administrador para que te asigne una organización o crea una nueva desde el panel de administración.",
+      "subtitle": "Has iniciado sesión correctamente. Ahora elige la organización con la que deseas trabajar en este momento.",
       "noName": "(sin nombre)",
-      "code": "CÃ³digo: {{code}}",
-      "noCode": "Sin cÃ³digo definido"
+      "code": "Código: {{code}}",
+      "noCode": "Sin código definido"
     },
     "requireOrg": {
-      "loading": "Cargando tu sesiÃ³n y organizaciÃ³n actual...",
-      "resolvingOrganization": "Resolviendo tu organizaciÃ³n..."
+      "loading": "Cargando tu sesión y organización actual...",
+      "resolvingOrganization": "Resolviendo tu organización..."
     },
     "callback": {
       "title": "Auth Callback",
-      "invalidLinkTitle": "El enlace de acceso ya no es vÃ¡lido",
-      "invalidLinkDetail": "Esto pasa si el enlace expirÃ³ o si fue abierto o escaneado antes, por ejemplo por una previsualizaciÃ³n del correo o si se abriÃ³ dos veces.",
-      "invalidLinkTipLatest": "Usa el correo mÃ¡s reciente y Ã¡brelo solo una vez.",
+      "invalidLinkTitle": "El enlace de acceso ya no es válido",
+      "invalidLinkDetail": "Esto pasa si el enlace expiró o si fue abierto o escaneado antes, por ejemplo por una previsualización del correo o si se abrió dos veces.",
+      "invalidLinkTipLatest": "Usa el correo más reciente y ábrelo solo una vez.",
       "invalidLinkTipBrowser": "Evita abrirlo dentro de un navegador interno del correo. Si puedes, usa Abrir en Chrome.",
       "invalidLinkTipOwner": "Si vuelve a fallar, pide al Owner que reenvíe la invitación.",
       "loginFailedTitle": "No se pudo completar el login",
@@ -307,7 +307,7 @@
       "confirmingSession": "Confirmando sesión…",
       "exchangingCode": "Intercambiando código…",
       "restoringSession": "Restaurando sesión…",
-      "noSessionFromCallback": "No se pudo establecer sesiÃ³n desde el callback.",
+      "noSessionFromCallback": "No se pudo establecer sesión desde el callback.",
       "creatingSecureCookies": "Creando cookies seguras…",
       "redirecting": "Redirigiendo…"
     },
@@ -340,12 +340,12 @@
       },
       "terms": {
         "acceptance": "Acepto los",
-        "terms": "TÃ©rminos",
+        "terms": "Términos",
         "and": "y la",
-        "privacy": "PolÃ­tica de Privacidad"
+        "privacy": "Política de Privacidad"
       },
       "alreadyHaveAccount": "¿Ya tienes cuenta?",
-      "loginLink": "Inicia sesiÃ³n",
+      "loginLink": "Inicia sesión",
       "separator": "o",
       "oauthGoogle": "Registrarse con Google"
     }
@@ -353,8 +353,8 @@
   "authInvite": {
     "continue": "Continuar",
     "expiredOrUsed": "La invitación es inválida, ya expiró o fue utilizada.",
-    "goToLogin": "Ir a iniciar sesiÃ³n",
-    "notInviteLink": "Este enlace no es una invitaciÃ³n vÃ¡lida. Usa el enlace de invitaciÃ³n que recibiste por correo.",
+    "goToLogin": "Ir a iniciar sesión",
+    "notInviteLink": "Este enlace no es una invitación válida. Usa el enlace de invitación que recibiste por correo.",
     "processing": "Validando invitación…",
     "timeout": "La validación de la invitación tardó demasiado. Intenta nuevamente.",
     "title": "Has sido invitado"
@@ -363,11 +363,11 @@
     "title": "Cuenta",
     "loading": "Cargando cuenta...",
     "noActiveSession": "No hay sesión activa",
-    "sessionStatus": "Estado de sesiÃ³n",
+    "sessionStatus": "Estado de sesión",
     "user": "Usuario",
-    "currentOrganization": "OrganizaciÃ³n actual",
+    "currentOrganization": "Organización actual",
     "role": "Rol",
-    "noSignOutAction": "No hay acciÃ³n de cierre de sesiÃ³n disponible en el contexto actual."
+    "noSignOutAction": "No hay acción de cierre de sesión disponible en el contexto actual."
   },
   "errors": {
     "notAuthorized": {
@@ -393,18 +393,18 @@
       "yes": "Sí"
     },
     "back": "Volver",
-    "createOrganization": "Crear organizaciÃ³n",
+    "createOrganization": "Crear organización",
     "fallbacks": {
       "noAuth": "No autenticado",
       "noEmail": "Sin correo",
-      "noOrg": "Sin organizaciÃ³n"
+      "noOrg": "Sin organización"
     },
     "language": {
       "en": "Inglés",
       "es": "Español",
       "fr": "Francés"
     },
-    "orgNamePlaceholder": "Nombre de la organizaciÃ³n (ej. Finca A)",
+    "orgNamePlaceholder": "Nombre de la organización (ej. Finca A)",
     "refreshContext": "Refrescar contexto",
     "roles": {
       "noRole": "SIN ROL",
@@ -442,7 +442,7 @@
     "welcome": "Bienvenido a App Geocercas",
     "sessionAs": "Sesión iniciada como {{role}}",
     "email": "Correo",
-    "organizationId": "OrganizaciÃ³n ID",
+    "organizationId": "Organización ID",
     "goToDashboard": "Ir al panel",
     "managePlan": "Administrar plan",
     "subscribePro": "Suscribirme a PRO",
@@ -450,16 +450,16 @@
     "helpCenter": "Centro de ayuda",
     "help": {
       "quickGuide": {
-        "title": "GuÃ­a rÃ¡pida",
-        "desc": "Aprende cÃ³mo usar la app paso a paso."
+        "title": "Guía rápida",
+        "desc": "Aprende cómo usar la app paso a paso."
       },
       "faq": {
         "title": "Preguntas frecuentes",
-        "desc": "Respuestas a las dudas mÃ¡s comunes."
+        "desc": "Respuestas a las dudas más comunes."
       },
       "support": {
         "title": "Soporte",
-        "desc": "Â¿Tienes un problema o consulta? ContÃ¡ctanos."
+        "desc": "¿Tienes un problema o consulta? Contáctanos."
       },
       "updates": {
         "title": "Novedades",
@@ -479,7 +479,7 @@
         "email": "Email",
         "role": "Rol",
         "createdAt": "Fecha Creación",
-        "description": "DescripciÃ³n"
+        "description": "Descripción"
       }
     },
     "adminTools": {
@@ -521,7 +521,7 @@
     "actions": {
       "refresh": "Refrescar datos",
       "exportData": "Exportar datos",
-      "exportGraphic": "Exportar grÃ¡fico"
+      "exportGraphic": "Exportar gráfico"
     },
     "kpis": {
       "totalHours": "Horas totales",
@@ -574,21 +574,21 @@
     "metricAvgRate": "Tarifa promedio",
     "tableEmpty": "No hay datos para mostrar",
     "tableNoResults": "No hay datos para los filtros actuales",
-    "tableTitle": "Detalle para la dimensiÃ³n seleccionada",
+    "tableTitle": "Detalle para la dimensión seleccionada",
     "chartNoData": "Sin datos disponibles",
-    "loadingAuth": "Cargando tu sesiÃ³n y organizaciÃ³n actualâ€¦",
-    "noOrgAssigned": "No hay organizaciÃ³n activa para este usuario.",
-    "noAccess": "No tienes acceso a este mÃ³dulo",
+    "loadingAuth": "Cargando tu sesión y organización actual…",
+    "noOrgAssigned": "No hay organización activa para este usuario.",
+    "noAccess": "No tienes acceso a este módulo",
     "currentRole": "Rol actual",
     "noRole": "sin rol",
-    "loadingPermissions": "Cargando permisosâ€¦",
+    "loadingPermissions": "Cargando permisos…",
     "currenciesSummaryTitle": "Resumen por moneda",
     "labelHours": "horas",
     "exportNoData": "No hay datos para exportar",
     "exportChartError": "No se pudo exportar el gráfico"
   },
   "forgot": {
-    "back": "Volver a iniciar sesiÃ³n",
+    "back": "Volver a iniciar sesión",
     "email": "Correo",
     "emailPh": "tu@correo.com",
     "errorEmail": "Ingresa un correo válido.",
@@ -597,7 +597,7 @@
     "noteTitle": "Nota",
     "send": "Enviar enlace",
     "sending": "Enviando…",
-    "subtitle": "Te enviaremos un enlace para crear una nueva contraseÃ±a. Si no te llega, revisa SPAM.",
+    "subtitle": "Te enviaremos un enlace para crear una nueva contraseña. Si no te llega, revisa SPAM.",
     "success": "✅ Si el correo existe, te llegará un enlace para crear una nueva contraseña. Revisa SPAM y ábrelo en el mismo navegador.",
     "tip": "Tip: si el enlace falla, genera uno nuevo y ábrelo en una ventana de incógnito.",
     "title": "Restablecer contraseña"
@@ -610,40 +610,40 @@
     "buttonShowAll": "Mostrar todas",
     "buttonShowOnMap": "Mostrar en mapa",
     "buttonShowSelected": "Mostrar seleccionadas",
-    "cardListBody": "PrÃ³ximamente podrÃ¡s ver aquÃ­ el listado de geocercas existentes y sus detalles. Por ahora, usa la opciÃ³n de Nueva geocerca para crear y editar.",
+    "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar.",
     "cardListTitle": "Listado de geocercas",
-    "cardNewBody": "Crea una nueva geocerca en el mapa y asÃ­gnala a tu personal o actividades.",
-    "cardNewCta": "Ir a Nueva geocerca â†’",
+    "cardNewBody": "Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
+    "cardNewCta": "Ir a Nueva geocerca →",
     "cardNewTitle": "Nueva geocerca",
-    "currentOrgLabel": "OrganizaciÃ³n actual:",
+    "currentOrgLabel": "Organización actual:",
     "currentUserLabel": "Usuario:",
     "cursorHint": "Mueve el mouse sobre el mapa",
-    "deleteConfirm": "Â¿Eliminar las geocercas seleccionadas?",
+    "deleteConfirm": "¿Eliminar las geocercas seleccionadas?",
     "deletedCount": "Eliminadas: {{count}}",
     "draftLabel": "Borrador",
-    "errorCoordsInvalid": "Coordenadas invÃ¡lidas. Usa formato: lat,lng (una por lÃ­nea).",
+    "errorCoordsInvalid": "Coordenadas inválidas. Usa formato: lat,lng (una por línea).",
     "errorNameRequired": "Escribe un nombre para la geocerca.",
-    "errorNoGeojson": "No se encontrÃ³ el GeoJSON de la geocerca.",
+    "errorNoGeojson": "No se encontró el GeoJSON de la geocerca.",
     "errorNoShape": "Dibuja una geocerca o crea una por coordenadas antes de guardar.",
     "errorSelectAtLeastOne": "Selecciona al menos una geocerca.",
     "lat": "Lat",
     "lng": "Lng",
     "loadingDataset": "Cargando dataset...",
-    "loadingGeofence": "Cargando geocercaâ€¦",
+    "loadingGeofence": "Cargando geocerca…",
     "modalDraw": "Draw",
     "modalHintRule": "1 point = small square | 2 points = rectangle | 3+ = polygon",
     "modalInstruction": "Format:",
     "modalOnePerLine": "(one per line)",
     "modalTitle": "Draw by coordinates",
-    "noGeofences": "AÃºn no tienes geocercas creadas.",
-    "noOrgFallback": "â€” (sin organizaciÃ³n seleccionada)",
-    "pageSubtitle": "Administra las geocercas de tu organizaciÃ³n. Desde aquÃ­ puedes crear nuevas geocercas y revisar las existentes.",
+    "noGeofences": "Aún no tienes geocercas creadas.",
+    "noOrgFallback": "— (sin organización seleccionada)",
+    "pageSubtitle": "Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
     "pageTitle": "Geocercas",
     "panelTitle": "Geocercas",
     "placeholderName": "Nombre de la geocerca",
     "pointsLabel": "Pts",
     "savedOk": "Geocerca guardada correctamente.",
-    "subtitleNew": "Dibuja una geocerca en el mapa y asÃ­gnala a tu personal o actividades.",
+    "subtitleNew": "Dibuja una geocerca en el mapa y asígnala a tu personal o actividades.",
     "titleNew": "Nueva geocerca",
     "coordsReady": "Figura creada desde coordenadas.",
     "errorSave": "No se pudo guardar la geocerca. Intenta nuevamente.",
@@ -652,31 +652,31 @@
     "showManyOk": "Mostrando {{count}} geocercas.",
     "planUsageTitle": "Geocercas",
     "planAvailableTitle": "Disponibles",
-    "draftYes": "sÃ­",
+    "draftYes": "sí",
     "draftNo": "no",
     "create": {
       "defaultName": "Casa",
       "nameLabel": "Nombre",
       "coordsLabel": "Coordenadas",
-      "coordsHint": "(lat, lng) por lÃ­nea",
-      "missingGeometry": "Agrega coordenadas (texto \"lat, lng\" por lÃ­nea) o dibuja un polÃ­gono en el mapa.",
-      "polygonFallback": "Si el cuadro queda vacÃ­o, se usarÃ¡ el polÃ­gono dibujado en el mapa."
+      "coordsHint": "(lat, lng) por línea",
+      "missingGeometry": "Agrega coordenadas (texto \"lat, lng\" por línea) o dibuja un polígono en el mapa.",
+      "polygonFallback": "Si el cuadro queda vacío, se usará el polígono dibujado en el mapa."
     },
     "errors": {
       "noEditPermission": "No tienes permisos para editar.",
-      "selectOrganizationFirst": "Selecciona una organizaciÃ³n primero."
+      "selectOrganizationFirst": "Selecciona una organización primero."
     },
     "plan": {
       "loading": "Cargando plan...",
-      "error": "No se pudieron cargar los lÃ­mites del plan.",
-      "unlimited": "Geocercas sin lÃ­mite configurado.",
+      "error": "No se pudieron cargar los límites del plan.",
+      "unlimited": "Geocercas sin límite configurado.",
       "usage": "Uso actual: {{used}} / {{max}} geocercas",
       "unlimitedShort": "Ilimitadas",
-      "limitReached": "Has alcanzado el lÃ­mite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
-      "limitReachedTitle": "Has alcanzado el lÃ­mite de geocercas de tu plan.",
-      "limitReachedBody": "Para crear mÃ¡s geocercas, actualiza tu organizaciÃ³n a PRO.",
-      "freeHint": "Plan FREE activo. Cuando alcances el lÃ­mite, podrÃ¡s hacer mejora de plan a PRO desde aquÃ­.",
-      "activePaidHint": "Tu organizaciÃ³n tiene un plan con mayor capacidad habilitada."
+      "limitReached": "Has alcanzado el límite de geocercas de tu plan actual. Actualiza a PRO para continuar.",
+      "limitReachedTitle": "Has alcanzado el límite de geocercas de tu plan.",
+      "limitReachedBody": "Para crear más geocercas, actualiza tu organización a PRO.",
+      "freeHint": "Plan FREE activo. Cuando alcances el límite, podrás hacer mejora de plan a PRO desde aquí.",
+      "activePaidHint": "Tu organización tiene un plan con mayor capacidad habilitada."
     }
   },
   "help": {
@@ -685,22 +685,22 @@
       "badge": "Centro de ayuda",
       "breadcrumb": "Centro de Ayuda",
       "goHome": "Ir a Inicio",
-      "quickGuideBadge": "GuÃ­a rÃ¡pida",
+      "quickGuideBadge": "Guía rápida",
       "viewFaq": "Ver FAQ"
     },
     "faq": {
       "breadcrumb": "Centro de Ayuda / Preguntas frecuentes",
       "title": "Preguntas frecuentes",
-      "subtitle": "Respuestas rÃ¡pidas a las dudas mÃ¡s comunes.",
+      "subtitle": "Respuestas rápidas a las dudas más comunes.",
       "goHome": "Ir a Inicio",
       "items": [
         {
-          "q": "Â¿CÃ³mo invito a un tracker?",
-          "a": "Ve a Invitar tracker, escribe el correo y envÃ­a la invitaciÃ³n."
+          "q": "¿Cómo invito a un tracker?",
+          "a": "Ve a Invitar tracker, escribe el correo y envía la invitación."
         },
         {
-          "q": "Â¿QuÃ© pasa si el enlace venciÃ³?",
-          "a": "Solicita una nueva invitaciÃ³n desde la organizaciÃ³n."
+          "q": "¿Qué pasa si el enlace venció?",
+          "a": "Solicita una nueva invitación desde la organización."
         }
       ],
       "backToPanel": "Ir al panel",
@@ -708,16 +708,16 @@
         {
           "items": [
             {
-              "a": "Necesitas una invitaciÃ³n de un Propietario/Admin de una organizaciÃ³n. Si no tienes acceso, solicita que te inviten.",
-              "q": "Â¿CÃ³mo obtengo acceso a la app?"
+              "a": "Necesitas una invitación de un Propietario/Admin de una organización. Si no tienes acceso, solicita que te inviten.",
+              "q": "¿Cómo obtengo acceso a la app?"
             },
             {
-              "a": "Propietario gestiona la organizaciÃ³n y administradores. Administrador gestiona datos operativos (geocercas, personal, actividades, asignaciones). Tracker es un usuario de campo que envÃ­a puntos GPS.",
-              "q": "Â¿CuÃ¡l es la diferencia entre Propietario, Administrador y Tracker?"
+              "a": "Propietario gestiona la organización y administradores. Administrador gestiona datos operativos (geocercas, personal, actividades, asignaciones). Tracker es un usuario de campo que envía puntos GPS.",
+              "q": "¿Cuál es la diferencia entre Propietario, Administrador y Tracker?"
             },
             {
-              "a": "SÃ­. Los Propietarios pueden trabajar con varias organizaciones y cambiar usando el selector de organizaciÃ³n.",
-              "q": "Â¿Puedo manejar mÃ¡s de una organizaciÃ³n?"
+              "a": "Sí. Los Propietarios pueden trabajar con varias organizaciones y cambiar usando el selector de organización.",
+              "q": "¿Puedo manejar más de una organización?"
             }
           ],
           "title": "Acceso y roles"
@@ -725,16 +725,16 @@
         {
           "items": [
             {
-              "a": "El tracker puede estar sin conexiÃ³n, sin permisos de ubicaciÃ³n, o sin asignaciÃ³n activa. Verifica permisos y asignaciones.",
-              "q": "Â¿Por quÃ© veo â€œSin datos recientesâ€ en Tracker?"
+              "a": "El tracker puede estar sin conexión, sin permisos de ubicación, o sin asignación activa. Verifica permisos y asignaciones.",
+              "q": "¿Por qué veo “Sin datos recientes” en Tracker?"
             },
             {
-              "a": "La frecuencia se define en la asignaciÃ³n. El mÃ­nimo permitido es 5 minutos para cuidar baterÃ­a y datos.",
-              "q": "Â¿Cada cuÃ¡nto se envÃ­a la ubicaciÃ³n?"
+              "a": "La frecuencia se define en la asignación. El mínimo permitido es 5 minutos para cuidar batería y datos.",
+              "q": "¿Cada cuánto se envía la ubicación?"
             },
             {
-              "a": "SÃ­. El tracker puede almacenar puntos y sincronizar cuando regresa la conectividad (segÃºn tu build y permisos).",
-              "q": "Â¿Funciona con seÃ±al dÃ©bil?"
+              "a": "Sí. El tracker puede almacenar puntos y sincronizar cuando regresa la conectividad (según tu build y permisos).",
+              "q": "¿Funciona con señal débil?"
             }
           ],
           "title": "seguimiento"
@@ -743,15 +743,15 @@
           "items": [
             {
               "a": "Los costos se calculan a partir de las asignaciones (horas) y la tarifa por hora configurada en cada actividad.",
-              "q": "Â¿CÃ³mo se calculan los costos?"
+              "q": "¿Cómo se calculan los costos?"
             },
             {
-              "a": "SÃ­. Los reportes se exportan como CSV, que puedes abrir en Excel o Google Sheets.",
-              "q": "Â¿Puedo exportar a Excel?"
+              "a": "Sí. Los reportes se exportan como CSV, que puedes abrir en Excel o Google Sheets.",
+              "q": "¿Puedo exportar a Excel?"
             },
             {
-              "a": "SÃ­. Usa los filtros en Reportes y panel Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas.",
-              "q": "Â¿Puedo filtrar por geocerca, persona, actividad y rango de fechas?"
+              "a": "Sí. Usa los filtros en Reportes y panel Costos para enfocarte por geocerca(s), persona(s), actividad(es) y fechas.",
+              "q": "¿Puedo filtrar por geocerca, persona, actividad y rango de fechas?"
             }
           ],
           "title": "Costos y reportes"
@@ -759,88 +759,88 @@
         {
           "items": [
             {
-              "a": "Solo los puntos necesarios para seguimiento y validaciÃ³n por geocerca. El acceso estÃ¡ controlado por roles y organizaciÃ³n.",
-              "q": "Â¿QuÃ© datos de ubicaciÃ³n se guardan?"
+              "a": "Solo los puntos necesarios para seguimiento y validación por geocerca. El acceso está controlado por roles y organización.",
+              "q": "¿Qué datos de ubicación se guardan?"
             },
             {
-              "a": "No. Los datos estÃ¡n aislados por organizaciÃ³n (multi-tenant) y protegidos por reglas de seguridad en base de datos.",
-              "q": "Â¿Un tracker puede ver datos de otras organizaciones?"
+              "a": "No. Los datos están aislados por organización (multi-tenant) y protegidos por reglas de seguridad en base de datos.",
+              "q": "¿Un tracker puede ver datos de otras organizaciones?"
             }
           ],
           "title": "Datos y privacidad"
         }
       ],
-      "seeQuickGuide": "Ver guÃ­a rÃ¡pida"
+      "seeQuickGuide": "Ver guía rápida"
     },
     "instructions": {
-      "badge": "GuÃ­a rÃ¡pida",
-      "bestPractice1Body": "Usa siempre el mismo telÃ©fono para evitar cortes en el seguimiento.",
-      "bestPractice1Title": "Usa tu telÃ©fono principal",
-      "bestPractice2Body": "MantÃ©n baterÃ­a suficiente o conecta el cargador durante jornadas largas.",
-      "bestPractice2Title": "Cuida la baterÃ­a",
-      "bestPractice3Body": "No cierres sesiÃ³n ni desactives ubicaciÃ³n mientras estÃ©s en ruta.",
-      "bestPractice3Title": "MantÃ©n la sesiÃ³n activa",
-      "bestPractice4Body": "Si algo no carga, vuelve a abrir el enlace de invitaciÃ³n mÃ¡s reciente.",
+      "badge": "Guía rápida",
+      "bestPractice1Body": "Usa siempre el mismo teléfono para evitar cortes en el seguimiento.",
+      "bestPractice1Title": "Usa tu teléfono principal",
+      "bestPractice2Body": "Mantén batería suficiente o conecta el cargador durante jornadas largas.",
+      "bestPractice2Title": "Cuida la batería",
+      "bestPractice3Body": "No cierres sesión ni desactives ubicación mientras estés en ruta.",
+      "bestPractice3Title": "Mantén la sesión activa",
+      "bestPractice4Body": "Si algo no carga, vuelve a abrir el enlace de invitación más reciente.",
       "bestPractice4Title": "Reabre el enlace si falla",
       "goToSteps": "Ir a pasos",
       "recommendationBody": "Antes de salir, revisa que veas el estado \"Seguimiento activo\" en tu pantalla.",
-      "recommendationTitle": "RecomendaciÃ³n",
+      "recommendationTitle": "Recomendación",
       "resultBullets": [
-        "Tu invitaciÃ³n fue aceptada correctamente.",
-        "Concediste permisos de ubicaciÃ³n en el telÃ©fono.",
+        "Tu invitación fue aceptada correctamente.",
+        "Concediste permisos de ubicación en el teléfono.",
         "Ves el estado \"Seguimiento activo\".",
-        "Mantienes internet y ubicaciÃ³n habilitadas.",
-        "Si no funciona, puedes pedir una nueva invitaciÃ³n o contactar soporte."
+        "Mantienes internet y ubicación habilitadas.",
+        "Si no funciona, puedes pedir una nueva invitación o contactar soporte."
       ],
-      "resultIntro": "Al finalizar, deberÃ­as tener todo listo para compartir ubicaciÃ³n sin problemas:",
-      "resultTitle": "QuÃ© debes confirmar",
+      "resultIntro": "Al finalizar, deberías tener todo listo para compartir ubicación sin problemas:",
+      "resultTitle": "Qué debes confirmar",
       "steps": {
         "title": "Paso a paso",
         "subtitle": "Sigue esta secuencia simple para activar el tracker en pocos minutos.",
         "items": [
           {
-            "title": "Recibe tu invitaciÃ³n",
+            "title": "Recibe tu invitación",
             "items": [
-              "Te llegarÃ¡ un enlace por correo o mensaje desde tu organizaciÃ³n."
+              "Te llegará un enlace por correo o mensaje desde tu organización."
             ]
           },
           {
-            "title": "Abre el enlace en tu telÃ©fono",
+            "title": "Abre el enlace en tu teléfono",
             "items": [
-              "Ãbrelo en el mismo telÃ©fono que usarÃ¡s para el tracker."
+              "Ábrelo en el mismo teléfono que usarás para el tracker."
             ]
           },
           {
-            "title": "Acepta permisos de ubicaciÃ³n",
+            "title": "Acepta permisos de ubicación",
             "items": [
-              "Cuando se soliciten, permite los permisos de ubicaciÃ³n."
+              "Cuando se soliciten, permite los permisos de ubicación."
             ]
           },
           {
             "title": "Confirma que aparece \"Seguimiento activo\"",
             "items": [
-              "Ese estado indica que tu ubicaciÃ³n se estÃ¡ compartiendo correctamente."
+              "Ese estado indica que tu ubicación se está compartiendo correctamente."
             ]
           },
           {
-            "title": "MantÃ©n conexiÃ³n y ubicaciÃ³n habilitadas",
+            "title": "Mantén conexión y ubicación habilitadas",
             "items": [
-              "Durante tu jornada, mantÃ©n encendidas la conexiÃ³n y la ubicaciÃ³n."
+              "Durante tu jornada, mantén encendidas la conexión y la ubicación."
             ]
           }
         ]
       },
-      "subtitle": "Activa tu tracker con pasos simples y mensajes claros, sin configuraciÃ³n tÃ©cnica.",
-      "tipsTitle": "Buenas prÃ¡cticas",
-      "title": "GuÃ­a rÃ¡pida del tracker",
+      "subtitle": "Activa tu tracker con pasos simples y mensajes claros, sin configuración técnica.",
+      "tipsTitle": "Buenas prácticas",
+      "title": "Guía rápida del tracker",
       "toc": {
         "title": "Tabla de contenido",
-        "subtitle": "Usa estos accesos para avanzar rÃ¡pido.",
+        "subtitle": "Usa estos accesos para avanzar rápido.",
         "items": [
           "Pasos",
-          "Buenas prÃ¡cticas",
+          "Buenas prácticas",
           "Resultado esperado",
-          "RecomendaciÃ³n"
+          "Recomendación"
         ]
       },
       "viewFaq": "Ver FAQ",
@@ -854,19 +854,19 @@
       "whatsappLabel": "WhatsApp",
       "viewFaq": "Ver FAQ",
       "faqLink": "Preguntas frecuentes",
-      "notConfigured": "El contacto de soporte aÃºn no estÃ¡ configurado.",
-      "subtitle": "ContÃ¡ctanos para soporte tÃ©cnico, dudas de facturaciÃ³n o capacitaciÃ³n.",
+      "notConfigured": "El contacto de soporte aún no está configurado.",
+      "subtitle": "Contáctanos para soporte técnico, dudas de facturación o capacitación.",
       "commonProblems": {
         "title": "Problemas comunes",
-        "subtitle": "Si algo no funciona, revisa estas soluciones rÃ¡pidas antes de contactar soporte.",
+        "subtitle": "Si algo no funciona, revisa estas soluciones rápidas antes de contactar soporte.",
         "items": [
           {
-            "title": "No puedo aceptar la invitaciÃ³n",
-            "desc": "Abre el enlace mÃ¡s reciente que te enviaron. Si ya venciÃ³ o aparece error, pide una nueva invitaciÃ³n."
+            "title": "No puedo aceptar la invitación",
+            "desc": "Abre el enlace más reciente que te enviaron. Si ya venció o aparece error, pide una nueva invitación."
           },
           {
             "title": "El enlace no funciona",
-            "desc": "CÃ³pialo completo en tu navegador del telÃ©fono o Ã¡brelo directamente desde el mensaje original."
+            "desc": "Cópialo completo en tu navegador del teléfono o ábrelo directamente desde el mensaje original."
           }
         ]
       },
@@ -874,17 +874,17 @@
     },
     "onboarding": {
       "title": "Primeros pasos",
-      "subtitle": "CÃ³mo comenzar a usar el tracker por primera vez.",
+      "subtitle": "Cómo comenzar a usar el tracker por primera vez.",
       "sections": [
         {
-          "title": "InvitaciÃ³n y acceso",
+          "title": "Invitación y acceso",
           "items": [
             {
-              "q": "Â¿CÃ³mo empiezo a usar el tracker?",
-              "a": "RecibirÃ¡s un enlace de invitaciÃ³n. Solo debes abrirlo desde tu telÃ©fono y seguir los pasos."
+              "q": "¿Cómo empiezo a usar el tracker?",
+              "a": "Recibirás un enlace de invitación. Solo debes abrirlo desde tu teléfono y seguir los pasos."
             },
             {
-              "q": "Â¿Necesito instalar algo?",
+              "q": "¿Necesito instalar algo?",
               "a": "No. Solo abre el enlace y acepta los permisos cuando se te soliciten."
             }
           ]
@@ -892,19 +892,19 @@
       ]
     },
     "tracker": {
-      "title": "Seguimiento de ubicaciÃ³n",
-      "subtitle": "QuÃ© significa que el seguimiento estÃ© activo.",
+      "title": "Seguimiento de ubicación",
+      "subtitle": "Qué significa que el seguimiento esté activo.",
       "sections": [
         {
           "title": "Estado del seguimiento",
           "items": [
             {
-              "q": "Â¿QuÃ© significa 'Seguimiento activo'?",
-              "a": "Significa que tu ubicaciÃ³n se estÃ¡ compartiendo correctamente."
+              "q": "¿Qué significa 'Seguimiento activo'?",
+              "a": "Significa que tu ubicación se está compartiendo correctamente."
             },
             {
-              "q": "Â¿Debo dejar la app abierta?",
-              "a": "No siempre. Mientras tu dispositivo tenga permisos y conexiÃ³n, el seguimiento puede continuar."
+              "q": "¿Debo dejar la app abierta?",
+              "a": "No siempre. Mientras tu dispositivo tenga permisos y conexión, el seguimiento puede continuar."
             }
           ]
         }
@@ -912,22 +912,22 @@
     },
     "troubleshooting": {
       "title": "Problemas frecuentes",
-      "subtitle": "Soluciones rÃ¡pidas para los casos mÃ¡s comunes.",
+      "subtitle": "Soluciones rápidas para los casos más comunes.",
       "sections": [
         {
-          "title": "InvitaciÃ³n y permisos",
+          "title": "Invitación y permisos",
           "items": [
             {
-              "q": "No puedo aceptar la invitaciÃ³n",
-              "a": "AsegÃºrate de abrir el enlace mÃ¡s reciente. Si sigue fallando, solicita una nueva invitaciÃ³n."
+              "q": "No puedo aceptar la invitación",
+              "a": "Asegúrate de abrir el enlace más reciente. Si sigue fallando, solicita una nueva invitación."
             },
             {
-              "q": "El enlace indica que estÃ¡ inactivo",
-              "a": "Eso puede ocurrir si abriste un enlace anterior. Usa el Ãºltimo enlace recibido."
+              "q": "El enlace indica que está inactivo",
+              "a": "Eso puede ocurrir si abriste un enlace anterior. Usa el último enlace recibido."
             },
             {
               "q": "No se inicia el seguimiento",
-              "a": "Verifica que aceptaste los permisos de ubicaciÃ³n en tu dispositivo."
+              "a": "Verifica que aceptaste los permisos de ubicación en tu dispositivo."
             }
           ]
         }
@@ -935,18 +935,18 @@
     },
     "geofences": {
       "title": "Geocercas",
-      "subtitle": "QuÃ© son y cÃ³mo funcionan dentro del seguimiento.",
+      "subtitle": "Qué son y cómo funcionan dentro del seguimiento.",
       "sections": [
         {
-          "title": "Conceptos bÃ¡sicos",
+          "title": "Conceptos básicos",
           "items": [
             {
-              "q": "Â¿QuÃ© es una geocerca?",
+              "q": "¿Qué es una geocerca?",
               "a": "Es una zona definida en el mapa para registrar entradas, salidas o presencia."
             },
             {
-              "q": "Â¿Tengo que hacer algo como tracker?",
-              "a": "No. El sistema registra automÃ¡ticamente tu actividad cuando corresponde."
+              "q": "¿Tengo que hacer algo como tracker?",
+              "a": "No. El sistema registra automáticamente tu actividad cuando corresponde."
             }
           ]
         }
@@ -954,18 +954,18 @@
     },
     "account": {
       "title": "Cuenta y acceso",
-      "subtitle": "Preguntas sobre inicio de sesiÃ³n y acceso a la organizaciÃ³n.",
+      "subtitle": "Preguntas sobre inicio de sesión y acceso a la organización.",
       "sections": [
         {
           "title": "Acceso",
           "items": [
             {
-              "q": "Â¿CÃ³mo inicio sesiÃ³n?",
-              "a": "Usa tu correo y contraseÃ±a desde la pantalla de inicio."
+              "q": "¿Cómo inicio sesión?",
+              "a": "Usa tu correo y contraseña desde la pantalla de inicio."
             },
             {
-              "q": "Â¿QuÃ© hago si estoy en la organizaciÃ³n incorrecta?",
-              "a": "AsegÃºrate de usar el enlace de invitaciÃ³n correcto o vuelve a ingresar con la cuenta indicada."
+              "q": "¿Qué hago si estoy en la organización incorrecta?",
+              "a": "Asegúrate de usar el enlace de invitación correcto o vuelve a ingresar con la cuenta indicada."
             }
           ]
         }
@@ -975,24 +975,24 @@
       "breadcrumb": "Centro de Ayuda / Historial de cambios",
       "back": "Volver",
       "title": "Historial de cambios",
-      "subtitle": "Mejoras y actualizaciones recientes de la aplicaciÃ³n.",
+      "subtitle": "Mejoras y actualizaciones recientes de la aplicación.",
       "goHome": "Ir a Inicio",
       "releases": [
         {
-          "version": "v1.2.0 Â· 2026-04",
+          "version": "v1.2.0 · 2026-04",
           "items": [
-            "Mejora en el flujo de invitaciÃ³n de trackers",
-            "Seguimiento mÃ¡s estable y confiable",
-            "Nueva interfaz mÃ¡s clara y consistente",
-            "CorrecciÃ³n de errores en activaciÃ³n de seguimiento"
+            "Mejora en el flujo de invitación de trackers",
+            "Seguimiento más estable y confiable",
+            "Nueva interfaz más clara y consistente",
+            "Corrección de errores en activación de seguimiento"
           ]
         },
         {
-          "version": "v1.1.0 Â· 2026-03",
+          "version": "v1.1.0 · 2026-03",
           "items": [
             "Sistema de geocercas mejorado",
-            "OptimizaciÃ³n de rendimiento",
-            "Mejoras en inicio de sesiÃ³n y manejo de sesiÃ³n"
+            "Optimización de rendimiento",
+            "Mejoras en inicio de sesión y manejo de sesión"
           ]
         }
       ],
@@ -1001,10 +1001,10 @@
           "version": "v1.2.0",
           "date": "2026-04",
           "changes": [
-            "Mejora en el flujo de invitaciÃ³n de trackers",
-            "Seguimiento mÃ¡s estable y confiable",
-            "Nueva interfaz mÃ¡s clara y consistente",
-            "CorrecciÃ³n de errores en activaciÃ³n de seguimiento"
+            "Mejora en el flujo de invitación de trackers",
+            "Seguimiento más estable y confiable",
+            "Nueva interfaz más clara y consistente",
+            "Corrección de errores en activación de seguimiento"
           ]
         },
         {
@@ -1012,8 +1012,8 @@
           "date": "2026-03",
           "changes": [
             "Sistema de geocercas mejorado",
-            "OptimizaciÃ³n de rendimiento",
-            "Mejoras en inicio de sesiÃ³n y manejo de sesiÃ³n"
+            "Optimización de rendimiento",
+            "Mejoras en inicio de sesión y manejo de sesión"
           ]
         }
       ]
@@ -1024,74 +1024,74 @@
     "deleteAccount": "Eliminar cuenta",
     "help": {
       "title": "Centro de ayuda",
-      "quick": "GuÃ­a rÃ¡pida",
-      "quickDesc": "Aprende cÃ³mo usar la app paso a paso.",
+      "quick": "Guía rápida",
+      "quickDesc": "Aprende cómo usar la app paso a paso.",
       "faq": "Preguntas frecuentes",
-      "faqDesc": "Respuestas a las dudas mÃ¡s comunes.",
+      "faqDesc": "Respuestas a las dudas más comunes.",
       "support": "Soporte",
-      "supportDesc": "Â¿Tienes un problema o consulta? ContÃ¡ctanos.",
+      "supportDesc": "¿Tienes un problema o consulta? Contáctanos.",
       "news": "Novedades",
       "newsDesc": "Cambios, mejoras y actualizaciones recientes."
     }
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",
-    "subtitle": "Solicita la eliminaciÃ³n permanente de tu cuenta de App Geocercas y de los datos asociados.",
+    "subtitle": "Solicita la eliminación permanente de tu cuenta de App Geocercas y de los datos asociados.",
     "warning": {
       "title": "Advertencia",
       "body": "Eliminar tu cuenta es permanente y no se puede deshacer."
     },
     "whatWillBeDeleted": {
-      "title": "QuÃ© se eliminarÃ¡",
+      "title": "Qué se eliminará",
       "items": {
-        "accountInfo": "InformaciÃ³n de la cuenta de usuario",
+        "accountInfo": "Información de la cuenta de usuario",
         "profileData": "Datos del perfil personal",
         "trackerAssignments": "Asignaciones de trackers",
-        "gpsRecords": "Registros de ubicaciÃ³n GPS",
+        "gpsRecords": "Registros de ubicación GPS",
         "geofences": "Geocercas creadas por la cuenta",
         "activityLogs": "Registros de actividad relacionados con la cuenta"
       }
     },
     "retention": {
-      "title": "Nota de retenciÃ³n",
-      "body": "Algunos datos limitados pueden conservarse temporalmente cuando sea necesario por cumplimiento legal, prevenciÃ³n de fraude o motivos de seguridad."
+      "title": "Nota de retención",
+      "body": "Algunos datos limitados pueden conservarse temporalmente cuando sea necesario por cumplimiento legal, prevención de fraude o motivos de seguridad."
     },
     "processingTime": {
       "title": "Tiempo de procesamiento",
-      "body": "Las solicitudes de eliminaciÃ³n de cuenta se procesan dentro de los 30 dÃ­as posteriores a la recepciÃ³n de la solicitud. Una vez completado el proceso, la cuenta y los datos asociados no podrÃ¡n recuperarse."
+      "body": "Las solicitudes de eliminación de cuenta se procesan dentro de los 30 días posteriores a la recepción de la solicitud. Una vez completado el proceso, la cuenta y los datos asociados no podrán recuperarse."
     },
     "account": {
       "title": "Cuenta",
-      "signedInAs": "SesiÃ³n iniciada como:",
+      "signedInAs": "Sesión iniciada como:",
       "unknownUser": "Usuario desconocido"
     },
-    "confirmCheckbox": "Entiendo que esta acciÃ³n es permanente y que los datos de mi cuenta no podrÃ¡n recuperarse.",
+    "confirmCheckbox": "Entiendo que esta acción es permanente y que los datos de mi cuenta no podrán recuperarse.",
     "confirmInputLabel": "Escribe DELETE para confirmar",
     "confirmKeyword": "DELETE",
-    "submitButton": "Solicitar eliminaciÃ³n de cuenta",
+    "submitButton": "Solicitar eliminación de cuenta",
     "submitting": "Enviando...",
-    "successMessage": "Tu solicitud de eliminaciÃ³n fue recibida. Tu cuenta y los datos asociados se eliminarÃ¡n dentro de los prÃ³ximos 30 dÃ­as.",
-    "publicPolicyLink": "Ver polÃ­tica pÃºblica de eliminaciÃ³n",
+    "successMessage": "Tu solicitud de eliminación fue recibida. Tu cuenta y los datos asociados se eliminarán dentro de los próximos 30 días.",
+    "publicPolicyLink": "Ver política pública de eliminación",
     "errors": {
-      "noAuthenticatedUser": "No se encontrÃ³ un usuario autenticado activo.",
-      "confirmationRequired": "Confirma la acciÃ³n y escribe \"DELETE\" para continuar.",
-      "requestFailed": "No se pudo crear la solicitud de eliminaciÃ³n."
+      "noAuthenticatedUser": "No se encontró un usuario autenticado activo.",
+      "confirmationRequired": "Confirma la acción y escribe \"DELETE\" para continuar.",
+      "requestFailed": "No se pudo crear la solicitud de eliminación."
     }
   },
   "inicio": {
     "cards": {
       "common": {
-        "soon": "PrÃ³ximamente"
+        "soon": "Próximamente"
       },
       "faq": {
         "badge": "Ayuda",
-        "body": "Encuentra respuestas a las dudas mÃ¡s comunes sobre invitaciones, roles, costos y uso del tracker.",
+        "body": "Encuentra respuestas a las dudas más comunes sobre invitaciones, roles, costos y uso del tracker.",
         "cta": "Ver preguntas frecuentes",
         "title": "Preguntas frecuentes"
       },
       "instrucciones": {
-        "badge": "GuÃ­a rÃ¡pida",
-        "body": "Sigue paso a paso cÃ³mo configurar organizaciones, geocercas, personal, actividades y trackers.",
+        "badge": "Guía rápida",
+        "body": "Sigue paso a paso cómo configurar organizaciones, geocercas, personal, actividades y trackers.",
         "cta": "Ver instrucciones",
         "title": "Instrucciones"
       },
@@ -1102,67 +1102,67 @@
         "title": "Novedades / Changelog"
       },
       "queEs": {
-        "badge": "InformaciÃ³n",
-        "body": "Conoce la visiÃ³n, los casos de uso y los beneficios de App Geocercas para tu organizaciÃ³n.",
-        "cta": "Leer mÃ¡s",
-        "title": "Â¿QuÃ© es App Geocercas?"
+        "badge": "Información",
+        "body": "Conoce la visión, los casos de uso y los beneficios de App Geocercas para tu organización.",
+        "cta": "Leer más",
+        "title": "¿Qué es App Geocercas?"
       },
       "soporte": {
         "badge": "Soporte",
-        "body": "Â¿Necesitas ayuda? ContÃ¡ctanos para soporte tÃ©cnico, facturaciÃ³n o dudas sobre tu cuenta.",
+        "body": "¿Necesitas ayuda? Contáctanos para soporte técnico, facturación o dudas sobre tu cuenta.",
         "cta": "Ir a soporte",
         "title": "Contacto / Soporte"
       },
       "videoDemo": {
         "badge": "Video",
-        "body": "Mira una demostraciÃ³n corta de cÃ³mo funciona App Geocercas en la vida real.",
+        "body": "Mira una demostración corta de cómo funciona App Geocercas en la vida real.",
         "cta": "Ver video demo",
         "title": "Video demo"
       }
     },
     "header": {
       "badge": "Centro de ayuda y recursos",
-      "subtitle": "Desde aquÃ­ puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de App Geocercas.",
+      "subtitle": "Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de App Geocercas.",
       "title": "Bienvenido a tu panel"
     },
     "userInfo": {
       "connectedAs": "Conectado como",
-      "inOrg": "en la organizaciÃ³n",
-      "orgIdLabel": "ID de organizaciÃ³n:",
+      "inOrg": "en la organización",
+      "orgIdLabel": "ID de organización:",
       "userLabel": "Usuario:",
       "withRole": "con el rol"
     },
     "billing": {
       "managePlan": "Administrar plan",
-      "managePlanBody": "Puedes entrar a la pÃ¡gina Billing para ver y manejar tu suscripciÃ³n.",
+      "managePlanBody": "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
       "goToBilling": "Ir a Billing",
       "previewNote": ""
     }
   },
   "inviteTracker": {
     "backToTracker": "Volver a Tracker",
-    "emailLabel": "Correo electrÃ³nico del tracker",
+    "emailLabel": "Correo electrónico del tracker",
     "emailPlaceholder": "tracker@ejemplo.com",
     "errors": {
-      "emailInvalid": "Ingresa un correo electrÃ³nico vÃ¡lido.",
-      "emailRequired": "Debes ingresar un correo electrÃ³nico.",
-      "noOrg": "No se pudo resolver una organizaciÃ³n activa para este usuario.",
-      "planBlocked": "El plan actual de la organizaciÃ³n no permite invitaciones de tracker.",
-      "notInOrg": "Tu usuario no estÃ¡ vinculado a la organizaciÃ³n activa.",
-      "inviteErrorPrefix": "Error al enviar la invitaciÃ³n"
+      "emailInvalid": "Ingresa un correo electrónico válido.",
+      "emailRequired": "Debes ingresar un correo electrónico.",
+      "noOrg": "No se pudo resolver una organización activa para este usuario.",
+      "planBlocked": "El plan actual de la organización no permite invitaciones de tracker.",
+      "notInOrg": "Tu usuario no está vinculado a la organización activa.",
+      "inviteErrorPrefix": "Error al enviar la invitación"
     },
     "form": {
-      "buttonSend": "Enviar invitaciÃ³n",
-      "buttonSending": "Enviando invitaciÃ³nâ€¦",
-      "emailHelp": "Se enviarÃ¡ una invitaciÃ³n a este correo.",
-      "emailLabel": "Correo electrÃ³nico del tracker",
+      "buttonSend": "Enviar invitación",
+      "buttonSending": "Enviando invitación…",
+      "emailHelp": "Se enviará una invitación a este correo.",
+      "emailLabel": "Correo electrónico del tracker",
       "emailPlaceholder": "tracker@ejemplo.com",
-      "selectHelp": "Si seleccionas un personal, su correo se llenarÃ¡ automÃ¡ticamente.",
+      "selectHelp": "Si seleccionas un personal, su correo se llenará automáticamente.",
       "selectLabel": "Selecciona personal vigente (opcional)",
       "selectPlaceholder": "-- Seleccionar personal --"
     },
     "diag": {
-      "orgUsed": "OrganizaciÃ³n usada",
+      "orgUsed": "Organización usada",
       "user": "Usuario",
       "membersLoaded": "Miembros cargados"
     },
@@ -1170,42 +1170,42 @@
       "noMembers": "No hay personal activo disponible para invitar."
     },
     "ok": {
-      "generated": "InvitaciÃ³n generada correctamente.",
-      "emailSent": "Correo de invitaciÃ³n enviado correctamente.",
+      "generated": "Invitación generada correctamente.",
+      "emailSent": "Correo de invitación enviado correctamente.",
       "fallbackLink": "No se pudo enviar el correo. Usa este enlace para compartir el acceso manualmente.",
-      "magicLinkFallback": "Link mÃ¡gico generado como respaldo."
+      "magicLinkFallback": "Link mágico generado como respaldo."
     },
     "plan": {
-      "validating": "Validando plan de la organizaciÃ³nâ€¦",
-      "validationError": "No se pudo validar el plan de la organizaciÃ³n.",
+      "validating": "Validando plan de la organización…",
+      "validationError": "No se pudo validar el plan de la organización.",
       "requiresProTitle": "Plan PRO requerido",
       "detectedPlan": "Plan detectado",
-      "freeBlockedBody": "Las invitaciones de tracker no estÃ¡n disponibles en el plan FREE actual.",
-      "upgradePrompt": "Actualiza esta organizaciÃ³n a PRO para habilitar invitaciones de tracker."
+      "freeBlockedBody": "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
+      "upgradePrompt": "Actualiza esta organización a PRO para habilitar invitaciones de tracker."
     },
     "messages": {
-      "createdWithoutEmail": "Se creÃ³ el acceso del tracker sin enviar correo electrÃ³nico.",
-      "genericProcessed": "La invitaciÃ³n para {{correo}} se procesÃ³ correctamente.",
-      "invited": "Se ha enviado una invitaciÃ³n a {{correo}} para unirse como tracker en {{orgName}}.",
-      "linkOnlyNoLink": "La invitaciÃ³n fue creada, pero no se recibiÃ³ un enlace pÃºblico.",
-      "linkOnlyWithLink": "La invitaciÃ³n fue creada. Usa este enlace para compartir el acceso: {{link}}.",
-      "magiclinkSent": "Se enviÃ³ un link mÃ¡gico de acceso a {{correo}}.",
-      "notOk": "No se pudo completar la invitaciÃ³n. Revisa el correo e intÃ©ntalo de nuevo.",
+      "createdWithoutEmail": "Se creó el acceso del tracker sin enviar correo electrónico.",
+      "genericProcessed": "La invitación para {{correo}} se procesó correctamente.",
+      "invited": "Se ha enviado una invitación a {{correo}} para unirse como tracker en {{orgName}}.",
+      "linkOnlyNoLink": "La invitación fue creada, pero no se recibió un enlace público.",
+      "linkOnlyWithLink": "La invitación fue creada. Usa este enlace para compartir el acceso: {{link}}.",
+      "magiclinkSent": "Se envió un link mágico de acceso a {{correo}}.",
+      "notOk": "No se pudo completar la invitación. Revisa el correo e inténtalo de nuevo.",
       "serverProblem": "Hubo un problema al contactar al servidor de invitaciones.",
-      "unexpectedError": "Error inesperado al procesar la invitaciÃ³n."
+      "unexpectedError": "Error inesperado al procesar la invitación."
     },
-    "onlyExistingNote": "Solo se puede invitar a personas existentes en tu organizaciÃ³n.",
-    "orgFallback": "tu organizaciÃ³n",
+    "onlyExistingNote": "Solo se puede invitar a personas existentes en tu organización.",
+    "orgFallback": "tu organización",
     "selectPersonLabel": "Selecciona una persona",
-    "sendInvite": "Enviar invitaciÃ³n",
+    "sendInvite": "Enviar invitación",
     "subtitle": "Selecciona un miembro de tu personal o ingresa un correo manualmente para invitarlo como tracker en {{orgName}}.",
     "title": "Invitar tracker"
   },
   "landing": {
-    "accessBody": "Esta aplicaciÃ³n requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitaciÃ³n a tu organizaciÃ³n.",
-    "accessHint": "Consejo: usa \"Link mÃ¡gico\" si tu administrador te invitÃ³ con correo.",
+    "accessBody": "Esta aplicación requiere una cuenta invitada por un administrador. Si no tienes acceso, solicita una invitación a tu organización.",
+    "accessHint": "Consejo: usa \"Link mágico\" si tu administrador te invitó con correo.",
     "accessTitle": "Acceso con cuenta autorizada",
-    "assistanceControlBody": "Verifica quiÃ©n estuvo dentro de cada geocerca, en quÃ© horario y en quÃ© actividad.",
+    "assistanceControlBody": "Verifica quién estuvo dentro de cada geocerca, en qué horario y en qué actividad.",
     "assistanceControlTitle": "Control de asistencia",
     "brandName": "App Geocercas",
     "brandTagline": "Control de personal por geocercas",
@@ -1213,15 +1213,15 @@
     "bulletCostsTitle": "Costos",
     "bulletGeocercasBody": "Crea y administra geocercas para tus campos, fincas, plantas o puntos de servicio.",
     "bulletGeocercasTitle": "Geocercas",
-    "bulletPersonalBody": "Registra a tu personal y asÃ­gnalo a actividades y zonas especÃ­ficas.",
+    "bulletPersonalBody": "Registra a tu personal y asígnalo a actividades y zonas específicas.",
     "bulletPersonalTitle": "Personal",
     "ctaLogin": "Ir al panel de control",
-    "ctaMagic": "Entrar con link mÃ¡gico",
+    "ctaMagic": "Entrar con link mágico",
     "email": "Correo",
     "footerFaq": "Preguntas frecuentes",
     "footerPrivacy": "Privacidad",
     "footerSupport": "Soporte",
-    "footerTerms": "TÃ©rminos",
+    "footerTerms": "Términos",
     "goPanel": "Ir al panel",
     "goToDashboard": "Ir al panel",
     "heroBadge": "Control inteligente de campo",
@@ -1230,119 +1230,119 @@
     "heroTitleHighlight": "con geocercas inteligentes",
     "heroTitlePrefix": "Controla a tu personal",
     "heroTitleSuffix": "en cualquier parte del mundo",
-    "invalidEmail": "Correo no vÃ¡lido.",
+    "invalidEmail": "Correo no válido.",
     "livePanelLabel": "Panel en vivo",
     "livePanelTitle": "Operaciones en tiempo real",
     "demoLiveLabel": "Demo en vivo",
     "demoOperationsAreaLabel": "Area de operaciones",
     "demoLoop10sLabel": "Loop 10s",
-    "login": "Iniciar sesiÃ³n",
+    "login": "Iniciar sesión",
     "loginButton": "Entrar",
     "logout": "Salir",
-    "magicEnter": "Iniciar sesiÃ³n con enlace mÃ¡gico",
-    "magicLinkError": "No se pudo enviar el enlace. IntÃ©ntalo de nuevo.",
+    "magicEnter": "Iniciar sesión con enlace mágico",
+    "magicLinkError": "No se pudo enviar el enlace. Inténtalo de nuevo.",
     "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
-    "magicNote": "Importante: el acceso funciona solo con el enlace mÃ¡gico real.",
+    "magicNote": "Importante: el acceso funciona solo con el enlace mágico real.",
     "multiOrgBody": "Administra varias empresas o proyectos desde una sola cuenta, con roles y permisos separados.",
-    "multiOrgTitle": "Multi organizaciÃ³n",
-    "privacyMiniNote": "Privacidad: la ubicaciÃ³n se usa solo para funciones de geocerca y seguimiento segÃºn permisos otorgados por el usuario.",
-    "quickAccessDesc": "Si lo prefieres, puedes iniciar sesiÃ³n usando un enlace mÃ¡gico (sin contraseÃ±a).",
+    "multiOrgTitle": "Multi organización",
+    "privacyMiniNote": "Privacidad: la ubicación se usa solo para funciones de geocerca y seguimiento según permisos otorgados por el usuario.",
+    "quickAccessDesc": "Si lo prefieres, puedes iniciar sesión usando un enlace mágico (sin contraseña).",
     "quickAccessTitle": "Quick access",
-    "reviewNote": "Nota: Si estÃ¡s revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
+    "reviewNote": "Nota: Si estás revisando la app (Google Play), utiliza las credenciales provistas en Play Console (App access).",
     "rightsReserved": "Todos los derechos reservados",
     "sending": "Sending...",
     "sendMagic": "Send magic link",
-    "statusOnline": "Sistema en lÃ­nea",
+    "statusOnline": "Sistema en línea",
     "support": "Support",
     "zonesActive": "Zonas activas",
-    "feature1Title": "SupervisiÃ³n de personal",
-    "feature1Body": "Visualiza quiÃ©n estÃ¡ en ruta, quiÃ©n llegÃ³ y quiÃ©n saliÃ³ de un Ã¡rea operativa.",
+    "feature1Title": "Supervisión de personal",
+    "feature1Body": "Visualiza quién está en ruta, quién llegó y quién salió de un área operativa.",
     "feature2Title": "Control por zonas",
-    "feature2Body": "Define geocercas para sedes, rutas, clientes o Ã¡reas sensibles y recibe contexto visual inmediato.",
+    "feature2Body": "Define geocercas para sedes, rutas, clientes o áreas sensibles y recibe contexto visual inmediato.",
     "feature3Title": "Eventos de entrada y salida",
-    "feature3Body": "Convierte posiciones GPS en eventos fÃ¡ciles de revisar para operaciÃ³n, auditorÃ­a y seguimiento.",
+    "feature3Body": "Convierte posiciones GPS en eventos fáciles de revisar para operación, auditoría y seguimiento.",
     "feature4Title": "Listo para equipos en campo",
-    "feature4Body": "Ãšsalo en operaciones comerciales, tÃ©cnicas, logÃ­sticas o de supervisiÃ³n territorial.",
+    "feature4Body": "Úsalo en operaciones comerciales, técnicas, logísticas o de supervisión territorial.",
     "useCase1Title": "Seguridad privada",
-    "useCase1Body": "Controla rondas de guardias, entradas a zonas restringidas y supervisiÃ³n de turnos.",
+    "useCase1Body": "Controla rondas de guardias, entradas a zonas restringidas y supervisión de turnos.",
     "useCase2Title": "Equipos comerciales",
     "useCase2Body": "Verifica visitas a clientes, cobertura territorial y actividad de vendedores.",
-    "useCase3Title": "Operaciones tÃ©cnicas",
-    "useCase3Body": "Supervisa tÃ©cnicos en campo y valida entradas y salidas en zonas de trabajo.",
-    "useCase4Title": "LogÃ­stica urbana",
-    "useCase4Body": "Monitorea movimientos dentro de zonas operativas y detecta eventos automÃ¡ticamente."
+    "useCase3Title": "Operaciones técnicas",
+    "useCase3Body": "Supervisa técnicos en campo y valida entradas y salidas en zonas de trabajo.",
+    "useCase4Title": "Logística urbana",
+    "useCase4Body": "Monitorea movimientos dentro de zonas operativas y detecta eventos automáticamente."
   },
   "login": {
     "advancedOptions": "Opciones avanzadas",
     "back": "Back",
-    "badge": "(inicio de sesiÃ³n-V31 NO-JS)",
+    "badge": "(inicio de sesión-V31 NO-JS)",
     "debug": {
       "lang": "LANG DEBUG",
       "i18n": "I18N DEBUG",
       "supabase": "Supabase"
     },
     "email": "Correo",
-    "emailLabel": "Correo electrÃ³nico",
+    "emailLabel": "Correo electrónico",
     "emailPlaceholder": "tucorreo@ejemplo.com",
-    "errorInvalidCredentials": "Credenciales invÃ¡lidas.",
-    "errorMagicLink": "No se pudo enviar el link mÃ¡gico.",
-    "errorMagicLinkUnexpected": "Error inesperado al enviar el link mÃ¡gico.",
-    "errorMissingCredentials": "Faltan usuario o contraseÃ±a.",
+    "errorInvalidCredentials": "Credenciales inválidas.",
+    "errorMagicLink": "No se pudo enviar el link mágico.",
+    "errorMagicLinkUnexpected": "Error inesperado al enviar el link mágico.",
+    "errorMissingCredentials": "Faltan usuario o contraseña.",
     "errorMissingEmail": "Debes ingresar un correo.",
-    "errorResetPassword": "No se pudo enviar el correo de recuperaciÃ³n.",
-    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperaciÃ³n.",
+    "errorResetPassword": "No se pudo enviar el correo de recuperación.",
+    "errorResetPasswordUnexpected": "Error inesperado al enviar el correo de recuperación.",
     "errors": {
-      "bootstrapFailed": "Bootstrap fallÃ³ (HTTP {{status}}). {{details}}",
-      "invalidEmail": "Ingresa un correo electrÃ³nico vÃ¡lido.",
-      "unknown": "OcurriÃ³ un error al iniciar sesiÃ³n."
+      "bootstrapFailed": "Bootstrap falló (HTTP {{status}}). {{details}}",
+      "invalidEmail": "Ingresa un correo electrónico válido.",
+      "unknown": "Ocurrió un error al iniciar sesión."
     },
-    "errorUnexpected": "Error inesperado al iniciar sesiÃ³n.",
-    "forgotPassword": "Â¿Olvidaste tu contraseÃ±a?",
-    "forgotPasswordAlt": "Â¿Prefieres restablecer tu contraseÃ±a? (enviar correo)",
+    "errorUnexpected": "Error inesperado al iniciar sesión.",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotPasswordAlt": "¿Prefieres restablecer tu contraseña? (enviar correo)",
     "goToDashboard": "Ir al panel",
     "goToNext": "Ir a",
-    "hidePassword": "Ocultar contraseÃ±a",
-    "info": "Stable WebView/TWA inicio de sesiÃ³n: native submit (no JS events), anti rate-limit by design.",
-    "infoMagicLinkSent": "Hemos enviado un link mÃ¡gico a tu correo.",
-    "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseÃ±a. Revisa la bandeja de entrada.",
+    "hidePassword": "Ocultar contraseña",
+    "info": "Stable WebView/TWA inicio de sesión: native submit (no JS events), anti rate-limit by design.",
+    "infoMagicLinkSent": "Hemos enviado un link mágico a tu correo.",
+    "infoResetPasswordSent": "Te enviamos un correo para restablecer tu contraseña. Revisa la bandeja de entrada.",
     "hints": {
-      "useResetPassword": " â€” Si nunca creaste contraseÃ±a en este entorno, usa \"{{resetTitle}}\" para crearla y luego entra con contraseÃ±a."
+      "useResetPassword": " — Si nunca creaste contraseña en este entorno, usa \"{{resetTitle}}\" para crearla y luego entra con contraseña."
     },
-    "loadingSession": "Cargando tu sesiÃ³nâ€¦",
-    "magicButton": "Enviar link mÃ¡gico",
-    "magicDescription": "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseÃ±a.",
-    "magicLinkButton": "Enviar link mÃ¡gico",
-    "magicLinkDescription": "Te enviaremos un enlace seguro a tu correo para entrar sin contraseÃ±a.",
-    "magicLinkSent": "Hemos enviado un link mÃ¡gico a tu correo.",
-    "magicLinkTitle": "Entrar con link mÃ¡gico",
-    "magicSubmitting": "Enviando enlaceâ€¦",
-    "modeDesc": "Si el inicio de sesiÃ³n es correcto, el servidor redirige a /auth/callback con tokens.",
-    "modeMagic": "Link mÃ¡gico",
-    "modePassword": "ContraseÃ±a",
+    "loadingSession": "Cargando tu sesión…",
+    "magicButton": "Enviar link mágico",
+    "magicDescription": "Te enviaremos un enlace seguro a tu correo para que ingreses sin contraseña.",
+    "magicLinkButton": "Enviar link mágico",
+    "magicLinkDescription": "Te enviaremos un enlace seguro a tu correo para entrar sin contraseña.",
+    "magicLinkSent": "Hemos enviado un link mágico a tu correo.",
+    "magicLinkTitle": "Entrar con link mágico",
+    "magicSubmitting": "Enviando enlace…",
+    "modeDesc": "Si el inicio de sesión es correcto, el servidor redirige a /auth/callback con tokens.",
+    "modeMagic": "Link mágico",
+    "modePassword": "Contraseña",
     "modeReset": "Restablecer",
     "modeTitle": "Mode: NO-JS (native form submit)",
-    "nextHint": "Ãštil para pruebas en PREVIEW. En producciÃ³n normalmente no lo cambias.",
+    "nextHint": "Útil para pruebas en PREVIEW. En producción normalmente no lo cambias.",
     "nextSuffix": "(next)",
-    "password": "ContraseÃ±a",
-    "passwordLabel": "ContraseÃ±a",
-    "passwordLoginButton": "Entrar con contraseÃ±a",
-    "passwordPlaceholder": "Ingresa tu contraseÃ±a",
-    "passwordTip": "Tip: en Preview y ProducciÃ³n la contraseÃ±a es distinta (Supabase distinto).",
+    "password": "Contraseña",
+    "passwordLabel": "Contraseña",
+    "passwordLoginButton": "Entrar con contraseña",
+    "passwordPlaceholder": "Ingresa tu contraseña",
+    "passwordTip": "Tip: en Preview y Producción la contraseña es distinta (Supabase distinto).",
     "previewBadge": "PREVIEW",
-    "sessionActive": "Ya tienes una sesiÃ³n activa.",
-    "sessionStarted": "âœ… SesiÃ³n iniciada. Entrandoâ€¦",
-    "showPassword": "Mostrar contraseÃ±a",
+    "sessionActive": "Ya tienes una sesión activa.",
+    "sessionStarted": "✅ Sesión iniciada. Entrando…",
+    "showPassword": "Mostrar contraseña",
     "submit": "Entrar",
-    "submitting": "Ingresandoâ€¦",
+    "submitting": "Ingresando…",
     "subtitle": "Accede a tu cuenta de App Geocercas",
-    "title": "Iniciar sesiÃ³n",
-    "userNotAuthorized": "Este correo no estÃ¡ autorizado. Solicita una invitaciÃ³n al administrador."
+    "title": "Iniciar sesión",
+    "userNotAuthorized": "Este correo no está autorizado. Solicita una invitación al administrador."
   },
   "orgs": {
     "title": "Organizaciones",
     "myTitle": "Mis Organizaciones",
-    "createNew": "Crear nueva organizaciÃ³n",
-    "newTitle": "Nueva organizaciÃ³n",
+    "createNew": "Crear nueva organización",
+    "newTitle": "Nueva organización",
     "form": {
       "name": "Nombre",
       "slugOptional": "Slug (opcional)",
@@ -1354,10 +1354,10 @@
   "personal": {
     "bannerCreated": "Personal creado exitosamente.",
     "bannerDeletedOk": "Registro eliminado correctamente.",
-    "bannerEditMode": "Modo ediciÃ³n.",
-    "bannerLoadingSession": "Cargando sesiÃ³nâ€¦",
-    "bannerLoginRequired": "Debes iniciar sesiÃ³n para acceder a esta secciÃ³n.",
-    "bannerNewMode": "Modo creaciÃ³n de personal.",
+    "bannerEditMode": "Modo edición.",
+    "bannerLoadingSession": "Cargando sesión…",
+    "bannerLoginRequired": "Debes iniciar sesión para acceder a esta sección.",
+    "bannerNewMode": "Modo creación de personal.",
     "bannerRefreshedOk": "Datos actualizados correctamente.",
     "bannerSelected": "Registro seleccionado.",
     "bannerUpdated": "Personal actualizado correctamente.",
@@ -1367,7 +1367,7 @@
     "buttonNew": "Nuevo",
     "buttonRefresh": "Actualizar",
     "buttonSave": "Guardar",
-    "confirmDelete": "Â¿EstÃ¡ seguro que desea eliminar este registro? (soft delete)",
+    "confirmDelete": "¿Está seguro que desea eliminar este registro? (soft delete)",
     "errorDelete": "No se pudo eliminar el registro.",
     "errorDeleteNoRows": "No se pudo eliminar: el registro no existe o ya fue eliminado.",
     "errorLoad": "Error al cargar el personal.",
@@ -1381,25 +1381,25 @@
     "errorNoPermissionDelete": "No tienes permisos para eliminar personal.",
     "errorNoPermissionEdit": "No tienes permisos para editar personal.",
     "errorNoPermissionSave": "No tienes permisos para guardar cambios.",
-    "errorPhonePolicy": "El telÃ©fono debe comenzar con + (formato internacional E.164).",
+    "errorPhonePolicy": "El teléfono debe comenzar con + (formato internacional E.164).",
     "errorSave": "No se pudo guardar el personal.",
-    "errorSaveNoRecord": "No se recibiÃ³ registro actualizado.",
+    "errorSaveNoRecord": "No se recibió registro actualizado.",
     "fieldActive": "Activo",
     "fieldEmail": "Correo",
     "fieldLastName": "Apellido",
     "fieldName": "Nombre",
-    "fieldPhonePlaceholder": "TelÃ©fono (+593â€¦)",
+    "fieldPhonePlaceholder": "Teléfono (+593…)",
     "formTitleEdit": "Editar personal",
     "formTitleNew": "Nuevo personal",
     "no": "No",
     "onlyActive": "Solo activos",
-    "orgFallback": "Sin organizaciÃ³n",
-    "orgInfoLabel": "OrganizaciÃ³n:",
+    "orgFallback": "Sin organización",
+    "orgInfoLabel": "Organización:",
     "pillCanEdit": "Editable",
     "pillReadOnly": "Solo lectura",
-    "processing": "Procesandoâ€¦",
+    "processing": "Procesando…",
     "roleLabel": "Rol:",
-    "searchPlaceholder": "Buscar por nombre, apellido, correo o telÃ©fonoâ€¦",
+    "searchPlaceholder": "Buscar por nombre, apellido, correo o teléfono…",
     "table": {
       "columns": {
         "active": "Activo",
@@ -1407,10 +1407,10 @@
         "end": "Fin",
         "firstName": "Nombre",
         "lastName": "Apellido",
-        "phone": "TelÃ©fono",
+        "phone": "Teléfono",
         "start": "Inicio"
       },
-      "loading": "Cargandoâ€¦",
+      "loading": "Cargando…",
       "noActive": "No hay personal activo."
     },
     "tableActive": "Activo",
@@ -1418,15 +1418,15 @@
     "tableLastName": "Apellido",
     "tableName": "Nombre",
     "tableNoResults": "No se encontraron resultados.",
-    "tablePhone": "TelÃ©fono",
+    "tablePhone": "Teléfono",
     "title": "Personal",
-    "noActiveSession": "No hay sesiÃ³n activa",
+    "noActiveSession": "No hay sesión activa",
     "legacyTable": {
       "actions": "Acciones",
       "softDelete": "Eliminar (soft)",
       "todoEdit": "TODO: Editar"
     },
-    "yes": "SÃ­"
+    "yes": "Sí"
   },
   "reportes": {
     "activityNoName": "Actividad sin nombre",
@@ -1456,7 +1456,7 @@
     "errorLoadFilters": "Error al cargar filtros (personas, actividades, geocercas).",
     "errorLoadReport": "Error al cargar el reporte de costos.",
     "errorRangeInvalid": "La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
-    "errorViewMissing": "La vista v_costos_detalle aÃºn no estÃ¡ creada en Supabase.",
+    "errorViewMissing": "La vista v_costos_detalle aún no está creada en Supabase.",
     "exportNoData": "No hay datos para exportar.",
     "filters": {
       "activityLabel": "Actividad",
@@ -1478,8 +1478,8 @@
     "filtersTo": "Hasta",
     "geofenceNoName": "Geocerca sin nombre",
     "headerSubtitle": "Consulta y exporta los costos por persona, actividad y geocerca.",
-    "loadingReport": "Cargando reporteâ€¦",
-    "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este mÃ³dulo estÃ¡ disponible solo para propietarios y administradores.",
+    "loadingReport": "Cargando reporte…",
+    "noAccessBody": "No tienes permisos para visualizar los reportes de costos. Este módulo está disponible solo para propietarios y administradores.",
     "personNoName": "Persona sin nombre",
     "summaryRecordsHelp": "Cantidad de filas que cumplen con los filtros actuales.",
     "summaryRecordsLabel": "Registros",
@@ -1508,26 +1508,26 @@
   },
   "resetPassword": {
     "backHome": "Ir a la landing",
-    "backToLogin": "Volver a iniciar sesiÃ³n",
-    "confirmPassword": "Confirmar contraseÃ±a",
+    "backToLogin": "Volver a iniciar sesión",
+    "confirmPassword": "Confirmar contraseña",
     "confirmPlaceholder": "Repite",
-    "invalidOrExpired": "El enlace de recuperaciÃ³n es invÃ¡lido o expirÃ³. Solicita uno nuevo.",
-    "loading": "Preparando enlace de recuperaciÃ³nâ€¦",
-    "newPassword": "Nueva contraseÃ±a",
-    "newPasswordPlaceholder": "MÃ­nimo 8 caracteres",
-    "noSession": "No hay una sesiÃ³n vÃ¡lida para restablecer la contraseÃ±a. Vuelve a solicitar una.",
-    "noticeType": "SesiÃ³n detectada. Si este enlace no era de recuperaciÃ³n, vuelve a iniciar sesiÃ³n normalmente.",
-    "passwordMin": "La contraseÃ±a debe tener al menos 8 caracteres.",
-    "passwordMismatch": "Las contraseÃ±as no coinciden.",
-    "saveButton": "Guardar nueva contraseÃ±a",
-    "saving": "Guardandoâ€¦",
-    "subtitle": "Crea una nueva contraseÃ±a para tu cuenta.",
-    "success": "ContraseÃ±a actualizada correctamente. Ahora puedes iniciar sesiÃ³n.",
-    "tip": "Tip: vuelve a /inicio de sesiÃ³n, escribe tu correo y usa \"Â¿Olvidaste tu contraseÃ±a?\" para generar un nuevo enlace.",
-    "title": "Restablecer contraseÃ±a",
-    "unexpected": "OcurriÃ³ un error al preparar el restablecimiento de contraseÃ±a.",
-    "updateFailed": "No se pudo actualizar la contraseÃ±a. Intenta nuevamente.",
-    "updateUnexpected": "Error inesperado al actualizar la contraseÃ±a."
+    "invalidOrExpired": "El enlace de recuperación es inválido o expiró. Solicita uno nuevo.",
+    "loading": "Preparando enlace de recuperación…",
+    "newPassword": "Nueva contraseña",
+    "newPasswordPlaceholder": "Mínimo 8 caracteres",
+    "noSession": "No hay una sesión válida para restablecer la contraseña. Vuelve a solicitar una.",
+    "noticeType": "Sesión detectada. Si este enlace no era de recuperación, vuelve a iniciar sesión normalmente.",
+    "passwordMin": "La contraseña debe tener al menos 8 caracteres.",
+    "passwordMismatch": "Las contraseñas no coinciden.",
+    "saveButton": "Guardar nueva contraseña",
+    "saving": "Guardando…",
+    "subtitle": "Crea una nueva contraseña para tu cuenta.",
+    "success": "Contraseña actualizada correctamente. Ahora puedes iniciar sesión.",
+    "tip": "Tip: vuelve a /inicio de sesión, escribe tu correo y usa \"¿Olvidaste tu contraseña?\" para generar un nuevo enlace.",
+    "title": "Restablecer contraseña",
+    "unexpected": "Ocurrió un error al preparar el restablecimiento de contraseña.",
+    "updateFailed": "No se pudo actualizar la contraseña. Intenta nuevamente.",
+    "updateUnexpected": "Error inesperado al actualizar la contraseña."
   },
   "tracker": {
     "page": {
@@ -1536,8 +1536,8 @@
     "attendance": {
       "title": "Registro de asistencias",
       "noRecords": "Sin registros",
-      "checkIn": "âœ… Entrada",
-      "checkOut": "ðŸšª Salida",
+      "checkIn": "✅ Entrada",
+      "checkOut": "🚪 Salida",
       "columns": {
         "user": "Usuario",
         "geofence": "Geocerca",
@@ -1549,7 +1549,7 @@
       "title": "Panel del tracker",
       "statusActive": "Activo",
       "statusInactive": "Sin actividad",
-      "lastUpdateRecent": "Ãšltima actualizaciÃ³n reciente"
+      "lastUpdateRecent": "Última actualización reciente"
     },
     "gps": {
       "messageStarting": "Iniciando seguimiento...",
@@ -1557,55 +1557,55 @@
       "messageActive": "Seguimiento activo",
       "titleActive": "Seguimiento activo",
       "titleStarting": "Iniciando seguimiento",
-      "subtitleActive": "Tu ubicaciÃ³n se estÃ¡ compartiendo correctamente.",
-      "subtitleStarting": "Estamos preparando tu sesiÃ³n para comenzar el seguimiento.",
+      "subtitleActive": "Tu ubicación se está compartiendo correctamente.",
+      "subtitleStarting": "Estamos preparando tu sesión para comenzar el seguimiento.",
       "badgeActive": "Activo",
       "badgeInitializing": "Inicializando",
       "noteUpdated": "Estado actualizado correctamente.",
       "noteWait": "Esto puede tomar unos segundos."
     },
     "invite": {
-      "title": "Permiso de ubicaciÃ³n",
-      "intro": "Esta invitaciÃ³n necesita tu ubicaciÃ³n para iniciar el tracker y validar recorridos y geocercas.",
+      "title": "Permiso de ubicación",
+      "intro": "Esta invitación necesita tu ubicación para iniciar el tracker y validar recorridos y geocercas.",
       "introStep": {
-        "before": "Primero aceptas el aviso. DespuÃ©s verÃ¡s una pantalla para permitir la ubicaciÃ³n. Solo necesitas tocar",
+        "before": "Primero aceptas el aviso. Después verás una pantalla para permitir la ubicación. Solo necesitas tocar",
         "allow": "Permitir",
         "after": "."
       },
-      "consentLabel": "Acepto el seguimiento de ubicaciÃ³n",
+      "consentLabel": "Acepto el seguimiento de ubicación",
       "acceptContinue": "Aceptar y continuar",
       "processing": "Procesando...",
-      "permissionCardTitle": "Permitir el uso de ubicaciÃ³n",
+      "permissionCardTitle": "Permitir el uso de ubicación",
       "permissionCardBody": {
-        "before": "En el siguiente paso aparecerÃ¡ el permiso del sistema. Toca",
+        "before": "En el siguiente paso aparecerá el permiso del sistema. Toca",
         "after": "para continuar."
       },
-      "permissionAction": "Permitir el uso de ubicaciÃ³n",
+      "permissionAction": "Permitir el uso de ubicación",
       "requestingPermission": "Solicitando permiso...",
-      "permissionAutoContinue": "Si el navegador muestra el permiso, solo confirma y el tracker continuarÃ¡ automÃ¡ticamente.",
-      "blockedTitle": "Necesitamos tu ubicaciÃ³n para continuar",
-      "blockedBody": "La ubicaciÃ³n estÃ¡ bloqueada o el navegador no pudo mostrar el permiso. Debes habilitarla manualmente para seguir.",
+      "permissionAutoContinue": "Si el navegador muestra el permiso, solo confirma y el tracker continuará automáticamente.",
+      "blockedTitle": "Necesitamos tu ubicación para continuar",
+      "blockedBody": "La ubicación está bloqueada o el navegador no pudo mostrar el permiso. Debes habilitarla manualmente para seguir.",
       "inAppBrowserHint": {
-        "before": "EstÃ¡s dentro de Gmail o WhatsApp. Usa"
+        "before": "Estás dentro de Gmail o WhatsApp. Usa"
       },
-      "chromePath": "Chrome â†’ ConfiguraciÃ³n del sitio â†’ UbicaciÃ³n â†’ Permitir",
+      "chromePath": "Chrome → Configuración del sitio → Ubicación → Permitir",
       "statusLabel": "Estado",
       "errors": {
         "missingToken": "Invite token faltante.",
         "consentRequired": "Debes aceptar el consentimiento antes de continuar.",
-        "blockedSite": "La ubicaciÃ³n estÃ¡ bloqueada para este sitio. Debes habilitarla manualmente para continuar.",
-        "locationUnavailable": "No se pudo obtener la ubicaciÃ³n. Activa el GPS y vuelve a intentar.",
-        "locationTimeout": "La ubicaciÃ³n tardÃ³ demasiado. Intenta de nuevo con mejor seÃ±al GPS.",
-        "permissionFailed": "No se pudo obtener permiso de ubicaciÃ³n.",
-        "blockedChrome": "La ubicaciÃ³n estÃ¡ bloqueada para este sitio. En Chrome: Ajustes del sitio â†’ UbicaciÃ³n â†’ Permitir.",
-        "locationUnavailableShort": "No se pudo obtener la ubicaciÃ³n."
+        "blockedSite": "La ubicación está bloqueada para este sitio. Debes habilitarla manualmente para continuar.",
+        "locationUnavailable": "No se pudo obtener la ubicación. Activa el GPS y vuelve a intentar.",
+        "locationTimeout": "La ubicación tardó demasiado. Intenta de nuevo con mejor señal GPS.",
+        "permissionFailed": "No se pudo obtener permiso de ubicación.",
+        "blockedChrome": "La ubicación está bloqueada para este sitio. En Chrome: Ajustes del sitio → Ubicación → Permitir.",
+        "locationUnavailableShort": "No se pudo obtener la ubicación."
       }
     },
     "history": {
       "traceLabel": "Rastro"
     },
     "controls": {
-      "centerOnUser": "Centrar en mi posiciÃ³n",
+      "centerOnUser": "Centrar en mi posición",
       "refresh": "Refrescar posiciones",
       "showAll": "Mostrar todos",
       "showInside": "Solo dentro de geocercas"
@@ -1618,9 +1618,9 @@
     },
     "status": {
       "offline": "Sin datos recientes",
-      "online": "Tracker en lÃ­nea"
+      "online": "Tracker en línea"
     },
-    "subtitle": "Visualiza en tiempo real la ubicaciÃ³n de los trackers dentro de tus geocercas.",
+    "subtitle": "Visualiza en tiempo real la ubicación de los trackers dentro de tus geocercas.",
     "table": {
       "activity": "Actividad",
       "geofence": "Geocerca",
@@ -1628,20 +1628,20 @@
       "person": "Persona",
       "status": "Estado",
       "timestamp": "Fecha/hora",
-      "title": "Ãšltimas posiciones"
+      "title": "Últimas posiciones"
     },
     "title": "Tracker GPS"
   },
   "table": {
     "name": "Nombre",
     "status": "Estado",
-    "lastPosition": "Ãšltima posiciÃ³n",
-    "lastUpdate": "Ãšltima actualizaciÃ³n"
+    "lastPosition": "Última posición",
+    "lastUpdate": "Última actualización"
   },
   "status": {
-    "online": "En lÃ­nea",
+    "online": "En línea",
     "stale": "Desactualizado",
-    "offline": "Sin conexiÃ³n"
+    "offline": "Sin conexión"
   },
   "map": {
     "coordinates": "Coordenadas",
@@ -1659,7 +1659,7 @@
     },
     "sections": {
       "filters": "Filtros",
-      "diagnostics": "DiagnÃ³stico",
+      "diagnostics": "Diagnóstico",
       "map": "Mapa"
     },
     "labels": {
@@ -1674,17 +1674,17 @@
     "actions": {
       "resolveOrgAgain": "Re-resolver org (RPC)",
       "refresh": "Actualizar",
-      "loading": "Cargandoâ€¦",
+      "loading": "Cargando…",
       "centerGeofence": "Centrar geocerca"
     },
     "states": {
-      "validatingPlan": "Validando plan de la organizaciÃ³n...",
-      "planValidationFailed": "No se pudo validar el plan de la organizaciÃ³n.",
-      "moduleUnavailable": "Este mÃ³dulo no estÃ¡ disponible en el plan actual de la organizaciÃ³n.",
+      "validatingPlan": "Validando plan de la organización...",
+      "planValidationFailed": "No se pudo validar el plan de la organización.",
+      "moduleUnavailable": "Este módulo no está disponible en el plan actual de la organización.",
       "requiresPro": "El panel de seguimiento requiere PRO o superior.",
       "upgradeHint": "Haz mejora de plan para visualizar posiciones, rutas y geocercas desde este panel.",
-      "upgradeOrgPrompt": "Actualiza esta organizaciÃ³n para habilitar Tracker panel.",
-      "resolvingActiveOrg": "Resolviendo organizaciÃ³n activaâ€¦"
+      "upgradeOrgPrompt": "Actualiza esta organización para habilitar Tracker panel.",
+      "resolvingActiveOrg": "Resolviendo organización activa…"
     },
     "messages": {
       "loadAssignmentsError": "Error cargando asignaciones (tracker_assignments).",
@@ -1692,7 +1692,7 @@
       "loadPositionsError": "Error al cargar posiciones.",
       "noActiveAssignments": "No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).",
       "noActiveGeofencesForAssignments": "Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org ({{orgId}}).",
-      "fallbackGeofenceShown": "No se encontraron geocercas activas; se mostrÃ³ 1 geocerca activa como fallback para no dejar el panel vacÃ­o.",
+      "fallbackGeofenceShown": "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el panel vacío.",
       "noActiveGeofencesForOrg": "No hay geocercas activas disponibles para esta org ({{orgId}}).",
       "noVisibleGeofences": "No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).",
       "orgResolveError": "Error resolviendo org"
@@ -1712,9 +1712,9 @@
       "intersects": "intersects"
     },
     "map": {
-      "initializing": "Inicializando mapaâ€¦",
+      "initializing": "Inicializando mapa…",
       "statusPrefix": "map",
-      "circleLabel": "{{name}} (cÃ­rculo)"
+      "circleLabel": "{{name}} (círculo)"
     },
     "tooltip": {
       "tracker": "Tracker",
@@ -1730,59 +1730,59 @@
       "labelNone": "Geocercas: Ninguna",
       "labelAll": "Geocercas: Todas ({{count}})",
       "labelSelected": "Geocercas: {{count}}",
-      "searchPlaceholder": "Buscar geocercaâ€¦",
+      "searchPlaceholder": "Buscar geocerca…",
       "showAll": "Mostrar todas",
       "hideAll": "Ocultar todas",
-      "noResults": "Sin resultadosâ€¦",
+      "noResults": "Sin resultados…",
       "close": "Cerrar"
     }
   },
   "trackerGps": {
     "title": "Tracker GPS",
-    "lastSend": "Ãšltimo envÃ­o",
-    "waitingCoords": "Esperando coordenadasâ€¦",
+    "lastSend": "Último envío",
+    "waitingCoords": "Esperando coordenadas…",
     "debugCopyPaste": "Debug (copiar/pegar)",
     "stateLabel": "Estado",
-    "onlyInvited": "Esta pÃ¡gina es solo para trackers invitados.",
+    "onlyInvited": "Esta página es solo para trackers invitados.",
     "goHome": "Ir al inicio",
     "status": {
-      "initializing": "Iniciando trackerâ€¦",
-      "processingMagicLink": "Procesando Magic Link del Trackerâ€¦",
-      "sessionOkPreparing": "SesiÃ³n OK. Preparando trackerâ€¦",
-      "readingSession": "Leyendo sesiÃ³n del trackerâ€¦",
-      "noSession": "No hay una sesiÃ³n activa del tracker.",
-      "noGeolocation": "Este dispositivo no soporta geolocalizaciÃ³n.",
+      "initializing": "Iniciando tracker…",
+      "processingMagicLink": "Procesando Magic Link del Tracker…",
+      "sessionOkPreparing": "Sesión OK. Preparando tracker…",
+      "readingSession": "Leyendo sesión del tracker…",
+      "noSession": "No hay una sesión activa del tracker.",
+      "noGeolocation": "Este dispositivo no soporta geolocalización.",
       "active": "Tracker activo",
-      "activating": "Activando tracker en la organizaciÃ³nâ€¦",
+      "activating": "Activando tracker en la organización…",
       "noPermission": "Tracker sin permiso / onboarding",
       "gpsError": "Error de GPS"
     },
     "errors": {
-      "notConfigured": "El tracker no estÃ¡ configurado en este deployment.",
-      "noSupabaseClient": "No se encontrÃ³ el cliente principal de Supabase.",
+      "notConfigured": "El tracker no está configurado en este deployment.",
+      "noSupabaseClient": "No se encontró el cliente principal de Supabase.",
       "setSession": "Error en setSession:",
-      "hashSession": "Error de sesiÃ³n por hash:",
-      "openFromMagicLinkOnly": "Abre esta pÃ¡gina solo desde tu Magic Link de Tracker.",
-      "geolocationUnavailable": "GeolocalizaciÃ³n no disponible."
+      "hashSession": "Error de sesión por hash:",
+      "openFromMagicLinkOnly": "Abre esta página solo desde tu Magic Link de Tracker.",
+      "geolocationUnavailable": "Geolocalización no disponible."
     },
     "membership": {
-      "missingOrgId": "Falta org_id en la URL. Abre esta pÃ¡gina desde el link de invitaciÃ³n: /tracker-gps?org_id=<ORG_ID>.",
-      "checking": "Verificando membresÃ­aâ€¦",
-      "noValidTokenUser": "No hay token/usuario vÃ¡lido en /tracker-gps.",
-      "okSessionCache": "MembresÃ­a OK (cache de sesiÃ³n).",
+      "missingOrgId": "Falta org_id en la URL. Abre esta página desde el link de invitación: /tracker-gps?org_id=<ORG_ID>.",
+      "checking": "Verificando membresía…",
+      "noValidTokenUser": "No hay token/usuario válido en /tracker-gps.",
+      "okSessionCache": "Membresía OK (cache de sesión).",
       "membershipsSelectError": "Error en select de memberships:",
-      "alreadyExists": "La membresÃ­a ya existe: role={{role}}",
-      "runningAccept": "No existe membresÃ­a. Ejecutando accept-tracker-invite",
+      "alreadyExists": "La membresía ya existe: role={{role}}",
+      "runningAccept": "No existe membresía. Ejecutando accept-tracker-invite",
       "acceptError": "Error de accept-tracker-invite:",
-      "membershipsRecheckError": "Error de revalidaciÃ³n de memberships:",
-      "acceptReturnedButNotCreated": "accept-tracker-invite devolviÃ³ OK pero la membresÃ­a no fue creada.",
+      "membershipsRecheckError": "Error de revalidación de memberships:",
+      "acceptReturnedButNotCreated": "accept-tracker-invite devolvió OK pero la membresía no fue creada.",
       "acceptOk": "accept-tracker-invite OK.",
-      "onboardingException": "ExcepciÃ³n en onboarding:"
+      "onboardingException": "Excepción en onboarding:"
     },
     "disclosure": {
-      "title": "UbicaciÃ³n en segundo plano",
-      "body1": "App Geocercas recopila tu ubicaciÃ³n incluso cuando la app estÃ¡ cerrada o el telÃ©fono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
-      "body2": "Esta informaciÃ³n se utiliza Ãºnicamente para fines operativos de la organizaciÃ³n y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicaciÃ³n o cerrando sesiÃ³n.",
+      "title": "Ubicación en segundo plano",
+      "body1": "App Geocercas recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
+      "body2": "Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión.",
       "continue": "Continuar"
     },
     "debugLabels": {
@@ -1799,15 +1799,15 @@
     }
   },
   "pricing": {
-    "accessDenied": "No tienes permisos para ver monetizaciÃ³n en esta organizaciÃ³n.",
+    "accessDenied": "No tienes permisos para ver monetización en esta organización.",
     "common": {
       "currentPlan": "Plan actual",
       "loading": "Cargando...",
-      "notAvailable": "â€”",
+      "notAvailable": "—",
       "unlimited": "Ilimitadas"
     },
     "actions": {
-      "goToBilling": "Ir a FacturaciÃ³n",
+      "goToBilling": "Ir a Facturación",
       "contactSales": "Contactar ventas"
     },
     "page": {
@@ -1815,9 +1815,9 @@
       "previewNotice": {
         "prefix": "Esta pantalla trabaja en",
         "previewTag": "PREVIEW",
-        "middle": "y usa el flujo de suscripciÃ³n en modo",
+        "middle": "y usa el flujo de suscripción en modo",
         "testTag": "TEST",
-        "suffix": "No afecta producciÃ³n."
+        "suffix": "No afecta producción."
       }
     },
     "summary": {
@@ -1831,36 +1831,36 @@
         "enterprise": "ENTERPRISE"
       },
       "planCodeUnknown": "{{code}}",
-      "maxGeofences": "MÃ¡x. geocercas",
-      "maxTrackers": "MÃ¡x. trackers"
+      "maxGeofences": "Máx. geocercas",
+      "maxTrackers": "Máx. trackers"
     },
     "free": {
       "title": "Free",
       "subtitle": "Para comenzar",
       "price": "$0",
       "description": "Pensado para validar el uso inicial de la plataforma.",
-      "currentPlanMessage": "Ya estÃ¡s usando el plan Free.",
+      "currentPlanMessage": "Ya estás usando el plan Free.",
       "features": {
         "validateFlow": "Ideal para empezar y validar el flujo base",
         "upToTrackers": "Hasta {{count}} tracker",
-        "geofenceLimits": "Geocercas con lÃ­mite por plan",
-        "billingAndUpgrade": "Acceso a FacturaciÃ³n y futura ruta de mejora de plan",
+        "geofenceLimits": "Geocercas con límite por plan",
+        "billingAndUpgrade": "Acceso a Facturación y futura ruta de mejora de plan",
         "backendEnforcement": "Backend sigue aplicando enforcement real"
       }
     },
     "pro": {
       "title": "Pro",
-      "subtitle": "OperaciÃ³n SaaS activa",
+      "subtitle": "Operación SaaS activa",
       "price": "Pro",
-      "description": "Plan recomendado para habilitar el mÃ³dulo Tracker y operar con suscripciÃ³n.",
-      "higherPlanMessage": "Tu organizaciÃ³n ya tiene un plan superior o distinto de Free.",
-      "reviewBillingMessage": "Revisa FacturaciÃ³n para administrarlo.",
+      "description": "Plan recomendado para habilitar el módulo Tracker y operar con suscripción.",
+      "higherPlanMessage": "Tu organización ya tiene un plan superior o distinto de Free.",
+      "reviewBillingMessage": "Revisa Facturación para administrarlo.",
       "features": {
-        "upToTrackers": "Hasta {{count}} trackers por organizaciÃ³n",
+        "upToTrackers": "Hasta {{count}} trackers por organización",
         "upToGeofences": "Hasta {{count}} geocercas",
-        "trackerEnabled": "MÃ³dulo Tracker habilitado",
-        "invitesEnabled": "InvitaciÃ³n de trackers habilitada",
-        "stripeSelfManaged": "SuscripciÃ³n autogestionable"
+        "trackerEnabled": "Módulo Tracker habilitado",
+        "invitesEnabled": "Invitación de trackers habilitada",
+        "stripeSelfManaged": "Suscripción autogestionable"
       }
     },
     "enterprise": {
@@ -1869,18 +1869,18 @@
       "price": "USD 99/mes",
       "description": "Para organizaciones que requieren condiciones comerciales especiales.",
       "features": {
-        "salesOnboarding": "AtenciÃ³n comercial y onboarding guiado",
-        "flexibleLimits": "LÃ­mites y condiciones ajustables",
-        "multiTeamReady": "Preparado para operaciÃ³n con mÃºltiples equipos",
+        "salesOnboarding": "Atención comercial y onboarding guiado",
+        "flexibleLimits": "Límites y condiciones ajustables",
+        "multiTeamReady": "Preparado para operación con múltiples equipos",
         "specialAgreements": "Escalamiento comercial y acuerdos especiales",
         "directSalesContact": "Contacto directo con ventas"
       }
     },
     "notes": {
       "title": "Notas de esta fase",
-      "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta pÃ¡gina solo refleja el plan y muestra las acciones comerciales disponibles.",
-      "proCheckout": "La mejora a Pro usa checkout seguro. Administra tu suscripciÃ³n desde FacturaciÃ³n.",
-      "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automÃ¡tico."
+      "backendAuthority": "El backend sigue siendo la autoridad real del plan. Esta página solo refleja el plan y muestra las acciones comerciales disponibles.",
+      "proCheckout": "La mejora a Pro usa checkout seguro. Administra tu suscripción desde Facturación.",
+      "enterpriseSales": "Enterprise queda presentado como canal comercial, sin activar checkout automático."
     },
     "status": {
       "active": "Activo",
@@ -1898,23 +1898,23 @@
     },
     "cancel": {
       "title": "Checkout cancelado",
-      "subtitle": "No se realizÃ³ ningÃºn cobro.",
+      "subtitle": "No se realizó ningún cobro.",
       "backToBilling": "Volver a Billing",
       "goHome": "Ir a Inicio"
     },
-    "title": "FacturaciÃ³n",
-    "authRequired": "Inicia sesiÃ³n para administrar tu plan.",
+    "title": "Facturación",
+    "authRequired": "Inicia sesión para administrar tu plan.",
     "previewNotice": {
-      "prefix": "MonetizaciÃ³n en",
-      "middle": "(Flujo de suscripciÃ³n).",
-      "suffix": "No afecta producciÃ³n."
+      "prefix": "Monetización en",
+      "middle": "(Flujo de suscripción).",
+      "suffix": "No afecta producción."
     },
     "actions": {
       "viewPlans": "Ver planes"
     },
     "labels": {
       "email": "Correo",
-      "orgId": "ID de organizaciÃ³n"
+      "orgId": "ID de organización"
     },
     "planState": {
       "title": "Estado del plan"
@@ -1929,12 +1929,12 @@
       "currentPeriodUntil": "Periodo actual hasta"
     },
     "subscriptionManagement": {
-      "title": "GestiÃ³n de suscripciÃ³n",
-      "description": "Abre FacturaciÃ³n para gestionar los detalles de tu suscripciÃ³n."
+      "title": "Gestión de suscripción",
+      "description": "Abre Facturación para gestionar los detalles de tu suscripción."
     },
     "messages": {
-      "cancelAtPeriodEnd": "Tu suscripciÃ³n estÃ¡ configurada para cancelarse al final del periodo actual.",
-      "activePlanExists": "Ya existe un plan activo para esta organizaciÃ³n. El botÃ³n de actualizaciÃ³n no se muestra."
+      "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
+      "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
     },
     "upgrade": {
       "productTitle": "Geocercas PRO",
@@ -1943,7 +1943,7 @@
       "notResolved": "(no resuelta)",
       "organizationInputLabel": "Organization ID (org_id)",
       "organizationInputPlaceholder": "Ej: ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
-      "organizationInputHelp": "Si no se detecta automÃ¡ticamente, pega aquÃ­ el UUID de la organizaciÃ³n.",
+      "organizationInputHelp": "Si no se detecta automáticamente, pega aquí el UUID de la organización.",
       "subscribe": "Suscribirme a PRO",
       "processing": "Procesando...",
       "noticeTitle": "Aviso",
@@ -1953,12 +1953,12 @@
         "paddleException": "EXCEPCION DE PADDLE:\n{{details}}"
       },
       "errors": {
-        "invalidOrgId": "Org ID invÃ¡lido. Copia el Organization ID (UUID) y pÃ©galo aquÃ­."
+        "invalidOrgId": "Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí."
       }
     },
     "compareBeforeUpgrade": {
-      "title": "Â¿Quieres comparar antes de actualizar?",
-      "description": "Revisa la pÃ¡gina de planes para comparar Free, Pro y Enterprise."
+      "title": "¿Quieres comparar antes de actualizar?",
+      "description": "Revisa la página de planes para comparar Free, Pro y Enterprise."
     },
     "status": {
       "trialing": "Prueba",
@@ -1971,9 +1971,9 @@
   "reports": {
     "title": "Reportes",
     "currentOrg": "Org actual",
-    "sessionLoading": "Cargando tu sesiÃ³nâ€¦",
-    "noActiveSession": "No hay sesiÃ³n activa. Inicia sesiÃ³n nuevamente.",
-    "noActiveOrg": "No hay organizaciÃ³n activa para este usuario.",
+    "sessionLoading": "Cargando tu sesión…",
+    "noActiveSession": "No hay sesión activa. Inicia sesión nuevamente.",
+    "noActiveOrg": "No hay organización activa para este usuario.",
     "filters": {
       "title": "Filtros",
       "subtitle": "Selecciona rangos y listas. Luego presiona Generar.",
@@ -1984,62 +1984,62 @@
       "from": "Desde",
       "to": "Hasta",
       "generate": "Generar",
-      "generating": "Generandoâ€¦",
+      "generating": "Generando…",
       "exportCsv": "Exportar CSV",
       "tipLabel": "Tip:",
-      "tipMultiSelect": "En listas multi-select usa Ctrl (Windows) / Command (Mac) para seleccionar mÃºltiples.",
+      "tipMultiSelect": "En listas multi-select usa Ctrl (Windows) / Command (Mac) para seleccionar múltiples.",
       "geofences": "Geocercas",
       "people": "Personas",
       "activities": "Actividades",
       "assignments": "Asignaciones",
       "multi": "(multi)",
-      "assignmentFallback": "asignaciÃ³n",
-      "assignmentNote": "Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacÃ­o."
+      "assignmentFallback": "asignación",
+      "assignmentNote": "Nota: si tus asignaciones no tienen personal_id, el cruce con marcajes puede salir vacío."
     },
     "results": {
       "title": "Resultados",
-      "generating": "Generando reporteâ€¦",
+      "generating": "Generando reporte…",
       "rows": "Filas: {{count}}",
-      "emptyHint": "AÃºn no hay datos. Ajusta filtros y genera.",
-      "loading": "Cargandoâ€¦",
+      "emptyHint": "Aún no hay datos. Ajusta filtros y genera.",
+      "loading": "Cargando…",
       "noDataSelectedFilters": "No hay datos con los filtros seleccionados."
     },
     "table": {
-      "day": "DÃ­a",
+      "day": "Día",
       "person": "Persona",
       "email": "Correo",
       "geofence": "Geocerca",
       "activity": "Actividad",
-      "assignment": "AsignaciÃ³n",
+      "assignment": "Asignación",
       "entry": "Entrada",
       "exit": "Salida",
       "marks": "Marcajes",
       "inside": "Dentro",
       "distanceM": "Dist (m)",
       "rate": "Tarifa",
-      "dash": "â€”"
+      "dash": "—"
     },
     "errors": {
       "loadFilters": "Error cargando filtros.",
-      "noActiveOrgOrSession": "No hay organizaciÃ³n activa o la sesiÃ³n no estÃ¡ lista.",
+      "noActiveOrgOrSession": "No hay organización activa o la sesión no está lista.",
       "invalidDateRange": "La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
       "generateReport": "Error generando reporte.",
       "exportNoData": "No hay datos para exportar."
     }
   },
   "activityAssignments": {
-    "title": "AsignaciÃ³n de actividades",
-    "subtitle": "Define quÃ© actividad realiza cada persona en un rango de fechas. La misma persona no puede tener dos actividades al mismo tiempo.",
-    "session": "SesiÃ³n",
+    "title": "Asignación de actividades",
+    "subtitle": "Define qué actividad realiza cada persona en un rango de fechas. La misma persona no puede tener dos actividades al mismo tiempo.",
+    "session": "Sesión",
     "actions": {
-      "new": "+ Nueva asignaciÃ³n",
+      "new": "+ Nueva asignación",
       "refresh": "Refrescar",
       "edit": "Editar",
       "delete": "Eliminar",
       "clear": "Limpiar",
       "newShort": "Nueva",
       "saveChanges": "Guardar cambios",
-      "createAssignment": "Crear asignaciÃ³n",
+      "createAssignment": "Crear asignación",
       "saving": "Guardando..."
     },
     "filters": {
@@ -2061,9 +2061,9 @@
       "empty": "No hay asignaciones para los filtros actuales."
     },
     "form": {
-      "titleCreate": "Nueva asignaciÃ³n",
-      "titleEdit": "Editar asignaciÃ³n",
-      "titleView": "Detalles / nueva asignaciÃ³n",
+      "titleCreate": "Nueva asignación",
+      "titleEdit": "Editar asignación",
+      "titleView": "Detalles / nueva asignación",
       "trackerPerson": "Persona / Tracker",
       "activity": "Actividad",
       "startDate": "Fecha inicio",
@@ -2077,12 +2077,12 @@
       "assignmentsLoadError": "No se pudieron cargar las asignaciones",
       "requiredFields": "Tracker, actividad y fecha de inicio son obligatorios",
       "assignedSuccessfully": "Actividad asignada correctamente",
-      "updatedSuccessfully": "AsignaciÃ³n actualizada correctamente",
-      "invalidFormMode": "Modo de formulario invÃ¡lido",
+      "updatedSuccessfully": "Asignación actualizada correctamente",
+      "invalidFormMode": "Modo de formulario inválido",
       "constraintOverlap": "No se puede asignar esta actividad: la persona ya tiene otra actividad en ese rango de fechas.",
-      "saveError": "Error al guardar la asignaciÃ³n de actividad",
-      "deletedSuccessfully": "AsignaciÃ³n eliminada correctamente",
-      "deleteError": "No se pudo eliminar la asignaciÃ³n de actividad"
+      "saveError": "Error al guardar la asignación de actividad",
+      "deletedSuccessfully": "Asignación eliminada correctamente",
+      "deleteError": "No se pudo eliminar la asignación de actividad"
     },
     "overlap": {
       "selectedPerson": "seleccionada",
@@ -2090,7 +2090,7 @@
       "noEndDate": "sin fecha de fin",
       "message": "La persona {{person}} ya tiene asignada la actividad \"{{activity}}\" entre {{start}} y {{end}}."
     },
-    "confirmDelete": "Â¿Seguro que deseas eliminar la asignaciÃ³n de \"{{activity}}\" para \"{{tracker}}\"?",
+    "confirmDelete": "¿Seguro que deseas eliminar la asignación de \"{{activity}}\" para \"{{tracker}}\"?",
     "fallbacks": {
       "activity": "actividad",
       "tracker": "tracker"
@@ -2098,8 +2098,8 @@
   },
   "admin": {
     "dashboard": {
-      "title": "Panel de AdministraciÃ³n",
-      "configRequired": "ConfiguraciÃ³n requerida",
+      "title": "Panel de Administración",
+      "configRequired": "Configuración requerida",
       "modules": {
         "geocercas": "Geocercas",
         "geocercasV2": "Geocercas V2",
@@ -2107,17 +2107,17 @@
         "reports": "Reportes"
       },
       "modulesDescriptions": {
-        "geocercas": "Gestiona las geocercas de tu organizaciÃ³n",
+        "geocercas": "Gestiona las geocercas de tu organización",
         "geocercasV2": "Geocercas mejoradas con nueva interfaz",
         "personal": "Gestiona el personal de campo",
         "reports": "Consulta reportes y eventos"
       },
-      "logout": "Cerrar sesiÃ³n"
+      "logout": "Cerrar sesión"
     },
     "geocercasV2": {
       "title": "Geocercas",
       "showAll": "Mostrar todas",
-      "back": "â† Volver",
+      "back": "← Volver",
       "savedGeofencesHeader": "Geocercas guardadas",
       "loading": "Cargando...",
       "noGeofences": "No hay geocercas",
@@ -2140,11 +2140,11 @@
       "prompt": {
         "name": "Nombre de la geocerca:",
         "newName": "Nuevo nombre (deja igual si no quieres cambiar):",
-        "editCoords": "Edita coordenadas (lat,lng por lÃ­nea). Deja en blanco para mantener:"
+        "editCoords": "Edita coordenadas (lat,lng por línea). Deja en blanco para mantener:"
       },
       "manualForm": {
         "title": "Crear geocerca manualmente",
-        "hintFormat": "Formato: lat,lng por lÃ­nea. MÃ­nimo 3 lÃ­neas.",
+        "hintFormat": "Formato: lat,lng por línea. Mínimo 3 líneas.",
         "saveButton": "Guardar manual"
       },
       "labels": {
@@ -2157,7 +2157,7 @@
     },
     "usersRoles": {
       "title": "Usuarios y Roles",
-      "processing": "Procesandoâ€¦",
+      "processing": "Procesando…",
       "inviteSection": "Invitar usuario",
       "emailPlaceholder": "correo@dominio.com",
       "fullNamePlaceholder": "Nombre completo",
@@ -2179,46 +2179,46 @@
       "magicLink": "Magic Link",
       "deleteButton": "Eliminar",
       "assignButton": "Asignar",
-      "confirmDelete": "Â¿Eliminar/suspender a {{correo}}?",
-      "inviteSuccess": "InvitaciÃ³n enviada a {{correo}}",
+      "confirmDelete": "¿Eliminar/suspender a {{correo}}?",
+      "inviteSuccess": "Invitación enviada a {{correo}}",
       "assignSuccess": "Rol \"{{role}}\" asignado a {{correo}}",
-      "magicLinkSentInvite": "InvitaciÃ³n enviada a {{correo}}",
-      "magicLinkSentLink": "Enlace mÃ¡gico enviado a {{correo}}",
+      "magicLinkSentInvite": "Invitación enviada a {{correo}}",
+      "magicLinkSentLink": "Enlace mágico enviado a {{correo}}",
       "deleteSuccess": "Usuario {{correo}} eliminado/suspendido"
     },
     "geofences": {
       "errors": {
         "loadFailed": "No se pudo cargar la lista",
-        "invalidPolygon": "Dibuja un polÃ­gono vÃ¡lido.",
+        "invalidPolygon": "Dibuja un polígono válido.",
         "saveFailed": "Error al guardar",
-        "invalidInput": "Revisa nombre y al menos 3 coordenadas vÃ¡lidas.",
+        "invalidInput": "Revisa nombre y al menos 3 coordenadas válidas.",
         "createFailed": "No se pudo guardar la geocerca",
         "statusChangeFailed": "No se pudo cambiar estado",
         "deleteFailed": "No se pudo eliminar",
-        "noCoordinates": "Geocerca sin coordenadas vÃ¡lidas",
-        "minimumPoints": "Se requieren al menos 3 puntos vÃ¡lidos.",
+        "noCoordinates": "Geocerca sin coordenadas válidas",
+        "minimumPoints": "Se requieren al menos 3 puntos válidos.",
         "editFailed": "No se pudo editar",
-        "invalidCoordinates": "Coordenadas invÃ¡lidas.",
-        "invalidPolygonData": "PolÃ­gono invÃ¡lido."
+        "invalidCoordinates": "Coordenadas inválidas.",
+        "invalidPolygonData": "Polígono inválido."
       },
       "messages": {
-        "created": "âœ… Geocerca guardada.",
+        "created": "✅ Geocerca guardada.",
         "createdManual": "Geocerca creada (manual).",
-        "activated": "âœ… Activada",
-        "deactivated": "âœ… Desactivada",
-        "deleted": "ðŸ—‘ï¸ Eliminada.",
-        "updated": "âœï¸ Geocerca actualizada.",
-        "mapEditActive": "ðŸŸ  EdiciÃ³n en mapa activa. Ajusta vÃ©rtices y pulsa 'Guardar cambios'.",
-        "editCancelled": "EdiciÃ³n cancelada.",
-        "changesSaved": "âœ… Cambios guardados."
+        "activated": "✅ Activada",
+        "deactivated": "✅ Desactivada",
+        "deleted": "🗑️ Eliminada.",
+        "updated": "✏️ Geocerca actualizada.",
+        "mapEditActive": "🟠 Edición en mapa activa. Ajusta vértices y pulsa 'Guardar cambios'.",
+        "editCancelled": "Edición cancelada.",
+        "changesSaved": "✅ Cambios guardados."
       },
-      "confirmDelete": "Â¿Eliminar \"{{name}}\"?"
+      "confirmDelete": "¿Eliminar \"{{name}}\"?"
     }
   },
   "trackerPanel": {
     "title": "Panel del Tracker",
-    "description": "AquÃ­ verÃ¡s tus geocercas asignadas, tu estado (dentro/fuera) y podrÃ¡s reportar incidencias.",
-    "logout": "Cerrar sesiÃ³n"
+    "description": "Aquí verás tus geocercas asignadas, tu estado (dentro/fuera) y podrás reportar incidencias.",
+    "logout": "Cerrar sesión"
   },
   "mapaTracking": {
     "traceLabel": "Rastro:",
@@ -2228,10 +2228,10 @@
       "60min": "60 min"
     },
     "refresh": "Refrescar",
-    "loading": "Cargandoâ€¦"
+    "loading": "Cargando…"
   },
   "newOrg": {
-    "title": "Nueva organizaciÃ³n",
+    "title": "Nueva organización",
     "labels": {
       "name": "Nombre",
       "slug": "Slug (opcional)"
@@ -2250,7 +2250,7 @@
     "fields": {
       "name": "Nombre",
       "coordinates": "Coordenadas",
-      "onePerLine": "por lÃ­nea"
+      "onePerLine": "por línea"
     },
     "placeholders": {
       "name": "Ej. Campo 1",
@@ -2258,19 +2258,19 @@
     },
     "labels": {
       "name": "Nombre",
-      "coordinates": "Coordenadas (lat,lng por lÃ­nea)"
+      "coordinates": "Coordenadas (lat,lng por línea)"
     },
     "actions": {
       "save": "Guardar geocerca",
       "saving": "Guardando..."
     },
     "hints": {
-      "mapSelection": "Dibuja o selecciona en el mapa; si la caja estÃ¡ vacÃ­a, ese polÃ­gono serÃ¡ usado."
+      "mapSelection": "Dibuja o selecciona en el mapa; si la caja está vacía, ese polígono será usado."
     },
     "map": {
       "lat": "Lat",
       "lng": "Lng",
-      "movePointer": "Mueve el puntero sobre el mapaâ€¦"
+      "movePointer": "Mueve el puntero sobre el mapa…"
     },
     "errors": {
       "minPoints": "Se requieren al menos 3 puntos."
@@ -2295,8 +2295,7 @@
       "assignments": "Asignaciones:"
     },
     "actions": {
-      "links": "VÃ­nculos"
+      "links": "Vínculos"
     }
   }
 }
-
