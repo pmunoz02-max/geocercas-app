@@ -134,7 +134,7 @@ function stripServerOwned(payload) {
    - Resolver memberships intentando primero con sbSrv; si falla, caer a sbUser (RLS)
 ========================= */
 
-async function resolveContext(req) {
+async function resolveContext(req, { requestedOrgId = null } = {}) {
   const SUPABASE_URL = getEnv(["SUPABASE_URL", "VITE_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL"]);
   const SUPABASE_ANON_KEY = getEnv([
     "SUPABASE_ANON_KEY",
