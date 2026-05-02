@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../context/AuthContext";
+import { formatPlanPrice } from "../config/pricing";
 
 const FALLBACKS = {
   "app.brand": {
@@ -56,11 +57,6 @@ const FALLBACKS = {
     es: "Empezar ahora",
     en: "Get started",
     fr: "Commencer",
-  },
-  "landing.ctaPricing": {
-    es: "Ver precios",
-    en: "View pricing",
-    fr: "Voir les tarifs",
   },
   "landing.panelTitle": {
     es: "Panel operativo",
@@ -177,11 +173,6 @@ const FALLBACKS = {
     en: "For active organizations.",
     fr: "Pour les organisations en activité.",
   },
-  "landing.planProPrice": {
-    es: "USD 29/mes",
-    en: "USD 29/month",
-    fr: "29 USD/mois",
-  },
   "landing.planProDetail": {
     es: "Hasta 50 trackers por organización.",
     en: "Up to 50 trackers per organization.",
@@ -196,11 +187,6 @@ const FALLBACKS = {
     es: "Para operaciones grandes.",
     en: "For large operations.",
     fr: "Pour les grandes opérations.",
-  },
-  "landing.planEnterprisePrice": {
-    es: "USD 99/mes",
-    en: "USD 99/month",
-    fr: "99 USD/mois",
   },
   "landing.planEnterpriseDetail": {
     es: "Más de 50 trackers y soporte comercial.",
@@ -250,14 +236,14 @@ export default function Landing() {
     {
       name: tr("landing.planProTitle"),
       description: tr("landing.planProDesc"),
-      price: tr("landing.planProPrice"),
+      price: formatPlanPrice("pro", currentLang),
       detail: tr("landing.planProDetail"),
       featured: true,
     },
     {
       name: tr("landing.planEnterpriseTitle"),
       description: tr("landing.planEnterpriseDesc"),
-      price: tr("landing.planEnterprisePrice"),
+      price: formatPlanPrice("enterprise", currentLang),
       detail: tr("landing.planEnterpriseDetail"),
     },
   ];

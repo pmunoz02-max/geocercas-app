@@ -5,6 +5,7 @@ import { useAuth } from "@/context/auth.js";
 import { supabase } from "@/lib/supabaseClient.js";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
+import { formatPlanPrice } from "../config/pricing";
 
 function normalizePlanCode(value) {
   return String(value || "free").toLowerCase();
@@ -764,7 +765,7 @@ export default function Pricing() {
                 ? "Active SaaS operations"
                 : "Active SaaS operations"
           )}
-          price={tt("pro.price", "Pro")}
+          price={formatPlanPrice("pro", i18n.language)}
           description={tt(
             "pro.description",
             i18n.language === "fr"
@@ -827,14 +828,7 @@ export default function Pricing() {
                 ? "Assisted sales"
                 : "Assisted sales"
           )}
-          price={tt(
-            "enterprise.price",
-            i18n.language === "fr"
-              ? "Sur mesure"
-              : i18n.language === "en"
-                ? "Custom"
-                : "Custom"
-          )}
+          price={formatPlanPrice("enterprise", i18n.language)}
           description={tt(
             "enterprise.description",
             i18n.language === "fr"
