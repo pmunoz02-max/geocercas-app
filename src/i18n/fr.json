@@ -6,7 +6,7 @@
     "fieldNamePlaceholder": "Ex. Semis, Irrigation, Récolte",
     "fieldHourlyRateLabel": "Coût horaire",
     "fieldCurrency": "Devise",
-    "fieldDescription": "Description",
+    "fieldDescription": "Description (facultative)",
     "fieldDescriptionPlaceholder": "Description courte de l’activité...",
     "buttonCreate": "Créer une activité",
     "buttonSave": "Enregistrer les modifications",
@@ -22,7 +22,12 @@
       "CAD": "Dollar canadien",
       "BRL": "Réal brésilien"
     },
-    "fieldDescriptionOptional": "Description (facultative)"
+    "fieldDescriptionOptional": "Description (facultative)",
+    "fieldNameLabel": "Nom",
+    "fieldCurrencyLabel": "Devise",
+    "fieldDescriptionLabel": "Description (facultative)",
+    "errorRateInvalid": "Saisissez un coût horaire valide.",
+    "errorRatePositive": "Le coût horaire doit être supérieur à 0."
   },
   "admins": {
     "actions": {
