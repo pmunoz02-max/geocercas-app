@@ -27,6 +27,13 @@ Este documento es la referencia actual y viva del flujo de invitación y trackin
 - El dashboard y los endpoints nunca deben usar `owner_id` ni `userId` del query/body para asociar posiciones o asignaciones.
 - Todos los documentos previos sobre el flujo de invitación tracker, asignaciones y posiciones deben considerarse **históricos** y no deben usarse como referencia.
 
+## Onboarding para usuarios nuevos sin organización
+
+- Los usuarios recién creados que aún no tienen organización **deben ver un onboarding claro** (pantalla /inicio o mensaje de espera), nunca una pantalla blanca ni un error genérico.
+- Debe indicarse explícitamente que falta aceptar invitación de tracker o que el administrador debe asignar una organización/rol.
+- El flujo correcto es: login exitoso → mensaje de bienvenida/espera → usuario espera invitación o asignación de rol.
+- Nunca dejar al usuario sin feedback visual o con la app bloqueada sin explicación.
+
 ---
 
 ## Histórico

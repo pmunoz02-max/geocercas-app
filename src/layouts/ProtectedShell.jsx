@@ -74,7 +74,14 @@ export default function ProtectedShell() {
   if (loading) return null;
   if (!user) return null;
 
-  const tabs = buildTabs({ role: currentRole, isAppRoot, isAdmin });
+  // Solo mostrar Inicio si falta organización o rol
+  // (currentOrgId puede venir de user, auth context, o similar)
+  const currentOrgId = user?.org_id || user?.orgId || user?.currentOrgId || null;
+  const showOnlyHome = !currentRole || !currentOrgId;
+
+  const tabs = showOnlyHome
+    ? [{ path: "/inicio", labelKey: "app.tabs.inicio" }]
+    : buildTabs({ role: currentRole, isAppRoot, isAdmin });
 
   return (
     <div className="min-h-screen bg-slate-50">

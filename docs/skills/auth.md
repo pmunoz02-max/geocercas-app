@@ -244,3 +244,11 @@ Push corto:
 git add docs/skills/auth.md
 git commit -m "docs: add auth skill [allow-docs]"
 git push origin preview
+```
+
+## Onboarding para usuarios nuevos sin organización
+
+- Los usuarios recién creados que aún no tienen organización **deben ver un onboarding claro** (pantalla /inicio o mensaje de espera), nunca una pantalla blanca ni un error genérico.
+- Debe indicarse explícitamente que falta aceptar invitación de tracker o que el administrador debe asignar una organización/rol.
+- El flujo correcto es: login exitoso → mensaje de bienvenida/espera → usuario espera invitación o asignación de rol.
+- Nunca dejar al usuario sin feedback visual o con la app bloqueada sin explicación.
