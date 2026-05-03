@@ -1,3 +1,7 @@
+const DEBUG_I18N =
+  import.meta.env.DEV &&
+  import.meta.env.MODE === "development" &&
+  import.meta.env.VITE_ENABLE_I18N_DEBUG === "true";
 // Auxiliar para resolver fallbackLng correctamente
 function resolveFallbackLng(i18nInstance) {
   const fallbackLng = i18nInstance?.options?.fallbackLng;
@@ -79,14 +83,10 @@ function getLangFromUrl() {
   return SUPPORTED.includes(lang) ? lang : null;
 }
 
-function logI18n(stage, extra = {}) {
-  const urlLang = getLangFromUrl();
-  console.log(`[i18n][${stage}]`, {
-    urlLang,
-    currentI18nLang: i18n.language,
-    resolvedLanguage: i18n.resolvedLanguage,
-    ...extra,
-  });
+function logI18n(...args) {
+  if (DEBUG_I18N) {
+    console.log("[i18n]", ...args);
+  }
 }
 
 
@@ -99,7 +99,9 @@ const initialLang = getInitialLang();
 logI18n("before-init", { initialLang });
 setHtmlLang(initialLang);
 
+// debug solo en desarrollo local y si VITE_ENABLE_I18N_DEBUG === 'true'
 i18n.use(initReactI18next).init({
+  debug: DEBUG_I18N,
   resources: {
     es: { translation: es },
     en: { translation: en },
@@ -138,11 +140,11 @@ i18n.on("languageChanged", (lng) => {
   const code = normalizeLang(lng);
   if (!code) return;
   setHtmlLang(code);
-  logI18n("languageChanged", { changedTo: code });
+  if (DEBUG_I18N) logI18n("languageChanged", { changedTo: code });
 });
 
 i18n.on("initialized", (opts) => {
-  logI18n("initialized", { opts });
+  if (DEBUG_I18N) logI18n("initialized", { opts });
 });
 
 if (import.meta.env.DEV) {
@@ -171,10 +173,10 @@ export function applyLanguageSafely(nextLang) {
   const safeLang = normalizeLang(nextLang) || "es";
   const current = i18n.resolvedLanguage || i18n.language;
 
-  logI18n("applyLanguageSafely:start", { nextLang: safeLang, current });
+  if (DEBUG_I18N) logI18n("applyLanguageSafely:start", { nextLang: safeLang, current });
 
   if (current === safeLang) {
-    logI18n("applyLanguageSafely:skip", { reason: "same-language" });
+    if (DEBUG_I18N) logI18n("applyLanguageSafely:skip", { reason: "same-language" });
     return;
   }
 
