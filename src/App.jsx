@@ -135,6 +135,9 @@ function MainAppRoutes() {
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
       <Route path="/geocerca/:id" element={<Navigate to="/geocerca" replace />} />
+      <Route path="/nueva-geocerca" element={<Navigate to="/geocerca" replace />} />
+      <Route path="/new-geofence" element={<Navigate to="/geocerca" replace />} />
+      <Route path="/geofences" element={<Navigate to="/geocercas" replace />} />
       <Route path="/tracker-dashboard" element={<Navigate to="/tracker" replace />} />
       <Route path="/admin" element={<Navigate to="/admins" replace />} />
       <Route path="/costos-dashboard" element={<Navigate to="/dashboard-costs" replace />} />
