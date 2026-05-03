@@ -22,3 +22,9 @@ se activa o desactiva
 - control de presencia
 - asignaciones
 - análisis territorial
+
+## API y acceso
+
+La ruta `/geocerca` utiliza la capa `geofencesApi` para todas las operaciones de lectura y escritura.
+
+> La UI no accede directamente a la tabla `geofences`, sino que siempre pasa por la API (`geofencesApi`). Esto permite aplicar reglas de negocio, validaciones y control de acceso centralizado.
