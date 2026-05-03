@@ -55,7 +55,17 @@ function buildTabs({ role, isAppRoot, isAdmin }) {
 }
 
 export default function ProtectedShell() {
-  const { loading, user, currentRole, isAppRoot, isAdmin } = useAuth();
+  const {
+    loading,
+    user,
+    currentRole,
+    role,
+    currentOrgId,
+    currentOrg,
+    orgId,
+    isAppRoot,
+    isAdmin,
+  } = useAuth();
   const location = useLocation();
   const bypassLoggedRef = useRef(false);
 
@@ -74,14 +84,15 @@ export default function ProtectedShell() {
   if (loading) return null;
   if (!user) return null;
 
-  // Solo mostrar Inicio si falta organización o rol
-  // (currentOrgId puede venir de user, auth context, o similar)
-  const currentOrgId = user?.org_id || user?.orgId || user?.currentOrgId || null;
-  const showOnlyHome = !currentRole || !currentOrgId;
+  // Determinar rol y organización efectivos
+  const effectiveRole = String(currentRole || role || "").toLowerCase().trim();
+  const effectiveOrgId = String(currentOrgId || currentOrg?.id || orgId || "").trim();
 
-  const tabs = showOnlyHome
+  const hasMissingContext = user && (!effectiveRole || !effectiveOrgId);
+
+  const tabs = hasMissingContext
     ? [{ path: "/inicio", labelKey: "app.tabs.inicio" }]
-    : buildTabs({ role: currentRole, isAppRoot, isAdmin });
+    : buildTabs({ role: effectiveRole, isAppRoot, isAdmin });
 
   return (
     <div className="min-h-screen bg-slate-50">
