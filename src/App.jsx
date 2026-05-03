@@ -1,3 +1,4 @@
+import VerGeocerca from "./pages/VerGeocerca.jsx";
 import Privacy from "./pages/Privacy.jsx";
 import Terms from "./pages/Terms.jsx";
 // src/App.jsx
@@ -222,6 +223,22 @@ function MainAppRoutes() {
           element={
             <RequireOrg>
               <GeocercasPage />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/geocercas/:id"
+          element={
+            <RequireOrg>
+              <VerGeocerca />
+            </RequireOrg>
+          }
+        />
+        <Route
+          path="/geofences/:id"
+          element={
+            <RequireOrg>
+              <VerGeocerca />
             </RequireOrg>
           }
         />
