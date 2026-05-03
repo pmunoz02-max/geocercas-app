@@ -18,6 +18,12 @@
 - `/geocercas/:id` y `/geofences/:id` ahora abren la vista VerGeocerca.
 - Esto es solo para la web. No afecta la base de datos, API, Android ni producción.
 
+### Actualización de página de geocercas (web)
+
+- Las rutas `/geocercas` y `/geofences` ahora usan la página moderna de mapa Geocercas.jsx.
+- GeocercasList.jsx es legacy y no está activa.
+- Este cambio es solo para la web; no afecta base de datos, API, Android ni producción.
+
 arquitectura vigente
 servicio válido: ForegroundLocationService
 entry point: WebViewActivity
