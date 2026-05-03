@@ -13,6 +13,11 @@
 - `/new-geofence` y `/nueva-geocerca` ahora redirigen a `/geocerca`.
 - Estos cambios aplican solo a la web. No hubo cambios en la base de datos, API ni Android.
 
+### Nuevos alias de rutas de detalle de geocerca (web)
+
+- `/geocercas/:id` y `/geofences/:id` ahora abren la vista VerGeocerca.
+- Esto es solo para la web. No afecta la base de datos, API, Android ni producción.
+
 arquitectura vigente
 servicio válido: ForegroundLocationService
 entry point: WebViewActivity
