@@ -102,6 +102,7 @@ setHtmlLang(initialLang);
 // debug solo en desarrollo local y si VITE_ENABLE_I18N_DEBUG === 'true'
 i18n.use(initReactI18next).init({
   debug: false,
+  showSupportNotice: false,
   resources: {
     es: { translation: es },
     en: { translation: en },
