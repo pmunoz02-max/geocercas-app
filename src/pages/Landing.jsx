@@ -211,6 +211,9 @@ const FALLBACKS = {
 };
 
 export default function Landing() {
+    const loginHref = "/login?mode=magic";
+    const dashboardHref = "/dashboard";
+    const primaryHref = user ? dashboardHref : loginHref;
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -306,7 +309,7 @@ export default function Landing() {
               <LanguageSwitcher />
             </div>
             <a
-              href={user ? "/dashboard" : "/auth"}
+              href={primaryHref}
               className="rounded-2xl bg-sky-500 px-4 py-2 font-semibold text-white hover:bg-sky-400 transition shadow-lg shadow-sky-900/30"
             >
               {user ? tr("landing.goDashboard") : tr("app.header.login")}
@@ -366,7 +369,7 @@ export default function Landing() {
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                href={user ? "/dashboard" : "/auth"}
+                href={primaryHref}
                 className="inline-flex items-center justify-center rounded-2xl bg-sky-500 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400"
               >
                 {user ? tr("landing.goDashboard") : tr("landing.ctaStart")}
