@@ -29,7 +29,7 @@ import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 // App pages
 import Inicio from "./pages/Inicio.jsx";
-import GeocercasPage from "./pages/GeocercasPage.jsx";
+import GeocercasPage from "./pages/Geocercas.jsx";
 import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
 import Personal from "./pages/Personal.jsx";
 import ActividadesPage from "./pages/ActividadesPage.jsx";
