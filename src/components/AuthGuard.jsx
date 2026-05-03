@@ -6,8 +6,13 @@ import { useAuthSafe } from "@/auth/AuthProvider.jsx";
 import { isTrackerGpsPath } from "@/lib/trackerFlow";
 
 // ✅ Marker infalible para saber si este archivo está en el bundle servido
+const DEBUG_AUTH_GUARD = import.meta.env.DEV;
+function authGuardDebug(...args) {
+  if (DEBUG_AUTH_GUARD) console.log(...args);
+}
+// ✅ Marker infalible para saber si este archivo está en el bundle servido
 window.__TG_AUTHGUARD_MARKER = "AUTHGUARD_MARKER_2026-02-26_A";
-console.log("[TG AUTHGUARD MARKER]", window.__TG_AUTHGUARD_MARKER);
+authGuardDebug("[TG AUTHGUARD MARKER]", window.__TG_AUTHGUARD_MARKER);
 
 export default function AuthGuard({ children }) {
   const location = useLocation();
@@ -18,14 +23,14 @@ export default function AuthGuard({ children }) {
     location.pathname.startsWith("/tracker-accept") ||
     location.pathname.startsWith("/tracker-gps")
   ) {
-    console.log("[AuthGuard] BYPASS for tracker route", location.pathname);
+    authGuardDebug("[AuthGuard] BYPASS for tracker route", location.pathname);
     return children || <Outlet />;
   }
   const missingProviderLoggedRef = useRef(false);
 
   // Permitir acceso directo a /paddle-checkout sin sesión ni redirigir
   if (location.pathname.startsWith("/paddle-checkout")) {
-    console.log("[AuthGuard] Allowing direct access to /paddle-checkout");
+    authGuardDebug("[AuthGuard] Allowing direct access to /paddle-checkout");
     return children || <Outlet />;
   }
 
@@ -39,7 +44,7 @@ export default function AuthGuard({ children }) {
       missingProviderLoggedRef.current = true;
     }
     const next = encodeURIComponent(location.pathname || "/inicio");
-    console.log("[AuthGuard] Redirecting to /login due to missing auth provider", { location: location.pathname });
+    authGuardDebug("[AuthGuard] Redirecting to /login due to missing auth provider", { location: location.pathname });
     return <Navigate to={`/login?next=${next}&err=auth_provider_missing`} replace />;
   }
 
@@ -47,7 +52,7 @@ export default function AuthGuard({ children }) {
   const { loading, initialized, user } = auth;
 
   if (!initialized || loading) {
-    console.log("[AuthGuard] Still loading or not initialized", { loading, initialized, user });
+    authGuardDebug("[AuthGuard] Still loading or not initialized", { loading, initialized, user });
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-sm text-slate-500">{t("common.actions.loading")}</div>
@@ -57,7 +62,7 @@ export default function AuthGuard({ children }) {
 
   if (!user) {
     const next = encodeURIComponent(location.pathname || "/inicio");
-    console.log("[AuthGuard] Redirecting to /login due to missing user", { location: location.pathname });
+    authGuardDebug("[AuthGuard] Redirecting to /login due to missing user", { location: location.pathname });
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
