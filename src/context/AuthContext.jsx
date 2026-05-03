@@ -34,14 +34,18 @@ const LS_ORG_KEY = "tg_current_org_id";
    FINGERPRINT (diagnóstico)
 ========================= */
 
-const AUTH_CTX_INSTANCE_ID = `AUTHCTX_${Math.random().toString(16).slice(2)}_${Date.now()}`;
 
+const AUTH_CTX_INSTANCE_ID = `AUTHCTX_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+const DEBUG_AUTH_CTX = import.meta.env.DEV;
+function authCtxDebug(...args) {
+  if (DEBUG_AUTH_CTX) console.log(...args);
+}
 try {
   if (typeof window !== "undefined") {
     window.__TG_AUTHCTX_IDS = window.__TG_AUTHCTX_IDS || [];
     window.__TG_AUTHCTX_IDS.push(AUTH_CTX_INSTANCE_ID);
     window.__TG_AUTHCTX_LAST = AUTH_CTX_INSTANCE_ID;
-    console.log("[AUTHCTX] module instance:", AUTH_CTX_INSTANCE_ID);
+    authCtxDebug("[AUTHCTX] module instance:", AUTH_CTX_INSTANCE_ID);
   }
 } catch {}
 
@@ -241,7 +245,7 @@ export function AuthProvider({ children }) {
     try {
       if (typeof window !== "undefined") {
         window.__TG_AUTH_PROVIDER_MOUNTED = AUTH_CTX_INSTANCE_ID;
-        console.log("[AUTHCTX] provider mounted for:", AUTH_CTX_INSTANCE_ID);
+        authCtxDebug("[AUTHCTX] provider mounted for:", AUTH_CTX_INSTANCE_ID);
       }
     } catch {}
   }, []);
@@ -276,7 +280,7 @@ export function AuthProvider({ children }) {
 
       const accessToken = currentSession?.access_token || null;
 
-      console.log("SET CURRENT ORG TRY", {
+      authCtxDebug("SET CURRENT ORG TRY", {
         fn: "set_current_org",
         orgId: orgIdToSelect,
         hasSession: !!currentSession,
@@ -300,7 +304,7 @@ export function AuthProvider({ children }) {
       });
 
       if (!error) {
-        console.log("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
+        authCtxDebug("SET CURRENT ORG SUCCESS", { fn: "set_current_org", data });
         return true;
       }
 
@@ -310,7 +314,7 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      console.log("SET CURRENT ORG FALLBACK", {
+      authCtxDebug("SET CURRENT ORG FALLBACK", {
         fn: "rpc_set_current_org",
         orgId: orgIdToSelect,
       });
