@@ -87,7 +87,11 @@ const SAFE_SUPABASE_URL = SUPABASE_URL || "https://invalid.supabase.co";
 const SAFE_SUPABASE_ANON_KEY = SUPABASE_ANON_KEY || "invalid-anon-key";
 
 // TEMP DEBUG
-console.info("[SUPABASE ENV DEBUG]", {
+const DEBUG_SUPABASE_CLIENT = import.meta.env.DEV;
+function supabaseDebug(...args) {
+  if (DEBUG_SUPABASE_CLIENT) console.info(...args);
+}
+supabaseDebug("[SUPABASE ENV DEBUG]", {
   url: SUPABASE_URL,
   anonPrefix: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.slice(0, 20) : null,
   anonLength: SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY.length : 0,
@@ -223,8 +227,8 @@ if (typeof window !== "undefined") {
 
   if (!window.__TG_SUPABASE_ENV_LOGGED__) {
     window.__TG_SUPABASE_ENV_LOGGED__ = true;
-    console.info(`[${BUILD_MARKER}] [ENV CHECK]`, info);
-    console.info(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
+    supabaseDebug(`[${BUILD_MARKER}] [ENV CHECK]`, info);
+    supabaseDebug(`[${BUILD_MARKER}] [BUILD_MARKER_LIST]`, window.__TG_BUILD_MARKERS__);
   }
 
   window.__supabase__ = supabase;
