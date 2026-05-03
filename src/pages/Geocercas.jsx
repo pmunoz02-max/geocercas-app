@@ -7,31 +7,24 @@ import GeoMap from "@/components/GeoMap";
 import OrgSelector from "@/components/OrgSelector";
 import { listGeocercas } from "@/lib/geocercasApi";
 
-const DBG = "[GEOCERCAS_PAGE_DBG_v2]";
-
 export default function GeocercasPage() {
   const { user, role, currentOrg, activeOrgId, organizations, loading } = useAuth();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
   const canEdit = role === "owner" || role === "admin";
-
   const orgId = useMemo(() => activeOrgId || null, [activeOrgId]);
 
   const [geocercas, setGeocercas] = useState([]);
   const [loadingGeocercas, setLoadingGeocercas] = useState(false);
-
   const [selectedGeocercaIdsUI, setSelectedGeocercaIdsUI] = useState([]);
   const [selectedGeocercaIdsApplied, setSelectedGeocercaIdsApplied] = useState([]);
-
   const [newGeocercaName, setNewGeocercaName] = useState("");
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
-      console.info(DBG, "load()", { orgId, user: user?.email, role });
-
       setGeocercas([]);
       setSelectedGeocercaIdsUI([]);
       setSelectedGeocercaIdsApplied([]);
@@ -46,21 +39,16 @@ export default function GeocercasPage() {
         if (cancelled) return;
 
         const safeRows = Array.isArray(rows) ? rows : [];
-        console.info(DBG, "API rows", {
-          orgId,
-          count: safeRows.length,
-          sample: safeRows.slice(0, 5).map((x) => ({
-            id: x.id,
-            nombre: x.nombre,
-            nombre_ci: x.nombre_ci,
-            org_id: x.org_id,
-          })),
-        });
-
         setGeocercas(safeRows);
       } catch (err) {
-        console.error(DBG, "load error:", err);
-        if (!cancelled) alert(t("geocercas.manage.loadError", { defaultValue: "No se pudieron cargar las geocercas." }));
+        console.error("[GeocercasPage] load error:", err);
+        if (!cancelled) {
+          alert(
+            t("geocercas.manage.loadError", {
+              defaultValue: "No se pudieron cargar las geocercas.",
+            })
+          );
+        }
       } finally {
         if (!cancelled) setLoadingGeocercas(false);
       }
@@ -94,6 +82,7 @@ export default function GeocercasPage() {
         <button
           onClick={() => navigate("/seleccionar-organizacion")}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-white"
+          type="button"
         >
           {t("geocercas.manage.selectOrgButton", {
             defaultValue: "Seleccionar organización",
@@ -149,10 +138,6 @@ export default function GeocercasPage() {
             ? t("geocercas.manage.loading", { defaultValue: "Cargando…" })
             : t("geocercas.manage.show", { defaultValue: "Mostrar" })}
         </button>
-      </div>
-
-      <div className="text-xs text-slate-500">
-        {DBG} orgId=<span className="font-mono">{orgId}</span> · items=<span className="font-mono">{String(geocercas.length)}</span>
       </div>
 
       <GeoMap
