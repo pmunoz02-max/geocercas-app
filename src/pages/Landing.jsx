@@ -211,15 +211,16 @@ const FALLBACKS = {
 };
 
 export default function Landing() {
-    const loginHref = "/login?mode=magic";
-    const dashboardHref = "/dashboard";
-    const primaryHref = user ? dashboardHref : loginHref;
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState(null);
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+
+  const loginHref = "/login?mode=magic";
+  const dashboardHref = "/dashboard";
+  const primaryHref = user ? dashboardHref : loginHref;
   const currentLang = String(i18n.resolvedLanguage || i18n.language || "es")
     .toLowerCase()
     .slice(0, 2);
