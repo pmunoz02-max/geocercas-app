@@ -681,7 +681,7 @@ export function AuthProvider({ children }) {
   );
 
   const bootstrap = useCallback(async () => {
-    console.log("[AUTHCTX] bootstrap start");
+    authCtxDebug("[AUTHCTX] bootstrap start");
     setLoading(true);
     didEnsureContextThisRunRef.current = false;
 
@@ -697,16 +697,16 @@ export function AuthProvider({ children }) {
 
       setSession(currentSession || null);
       setUser(currentSession?.user ?? null);
-      console.log("[AUTHCTX] session resolved", currentSession);
+      authCtxDebug("[AUTHCTX] session resolved", currentSession);
       if (currentSession?.user) {
-        console.log("[AUTHCTX] user resolved", currentSession.user);
+        authCtxDebug("[AUTHCTX] user resolved", currentSession.user);
       }
 
       const s1 = await fetchSession();
-      console.log("[AUTHCTX] backend session:", s1?.data);
+      authCtxDebug("[AUTHCTX] backend session:", s1?.data);
 
       if (!currentSession?.user && (!s1.ok || !s1.data || s1.data.authenticated !== true)) {
-        console.log("[AUTHCTX] redirect: no currentSession.user and backend not authenticated");
+        authCtxDebug("[AUTHCTX] redirect: no currentSession.user and backend not authenticated");
         clearResolvedAuthState();
         return;
       }
@@ -734,7 +734,7 @@ export function AuthProvider({ children }) {
       if (!s1.ok || !s1.data || s1.data.authenticated !== true) {
         const fallbackUser = currentSession?.user ?? s1?.data?.user ?? null;
         if (!fallbackUser) {
-          console.log("[AUTHCTX] redirect: no fallbackUser after backend session fail");
+          authCtxDebug("[AUTHCTX] redirect: no fallbackUser after backend session fail");
           clearResolvedAuthState();
           return;
         }
@@ -774,7 +774,7 @@ export function AuthProvider({ children }) {
       clearResolvedAuthState();
     } finally {
       setLoading(false);
-      console.log("[AUTHCTX] loading false");
+      authCtxDebug("[AUTHCTX] loading false");
       if (!didBootstrapOnceRef.current) {
         didBootstrapOnceRef.current = true;
         setReady(true);
@@ -820,7 +820,7 @@ export function AuthProvider({ children }) {
     setReady(true);
     setInitialized(true);
 
-    console.log("[AUTHCTX] redirect: logout to /login");
+    authCtxDebug("[AUTHCTX] redirect: logout to /login");
     window.location.href = "/login";
   }, [clearResolvedAuthState]);
 
