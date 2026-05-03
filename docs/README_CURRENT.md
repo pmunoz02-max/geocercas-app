@@ -7,6 +7,12 @@
 - `tracker_positions` es la fuente de datos para el dashboard y reportes de posiciones.
 - El endpoint `invite-tracker` bloquea la invitación si `personal.user_id` es null (no permite invitar sin usuario enlazado).
 
+### Nuevos alias de rutas para geocercas (web)
+
+- `/geofences` ahora redirige a `/geocercas`.
+- `/new-geofence` y `/nueva-geocerca` ahora redirigen a `/geocerca`.
+- Estos cambios aplican solo a la web. No hubo cambios en la base de datos, API ni Android.
+
 arquitectura vigente
 servicio válido: ForegroundLocationService
 entry point: WebViewActivity
