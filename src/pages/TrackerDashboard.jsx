@@ -1221,8 +1221,6 @@ export default function TrackerDashboard() {
             defaultValue: `There are assignments, but there are no active geofences for those assignments in org (${currentOrgId}).`,
           })
         );
-      }
-      // Fallback eliminado: nunca se muestra mensaje de fallback.
       } else {
         setInfoMsg(
           t("trackerDashboard.messages.noActiveGeofencesForOrg", {
