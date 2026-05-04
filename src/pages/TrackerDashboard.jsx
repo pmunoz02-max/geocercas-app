@@ -17,6 +17,7 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient";
+import { listGeofences } from "../lib/geofencesApi";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import {
@@ -1141,27 +1142,14 @@ export default function TrackerDashboard() {
       )
     );
 
-    let q = supabase
-      .from("geofences")
-      .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
-      .eq("org_id", safeOrgId)
-      .eq("active", true);
 
-    if (assignedIds.length > 0) {
-      q = q.in("id", assignedIds);
-    } else {
-      q = q
-        .order("is_default", { ascending: false })
-        .order("updated_at", { ascending: false })
-        .order("created_at", { ascending: false });
-    }
-
-    const res = await q;
-
-    if (res.error) {
+    let rows = [];
+    try {
+      rows = await listGeofences(safeOrgId, true);
+    } catch (err) {
       setDiag((d) => ({
         ...d,
-        lastGeofencesError: res.error.message || String(res.error),
+        lastGeofencesError: err?.message || String(err),
         geofencesFound: 0,
         geofencePolys: 0,
         geofenceCircles: 0,
@@ -1174,7 +1162,19 @@ export default function TrackerDashboard() {
       return;
     }
 
-    let rows = Array.isArray(res.data) ? res.data : [];
+    if (assignedIds.length > 0) {
+      const assignedSet = new Set(assignedIds.map(String));
+      rows = rows.filter((g) => assignedSet.has(String(g?.id)));
+    } else {
+      rows = rows.sort((a, b) => {
+        const da = Number(Boolean(a?.is_default));
+        const db = Number(Boolean(b?.is_default));
+        if (db !== da) return db - da;
+        return String(b?.updated_at || b?.created_at || "").localeCompare(
+          String(a?.updated_at || a?.created_at || "")
+        );
+      });
+    }
 
     let pickedFallbackFirstActive = false;
     if (assignedIds.length === 0 && rows.length === 0) {
