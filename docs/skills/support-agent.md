@@ -304,61 +304,148 @@ Variables permitidas:
 
 Si una variable no está disponible, el agente debe omitirla sin dejar placeholders visibles.
 
+## Matriz de clasificación automática
+
+| Categoría             | Palabras clave ejemplo                                 | Prioridad típica | Confianza | Acción recomendada         | Escala por defecto | Gmail Labels sugeridos                |
+|----------------------|--------------------------------------------------------|------------------|-----------|----------------------------|--------------------|---------------------------------------|
+| login_access         | login, acceso, entrar, sign in, code, enlace           | normal           | alta      | Borrador listo             | No                 | AI/login, AI/ready-to-review          |
+| tracker_invite       | invitación, tracker, enlace, aceptar, invite           | alta             | alta      | Borrador listo             | No                 | AI/tracker, AI/ready-to-review        |
+| android_gps_tracking | Android, GPS, ubicación, tracking, offline, permisos   | alta             | alta      | Borrador listo             | No                 | AI/android, AI/ready-to-review        |
+| geofence_usage       | geocerca, geofence, perímetro, evento, mapa            | normal           | alta      | Borrador listo             | No                 | AI/geofence, AI/ready-to-review       |
+| billing_payment      | pago, factura, suscripción, Paddle, cobro, billing     | urgente          | media     | Escalar a humano           | Sí                 | AI/billing, AI/needs-human            |
+| pricing_sales        | precio, plan, tarifa, pricing, oferta, enterprise      | normal/alta      | media     | Borrador o escalar         | Sí (si enterprise) | AI/pricing, AI/ready-to-review        |
+| privacy_legal        | privacidad, datos, GDPR, eliminar, terms, legal        | urgente          | baja      | Escalar a humano           | Sí                 | AI/privacy-legal, AI/needs-human      |
+| bug_report           | error, bug, falla, crash, pantalla blanca, no funciona | normal/urgente   | media     | Borrador o escalar         | Sí (si crítico)    | AI/bug, AI/ready-to-review            |
+| feature_request      | sugerencia, feature, mejora, request                   | baja/normal      | alta      | Borrador listo             | No                 | AI/feature-request, AI/ready-to-review|
+| other                | cualquier otro caso                                    | variable         | variable  | Según contexto             | Según contexto     | AI/needs-human                        |
+
+- Escala por defecto: "Sí" indica que siempre debe escalarse a revisión humana.
+- Si la prioridad es "urgente" (cobros, privacidad, acceso indebido, datos de otra organización, seguridad, pérdida de tracking operativo), siempre escalar.
+
+### Labels Gmail sugeridos
+- AI/ready-to-review
+- AI/needs-human
+- AI/billing
+- AI/bug
+- AI/tracker
+- AI/android
+- AI/privacy-legal
+- AI/geofence
+- AI/pricing
+- AI/feature-request
+- AI/other
+- AI/done
+- AI/urgent
+
+---
+
 ## Templates de respuesta rápida (ES/EN/FR)
 
 ### Login / acceso
 
 **ES:**
-Hola, para acceder:
+Asunto: Acceso a tu cuenta
+
+Hola,
+
+Para acceder:
 1. Ingresa a la web oficial.
 2. Usa el mismo correo con el que te registraste o fuiste invitado.
 3. Revisa el enlace o código de acceso.
 Si el problema continúa, por favor envíanos una captura del mensaje visible (sin datos privados).
 
+Saludos,
+Equipo de soporte tuGeocercas
+soporte@tugeocercas.com
+
 **EN:**
-Hello, to log in:
+Subject: Access to your account
+
+Hello,
+
+To log in:
 1. Go to the official website.
 2. Use the same email you registered or were invited with.
 3. Check the access link or code.
 If the issue persists, please send us a screenshot of the visible message (no private data).
 
+Best regards,
+tuGeocercas Support Team
+soporte@tugeocercas.com
+
 **FR:**
-Bonjour, pour accéder :
+Objet : Accès à votre compte
+
+Bonjour,
+
+Pour accéder :
 1. Rendez-vous sur le site officiel.
 2. Utilisez le même e-mail que celui utilisé lors de l'inscription ou de l'invitation.
 3. Vérifiez le lien ou le code d'accès.
 Si le problème persiste, envoyez-nous une capture du message visible (sans données privées).
+
+Cordialement,
+Équipe support tuGeocercas
+soporte@tugeocercas.com
 
 ---
 
 ### Invitación de tracker
 
 **ES:**
+Asunto: Invitación para activar tracking
+
+Hola,
+
 Para aceptar la invitación como tracker:
 1. Abre el enlace de invitación desde tu teléfono.
 2. Usa el mismo correo invitado.
 3. Acepta la invitación.
 4. Inicia el tracking desde Android.
 
+Saludos,
+Equipo de soporte tuGeocercas
+soporte@tugeocercas.com
+
 **EN:**
+Subject: Tracker invitation
+
+Hello,
+
 To accept the tracker invite:
 1. Open the invitation link on your phone.
 2. Use the same invited email.
 3. Accept the invitation.
 4. Start tracking from Android.
 
+Best regards,
+tuGeocercas Support Team
+soporte@tugeocercas.com
+
 **FR:**
+Objet : Invitation tracker
+
+Bonjour,
+
 Pour accepter l'invitation tracker :
 1. Ouvrez le lien d'invitation sur votre téléphone.
 2. Utilisez le même e-mail invité.
 3. Acceptez l'invitation.
 4. Lancez le suivi depuis Android.
 
+Cordialement,
+Équipe support tuGeocercas
+soporte@tugeocercas.com
+
 ---
 
 ### Android / GPS / tracking
 
 **ES:**
+Asunto: Activar tracking en Android
+
+Hola,
+
 Para activar el tracking:
 1. Instala la app Android.
 2. Permite la ubicación.
@@ -366,7 +453,15 @@ Para activar el tracking:
 4. Abre la invitación en el teléfono correcto.
 5. Presiona iniciar tracking.
 
+Saludos,
+Equipo de soporte tuGeocercas
+soporte@tugeocercas.com
+
 **EN:**
+Subject: Activate tracking on Android
+
+Hello,
+
 To activate tracking:
 1. Install the Android app.
 2. Allow location access.
@@ -374,7 +469,15 @@ To activate tracking:
 4. Open the invitation on the correct phone.
 5. Tap start tracking.
 
+Best regards,
+tuGeocercas Support Team
+soporte@tugeocercas.com
+
 **FR:**
+Objet : Activer le suivi Android
+
+Bonjour,
+
 Pour activer le suivi :
 1. Installez l'application Android.
 2. Autorisez l'accès à la localisation.
@@ -382,118 +485,173 @@ Pour activer le suivi :
 4. Ouvrez l'invitation sur le bon téléphone.
 5. Appuyez sur démarrer le suivi.
 
+Cordialement,
+Équipe support tuGeocercas
+soporte@tugeocercas.com
+
 ---
 
 ### Geocercas / Geofences
 
 **ES:**
+Asunto: Uso de geocercas
+
+Hola,
+
 Para usar geocercas:
 1. Entra a la sección Geocercas.
 2. Crea o selecciona una geocerca.
 3. Verifica que el tracker esté activo.
 4. Verás eventos ENTER / EXIT al cruzar el perímetro.
 
+Saludos,
+Equipo de soporte tuGeocercas
+soporte@tugeocercas.com
+
 **EN:**
+Subject: Using geofences
+
+Hello,
+
 To use geofences:
 1. Go to the Geofences section.
 2. Create or select a geofence.
 3. Make sure the tracker is active.
 4. You will see ENTER / EXIT events when crossing the perimeter.
 
+Best regards,
+tuGeocercas Support Team
+soporte@tugeocercas.com
+
 **FR:**
+Objet : Utilisation des géorepérages
+
+Bonjour,
+
 Pour utiliser les géorepérages :
 1. Accédez à la section Géorepérages.
 2. Créez ou sélectionnez une géorepérage.
 3. Vérifiez que le tracker est actif.
 4. Vous verrez des événements ENTER / EXIT en franchissant le périmètre.
 
+Cordialement,
+Équipe support tuGeocercas
+soporte@tugeocercas.com
+
 ---
 
 ### Pricing / planes
 
 **ES:**
+Asunto: Información de planes y precios
+
+Hola,
+
 Puedes consultar los planes y precios vigentes en la web oficial. Si tienes una necesidad especial, indícanos tu caso y lo revisaremos.
 
+Saludos,
+Equipo de soporte tuGeocercas
+soporte@tugeocercas.com
+
 **EN:**
+Subject: Plans and pricing information
+
+Hello,
+
 You can check current plans and pricing on the official website. If you have a special need, let us know and we will review your case.
 
+Best regards,
+tuGeocercas Support Team
+soporte@tugeocercas.com
+
 **FR:**
+Objet : Tarifs et forfaits
+
+Bonjour,
+
 Vous pouvez consulter les forfaits et tarifs actuels sur le site officiel. Si vous avez un besoin particulier, indiquez-le-nous et nous l'examinerons.
+
+Cordialement,
+Équipe support tuGeocercas
+soporte@tugeocercas.com
 
 ---
 
 ### Billing / pagos / Paddle
 
 **ES:**
-Por temas de pagos, facturación o suscripciones, tu caso será revisado manualmente por nuestro equipo de soporte especializado. Te contactaremos con los siguientes pasos.
+Asunto: Consulta sobre pagos o facturación
+
+Hola,
+
+Por temas de pagos, facturación o suscripciones, tu caso será revisado manualmente por nuestro equipo de soporte especializado. Por favor indícanos el correo asociado a la cuenta y, si aplica, el monto y fecha del pago o el mensaje visible. Por seguridad, nunca solicitaremos datos completos de tarjeta, contraseñas ni códigos privados. Te contactaremos con los siguientes pasos.
+
+Saludos,
+Equipo de soporte tuGeocercas
+soporte@tugeocercas.com
 
 **EN:**
-For billing, payments, or subscription issues, your case will be reviewed manually by our specialized support team. We will contact you with the next steps.
+Subject: Billing or payment inquiry
+
+Hello,
+
+For billing, payments, or subscription issues, your case will be reviewed manually by our specialized support team. Please provide the email associated with your account and, if applicable, the amount, date of payment, or visible message. For your security, we will never request full card details, passwords, or private codes. We will contact you with the next steps.
+
+Best regards,
+tuGeocercas Support Team
+soporte@tugeocercas.com
 
 **FR:**
-Pour toute question de paiement, de facturation ou d'abonnement, votre demande sera examinée manuellement par notre équipe de support spécialisée. Nous vous contacterons pour la suite.
+Objet : Paiement ou facturation
+
+Bonjour,
+
+Pour toute question de paiement, de facturation ou d'abonnement, votre demande sera examinée manuellement par notre équipe de support spécialisée. Merci d'indiquer l'e-mail associé au compte et, si besoin, le montant, la date du paiement ou le message visible. Pour votre sécurité, nous ne demanderons jamais de données complètes de carte, de mots de passe ou de codes privés. Nous vous contacterons pour la suite.
+
+Cordialement,
+Équipe support tuGeocercas
+soporte@tugeocercas.com
 
 *Nota: Todos los casos de billing siempre se escalan para revisión humana.*
+---
 
-Pruebas obligatorias
+## Pruebas obligatorias
 
 Antes de activar el agente con correos reales:
 
-Probar 10 emails simulados en español.
-Probar 10 emails simulados en inglés.
-Probar 10 emails simulados en francés.
-Verificar que billing siempre escala.
-Verificar que privacidad/legal siempre escala.
-Verificar que bugs críticos siempre escalan.
-Verificar que no inventa estado de cuenta.
-Verificar que no pide tokens ni contraseñas.
-Verificar que no envía automáticamente.
-Regla Copilot
+- Probar 10 emails simulados en español.
+- Probar 10 emails simulados en inglés.
+- Probar 10 emails simulados en francés.
+- Verificar que billing siempre escala.
+- Verificar que privacidad/legal siempre escala.
+- Verificar que bugs críticos siempre escalan.
+- Verificar que no inventa estado de cuenta.
+- Verificar que no pide tokens ni contraseñas.
+- Verificar que no envía automáticamente.
+
+## Regla Copilot
 
 Cuando se use Copilot:
 
-Abrir un archivo específico.
-Prompt corto.
-Un cambio por paso.
-Probar en preview.
-Push a branch preview.
+- Abrir un archivo específico.
+- Prompt corto.
+- Un cambio por paso.
+- Probar en preview.
+- Push a branch preview.
 
-Ejemplo:
+## No hacer
 
-Archivo:
+- No auto-enviar respuestas en la primera versión.
+- No mezclar idiomas.
+- No inventar estado de cuenta.
+- No resolver billing por email sin revisión humana.
+- No exponer detalles técnicos internos.
+- No usar datos de Preview para responder casos de Producción.
+- No tocar Producción.
+- No hacer cambios de base de datos sin inspección previa.
 
-docs/skills/support-agent.md
+## Push corto
 
-Prompt:
-
-Crea el skill de soporte con reglas de idioma, clasificación, escalamiento y borradores. No agregues código.
-No hacer
-No auto-enviar respuestas en la primera versión.
-No mezclar idiomas.
-No inventar estado de cuenta.
-No resolver billing por email sin revisión humana.
-No exponer detalles técnicos internos.
-No usar datos de Preview para responder casos de Producción.
-No tocar Producción.
-No hacer cambios de base de datos sin inspección previa.
-Push corto
 git add docs/skills/support-agent.md
 git commit -m "docs: add support agent skill [allow-docs]"
 git push origin preview
-
-Listo. Ya agregué en el canvas los templates reales ES/EN/FR para:
-
-Login / acceso
-Invitación tracker
-Android GPS / tracking
-Geocercas
-Pricing / planes
-Billing / pagos / Paddle con escalamiento obligatorio
-
-También dejé reglas de uso:
-
-No inventar precios ni límites si no hay fuente vigente.
-Billing siempre va a revisión humana.
-No pedir contraseñas, tokens, datos completos de tarjeta ni IDs internos.
-Usar solo el idioma detectado del usuario.
-Crear borrador, no enviar automático.
