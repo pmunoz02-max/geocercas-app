@@ -361,3 +361,11 @@ route compliance detection
 anomaly detection
 
 These features build on the core evaluation engine.
+
+---
+
+## Nota sobre integración frontend
+
+A partir de mayo 2026, la pantalla TrackerDashboard obtiene la lista de geocercas exclusivamente mediante el helper `listGeofences` del módulo `geofencesApi`, en vez de acceder directamente a la tabla `geofences` vía Supabase. Esto permite aplicar lógica de filtrado, normalización y futuras extensiones de negocio desde un solo punto de mantenimiento, y desacopla la UI de detalles de persistencia.
+
+Para detalles, ver la función `fetchGeofences` en TrackerDashboard.jsx.
