@@ -369,3 +369,75 @@ These features build on the core evaluation engine.
 A partir de mayo 2026, la pantalla TrackerDashboard obtiene la lista de geocercas exclusivamente mediante el helper `listGeofences` del módulo `geofencesApi`, en vez de acceder directamente a la tabla `geofences` vía Supabase. Esto permite aplicar lógica de filtrado, normalización y futuras extensiones de negocio desde un solo punto de mantenimiento, y desacopla la UI de detalles de persistencia.
 
 Para detalles, ver la función `fetchGeofences` en TrackerDashboard.jsx.
+
+## Legacy pendiente: archivos no canónicos detectados
+
+Durante la normalización del flujo interno `geocercas → geofences`, se identificaron archivos que todavía contienen referencias directas a `public.geofences`, pero que no forman parte del flujo activo principal.
+
+### `src/pages/GeocercasList.jsx`
+
+Estado: **legacy/orphan probable**.
+
+Este archivo no está importado ni ruteado desde `src/App.jsx` en el flujo activo actual. Además, usa un modelo antiguo de ownership:
+
+```js
+.eq("owner", user?.id ?? "")
+```
+
+---
+
+Ese criterio no corresponde al modelo multi-org actual, donde la referencia canónica debe ser org_id resuelto por contexto de organización.
+
+**Decisión actual:**
+
+- No modificar en esta fase.
+- No usar como referencia para nuevos desarrollos.
+- No migrar parcialmente sin confirmar si la pantalla será reactivada.
+- Marcar para limpieza posterior: eliminar, archivar o reescribir usando geofencesApi.
+
+### `src/api/geofences.js`
+
+Estado: legacy/orphan probable dentro de src/api.
+
+Este archivo contiene lógica antigua de inserción directa a public.geofences, pero no es el endpoint Vercel activo usado por la app.
+
+**Endpoint canónico activo:**
+
+- `api/geofences.js`
+
+**No usar como endpoint canónico:**
+
+- `src/api/geofences.js`
+
+**Decisión actual:**
+
+- No modificar en esta fase.
+- No usar para nuevos flujos.
+- Mantener pendiente de limpieza posterior.
+- Si se confirma que no tiene imports activos, podrá eliminarse o archivarse en una fase de limpieza legacy.
+
+### Flujo canónico activo
+
+Los flujos activos deben usar:
+
+UI / pages / components
+→ `src/lib/geofencesApi.js`
+→ `api/geofences.js`
+→ `public.geofences`
+
+Actualmente normalizados:
+
+- src/components/geocercas/NuevaGeocerca.jsx
+- src/pages/TrackerDashboard.jsx
+- src/pages/VerGeocerca.jsx
+- src/pages/Reports.jsx
+- src/pages/CostosPage.jsx
+- src/pages/CostosDashboardPage.jsx
+
+**Regla:**
+
+No agregar nuevos accesos directos desde UI a:
+
+- `supabase.from("geofences")`
+
+Todo acceso nuevo a geofences debe pasar por `src/lib/geofencesApi.js`.
