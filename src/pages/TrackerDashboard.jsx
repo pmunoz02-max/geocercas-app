@@ -1176,22 +1176,8 @@ export default function TrackerDashboard() {
       });
     }
 
+    // Fallback directo a DB eliminado; la carga usa geofencesApi.
     let pickedFallbackFirstActive = false;
-    if (assignedIds.length === 0 && rows.length === 0) {
-      const fb = await supabase
-        .from("geofences")
-        .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
-        .eq("org_id", safeOrgId)
-        .eq("active", true)
-        .order("updated_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (!fb.error && Array.isArray(fb.data) && fb.data.length > 0) {
-        rows = fb.data;
-        pickedFallbackFirstActive = true;
-      }
-    }
 
     const normalized = rows
       .filter((r) => r.active === true)
@@ -1235,13 +1221,8 @@ export default function TrackerDashboard() {
             defaultValue: `There are assignments, but there are no active geofences for those assignments in org (${currentOrgId}).`,
           })
         );
-      } else if (pickedFallbackFirstActive) {
-        setInfoMsg(
-          tOr(
-            "trackerDashboard.messages.fallbackGeofenceShown",
-            "No active geofences were found; 1 active geofence was shown as a fallback so the dashboard does not remain empty."
-          )
-        );
+      }
+      // Fallback eliminado: nunca se muestra mensaje de fallback.
       } else {
         setInfoMsg(
           t("trackerDashboard.messages.noActiveGeofencesForOrg", {
