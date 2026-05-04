@@ -166,63 +166,55 @@ export default function Inicio() {
   // 3) Rol efectivo
   const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
 
-  // 4) Estado anómalo (sesión sin rol u org)
+  // 4) Estado: cuenta creada pero sin organización ni rol
   if (!roleLower || !currentOrgId) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-10">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <h1 className="text-xl font-semibold text-slate-900">
-              {t("home.missingContextTitle")}
-            </h1>
-
-            <button
-              className="
-                rounded-xl
-                bg-slate-900 hover:bg-slate-800
-                text-white font-medium
-                px-4 py-2
-                transition
-                disabled:opacity-60
-              "
-              onClick={onLogout}
-              disabled={signingOut}
-              type="button"
-              title={t("common.actions.logout")}
-            >
-              {signingOut
-                ? t("common.actions.processing")
-                : t("common.actions.logout")}
-            </button>
-          </div>
-
-          <p className="text-sm text-slate-600">
-            {t("home.missingContextBody", {
-              correo: user.email,
-            })}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-6">
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">
+            {t("home.missingContextTitle", { defaultValue: "Cuenta creada correctamente" })}
+          </h1>
+          <p className="text-base text-slate-700">
+            {t("home.missingContextBody", { defaultValue: "Tu cuenta ya existe, pero todavía no está vinculada a una organización." })}
           </p>
 
-          <div className="text-sm text-slate-700 space-y-1">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-900 text-sm">
+            <b>Si eres tracker:</b>
+            <ol className="list-decimal list-inside mt-2 space-y-1">
+              <li>Avisa al administrador que ya creaste tu cuenta.</li>
+              <li>Espera el enlace de invitación.</li>
+              <li>Abre el enlace desde este mismo teléfono.</li>
+              <li>Después podrás usar el tracking GPS.</li>
+            </ol>
+          </div>
+
+          <div className="text-sm text-slate-700 space-y-1 pt-2">
             <div>
-              <b>{t("dashboard.email")}:</b> {user.email}
+              <b>Correo:</b> soporte@tugeocercas.com
             </div>
             <div>
-              <b>{t("home.labels.organization")}</b>{" "}
-              {t("home.orgNotResolved")}
+              <b>Organización:</b> Pendiente de invitación
             </div>
             <div>
-              <b>{t("home.labels.role")}</b>{" "}
-              {t("home.roleEmpty")}
+              <b>Rol:</b> Pendiente
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 pt-4">
             <button
               className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition"
               onClick={() => window.location.reload()}
               type="button"
             >
-              {t("home.retry")}
+              {t("home.retry", { defaultValue: "Revisar nuevamente" })}
+            </button>
+            <button
+              className="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 hover:bg-slate-50 transition"
+              onClick={onLogout}
+              disabled={signingOut}
+              type="button"
+            >
+              {signingOut ? "Cerrando sesión…" : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
             </button>
           </div>
         </div>
