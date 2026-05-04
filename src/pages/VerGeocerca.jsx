@@ -1,7 +1,7 @@
 import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../lib/supabaseClient.js";
+import { getGeofence } from "../lib/geofencesApi";
 import { MapContainer, TileLayer, GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -58,24 +58,20 @@ export default function VerGeocerca() {
     (async () => {
       setLoading(true);
       setErrorMsg("");
-
-      const { data, error } = await supabase
-        .from("geofences")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (cancelled) return;
-
-      setLoading(false);
-
-      if (error) {
+      try {
+        const data = await getGeofence({ id });
+        if (cancelled) return;
+        setLoading(false);
+        setItem(data || null);
+        if (!data) {
+          setErrorMsg(tr("geocercas.errorLoad", "No se pudo cargar la geocerca."));
+        }
+      } catch {
+        if (cancelled) return;
+        setLoading(false);
         setItem(null);
         setErrorMsg(tr("geocercas.errorLoad", "No se pudo cargar la geocerca."));
-        return;
       }
-
-      setItem(data || null);
     })();
 
     return () => {
