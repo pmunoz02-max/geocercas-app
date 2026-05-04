@@ -346,6 +346,14 @@ Se desactiva geofence_events en dashboard para evitar errores de schema. No es c
 
 ---
 
+## Nota sobre rutas en dashboard
+
+Las líneas de ruta en TrackerDashboard deben construirse usando el historial de la tabla `tracker_positions` (todas las posiciones históricas válidas), **no** solo con los últimos marcadores de cada tracker.
+
+Esto asegura que el recorrido mostrado sea fiel al trayecto real y no solo a la última posición reportada.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.

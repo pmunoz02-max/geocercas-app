@@ -936,6 +936,7 @@ export default function TrackerDashboard() {
   const [trackerStatusRows, setTrackerStatusRows] = useState([]);
   const [trackerCounts, setTrackerCounts] = useState(null);
   const [positions, setPositions] = useState([]);
+  const [routePositions, setRoutePositions] = useState([]);
   const [geofenceEvents, setGeofenceEvents] = useState([]);
 
   const [geofenceRows, setGeofenceRows] = useState([]);
@@ -971,6 +972,7 @@ export default function TrackerDashboard() {
     setTrackerStatusRows([]);
     setTrackerCounts(null);
     setPositions([]);
+    setRoutePositions([]);
     positionsRef.current = [];
     setGeofenceEvents([]);
     setGeofenceRows([]);
@@ -1514,6 +1516,81 @@ export default function TrackerDashboard() {
 
 
 
+  async function loadRoutePositionsCanonical(currentOrgId, hoursBack) {
+    const safeOrgId = normalizeUuid(currentOrgId);
+    if (!safeOrgId) {
+      console.warn("[tracker-dashboard] org_id missing, skip route tracker_positions query", currentOrgId);
+      return [];
+    }
+
+    const safeHours = Math.max(1, Number(hoursBack || 6));
+    const fromIso = new Date(Date.now() - safeHours * 60 * 60 * 1000).toISOString();
+
+    const orTime = `recorded_at.gte.${fromIso},and(recorded_at.is.null,created_at.gte.${fromIso})`;
+
+    const { data, error } = await supabase
+      .from("tracker_positions")
+      .select("id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at")
+      .eq("org_id", safeOrgId)
+      .not("lat", "is", null)
+      .not("lng", "is", null)
+      .or(orTime)
+      .order("recorded_at", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true })
+      .limit(5000);
+
+    if (error) {
+      console.warn("[tracker-dashboard] route positions error:", error);
+      return [];
+    }
+
+    return (Array.isArray(data) ? data : [])
+      .map((p) => {
+        if (!p?.user_id) return null;
+
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        if (!isValidLatLng(lat, lng)) return null;
+
+        const recordedAt = p.recorded_at ?? p.created_at ?? null;
+
+        return {
+          ...p,
+          id: p.id ?? `${p.user_id}-${recordedAt || "route"}`,
+          user_id: String(p.user_id),
+          org_id: p?.org_id ? String(p.org_id) : safeOrgId,
+          lat,
+          lng,
+          accuracy: p.accuracy ?? null,
+          speed: p.speed ?? null,
+          heading: p.heading ?? null,
+          battery: p.battery ?? null,
+          is_mock: p.is_mock ?? null,
+          source: p.source ?? "tracker_positions",
+          recorded_at: recordedAt,
+          ts: recordedAt,
+          created_at: p.created_at ?? null,
+          latest: {
+            user_id: String(p.user_id),
+            org_id: p?.org_id ? String(p.org_id) : safeOrgId,
+            lat,
+            lng,
+            accuracy: p.accuracy ?? null,
+            speed: p.speed ?? null,
+            heading: p.heading ?? null,
+            battery: p.battery ?? null,
+            is_mock: p.is_mock ?? null,
+            source: p.source ?? "tracker_positions",
+            recorded_at: recordedAt,
+            ts: recordedAt,
+            created_at: p.created_at ?? null,
+          },
+        };
+      })
+      .filter(Boolean);
+  }
+
+
   const fetchDashboardData = useCallback(
     async (currentOrgId, options = { showSpinner: true }) => {
       const safeOrgId = normalizeUuid(currentOrgId);
@@ -1600,7 +1677,13 @@ export default function TrackerDashboard() {
           return !Number.isNaN(lat) && !Number.isNaN(lng) && isValidLatLng(lat, lng);
         });
 
+        let routeRows = await loadRoutePositionsCanonical(safeOrgId, selectedWindowHours);
+        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
+          routeRows = routeRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)));
+        }
+
         setPositions(finalRows);
+        setRoutePositions(routeRows);
         setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
       } finally {
         if (showSpinner) setLoading(false);
@@ -1686,7 +1769,13 @@ export default function TrackerDashboard() {
           }))
         );
 
+        let routeRows = await loadRoutePositionsCanonical(safeOrgId, selectedWindowHours);
+        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
+          routeRows = routeRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)));
+        }
+
         setPositions(finalRows);
+        setRoutePositions(routeRows);
         setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: source }));
       } finally {
         if (showSpinner) setLoading(false);
@@ -1808,6 +1897,7 @@ export default function TrackerDashboard() {
           "assignment_tracker_user_id:", assignmentUserIds.join(",")
         );
         setPositions(finalRows);
+        setRoutePositions(finalRows);
         setDiag((d) => ({ ...d, positionsFound: finalRows.length, positionsSource: tableUsed }));
       } finally {
         if (showSpinner) setLoading(false);
@@ -2283,7 +2373,7 @@ export default function TrackerDashboard() {
 
     const groups = new Map();
 
-    (positions || []).forEach((p) => {
+    (routePositions || []).forEach((p) => {
       const trackerId = getTrackerKey(p);
       if (!trackerId) return;
 
@@ -2326,7 +2416,7 @@ export default function TrackerDashboard() {
         };
       })
       .filter((route) => route.latlngs.length > 1);
-  }, [filteredAllTrackerMarkers, positions, selectedTrackerId]);
+  }, [filteredAllTrackerMarkers, routePositions, selectedTrackerId]);
 
   const trackerStatusSummary = useMemo(() => {
     if (trackerCounts) {
@@ -2358,18 +2448,29 @@ export default function TrackerDashboard() {
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
 
-    const trackerPositions = Array.isArray(visiblePositions) ? visiblePositions : [];
-    const latlngs = trackerPositions
+    const trackerRoutePositions = (Array.isArray(routePositions) ? routePositions : [])
+      .filter((p) => getTrackerKey(p) === selectedTrackerId)
+      .sort((a, b) => getPositionTs(a) - getPositionTs(b))
+      .slice(-MAX_HISTORY_PER_TRACKER);
+
+    const latlngs = trackerRoutePositions
       .map((p) => [Number(p?.lat), Number(p?.lng)])
       .filter(([lat, lng]) => isValidLatLng(lat, lng));
 
+    const latestFromMarkers = (Array.isArray(positions) ? positions : [])
+      .filter((p) => getTrackerKey(p) === selectedTrackerId)
+      .slice()
+      .sort((a, b) => getPositionTs(b) - getPositionTs(a))[0];
+
+    const latest = latestFromMarkers || trackerRoutePositions[trackerRoutePositions.length - 1] || null;
+
     return {
-      positions: trackerPositions,
+      positions: trackerRoutePositions,
       latlngs,
-      latest: trackerPositions[trackerPositions.length - 1] || null,
-      live: getTrackerLiveStatus(trackerPositions[trackerPositions.length - 1] || null),
+      latest,
+      live: getTrackerLiveStatus(latest),
     };
-  }, [selectedTrackerId, visiblePositions]);
+  }, [selectedTrackerId, routePositions, positions]);
 
   const mapFitPoints = useMemo(() => {
     if (selectedTrackerId === "all") {

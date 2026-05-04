@@ -380,3 +380,11 @@ Antes de aprobar un cambio tracker, validar:
 Si alguna respuesta es no, el cambio debe revisarse antes de continuar.
 
 ---
+
+## 5. Renderizado de rutas en TrackerDashboard
+
+- El dashboard muestra dos tipos de datos principales:
+  - **positions**: contiene los últimos marcadores (latest positions) de cada tracker, usados para mostrar la ubicación actual de cada uno.
+  - **routePositions**: contiene el historial de posiciones de `tracker_positions` (no deduplicado por usuario), usado para renderizar polilíneas de rutas históricas en el mapa.
+- No implica cambios en la base de datos, API ni Android; es solo lógica de frontend y visualización.
+- El estado `routePositions` permite mostrar la trayectoria recorrida por cada tracker, mientras que `positions` muestra solo la última posición conocida.
