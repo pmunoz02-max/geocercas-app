@@ -287,51 +287,153 @@ AI/done
 Regla inicial:
 
 El agente crea borradores y aplica etiquetas. No envía automáticamente.
-Templates base
-Español — caso simple de login
+Templates reales ES/EN/FR
 
-Hola,
+Regla general:
 
-Gracias por escribirnos. Para ingresar, usa el mismo correo con el que te registraste o con el que recibiste la invitación.
+El agente debe usar estos templates como base de borrador.
+Debe adaptar solo nombre, detalle mínimo del caso y siguiente paso.
+No debe inventar datos de cuenta, estado de pago, límites de plan ni información técnica.
 
-Por favor intenta estos pasos:
+Variables permitidas:
 
-Abre tuGeocercas desde la web oficial.
-Ingresa con tu correo.
-Revisa tu bandeja de entrada y spam si recibes un enlace de acceso.
-Si sigues sin poder entrar, envíanos una captura del mensaje visible para revisarlo.
+{{user_name}}        Opcional. Usar solo si viene claro en el email.
+{{app_url}}          URL pública oficial de la app web.
+{{pricing_url}}      URL oficial de pricing o sección Billing/Planes.
+{{support_email}}    soporte@tugeocercas.com
 
-Saludos, Equipo de soporte tuGeocercas
+Si una variable no está disponible, el agente debe omitirla sin dejar placeholders visibles.
 
-English — simple login case
+## Templates de respuesta rápida (ES/EN/FR)
 
-Hello,
+### Login / acceso
 
-Thanks for contacting us. To sign in, please use the same email address you used to register or the one that received the invitation.
+**ES:**
+Hola, para acceder:
+1. Ingresa a la web oficial.
+2. Usa el mismo correo con el que te registraste o fuiste invitado.
+3. Revisa el enlace o código de acceso.
+Si el problema continúa, por favor envíanos una captura del mensaje visible (sin datos privados).
 
-Please try these steps:
+**EN:**
+Hello, to log in:
+1. Go to the official website.
+2. Use the same email you registered or were invited with.
+3. Check the access link or code.
+If the issue persists, please send us a screenshot of the visible message (no private data).
 
-Open tuGeocercas from the official web app.
-Sign in with your email address.
-Check your inbox and spam folder if you receive an access link.
-If you still cannot sign in, send us a screenshot of the visible message so we can review it.
+**FR:**
+Bonjour, pour accéder :
+1. Rendez-vous sur le site officiel.
+2. Utilisez le même e-mail que celui utilisé lors de l'inscription ou de l'invitation.
+3. Vérifiez le lien ou le code d'accès.
+Si le problème persiste, envoyez-nous une capture du message visible (sans données privées).
 
-Best regards, tuGeocercas Support Team
+---
 
-Français — cas simple de connexion
+### Invitación de tracker
 
-Bonjour,
+**ES:**
+Para aceptar la invitación como tracker:
+1. Abre el enlace de invitación desde tu teléfono.
+2. Usa el mismo correo invitado.
+3. Acepta la invitación.
+4. Inicia el tracking desde Android.
 
-Merci de nous avoir contactés. Pour vous connecter, utilisez la même adresse e-mail que celle utilisée pour l’inscription ou celle qui a reçu l’invitation.
+**EN:**
+To accept the tracker invite:
+1. Open the invitation link on your phone.
+2. Use the same invited email.
+3. Accept the invitation.
+4. Start tracking from Android.
 
-Veuillez essayer ces étapes :
+**FR:**
+Pour accepter l'invitation tracker :
+1. Ouvrez le lien d'invitation sur votre téléphone.
+2. Utilisez le même e-mail invité.
+3. Acceptez l'invitation.
+4. Lancez le suivi depuis Android.
 
-Ouvrez tuGeocercas depuis l’application web officielle.
-Connectez-vous avec votre adresse e-mail.
-Vérifiez votre boîte de réception et vos spams si vous recevez un lien d’accès.
-Si vous ne pouvez toujours pas vous connecter, envoyez-nous une capture du message visible afin que nous puissions l’examiner.
+---
 
-Cordialement, Équipe de support tuGeocercas
+### Android / GPS / tracking
+
+**ES:**
+Para activar el tracking:
+1. Instala la app Android.
+2. Permite la ubicación.
+3. Mantén el GPS activo.
+4. Abre la invitación en el teléfono correcto.
+5. Presiona iniciar tracking.
+
+**EN:**
+To activate tracking:
+1. Install the Android app.
+2. Allow location access.
+3. Keep GPS enabled.
+4. Open the invitation on the correct phone.
+5. Tap start tracking.
+
+**FR:**
+Pour activer le suivi :
+1. Installez l'application Android.
+2. Autorisez l'accès à la localisation.
+3. Gardez le GPS activé.
+4. Ouvrez l'invitation sur le bon téléphone.
+5. Appuyez sur démarrer le suivi.
+
+---
+
+### Geocercas / Geofences
+
+**ES:**
+Para usar geocercas:
+1. Entra a la sección Geocercas.
+2. Crea o selecciona una geocerca.
+3. Verifica que el tracker esté activo.
+4. Verás eventos ENTER / EXIT al cruzar el perímetro.
+
+**EN:**
+To use geofences:
+1. Go to the Geofences section.
+2. Create or select a geofence.
+3. Make sure the tracker is active.
+4. You will see ENTER / EXIT events when crossing the perimeter.
+
+**FR:**
+Pour utiliser les géorepérages :
+1. Accédez à la section Géorepérages.
+2. Créez ou sélectionnez une géorepérage.
+3. Vérifiez que le tracker est actif.
+4. Vous verrez des événements ENTER / EXIT en franchissant le périmètre.
+
+---
+
+### Pricing / planes
+
+**ES:**
+Puedes consultar los planes y precios vigentes en la web oficial. Si tienes una necesidad especial, indícanos tu caso y lo revisaremos.
+
+**EN:**
+You can check current plans and pricing on the official website. If you have a special need, let us know and we will review your case.
+
+**FR:**
+Vous pouvez consulter les forfaits et tarifs actuels sur le site officiel. Si vous avez un besoin particulier, indiquez-le-nous et nous l'examinerons.
+
+---
+
+### Billing / pagos / Paddle
+
+**ES:**
+Por temas de pagos, facturación o suscripciones, tu caso será revisado manualmente por nuestro equipo de soporte especializado. Te contactaremos con los siguientes pasos.
+
+**EN:**
+For billing, payments, or subscription issues, your case will be reviewed manually by our specialized support team. We will contact you with the next steps.
+
+**FR:**
+Pour toute question de paiement, de facturation ou d'abonnement, votre demande sera examinée manuellement par notre équipe de support spécialisée. Nous vous contacterons pour la suite.
+
+*Nota: Todos los casos de billing siempre se escalan para revisión humana.*
 
 Pruebas obligatorias
 
@@ -378,16 +480,20 @@ Push corto
 git add docs/skills/support-agent.md
 git commit -m "docs: add support agent skill [allow-docs]"
 git push origin preview
-Thought for 1m 33s
 
-Listo. Revisé /docs y armé el primer borrador del Skill: Support Agent — Soporte tuGeocercas en el canvas para que lo iteremos.
+Listo. Ya agregué en el canvas los templates reales ES/EN/FR para:
 
-Puntos base que ya dejé definidos:
+Login / acceso
+Invitación tracker
+Android GPS / tracking
+Geocercas
+Pricing / planes
+Billing / pagos / Paddle con escalamiento obligatorio
 
-El agente no debe enviar emails automáticamente al inicio.
-Primera versión: leer → clasificar → detectar idioma ES/EN/FR → crear borrador → etiquetar si requiere revisión humana.
-Billing, privacidad/legal, cobros, cancelaciones, seguridad y bugs críticos siempre escalan a revisión humana.
-El agente responde en el idioma del usuario: ES / EN / FR, sin mezclar idiomas.
-No debe pedir contraseñas, tokens, IDs internos, logs, user_id, org_id, ni mostrar errores técnicos.
-No toca Producción, no toca DB y no mezcla Preview/Producción.
-Email correcto: soporte@tugeocercas.com
+También dejé reglas de uso:
+
+No inventar precios ni límites si no hay fuente vigente.
+Billing siempre va a revisión humana.
+No pedir contraseñas, tokens, datos completos de tarjeta ni IDs internos.
+Usar solo el idioma detectado del usuario.
+Crear borrador, no enviar automático.
