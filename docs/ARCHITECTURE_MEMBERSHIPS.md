@@ -96,3 +96,15 @@ Comportamiento explícito:
 - Capa runtime (principal): `safeUpsertMembership` y flows proxy/edge.
 - Capa DB adicional (segun despliegue): RPC `set_member_role` y `accept_invitation` con logica de no degradación en same-org (`supabase/migrations/20260317000100_*`, `20260317000300_*`).
 - Capa DB (preview hardening): trigger `trg_prevent_membership_role_downgrade` en `memberships` bloquea downgrade en misma org (`owner/admin -> tracker`) como defensa en profundidad.
+
+---
+
+## Sin membresía: NO_ORG_CONTEXT y espera de invitación
+
+Desde 2026-05, el endpoint `/api/auth/ensure-context` **ya no crea organización automática** para usuarios autenticados sin ninguna membresía. En vez de bootstrap automático:
+
+- Devuelve HTTP 200 con `{ ok: false, code: "NO_ORG_CONTEXT", data: ... }`.
+- El frontend debe mostrar pantalla de espera de invitación (onboarding para testers: cuenta creada, espera invitación o abre el enlace recibido).
+- Solo si el usuario ya tiene al menos una membresía, se resuelve contexto normal y se expone la organización activa.
+
+Esto evita crear organizaciones basura y permite flujos de onboarding controlados para testers y usuarios invitados.

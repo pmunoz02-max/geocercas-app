@@ -264,3 +264,15 @@ El formulario de login debe mostrar un badge de entorno visible en la esquina su
 - **LOCAL**: si el hostname es `localhost` o `127.0.0.1`
 
 Esto ayuda a evitar confusiones y errores de ambiente. El badge debe ser visible solo si aplica, y nunca debe depender de variables de entorno del build, sino del hostname real en tiempo de ejecución.
+
+---
+
+## Sin membresía: NO_ORG_CONTEXT y espera de invitación
+
+Desde 2026-05, el endpoint `/api/auth/ensure-context` **ya no crea organización automática** para usuarios autenticados sin ninguna membresía. En vez de bootstrap automático:
+
+- Devuelve HTTP 200 con `{ ok: false, code: "NO_ORG_CONTEXT", data: ... }`.
+- El frontend debe mostrar pantalla de espera de invitación (onboarding para testers: cuenta creada, espera invitación o abre el enlace recibido).
+- Solo si el usuario ya tiene al menos una membresía, se resuelve contexto normal y se expone la organización activa.
+
+Esto evita crear organizaciones basura y permite flujos de onboarding controlados para testers y usuarios invitados.

@@ -1,3 +1,22 @@
+// Construye un contexto vacío si el usuario no tiene memberships
+function buildNoOrgContext(user) {
+  return {
+    org_id: null,
+    active_org_id: null,
+    current_org_id: null,
+    role: null,
+    current_role: null,
+    created: false,
+    source: "no_membership",
+    code: "NO_ORG_CONTEXT",
+    no_org_context: true,
+    current_org: null,
+    organizations: [],
+    membership_count: 0,
+    can_switch_organizations: false,
+    user_email: user?.email || null,
+  };
+}
 // api/auth/ensure-context.js
 import { createClient } from "@supabase/supabase-js";
 
@@ -229,50 +248,8 @@ async function ensureContextForUser(sb, user) {
     });
   }
 
-  const deterministicSlug = buildBootstrapSlug(userId);
-  const orgName = buildBootstrapOrgName(user);
-
-  const existingBySlug = await findOrganizationBySlug(sb, deterministicSlug);
-  if (existingBySlug?.id && isOwnedByUser(existingBySlug, userId)) {
-    await ensureOwnerMembership(sb, userId, existingBySlug.id);
-    return buildResolvedContext(sb, userId, existingBySlug.id, {
-      created: false,
-      source: "recovered_by_slug",
-    });
-  }
-
-  const existingOwnedOrg = await findOwnedOrganization(sb, userId);
-  if (existingOwnedOrg?.id) {
-    await ensureOwnerMembership(sb, userId, existingOwnedOrg.id);
-    return buildResolvedContext(sb, userId, existingOwnedOrg.id, {
-      created: false,
-      source: "recovered_owned_org",
-    });
-  }
-
-  let orgId = null;
-  let created = false;
-  try {
-    orgId = await createOrganizationViaRpc(sb, orgName, deterministicSlug);
-    created = !!orgId;
-  } catch (createErr) {
-    const recoveredOrg = await findOrganizationBySlug(sb, deterministicSlug);
-    if (!recoveredOrg?.id || !isOwnedByUser(recoveredOrg, userId)) {
-      throw createErr;
-    }
-    orgId = recoveredOrg.id;
-  }
-
-  if (!orgId) {
-    throw new Error("failed to resolve bootstrap organization for user");
-  }
-
-  await ensureOwnerMembership(sb, userId, orgId);
-
-  return buildResolvedContext(sb, userId, orgId, {
-    created,
-    source: created ? "create_organization" : "recovered_after_create_conflict",
-  });
+  // Si no hay memberships, NO crear organización automática
+  return buildNoOrgContext(user);
 }
 
 export default async function handler(req, res) {
@@ -313,6 +290,14 @@ export default async function handler(req, res) {
     }
 
     const context = await ensureContextForUser(sb, user);
+    if (context?.no_org_context) {
+      return res.status(200).json({
+        ok: false,
+        authenticated: true,
+        code: "NO_ORG_CONTEXT",
+        data: context,
+      });
+    }
     return res.status(200).json({ ok: true, data: context });
   } catch (e) {
     return res.status(500).json({ ok: false, error: e?.message || "server_error" });
