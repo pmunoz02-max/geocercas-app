@@ -252,3 +252,15 @@ git push origin preview
 - Debe indicarse explícitamente que falta aceptar invitación de tracker o que el administrador debe asignar una organización/rol.
 - El flujo correcto es: login exitoso → mensaje de bienvenida/espera → usuario espera invitación o asignación de rol.
 - Nunca dejar al usuario sin feedback visual o con la app bloqueada sin explicación.
+
+---
+
+## Visualización de entorno en Login
+
+El formulario de login debe mostrar un badge de entorno visible en la esquina superior del card de autenticación, según el hostname:
+
+- **PRODUCCIÓN**: si el hostname es `app.tugeocercas.com`
+- **PREVIEW**: si el hostname es `preview.tugeocercas.com` o termina en `.vercel.app`
+- **LOCAL**: si el hostname es `localhost` o `127.0.0.1`
+
+Esto ayuda a evitar confusiones y errores de ambiente. El badge debe ser visible solo si aplica, y nunca debe depender de variables de entorno del build, sino del hostname real en tiempo de ejecución.

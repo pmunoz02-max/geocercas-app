@@ -53,6 +53,14 @@ function sleep(ms: number) {
 }
 
 export default function Login() {
+    // Badge de entorno según hostname
+    const envBadge = useMemo(() => {
+      const host = window.location.hostname;
+      if (host === "app.tugeocercas.com") return "PRODUCCIÓN";
+      if (host === "preview.tugeocercas.com" || host.endsWith(".vercel.app")) return "PREVIEW";
+      if (host === "localhost" || host === "127.0.0.1") return "LOCAL";
+      return "";
+    }, []);
   const location = useLocation();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -359,11 +367,13 @@ export default function Login() {
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="hidden sm:block text-xs text-slate-400">
-                <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
-                  {t("login.previewBadge", { defaultValue: "PREVIEW" })}
-                </span>
-              </div>
+              {envBadge ? (
+                <div className="hidden sm:block text-xs text-slate-400">
+                  <span className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1">
+                    {envBadge}
+                  </span>
+                </div>
+              ) : null}
               <div className="relative z-50">
                 <LanguageSwitcher />
               </div>
