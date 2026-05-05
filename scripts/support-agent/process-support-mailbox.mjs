@@ -85,13 +85,33 @@ const simulatedEmails = JSON.parse(fs.readFileSync(inputFile, 'utf8'));
 function detectLanguage(text) {
   const langKeywords = {
     ES: [
-      'no puedo','cuenta','acceso','correo','entrar','mensaje','gracias','empresa','organización','pago','factura','suscripción','cobro','reembolso','seguridad','otra','ver','datos','pantalla','blanca','geocerca','ubicación','android','tracker','invitación','rol','permiso','evento','mapa','eliminar','privacidad','legal','borrar'
+      'no puedo','cuenta','acceso','correo','entrar','mensaje','gracias','empresa','organización','pago','factura','suscripción','cobro','reembolso','seguridad','otra','ver','datos','pantalla','blanca','geocerca','ubicación','android','tracker','invitación','rol','permiso','evento','mapa','eliminar','privacidad','legal','borrar','precio','plan','tarifa','soporte','ayuda','problema','error','sugerencia','mejora','agregar','añadir','whatsapp','contrato','descuento','oferta','reporte','exportar','excel'
     ],
     EN: [
-      "can't",'sign in','account','link','never','please','organization','payment','invoice','subscription','charge','refund','security','other','see','data','blank screen','geofence','location','android','tracker','invite','role','permission','event','map','delete','privacy','legal','remove'
+      "can't",'cannot','unable','sign in','account','link','never','please','organization','payment','invoice','subscription','charge','refund','security','other','see','data','blank screen','geofence','location','android','tracker','invite','role','permission','event','map','delete','privacy','legal','remove','price','plan','rate','support','help','problem','issue','error','suggestion','feature','add','whatsapp','contract','discount','offer','report','export','excel','improvement','request','bug','crash',
+      // Nuevos keywords login EN
+      "can't sign in","cannot sign in","log in","login","access link","sign in",
+      // Nuevos tracker_invite EN
+      "invitation","accepted","not showing","role","not listed","not visible","not found","not present","not assigned","not added","not included","not part","not member",
+      // Pricing EN
+      "price","pricing","plan","plans","enterprise","quote","discount","invoice","company","team","teams"
     ],
     FR: [
-      'connexion','compte','accès','recevoir','lien','entreprise','organisation','paiement','facture','abonnement','prélèvement','remboursement','sécurité','autre','voir','données','écran','blanc','géofence','position','android','tracker','invitation','rôle','permission','événement','carte','supprimer','confidentialité','légal','effacer'
+      'connexion','compte','accès','recevoir','lien','entreprise','organisation','paiement','facture','abonnement','prélèvement','remboursement','sécurité','autre','voir','données','écran','blanc','géofence','position','android','tracker','invitation','rôle','permission','événement','carte','supprimer','confidentialité','légal','effacer','prix','forfait','tarif','soutien','aide','problème','erreur','suggestion','amélioration','ajouter','whatsapp','contrat','remise','offre','rapport','exporter','excel','demande','bug','crash',
+      // Nuevos keywords billing FR
+      'annuler','abonnement','remboursement','paiement','facturation','prélèvement',
+      // Billing FR adicionales
+      'facturé','facturée','facturation','deux fois','mois-ci','vérifier',
+      // Frases clave para mejor detección FR
+      "j'ai été","facturé","deux fois","ce mois-ci","pouvez-vous","vérifier",
+      // Nuevos login FR
+      "impossible d’accéder","impossible de se connecter",
+      // Nuevos tracker_invite FR
+      "invitation","a accepté","n’apparaît","autre rôle","n’apparais","pas dans","not in",
+      // Pricing FR
+      "tarif","tarifs","forfait","forfaits","prix","abonnement","entreprise","équipe","équipes","devis",
+      // Billing FR extra
+      "facturé","vérifier"
     ]
   };
   const scores = { ES: 0, EN: 0, FR: 0 };
@@ -108,33 +128,52 @@ function detectLanguage(text) {
   return 'ES';
 }
 
-// --- Category classification (billing/security first, then android/geofence, tracker_invite only if invite/invitación/invitation) ---
+// --- Category classification (estricto: billing > security > privacy > android > bug crítico > geofence > tracker_invite > login > pricing > feature > other) ---
 function classifyCategory(text) {
-  // Billing/security first
-  if (/(pago|factura|suscripción|paddle|cobro|billing|refund|cancel|payment|invoice|subscription|charge|remboursement|paiement|facture|abonnement|prélèvement)/i.test(text)) return 'billing_payment';
-  if (/(acceso indebido|otra organización|seguridad|security|unauthorized|autre organisation|sécurité|non autorisé)/i.test(text)) return 'security_access';
-  // Android/geofence
-  if (/(android|gps|ubicación|tracking|offline|permisos|position|permisión|le gps|reste offline)/i.test(text)) return 'android_gps_tracking';
-  if (/(geocerca|geofence|perímetro|evento|mapa|boundary|géofence|événement|carte)/i.test(text)) return 'geofence_usage';
-  // Tracker invite only if invite/invitación/invitation
-  if (/(invitación|invite|invitation)/i.test(text)) return 'tracker_invite';
-  // Login
-  if (/(login|acceso|entrar|sign in|access link|connexion|compte)/i.test(text)) return 'login_access';
-  // Pricing
-  if (/(precio|plan|tarifa|pricing|oferta|enterprise|offre)/i.test(text)) return 'pricing_sales';
-  // Privacy/legal
-  if (/(privacidad|datos|gdpr|eliminar|terms|legal|delete|confidentialité|données|supprimer|légal|effacer)/i.test(text)) return 'privacy_legal';
-  // Bug
-  if (/(error|bug|falla|crash|pantalla blanca|no funciona|blank screen|écran blanc|ne fonctionne pas)/i.test(text)) return 'bug_report';
-  // Feature
-  if (/(sugerencia|feature|mejora|request|add|suggestion|amélioration)/i.test(text)) return 'feature_request';
+  // 1. Billing (FR: annuler, résilier, abonnement, remboursement, paiement, facturation, prélèvement, facturé, vérifier)
+  if (/(pago|factura|suscripción|cancelar|reembolso|paddle|cobro|cobrado|cobrado dos veces|cobraron|cobro doble|facturación incorrecta|factura incorrecta|billing|refund|cancel|payment|invoice|subscription|charge|paiement|facture|abonnement|annuler|résilier|remboursement|facturation|prélèvement|facturé|vérifier)/i.test(text)) return 'billing_payment';
+  // 2. Security
+  if (/(acceso indebido|otra organización|seguridad|security|unauthorized|autre organisation|sécurité|non autorisé|acceso sospechoso|acceso no autorizado|not authorized|not allowed|see.*other organization|see.*other company|voir.*autre organisation|voir.*autre entreprise)/i.test(text)) return 'security_access';
+  // 3. Privacy/legal
+  if (/(privacidad|datos|gdpr|eliminar|terms|legal|delete|confidentialité|données|supprimer|légal|effacer|privacy|data|remove|erase|borrar|proteger|protección|protection|protéger)/i.test(text)) return 'privacy_legal';
+  // 4. Android GPS tracking (gana sobre bug si aparecen ambos)
+  if (/(android|gps|tracking|offline|ubicación|posición|position|localisation|autorisation|permissions|ne met plus à jour|no actualiza)/i.test(text)) return 'android_gps_tracking';
+  // 5. Feature request antes que bug si hay intención de mejora (ES/EN/FR)
+  if (/(sería bueno|agregar|añadir|pueden agregar|whatsapp|feature request|feature|suggestion|add|could you add|can you add|ajouter|amélioration|pouvez-vous ajouter|exportar|export|excel|mejora|improvement|it would be great|ce serait utile|suggestion d'amélioration|sugerencia de mejora|sería útil|utile de|serait utile|serait bon|serait bien|serait intéressant)/i.test(text)) {
+    return 'feature_request';
+  }
+  // 6. Bug crítico (más estricto, antes de geofence)
+  if (/(pantalla blanca|blank screen|écran blanc|crash|no carga|does not load|ne se charge pas|reportes no cargan|reports do not load|rapports ne se chargent pas|error crítico|critical error|se cierra sola|app se cierra|application se ferme|app closes|application closes|app crashes|application crashes)/i.test(text)) return 'bug_report';
+  // 7. Geofence simple después de bug crítico
+  if (/(geocerca|geofence|géofence|perímetro|perimeter|périmètre|evento|event|événement|mapa|map|carte|enter|exit)/i.test(text)) {
+    return 'geofence_usage';
+  }
+  // 8. Tracker invite (invitación, invitado, acepté, tracker, rol, invite, invitation, accepted, not showing, role, rôle, a accepté, n’apparaît, autre rôle)
+  if (/(invitación|invitado|acept[ée]|tracker|rol|invite|invitation|accepted|not showing|role|rôle|a accepté|n’apparaît|autre rôle)/i.test(text)) return 'tracker_invite';
+  // 9. Login (EN: can't sign in, cannot sign in, log in, login, access link, sign in)
+  if (/(login|acceso|entrar|sign in|access link|connexion|compte|no puedo acceder|can’t log in|can’t access|cannot log in|cannot access|impossible d’accéder|impossible de se connecter|can\'t sign in|cannot sign in|log in)/i.test(text)) return 'login_access';
+  // 10. Pricing
+  if (/(precio|plan|tarifa|pricing|oferta|enterprise|offre|contrato|contract|discount|descuento|facturación|factura|invoice|cotización|quote|presupuesto|budget|coste|cost|fee|tarif|tarifs|tarifa|tarifas|plans|rates|rate|pricing|price|prices|precios|plans|plan|abono|abonement|abonnement|abonnements|abonnement|abonnements|plan|plans|enterprise|corporate|business|negocio|empresa|empresarial|corporativo|corporate|business|negocio|empresa|empresarial|corporativo)/i.test(text)) return 'pricing_sales';
+  // 11. Other
   return 'other';
 }
 
-function assignPriority(category) {
-  if (['billing_payment', 'privacy_legal', 'security_access'].includes(category)) return 'urgent';
-  if (['tracker_invite', 'android_gps_tracking', 'bug_report', 'pricing_sales'].includes(category)) return 'high';
-  return 'normal';
+function assignPriority(category, email) {
+  // billing_payment, privacy_legal, security_access: urgent
+  if (["billing_payment", "privacy_legal", "security_access"].includes(category)) return "urgent";
+  // android_gps_tracking: high
+  if (category === "android_gps_tracking") return "high";
+  // tracker_invite con problema: high
+  if (category === "tracker_invite") return "high";
+  // bug crítico: urgent
+  if (category === "bug_report") return "urgent";
+  // pricing_sales enterprise/contrato/factura/descuento: high
+  if (category === "pricing_sales" && /(enterprise|contrato|contract|factura|invoice|descuento|discount|corporate|business|negocio|empresa|empresarial|corporativo)/i.test(email.body)) return "high";
+  // feature_request: low
+  if (category === "feature_request") return "low";
+  // pricing_sales simple: normal
+  if (category === "pricing_sales") return "normal";
+  return "normal";
 }
 
 function assignConfidence(category) {
@@ -158,27 +197,32 @@ function assignLabels(category, priority, escalate) {
     case 'feature_request': labels.push('AI/feature-request'); break;
     case 'other': labels.push('AI/other'); break;
   }
-  if (escalate) labels.push('AI/needs-human');
-  else labels.push('AI/ready-to-review');
+  if (escalate) {
+    labels.push('AI/needs-human');
+  } else {
+    labels.push('AI/ready-to-review');
+  }
   if (priority === 'urgent') labels.push('AI/urgent');
   return labels;
 }
 
 function shouldEscalate(email, category, priority, confidence) {
-  // Escala siempre si es billing, privacy/legal, security
-  if (['billing_payment', 'privacy_legal', 'security_access', 'android_gps_tracking'].includes(category)) return true;
-  // Escala tracker_invite si hay error después de aceptar invitación
-  if (category === 'tracker_invite' &&
-      /accepted.*(not|no|doesn'?t|does not|aparece|aparezco|no estoy|not showing|n’apparaît|n’apparais|pas dans|not in|no figura|no sale|no aparece|no se ve|no me veo|no me muestra|not listed|not visible|not found|not present|not assigned|not added|not included|not part|not member|not showing up|not appearing|not visible|not present|not assigned|not added|not included|not part|not member)/i.test(email.body)) {
-    return true;
-  }
+  // Escala siempre si es billing, privacy/legal, security, android
+  if (["billing_payment", "privacy_legal", "security_access", "android_gps_tracking"].includes(category)) return true;
+  // Escala tracker_invite si hay problema de rol o no aparece, o si dice accepted invite + doesn't appear/dashboard
+    if (
+      category === 'tracker_invite' &&
+      /(rol|role|rôle|administrador|admin|owner|propietario|rol incorrecto|otro rol|rol diferente|wrong role|different role|mauvais rôle|autre rôle|no aparece|no se muestra|no figura|no sale|no lo veo|no me veo|not showing|doesn't appear|does not appear|not visible|not listed|not in my dashboard|n’apparaît|n'apparait|ne s’affiche pas|ne s'affiche pas|acepté|acepto|aceptado|accepted|accepté|a accepté)/i.test(email.body)
+    ) {
+      return true;
+    }
   // Escala bug_report crítico
-  if (category === 'bug_report' &&
-      /(pantalla blanca|blank screen|crash|critical|crítico|crítica|no funciona|no se puede|no responde|no actualiza|no carga|no inicia|no arranca|no abre|no muestra|no responde|no actualiza|no carga|no inicia|no arranca|no abre|no muestra|perdida de datos|data loss|lost data|error grave|se pierde|se borra|se elimina|se desaparece|se pierde|se borra|se elimina|se desaparece)/i.test(email.body)) {
+  if (category === "bug_report" &&
+    /(pantalla blanca|blank screen|écran blanc|crash|no carga|does not load|ne se charge pas|reportes no cargan|reports do not load|rapports ne se chargent pas|error crítico|critical error|se cierra sola|app se cierra|application se ferme|app closes|application closes|app crashes|application crashes)/i.test(email.body)) {
     return true;
   }
   // Escala si confianza baja o prioridad urgente
-  if (confidence === 'baja' || priority === 'urgent') return true;
+  if (confidence === "baja" || priority === "urgent") return true;
   return false;
 }
 
@@ -220,7 +264,7 @@ const results = [];
 for (const email of simulatedEmails) {
   const lang = detectLanguage(email.body);
   const category = classifyCategory(email.body);
-  const priority = assignPriority(category);
+  const priority = assignPriority(category, email);
   const confidence = assignConfidence(category);
   const escalate = shouldEscalate(email, category, priority, confidence);
   const labels = assignLabels(category, priority, escalate);

@@ -1,32 +1,32 @@
 [
-  {
-    "id": "ES-LOGIN",
-    "subject": "No puedo acceder",
-    "body": "No puedo entrar a mi cuenta, el enlace de acceso no llega a mi correo."
-  },
-  {
-    "id": "EN-TRACKER",
-    "subject": "Tracker invite issue",
-    "body": "I accepted the tracker invitation but I am not showing up in the organization."
-  },
-  {
-    "id": "FR-BILLING",
-    "subject": "Problème de paiement",
-    "body": "Je veux annuler mon abonnement et demander un remboursement."
-  },
-  {
-    "id": "ES-SECURITY",
-    "subject": "Veo datos de otra empresa",
-    "body": "Puedo ver información de otra organización en mi cuenta, esto es un problema de seguridad."
-  },
-  {
-    "id": "EN-GEOFENCE",
-    "subject": "How do I create a geofence?",
-    "body": "How do I create a new geofence and see when a tracker enters or exits?"
-  },
-  {
-    "id": "FR-ANDROID",
-    "subject": "Problème GPS Android",
-    "body": "Le GPS ne met plus à jour la position sur Android, le tracker reste offline."
-  }
+  { "id": "ES-01", "subject": "No puedo acceder", "body": "No puedo entrar a mi cuenta, el enlace de acceso no llega a mi correo." },
+  { "id": "ES-02", "subject": "Problema con el tracker", "body": "Mi tracker no aparece en la lista después de la invitación." },
+  { "id": "ES-03", "subject": "GPS Android no funciona", "body": "El GPS de mi teléfono Android no actualiza la ubicación del tracker." },
+  { "id": "ES-04", "subject": "Crear geocerca", "body": "¿Cómo puedo crear una geocerca y recibir alertas cuando un tracker entra o sale?" },
+  { "id": "ES-05", "subject": "Facturación incorrecta", "body": "Me han cobrado dos veces este mes, ¿pueden revisarlo?" },
+  { "id": "ES-06", "subject": "Precios del servicio", "body": "¿Dónde puedo ver los precios y planes disponibles?" },
+  { "id": "ES-07", "subject": "Privacidad de datos", "body": "¿Cómo se protegen mis datos personales en la plataforma?" },
+  { "id": "ES-08", "subject": "Acceso no autorizado", "body": "He detectado un acceso sospechoso a mi cuenta, ¿qué hago?" },
+  { "id": "ES-09", "subject": "Error en la app", "body": "La aplicación se cierra sola al intentar abrir el mapa." },
+  { "id": "ES-10", "subject": "Sugerencia de mejora", "body": "Sería útil poder exportar los reportes en formato Excel." },
+  { "id": "EN-01", "subject": "Can't log in", "body": "I can't log into my account, the magic link never arrives." },
+  { "id": "EN-02", "subject": "Tracker not showing", "body": "I accepted the tracker invite but it doesn't appear in my dashboard." },
+  { "id": "EN-03", "subject": "Android GPS issue", "body": "My Android device is not updating the tracker location." },
+  { "id": "EN-04", "subject": "Geofence setup", "body": "How do I set up a geofence and get notifications?" },
+  { "id": "EN-05", "subject": "Billing problem", "body": "I was charged twice this month, please check." },
+  { "id": "EN-06", "subject": "Pricing info", "body": "Where can I find your pricing and plans?" },
+  { "id": "EN-07", "subject": "Data privacy question", "body": "How is my personal data protected on your platform?" },
+  { "id": "EN-08", "subject": "Security alert", "body": "I noticed unauthorized access to my account, what should I do?" },
+  { "id": "EN-09", "subject": "App bug report", "body": "The app crashes when I try to open the map view." },
+  { "id": "EN-10", "subject": "Feature request", "body": "It would be great to have an option to export reports to Excel." },
+  { "id": "FR-01", "subject": "Connexion impossible", "body": "Je ne reçois pas le lien magique pour accéder à mon compte." },
+  { "id": "FR-02", "subject": "Problème d'invitation tracker", "body": "J'ai accepté l'invitation mais le tracker n'apparaît pas." },
+  { "id": "FR-03", "subject": "GPS Android ne fonctionne pas", "body": "Le GPS de mon Android ne met pas à jour la position du tracker." },
+  { "id": "FR-04", "subject": "Créer une géofence", "body": "Comment créer une géofence et recevoir des alertes ?" },
+  { "id": "FR-05", "subject": "Erreur de facturation", "body": "J'ai été facturé deux fois ce mois-ci, pouvez-vous vérifier ?" },
+  { "id": "FR-06", "subject": "Tarifs et abonnements", "body": "Où puis-je consulter vos tarifs et formules ?" },
+  { "id": "FR-07", "subject": "Vie privée des données", "body": "Comment mes données personnelles sont-elles protégées ?" },
+  { "id": "FR-08", "subject": "Alerte sécurité", "body": "J'ai remarqué un accès non autorisé à mon compte, que faire ?" },
+  { "id": "FR-09", "subject": "Bug dans l'application", "body": "L'application se ferme lorsque j'ouvre la carte." },
+  { "id": "FR-10", "subject": "Suggestion d'amélioration", "body": "Ce serait utile de pouvoir exporter les rapports en Excel." }
 ]

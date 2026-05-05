@@ -1,56 +1,32 @@
 [
-  {
-    "id": "ES-LOGIN",
-    "idioma": "ES",
-    "categoria": "login_access",
-    "prioridad": "normal",
-    "labels": ["AI/login", "AI/ready-to-review"],
-    "escala": "no",
-    "enviado": false
-  },
-  {
-    "id": "EN-TRACKER",
-    "idioma": "EN",
-    "categoria": "tracker_invite",
-    "prioridad": "high",
-    "labels": ["AI/tracker", "AI/needs-human"],
-    "escala": "sí",
-    "enviado": false
-  },
-  {
-    "id": "FR-BILLING",
-    "idioma": "FR",
-    "categoria": "billing_payment",
-    "prioridad": "urgent",
-    "labels": ["AI/billing", "AI/needs-human", "AI/urgent"],
-    "escala": "sí",
-    "enviado": false
-  },
-  {
-    "id": "ES-SECURITY",
-    "idioma": "ES",
-    "categoria": "security_access",
-    "prioridad": "urgent",
-    "labels": ["AI/security", "AI/needs-human", "AI/urgent"],
-    "escala": "sí",
-    "enviado": false
-  },
-  {
-    "id": "EN-GEOFENCE",
-    "idioma": "EN",
-    "categoria": "geofence_usage",
-    "prioridad": "normal",
-    "labels": ["AI/geofence", "AI/ready-to-review"],
-    "escala": "no",
-    "enviado": false
-  },
-  {
-    "id": "FR-ANDROID",
-    "idioma": "FR",
-    "categoria": "android_gps_tracking",
-    "prioridad": "high",
-    "labels": ["AI/android", "AI/tracker", "AI/needs-human"],
-    "escala": "sí",
-    "enviado": false
-  }
+  { "id": "ES-01", "idioma": "ES", "categoria": "login_access", "prioridad": "normal", "labels": ["AI/login", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "ES-02", "idioma": "ES", "categoria": "tracker_invite", "prioridad": "high", "labels": ["AI/tracker", "AI/needs-human"], "escala": "sí", "enviado": false },
+  { "id": "ES-03", "idioma": "ES", "categoria": "android_gps_tracking", "prioridad": "high", "labels": ["AI/android", "AI/tracker", "AI/needs-human"], "escala": "sí", "enviado": false },
+  { "id": "ES-04", "idioma": "ES", "categoria": "geofence_usage", "prioridad": "normal", "labels": ["AI/geofence", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "ES-05", "idioma": "ES", "categoria": "billing_payment", "prioridad": "urgent", "labels": ["AI/billing", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "ES-06", "idioma": "ES", "categoria": "pricing_sales", "prioridad": "normal", "labels": ["AI/pricing", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "ES-07", "idioma": "ES", "categoria": "privacy_legal", "prioridad": "urgent", "labels": ["AI/privacy-legal", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "ES-08", "idioma": "ES", "categoria": "security_access", "prioridad": "urgent", "labels": ["AI/security", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "ES-09", "idioma": "ES", "categoria": "bug_report", "prioridad": "urgent", "labels": ["AI/bug", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "ES-10", "idioma": "ES", "categoria": "feature_request", "prioridad": "low", "labels": ["AI/feature-request", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "EN-01", "idioma": "EN", "categoria": "login_access", "prioridad": "normal", "labels": ["AI/login", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "EN-02", "idioma": "EN", "categoria": "tracker_invite", "prioridad": "high", "labels": ["AI/tracker", "AI/needs-human"], "escala": "sí", "enviado": false },
+  { "id": "EN-03", "idioma": "EN", "categoria": "android_gps_tracking", "prioridad": "high", "labels": ["AI/android", "AI/tracker", "AI/needs-human"], "escala": "sí", "enviado": false },
+  { "id": "EN-04", "idioma": "EN", "categoria": "geofence_usage", "prioridad": "normal", "labels": ["AI/geofence", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "EN-05", "idioma": "EN", "categoria": "billing_payment", "prioridad": "urgent", "labels": ["AI/billing", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "EN-06", "idioma": "EN", "categoria": "pricing_sales", "prioridad": "normal", "labels": ["AI/pricing", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "EN-07", "idioma": "EN", "categoria": "privacy_legal", "prioridad": "urgent", "labels": ["AI/privacy-legal", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "EN-08", "idioma": "EN", "categoria": "security_access", "prioridad": "urgent", "labels": ["AI/security", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "EN-09", "idioma": "EN", "categoria": "bug_report", "prioridad": "urgent", "labels": ["AI/bug", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "EN-10", "idioma": "EN", "categoria": "feature_request", "prioridad": "low", "labels": ["AI/feature-request", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "FR-01", "idioma": "FR", "categoria": "login_access", "prioridad": "normal", "labels": ["AI/login", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "FR-02", "idioma": "FR", "categoria": "tracker_invite", "prioridad": "high", "labels": ["AI/tracker", "AI/needs-human"], "escala": "sí", "enviado": false },
+  { "id": "FR-03", "idioma": "FR", "categoria": "android_gps_tracking", "prioridad": "high", "labels": ["AI/android", "AI/tracker", "AI/needs-human"], "escala": "sí", "enviado": false },
+  { "id": "FR-04", "idioma": "FR", "categoria": "geofence_usage", "prioridad": "normal", "labels": ["AI/geofence", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "FR-05", "idioma": "FR", "categoria": "billing_payment", "prioridad": "urgent", "labels": ["AI/billing", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "FR-06", "idioma": "FR", "categoria": "pricing_sales", "prioridad": "normal", "labels": ["AI/pricing", "AI/ready-to-review"], "escala": "no", "enviado": false },
+  { "id": "FR-07", "idioma": "FR", "categoria": "privacy_legal", "prioridad": "urgent", "labels": ["AI/privacy-legal", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "FR-08", "idioma": "FR", "categoria": "security_access", "prioridad": "urgent", "labels": ["AI/security", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "FR-09", "idioma": "FR", "categoria": "bug_report", "prioridad": "urgent", "labels": ["AI/bug", "AI/needs-human", "AI/urgent"], "escala": "sí", "enviado": false },
+  { "id": "FR-10", "idioma": "FR", "categoria": "feature_request", "prioridad": "low", "labels": ["AI/feature-request", "AI/ready-to-review"], "escala": "no", "enviado": false }
 ]
