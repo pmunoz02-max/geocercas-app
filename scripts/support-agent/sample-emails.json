@@ -1,0 +1,32 @@
+[
+  {
+    "id": "ES-LOGIN",
+    "subject": "No puedo acceder",
+    "body": "No puedo entrar a mi cuenta, el enlace de acceso no llega a mi correo."
+  },
+  {
+    "id": "EN-TRACKER",
+    "subject": "Tracker invite issue",
+    "body": "I accepted the tracker invitation but I am not showing up in the organization."
+  },
+  {
+    "id": "FR-BILLING",
+    "subject": "Problème de paiement",
+    "body": "Je veux annuler mon abonnement et demander un remboursement."
+  },
+  {
+    "id": "ES-SECURITY",
+    "subject": "Veo datos de otra empresa",
+    "body": "Puedo ver información de otra organización en mi cuenta, esto es un problema de seguridad."
+  },
+  {
+    "id": "EN-GEOFENCE",
+    "subject": "How do I create a geofence?",
+    "body": "How do I create a new geofence and see when a tracker enters or exits?"
+  },
+  {
+    "id": "FR-ANDROID",
+    "subject": "Problème GPS Android",
+    "body": "Le GPS ne met plus à jour la position sur Android, le tracker reste offline."
+  }
+]
