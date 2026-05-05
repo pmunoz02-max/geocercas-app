@@ -1,15 +1,25 @@
-# Workflow técnico — Agente de soporte Gmail (tuGeocercas)
+# Workflow técnico — Agente de soporte (soporte@tugeocercas.com)
 
 ## Objetivo
 
-Describir el flujo técnico que debe seguir el agente de soporte para operar sobre la casilla de Gmail de soporte@tugeocercas.com, garantizando seguridad, trazabilidad y cumplimiento de reglas de escalamiento.
+Describir el flujo técnico que debe seguir el agente de soporte para operar sobre la casilla de soporte@tugeocercas.com, garantizando seguridad, trazabilidad y cumplimiento de reglas de escalamiento. El proveedor de correo puede ser Gmail u otro compatible, pero el workflow es independiente del proveedor.
 
 ---
+
+## Modo inicial seguro
+
+- El agente inicia siempre en modo solo-lectura y solo puede crear borradores y aplicar labels, nunca enviar respuestas automáticas.
+- No debe modificar, reenviar ni eliminar emails originales.
+
+## Regla anti-duplicados
+
+- Antes de procesar un email, verificar que no tenga ya labels de procesamiento (AI/done, AI/ready-to-review, AI/needs-human) para evitar duplicidad.
+- Si un email ya tiene alguno de estos labels, omitirlo del workflow.
 
 ## Pasos del workflow
 
 1. **Leer emails nuevos**
-   - Acceder a la bandeja de entrada de soporte@tugeocercas.com mediante API segura (Gmail API, OAuth2).
+   - Acceder a la bandeja de entrada de soporte@tugeocercas.com mediante API segura (por ejemplo, Gmail API, OAuth2, IMAP, etc.).
    - Filtrar solo emails no procesados (sin label AI/done ni AI/ready-to-review ni AI/needs-human).
 
 2. **Clasificar email**
@@ -22,7 +32,7 @@ Describir el flujo técnico que debe seguir el agente de soporte para operar sob
    - No incluir información inventada ni datos sensibles.
    - No enviar el email automáticamente.
 
-4. **Aplicar labels Gmail**
+4. **Aplicar labels**
    - Asignar los labels sugeridos según la clasificación:
      - AI/ready-to-review, AI/needs-human, AI/login, AI/tracker, AI/android, AI/geofence, AI/billing, AI/pricing, AI/privacy-legal, AI/security, AI/bug, AI/feature-request, AI/other, AI/done, AI/urgent.
    - Regla: Nunca aplicar AI/done automáticamente. AI/security siempre va con AI/needs-human. Casos security_access siempre escalan.
@@ -37,22 +47,12 @@ Describir el flujo técnico que debe seguir el agente de soporte para operar sob
 
 ---
 
-## Notas
-- El agente nunca debe pedir contraseñas, tokens, códigos privados ni exponer datos internos.
-- Todo procesamiento debe ser auditable y reversible.
-- El workflow debe actualizarse si cambian las reglas de negocio, escalamiento o templates.
-
-## Modo inicial seguro
-
-- El agente inicia siempre en modo solo-lectura y solo puede crear borradores y aplicar labels, nunca enviar respuestas automáticas.
-- No debe modificar, reenviar ni eliminar emails originales.
-
-## Regla anti-duplicados
-
-- Antes de procesar un email, verificar que no tenga ya labels de procesamiento (AI/done, AI/ready-to-review, AI/needs-human) para evitar duplicidad.
-- Si un email ya tiene alguno de estos labels, omitirlo del workflow.
-
 ## Aclaración sobre AI/done
 
 - El label AI/done nunca debe ser aplicado automáticamente por el agente.
 - Solo un humano autorizado puede marcar un caso como AI/done tras revisión manual y envío seguro.
+
+## Notas
+- El agente nunca debe pedir contraseñas, tokens, códigos privados ni exponer datos internos.
+- Todo procesamiento debe ser auditable y reversible.
+- El workflow debe actualizarse si cambian las reglas de negocio, escalamiento o templates.
