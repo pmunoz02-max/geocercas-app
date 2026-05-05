@@ -56,8 +56,21 @@ export function mapTrackerLatestRow(row) {
 }
 
 export function getTrackerKey(row) {
-  if (!row) return "unknown";
-  return String(row.personal_id || row.user_id || "unknown");
+  if (!row) return null;
+
+  const key =
+    row.user_id ||
+    row.tracker_user_id ||
+    row.latest?.user_id ||
+    row.latest?.tracker_user_id ||
+    row.tracker_key ||
+    row.key ||
+    row.id ||
+    row.personal_id ||
+    row.latest?.personal_id ||
+    null;
+
+  return key ? String(key) : null;
 }
 
 export function getPositionTs(row) {

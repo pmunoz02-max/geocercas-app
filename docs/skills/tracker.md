@@ -362,6 +362,33 @@ Esto asegura que el recorrido mostrado sea fiel al trayecto real y no solo a la 
 
 ---
 
+## Clave de rutas de tracker (tracker route key)
+
+- Para que las rutas (routePositions) provenientes de la tabla tracker_positions coincidan correctamente con los trackers visibles en el dashboard, la función de clave debe priorizar `user_id` o `tracker_user_id` sobre `personal_id`.
+- Solo si no existe user_id/tracker_user_id, se puede usar personal_id como fallback.
+- Esto asegura que los recorridos históricos se asocien correctamente a los trackers activos, evitando rutas huérfanas o duplicadas por diferencias de clave.
+- La función recomendada es:
+
+```js
+export function getTrackerKey(row) {
+  if (!row) return null;
+  const key =
+    row.user_id ||
+    row.tracker_user_id ||
+    row.latest?.user_id ||
+    row.latest?.tracker_user_id ||
+    row.tracker_key ||
+    row.key ||
+    row.id ||
+    row.personal_id ||
+    row.latest?.personal_id ||
+    null;
+  return key ? String(key) : null;
+}
+```
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.
