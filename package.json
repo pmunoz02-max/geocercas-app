@@ -15,7 +15,8 @@
     "i18n:validate": "node scripts/i18n-validate.mjs",
     "i18n:translate": "node scripts/i18n-translate.mjs",
     "prepush:check": "node scripts/pre-push-check.mjs",
-    "support:agent:sim": "node scripts/support-agent/process-support-mailbox.mjs --input=scripts/support-agent/sample-emails.json"
+    "support:agent:sim": "node scripts/support-agent/process-support-mailbox.mjs --input=scripts/support-agent/sample-emails.json",
+    "support:agent:test": "node scripts/support-agent/process-support-mailbox.mjs --input=scripts/support-agent/sample-emails.json --expect=scripts/support-agent/expected-results.json"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
