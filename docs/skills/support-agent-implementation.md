@@ -46,3 +46,29 @@
 5. Esperar revisión y envío manual
 
 > En ningún caso el agente envía, archiva, borra ni aplica AI/done automáticamente. Nunca toca Producción fuera de la casilla de soporte.
+
+## Validación y pruebas automatizadas
+
+- **Cobertura de casos:**
+  - 30 emails simulados: 10 en español (ES), 10 en inglés (EN), 10 en francés (FR).
+  - Casos cubren: login, tracker, Android GPS, geocercas, billing, pricing, privacidad/legal, security_access, bugs y feature_request.
+- **Archivos de validación:**
+  - `sample-emails.json`: emails de entrada simulados.
+  - `expected-results.json`: resultados esperados alineados con categorías, prioridades, labels y escalamiento.
+- **Comandos de validación:**
+  - `npm run support:agent:test` — Ejecuta la validación principal:
+    ```sh
+    node geocercas-app/scripts/support-agent/process-support-mailbox.mjs --input geocercas-app/scripts/support-agent/sample-emails.json --expect geocercas-app/scripts/support-agent/expected-results.json
+    ```
+  - `npm run support:agent:sim` — Simula procesamiento y permite salida custom:
+    ```sh
+    node geocercas-app/scripts/support-agent/process-support-mailbox.mjs --input geocercas-app/scripts/support-agent/sample-emails.json --out resultado-simulado.json
+    ```
+    - O bien, para comparar contra expected:
+    ```sh
+    node geocercas-app/scripts/support-agent/process-support-mailbox.mjs --input geocercas-app/scripts/support-agent/sample-emails.json --out resultado-simulado.json --expect geocercas-app/scripts/support-agent/expected-results.json
+    ```
+- **Safe-mode validado:**
+  - Todas las reglas de clasificación, escalamiento y generación de borradores se validan automáticamente contra los 30 casos.
+  - El agente nunca envía, archiva ni borra emails en modo seguro.
+  - Los resultados deben coincidir exactamente con los archivos de expected para pasar la validación.
