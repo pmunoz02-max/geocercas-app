@@ -1,5 +1,7 @@
 // src/pages/SignUp.tsx
 import { FormEvent, useState } from "react";
+// Detecta si Google está habilitado por variable de entorno (solo si === "true")
+const googleEnabled = import.meta.env.VITE_AUTH_GOOGLE_ENABLED === "true";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
@@ -43,7 +45,10 @@ export default function SignUp() {
       if (error) {
         setMsg(t("auth.signup.errors.sendFailed", { message: error.message }));
       } else {
-        setMsg(t("auth.signup.messages.magicLinkSent"));
+        setMsg(
+          t("auth.signup.messages.magicLinkSent") +
+          "\nRevisa tu correo y abre el último enlace que recibiste para continuar con el registro."
+        );
       }
     } catch (e: any) {
       setMsg(e?.message ? t("auth.signup.errors.unknown", { message: e.message }) : t("auth.signup.errors.unknown"));
@@ -151,15 +156,18 @@ export default function SignUp() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={signUpWithGoogle}
-          className="w-full px-4 py-2 rounded border disabled:opacity-50"
-          disabled={sending}
+
+        {googleEnabled && (
+          <button
+            type="button"
+            onClick={signUpWithGoogle}
+            className="w-full px-4 py-2 rounded border disabled:opacity-50"
+            disabled={sending}
             title={t("auth.signup.oauthGoogle")}
-        >
-          Continuar con Google
-        </button>
+          >
+            Continuar con Google
+          </button>
+        )}
 
         {msg && <p className="text-sm text-gray-700">{msg}</p>}
 
