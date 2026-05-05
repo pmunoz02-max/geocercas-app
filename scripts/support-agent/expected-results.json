@@ -1,0 +1,56 @@
+[
+  {
+    "id": "ES-LOGIN",
+    "idioma": "ES",
+    "categoria": "login_access",
+    "prioridad": "normal",
+    "labels": ["AI/login", "AI/ready-to-review"],
+    "escala": "no",
+    "enviado": false
+  },
+  {
+    "id": "EN-TRACKER",
+    "idioma": "EN",
+    "categoria": "tracker_invite",
+    "prioridad": "high",
+    "labels": ["AI/tracker", "AI/needs-human"],
+    "escala": "sí",
+    "enviado": false
+  },
+  {
+    "id": "FR-BILLING",
+    "idioma": "FR",
+    "categoria": "billing_payment",
+    "prioridad": "urgent",
+    "labels": ["AI/billing", "AI/needs-human", "AI/urgent"],
+    "escala": "sí",
+    "enviado": false
+  },
+  {
+    "id": "ES-SECURITY",
+    "idioma": "ES",
+    "categoria": "security_access",
+    "prioridad": "urgent",
+    "labels": ["AI/security", "AI/needs-human", "AI/urgent"],
+    "escala": "sí",
+    "enviado": false
+  },
+  {
+    "id": "EN-GEOFENCE",
+    "idioma": "EN",
+    "categoria": "geofence_usage",
+    "prioridad": "normal",
+    "labels": ["AI/geofence", "AI/ready-to-review"],
+    "escala": "no",
+    "enviado": false
+  },
+  {
+    "id": "FR-ANDROID",
+    "idioma": "FR",
+    "categoria": "android_gps_tracking",
+    "prioridad": "high",
+    "labels": ["AI/android", "AI/tracker", "AI/needs-human"],
+    "escala": "sí",
+    "enviado": false
+  }
+]

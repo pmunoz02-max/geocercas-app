@@ -39,6 +39,7 @@ const LABELS = [
 // --- Argument parsing ---
 let inputFile = null;
 let outFile = null;
+let expectFile = null;
 for (let i = 2; i < process.argv.length; i++) {
   const arg = process.argv[i];
   if (arg.startsWith('--input=')) {
@@ -56,6 +57,15 @@ for (let i = 2; i < process.argv.length; i++) {
   }
   if (arg === '--out' && process.argv[i + 1]) {
     outFile = process.argv[i + 1];
+    i++;
+    continue;
+  }
+  if (arg.startsWith('--expect=')) {
+    expectFile = arg.slice('--expect='.length);
+    continue;
+  }
+  if (arg === '--expect' && process.argv[i + 1]) {
+    expectFile = process.argv[i + 1];
     i++;
     continue;
   }
@@ -237,4 +247,43 @@ if (outFile) {
   const dir = path.dirname(outFile);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(outFile, outputJson + '\n', 'utf8');
+}
+
+// --- Expectation check ---
+if (expectFile) {
+  if (!fs.existsSync(expectFile)) {
+    console.error(`Error: El archivo de resultados esperados '${expectFile}' no existe.`);
+    process.exit(1);
+  }
+  const expected = JSON.parse(fs.readFileSync(expectFile, 'utf8'));
+  let pass = true;
+  if (!Array.isArray(expected) || expected.length !== results.length) {
+    console.error('FAIL: El número de resultados no coincide con el esperado.');
+    pass = false;
+  } else {
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      const e = expected[i];
+      // Compare fields
+      const fields = ['id','idioma','categoria','prioridad','escala','enviado'];
+      for (const f of fields) {
+        if (r[f] !== e[f]) {
+          console.error(`FAIL: Caso ${r.id} campo '${f}' esperado='${e[f]}' obtenido='${r[f]}'`);
+          pass = false;
+        }
+      }
+      // Compare labels as sets
+      const rLabels = Array.isArray(r.labels) ? [...r.labels].sort() : [];
+      const eLabels = Array.isArray(e.labels) ? [...e.labels].sort() : [];
+      if (rLabels.length !== eLabels.length || rLabels.some((v, idx) => v !== eLabels[idx])) {
+        console.error(`FAIL: Caso ${r.id} labels esperado=${JSON.stringify(eLabels)} obtenido=${JSON.stringify(rLabels)}`);
+        pass = false;
+      }
+    }
+  }
+  if (pass) {
+    console.log('PASS: Todos los resultados coinciden con los esperados.');
+  } else {
+    process.exit(1);
+  }
 }
