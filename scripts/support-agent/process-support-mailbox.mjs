@@ -3,6 +3,7 @@
 // Lee emails simulados desde archivo JSON (--input), clasifica, genera borrador, asigna labels/escalamiento, nunca envía emails ni conecta correo real.
 
 import fs from 'fs';
+import path from 'path';
 
 const CATEGORIES = [
   'login_access',
@@ -37,14 +38,26 @@ const LABELS = [
 
 // --- Argument parsing ---
 let inputFile = null;
-for (let i = 2; i < process.argv.length; ++i) {
-  if (process.argv[i].startsWith('--input=')) {
-    inputFile = process.argv[i].split('=')[1];
-    break;
+let outFile = null;
+for (let i = 2; i < process.argv.length; i++) {
+  const arg = process.argv[i];
+  if (arg.startsWith('--input=')) {
+    inputFile = arg.slice('--input='.length);
+    continue;
   }
-  if (process.argv[i] === '--input' && process.argv[i + 1]) {
+  if (arg === '--input' && process.argv[i + 1]) {
     inputFile = process.argv[i + 1];
-    break;
+    i++;
+    continue;
+  }
+  if (arg.startsWith('--out=')) {
+    outFile = arg.slice('--out='.length);
+    continue;
+  }
+  if (arg === '--out' && process.argv[i + 1]) {
+    outFile = process.argv[i + 1];
+    i++;
+    continue;
   }
 }
 if (!inputFile) {
@@ -216,4 +229,12 @@ for (const email of simulatedEmails) {
   };
   results.push(result);
 }
-console.log(JSON.stringify(results, null, 2));
+
+const outputJson = JSON.stringify(results, null, 2);
+console.log(outputJson);
+
+if (outFile) {
+  const dir = path.dirname(outFile);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(outFile, outputJson + '\n', 'utf8');
+}

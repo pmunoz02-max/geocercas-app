@@ -65,3 +65,8 @@ coverage/
 *.tar
 *.gz
 *.lnk
+
+# -----------------------------
+# Support agent output
+# -----------------------------
+scripts/support-agent/output/
