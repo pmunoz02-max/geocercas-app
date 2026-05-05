@@ -1533,8 +1533,8 @@ export default function TrackerDashboard() {
       .not("lat", "is", null)
       .not("lng", "is", null)
       .or(orTime)
-      .order("recorded_at", { ascending: true, nullsFirst: false })
-      .order("created_at", { ascending: true })
+      .order("recorded_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false, nullsFirst: false })
       .limit(5000);
 
     if (error) {
@@ -1542,7 +1542,8 @@ export default function TrackerDashboard() {
       return [];
     }
 
-    return (Array.isArray(data) ? data : [])
+    // Primero, mapea y filtra los datos válidos
+    const routeRows = (Array.isArray(data) ? data : [])
       .map((p) => {
         if (!p?.user_id) return null;
 
@@ -1586,6 +1587,9 @@ export default function TrackerDashboard() {
         };
       })
       .filter(Boolean);
+
+    // Luego, reordena de más antiguo a más nuevo para dibujar la línea
+    return routeRows.slice().sort((a, b) => getPositionTs(a) - getPositionTs(b));
   }
 
 
@@ -2688,7 +2692,7 @@ export default function TrackerDashboard() {
                     value={timeWindowId}
                     onChange={(e) => {
                       setTimeWindowId(e.target.value);
-                      setIsHistoryRequested(true);
+                      setIsHistoryRequested(false);
                       setRoutePositions([]);
                     }}
                     disabled={!orgId}
