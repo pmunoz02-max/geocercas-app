@@ -1,4 +1,4 @@
-// Devuelve el nombre amigable del tracker según prioridad solicitada
+﻿// Devuelve el nombre amigable del tracker según prioridad solicitada
 // Nombre amigable de tracker según prioridad estricta
 function getFriendlyTrackerName(tracker) {
   return (
@@ -17,7 +17,6 @@ import React, { useEffect, useMemo, useState, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient";
-import { listGeofences } from "../lib/geofencesApi";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import {
@@ -1142,14 +1141,27 @@ export default function TrackerDashboard() {
       )
     );
 
+    let q = supabase
+      .from("geofences")
+      .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
+      .eq("org_id", safeOrgId)
+      .eq("active", true);
 
-    let rows = [];
-    try {
-      rows = await listGeofences(safeOrgId, true);
-    } catch (err) {
+    if (assignedIds.length > 0) {
+      q = q.in("id", assignedIds);
+    } else {
+      q = q
+        .order("is_default", { ascending: false })
+        .order("updated_at", { ascending: false })
+        .order("created_at", { ascending: false });
+    }
+
+    const res = await q;
+
+    if (res.error) {
       setDiag((d) => ({
         ...d,
-        lastGeofencesError: err?.message || String(err),
+        lastGeofencesError: res.error.message || String(res.error),
         geofencesFound: 0,
         geofencePolys: 0,
         geofenceCircles: 0,
@@ -1162,22 +1174,24 @@ export default function TrackerDashboard() {
       return;
     }
 
-    if (assignedIds.length > 0) {
-      const assignedSet = new Set(assignedIds.map(String));
-      rows = rows.filter((g) => assignedSet.has(String(g?.id)));
-    } else {
-      rows = rows.sort((a, b) => {
-        const da = Number(Boolean(a?.is_default));
-        const db = Number(Boolean(b?.is_default));
-        if (db !== da) return db - da;
-        return String(b?.updated_at || b?.created_at || "").localeCompare(
-          String(a?.updated_at || a?.created_at || "")
-        );
-      });
-    }
+    let rows = Array.isArray(res.data) ? res.data : [];
 
-    // Fallback directo a DB eliminado; la carga usa geofencesApi.
     let pickedFallbackFirstActive = false;
+    if (assignedIds.length === 0 && rows.length === 0) {
+      const fb = await supabase
+        .from("geofences")
+        .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
+        .eq("org_id", safeOrgId)
+        .eq("active", true)
+        .order("updated_at", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (!fb.error && Array.isArray(fb.data) && fb.data.length > 0) {
+        rows = fb.data;
+        pickedFallbackFirstActive = true;
+      }
+    }
 
     const normalized = rows
       .filter((r) => r.active === true)
@@ -1220,6 +1234,13 @@ export default function TrackerDashboard() {
             orgId: currentOrgId,
             defaultValue: `There are assignments, but there are no active geofences for those assignments in org (${currentOrgId}).`,
           })
+        );
+      } else if (pickedFallbackFirstActive) {
+        setInfoMsg(
+          tOr(
+            "trackerDashboard.messages.fallbackGeofenceShown",
+            "No active geofences were found; 1 active geofence was shown as a fallback so the dashboard does not remain empty."
+          )
         );
       } else {
         setInfoMsg(
@@ -1494,7 +1515,6 @@ export default function TrackerDashboard() {
   }
 
 
-
   async function loadRoutePositionsCanonical(currentOrgId, hoursBack) {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) {
@@ -1504,7 +1524,6 @@ export default function TrackerDashboard() {
 
     const safeHours = Math.max(1, Number(hoursBack || 6));
     const fromIso = new Date(Date.now() - safeHours * 60 * 60 * 1000).toISOString();
-
     const orTime = `recorded_at.gte.${fromIso},and(recorded_at.is.null,created_at.gte.${fromIso})`;
 
     const { data, error } = await supabase
@@ -1796,6 +1815,8 @@ export default function TrackerDashboard() {
         if (showSpinner) setLoading(true);
         setDiag((d) => ({ ...d, lastPositionsError: null, positionsSource: null }));
         setErrorMsg("");
+
+        setRoutePositions([]);
 
         const windowConfig = TIME_WINDOWS.find((w) => w.id === timeWindowId) ?? TIME_WINDOWS[1];
         const fromIso = new Date(Date.now() - windowConfig.ms).toISOString();
@@ -2676,6 +2697,7 @@ export default function TrackerDashboard() {
                     onChange={(e) => {
                       setTimeWindowId(e.target.value);
                       setIsHistoryRequested(true);
+                      setRoutePositions([]);
                     }}
                     disabled={!orgId}
                   >
