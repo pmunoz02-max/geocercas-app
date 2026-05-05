@@ -1675,10 +1675,7 @@ export default function TrackerDashboard() {
           return !Number.isNaN(lat) && !Number.isNaN(lng) && isValidLatLng(lat, lng);
         });
 
-        let routeRows = await loadRoutePositionsCanonical(safeOrgId, selectedWindowHours);
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          routeRows = routeRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)));
-        }
+        const routeRows = await loadRoutePositionsCanonical(safeOrgId, selectedWindowHours);
 
         setPositions(finalRows);
         setRoutePositions(routeRows);
@@ -1767,10 +1764,7 @@ export default function TrackerDashboard() {
           }))
         );
 
-        let routeRows = await loadRoutePositionsCanonical(safeOrgId, selectedWindowHours);
-        if (allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0) {
-          routeRows = routeRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)));
-        }
+        const routeRows = await loadRoutePositionsCanonical(safeOrgId, selectedWindowHours);
 
         setPositions(finalRows);
         setRoutePositions(routeRows);
