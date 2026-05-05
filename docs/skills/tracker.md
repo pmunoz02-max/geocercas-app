@@ -354,6 +354,14 @@ Esto asegura que el recorrido mostrado sea fiel al trayecto real y no solo a la 
 
 ---
 
+## Renderizado de polilíneas en TrackerDashboard
+
+- Las polilíneas de recorrido en el dashboard deben renderizarse siempre a partir de `routePositions`, incluso si no existe un marker visible o actualizado para ese tracker.
+- El color de la polilínea debe usar el color del marker solo si está disponible (`marker?.color`); si no, debe aplicar el fallback de la paleta (`TRACKER_COLORS`).
+- No se debe descartar el renderizado de rutas por ausencia de marker; la visualización del historial debe ser robusta ante delays o inconsistencias temporales en los markers.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.

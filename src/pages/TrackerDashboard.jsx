@@ -2363,8 +2363,7 @@ export default function TrackerDashboard() {
       });
     });
 
-    if (!visibleMarkerByKey.size) return [];
-
+    // Do not discard if no visibleMarkerByKey.size
     const groups = new Map();
 
     (routePositions || []).forEach((p) => {
@@ -2372,8 +2371,7 @@ export default function TrackerDashboard() {
       if (!trackerId) return;
 
       const key = String(trackerId);
-      const marker = visibleMarkerByKey.get(key);
-      if (!marker) return;
+      const marker = visibleMarkerByKey.get(key) || null;
 
       const lat = Number(p?.lat);
       const lng = Number(p?.lng);
