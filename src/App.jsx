@@ -116,7 +116,6 @@ function MainAppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RootEntry />} />
-      <Route path="/logout" element={<Logout />} />
 
       {/* Public */}
       <Route path="/privacy" element={<Privacy />} />
@@ -339,6 +338,7 @@ export default function App() {
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/accept-invite" element={<TrackerInviteStart />} />
       <Route path="/pay" element={<PayPage />} />
+      <Route path="/logout" element={<Logout />} />
       <Route path="/*" element={<MainApp />} />
     </Routes>
   );

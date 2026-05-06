@@ -282,6 +282,7 @@ Esto evita crear organizaciones basura y permite flujos de onboarding controlado
 ## Ruta /logout: salida fuerte y cambio de cuenta
 
 - La ruta `/logout` implementa un cierre de sesión fuerte: ejecuta `signOut` de Supabase, limpia `localStorage` y `sessionStorage`, y redirige automáticamente a `/login?mode=magic`.
+- Debe estar definida en el router superior, fuera de `AuthProvider`, `AuthGuard` y `RequireOrg`, para que siempre pueda limpiar la sesión aunque haya problemas de autenticación, permisos o estado de organización.
 - Úsala siempre que se requiera cambiar de cuenta, limpiar sesión corrupta o forzar reautenticación.
 - Es la vía recomendada para:
   - Apps TWA (Trusted Web Activity) que necesitan asegurar cambio de usuario.
