@@ -91,7 +91,9 @@ export default function SignUp() {
     <div className="max-w-md mx-auto p-6">
       <h1 className="text-2xl font-bold mb-1">{t("auth.signup.title")}</h1>
       <p className="text-sm text-gray-600 mb-6">
-        {t("auth.signup.subtitle")}
+        {googleEnabled
+          ? t("auth.signup.subtitle")
+          : "Crea tu cuenta con Magic Link."}
       </p>
 
       <form onSubmit={onSubmit} className="space-y-4">
@@ -148,15 +150,16 @@ export default function SignUp() {
             {sending ? t("auth.signup.buttons.creating") : t("auth.signup.buttons.create")}
         </button>
 
-        <div className="relative my-2">
-          <div className="pointer-events-none absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
+        {googleEnabled && (
+          <div className="relative my-2">
+            <div className="pointer-events-none absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-gray-500">{t("auth.signup.separator")}</span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">{t("auth.signup.separator")}</span>
-          </div>
-        </div>
-
+        )}
 
         {googleEnabled && (
           <button
