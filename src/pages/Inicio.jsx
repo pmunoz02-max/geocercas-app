@@ -178,6 +178,7 @@ export default function Inicio() {
             {t("home.missingContextBody", { defaultValue: "Tu cuenta ya existe, pero todavía no está vinculada a una organización." })}
           </p>
 
+
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-900 text-sm">
             <b>Si eres tracker:</b>
             <ol className="list-decimal list-inside mt-2 space-y-1">
@@ -186,6 +187,15 @@ export default function Inicio() {
               <li>Abre el enlace desde este mismo teléfono.</li>
               <li>Después podrás usar el tracking GPS.</li>
             </ol>
+            <div className="mt-5 flex justify-center">
+              <button
+                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow-md"
+                onClick={() => window.location.assign('/tracker-install')}
+                type="button"
+              >
+                {t("home.installTrackerAppCta", { defaultValue: "Instalar app para tracking GPS" })}
+              </button>
+            </div>
           </div>
 
           <div className="text-sm text-slate-700 space-y-1 pt-2">

@@ -34,6 +34,12 @@ Este documento es la referencia actual y viva del flujo de invitación y trackin
 - El flujo correcto es: login exitoso → mensaje de bienvenida/espera → usuario espera invitación o asignación de rol.
 - Nunca dejar al usuario sin feedback visual o con la app bloqueada sin explicación.
 
+### Botón para instalar app de tracking
+
+- En este estado, la pantalla muestra un botón visible que lleva a `/tracker-install` para instalar o abrir la app de tracking GPS.
+- Este botón **no** debe apuntar a la antigua página de Google Play ni a enlaces externos obsoletos.
+- El objetivo es facilitar la instalación directa o apertura de la app de tracking oficial desde el flujo de onboarding.
+
 ---
 
 ## Sin membresía: NO_ORG_CONTEXT y espera de invitación
