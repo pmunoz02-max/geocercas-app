@@ -1,5 +1,4 @@
-﻿  // Devuelve el nombre amigable del tracker según prioridad solicitada
-// Nombre amigable de tracker según prioridad estricta
+﻿// Nombre amigable de tracker según prioridad estricta
 function getFriendlyTrackerName(tracker) {
   return (
     tracker?.display_name ||
@@ -2467,18 +2466,6 @@ export default function TrackerDashboard() {
       live: getTrackerLiveStatus(latest),
     };
   }, [selectedTrackerId, routePositions, positions]);
-
-  useEffect(() => {
-    console.log("[tracker-route-runtime]", {
-      selectedTrackerId,
-      routePositions: routePositions?.length || 0,
-      allTrackerPaths: allTrackerPaths?.length || 0,
-      firstAllPathPoints: allTrackerPaths?.[0]?.latlngs?.length || 0,
-      selectedPathPoints: selectedTrackerPath?.latlngs?.length || 0,
-      firstRoutePosition: routePositions?.[0] || null,
-      lastRoutePosition: routePositions?.[routePositions.length - 1] || null,
-    });
-  }, [selectedTrackerId, routePositions, allTrackerPaths, selectedTrackerPath]);
 
   const mapFitPoints = useMemo(() => {
     if (selectedTrackerId === "all") {

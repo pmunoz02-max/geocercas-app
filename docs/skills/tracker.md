@@ -389,6 +389,15 @@ export function getTrackerKey(row) {
 
 ---
 
+## Historial de rutas: consulta y visualización
+
+- El historial de rutas debe consultarse de la base de datos (`tracker_positions`) ordenando primero por los registros más nuevos (`recorded_at` y `created_at` descendente) y aplicando el límite de filas.
+- Antes de dibujar la línea en el dashboard, los resultados deben reordenarse de más antiguo a más nuevo para asegurar la visualización cronológica correcta.
+- Al cambiar la ventana de tiempo (time window), se debe limpiar el historial actual y resetear cualquier modo de historial activo (por ejemplo, isHistoryRequested debe ponerse en false).
+- Esto garantiza que el usuario siempre vea el historial relevante y actualizado para la ventana seleccionada, sin residuos de estados anteriores.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.
