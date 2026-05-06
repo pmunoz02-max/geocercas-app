@@ -281,12 +281,12 @@ Esto evita crear organizaciones basura y permite flujos de onboarding controlado
 
 ## Ruta /logout: salida fuerte y cambio de cuenta
 
-- La ruta `/logout` implementa un cierre de sesión fuerte: ejecuta `signOut` de Supabase, limpia `localStorage` y `sessionStorage`, y redirige automáticamente a `/login?mode=magic&logout=1&switchAccount=1`.
-- El uso de los parámetros `logout=1` y `switchAccount=1` en la URL de login fuerza el modo Magic Link, limpia cualquier correo/contraseña precargados y garantiza un cambio de cuenta seguro y sin residuos de sesión previa.
+- La ruta `/logout` implementa un cierre de sesión ultra-fuerte: ejecuta `signOut` de Supabase, limpia `localStorage`, `sessionStorage`, **cookies**, **caches**, **service workers** e **IndexedDB** (especialmente relevante para TWA/Chrome Android), y redirige automáticamente a `/login?mode=magic&logout=1&switchAccount=1&t={timestamp}`.
+- El uso de los parámetros `logout=1` y `switchAccount=1` en la URL de login fuerza el modo Magic Link, limpia cualquier correo/contraseña precargados y garantiza un cambio de cuenta seguro y sin residuos de sesión previa. Se agrega un timestamp para evitar caché y asegurar la redirección.
 - Debe estar definida en el router superior, fuera de `AuthProvider`, `AuthGuard` y `RequireOrg`, para que siempre pueda limpiar la sesión aunque haya problemas de autenticación, permisos o estado de organización.
 - Úsala siempre que se requiera cambiar de cuenta, limpiar sesión corrupta o forzar reautenticación.
 - Es la vía recomendada para:
   - Apps TWA (Trusted Web Activity) que necesitan asegurar cambio de usuario.
   - Revisores o testers que alternan entre cuentas.
   - Trackers o usuarios atrapados con sesión incorrecta o tokens caducados.
-- No basta con cerrar sesión visualmente: esta ruta garantiza que no quedan residuos de sesión previa en el navegador.
+- No basta con cerrar sesión visualmente: esta ruta garantiza que no quedan residuos de sesión previa en el navegador, incluyendo datos persistentes de cookies, caches, service workers e IndexedDB, lo cual es crítico en TWA/Chrome Android.
