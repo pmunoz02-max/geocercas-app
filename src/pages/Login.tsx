@@ -53,17 +53,25 @@ function sleep(ms: number) {
 }
 
 export default function Login() {
-    // Badge de entorno según hostname
-    const envBadge = useMemo(() => {
-      const host = window.location.hostname;
-      if (host === "app.tugeocercas.com") return "PRODUCCIÓN";
-      if (host === "preview.tugeocercas.com" || host.endsWith(".vercel.app")) return "PREVIEW";
-      if (host === "localhost" || host === "127.0.0.1") return "LOCAL";
-      return "";
-    }, []);
+  // Badge de entorno según hostname
+  const envBadge = useMemo(() => {
+    const host = window.location.hostname;
+    if (host === "app.tugeocercas.com") return "PRODUCCIÓN";
+    if (host === "preview.tugeocercas.com" || host.endsWith(".vercel.app")) return "PREVIEW";
+    if (host === "localhost" || host === "127.0.0.1") return "LOCAL";
+    return "";
+  }, []);
+
   const location = useLocation();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+
+  // /logout redirige con estos flags para cambio de cuenta seguro.
+  // En ese flujo forzamos Magic Link y no reutilizamos email/password previos.
+  const forceMagic = useMemo(() => {
+    const sp = new URLSearchParams(location.search || "");
+    return sp.get("logout") === "1" || sp.get("switchAccount") === "1";
+  }, [location.search]);
 
   const hasModeInUrl = useMemo(
     () => hasQueryParam(location.search, "mode"),
@@ -84,8 +92,9 @@ export default function Login() {
   }, []);
 
   const initialMode = useMemo<Mode>(() => {
+    if (forceMagic) return "magic";
     return hasModeInUrl ? modeFromUrl : modeFromStorage;
-  }, [hasModeInUrl, modeFromUrl, modeFromStorage]);
+  }, [forceMagic, hasModeInUrl, modeFromUrl, modeFromStorage]);
 
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
@@ -114,10 +123,32 @@ export default function Login() {
     setNextInput(nextFromUrl);
   }, [nextFromUrl]);
 
+  // Cambio seguro de cuenta: evita que la pantalla vuelva al modo contraseña
+  // y limpia valores que pudieron quedar en estado React o storage del navegador.
   useEffect(() => {
+    if (!forceMagic) return;
+
+    setMode("magic");
+    setEmail("");
+    setPassword("");
+    setShowPassword(false);
+    setMsg(null);
+    setErr(null);
+
+    try {
+      localStorage.setItem(MODE_LS_KEY, "magic");
+    } catch {}
+  }, [forceMagic]);
+
+  useEffect(() => {
+    if (forceMagic) {
+      if (mode !== "magic") setMode("magic");
+      return;
+    }
+
     if (!hasModeInUrl) return;
     if (modeFromUrl !== mode) setMode(modeFromUrl);
-  }, [hasModeInUrl, modeFromUrl, mode]);
+  }, [forceMagic, hasModeInUrl, modeFromUrl, mode]);
 
   useEffect(() => {
     try {
@@ -132,6 +163,12 @@ export default function Login() {
 
     const sp = new URLSearchParams(location.search || "");
     sp.set("mode", nextMode);
+
+    // Si el usuario cambia manualmente de pestaña después de /logout,
+    // salimos del flujo forzado para no dejarlo atrapado en Magic Link.
+    sp.delete("logout");
+    sp.delete("switchAccount");
+
     navigate(`/login?${sp.toString()}`, { replace: true });
   }
 
@@ -336,7 +373,7 @@ export default function Login() {
           </div>
 
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-white">
-            {t("landing.heroTitlePrefix")}{" "}
+            {t("landing.heroTitlePrefix")} {" "}
             <span className="text-emerald-300">
               {t("landing.heroTitleHighlight")}
             </span>
@@ -417,7 +454,12 @@ export default function Login() {
             </div>
           )}
 
-          <form className="mt-5 space-y-4" onSubmit={onSubmit}>
+          <form
+            key={forceMagic ? "switch-account-form" : "login-form"}
+            className="mt-5 space-y-4"
+            autoComplete={forceMagic ? "off" : "on"}
+            onSubmit={onSubmit}
+          >
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-200">
                 {t("login.emailLabel")}
@@ -425,7 +467,10 @@ export default function Login() {
               <input
                 className={inputClass}
                 type="email"
-                autoComplete="email"
+                name={forceMagic ? "switch-account-email" : "email"}
+                autoComplete={forceMagic ? "off" : "email"}
+                autoCorrect="off"
+                spellCheck={false}
                 inputMode="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -443,7 +488,8 @@ export default function Login() {
                   <input
                     className={`${inputClass} pr-12`}
                     type={showPassword ? "text" : "password"}
-                    autoComplete="current-password"
+                    name={forceMagic ? "switch-account-password" : "password"}
+                    autoComplete={forceMagic ? "off" : "current-password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={t("login.passwordPlaceholder")}
@@ -500,22 +546,22 @@ export default function Login() {
             <summary className="cursor-pointer select-none">{debugLabel}</summary>
             <div className="mt-2 space-y-2">
               <div>
-                {t("login.debug.supabase", { defaultValue: "Supabase" })}:{" "}
+                {t("login.debug.supabase", { defaultValue: "Supabase" })}: {" "}
                 <span className="break-all text-slate-300">{supabaseUrlHost}</span>
               </div>
               <div>
-                Redirect Magic Link:{" "}
+                Redirect Magic Link: {" "}
                 <span className="break-all text-slate-300">{redirectTo}</span>
               </div>
               <div>
-                Redirect Reset:{" "}
+                Redirect Reset: {" "}
                 <span className="break-all text-slate-300">{resetRedirectTo}</span>
               </div>
               <div>
                 Mode: <span className="break-all text-slate-300">{mode}</span>
               </div>
               <div>
-                hasModeInUrl:{" "}
+                hasModeInUrl: {" "}
                 <span className="break-all text-slate-300">{String(hasModeInUrl)}</span>
               </div>
             </div>

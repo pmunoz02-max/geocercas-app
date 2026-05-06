@@ -10,7 +10,7 @@ export default function Logout() {
       } catch {}
       try { localStorage.clear(); } catch {}
       try { sessionStorage.clear(); } catch {}
-      window.location.replace("/login?mode=magic");
+      window.location.replace("/login?mode=magic&logout=1&switchAccount=1");
     }
     doLogout();
   }, []);
