@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 const BUILD_TAG = "tracker_open_runtime_exchange_v6_20260428";
-const ANDROID_PACKAGE = "com.fenice.geocercas";
-const PLAY_STORE_URL = `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`;
-const PLAY_STORE_WEB_URL = PLAY_STORE_URL;
+const androidPlayUrl = (import.meta.env.VITE_ANDROID_PLAY_URL || "").trim();
+const hasAndroidPlayUrl = androidPlayUrl.length > 0;
+const PLAY_STORE_URL = androidPlayUrl;
+const PLAY_STORE_WEB_URL = androidPlayUrl;
 
 function clean(value) {
   return String(value || "").trim();
@@ -447,7 +448,9 @@ export default function TrackerOpen() {
   }, [runtimeSession]);
 
   const installApp = () => {
-    window.location.href = PLAY_STORE_URL;
+    if (hasAndroidPlayUrl) {
+      window.location.href = androidPlayUrl;
+    }
   };
 
   const openAndroid = () => {
@@ -491,9 +494,27 @@ export default function TrackerOpen() {
             No se generó la sesión segura de seguimiento. Solicita una nueva invitación o vuelve a abrir el enlace original.
           </p>
           <p style={styles.error}>{errorMessage}</p>
-          <button type="button" style={styles.secondaryButton} onClick={installApp}>
-            Instalar desde Google Play
-          </button>
+          <div style={styles.actions}>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={openAndroid}
+              disabled={!intentUrl}
+            >
+              Ya tengo la app
+            </button>
+            {hasAndroidPlayUrl && (
+              <button type="button" style={styles.secondaryButton} onClick={installApp}>
+                Instalar desde Google Play
+              </button>
+            )}
+            {!hasAndroidPlayUrl && (
+              <div style={{marginTop: 8, color: '#64748b', fontSize: 14}}>
+                La instalación oficial para Android todavía no está disponible desde esta pantalla.<br />
+                Abre esta página desde tu teléfono y usa “Ya tengo la app” después de instalar o abrir la app autorizada.
+              </div>
+            )}
+          </div>
           {/* Debug UI eliminado */}
         </section>
       </main>
@@ -518,16 +539,20 @@ export default function TrackerOpen() {
           >
             Ya tengo la app
           </button>
-
-          <button type="button" style={styles.secondaryButton} onClick={installApp}>
-            Instalar desde Google Play
-          </button>
+          {hasAndroidPlayUrl && (
+            <button type="button" style={styles.secondaryButton} onClick={installApp}>
+              Instalar desde Google Play
+            </button>
+          )}
+          {!hasAndroidPlayUrl && (
+            <div style={{marginTop: 8, color: '#64748b', fontSize: 14}}>
+                La instalación oficial para Android todavía no está disponible desde esta pantalla.<br />
+              Abre esta página desde tu teléfono y usa “Ya tengo la app” después de instalar o abrir la app autorizada.
+            </div>
+          )}
         </div>
 
-        <p style={styles.note}>
-          Si Google Play muestra “Item not found”, la app todavía no está disponible para tu cuenta de prueba.
-          Instálala desde Android Studio y vuelve a tocar “Ya tengo la app”.
-        </p>
+        {/* Instrucciones neutrales cuando no hay URL oficial de instalación */}
 
         {/* Debug UI eliminado */}
       </section>

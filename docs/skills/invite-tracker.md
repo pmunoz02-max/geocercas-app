@@ -37,8 +37,9 @@ Este documento es la referencia actual y viva del flujo de invitación y trackin
 ### Botón para instalar app de tracking
 
 - En este estado, la pantalla muestra un botón visible que lleva a `/tracker-install` para instalar o abrir la app de tracking GPS.
-- Este botón **no** debe apuntar a la antigua página de Google Play ni a enlaces externos obsoletos.
-- El objetivo es facilitar la instalación directa o apertura de la app de tracking oficial desde el flujo de onboarding.
+- En `/tracker-install`, el botón "Instalar desde Google Play" solo se muestra si existe la variable de entorno `VITE_ANDROID_PLAY_URL`.
+- Mientras no exista `VITE_ANDROID_PLAY_URL`, **no** debe mostrarse ningún enlace ni botón que apunte a la antigua página de Google Play ni a enlaces externos obsoletos.
+- El objetivo es facilitar la instalación directa o apertura de la app de tracking oficial desde el flujo de onboarding, evitando confusión con versiones antiguas o no autorizadas.
 
 ---
 
