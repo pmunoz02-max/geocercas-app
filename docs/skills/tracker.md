@@ -398,6 +398,14 @@ export function getTrackerKey(row) {
 
 ---
 
+## Polilíneas de rutas: uso de todos los puntos
+
+- Las polilíneas de recorrido de trackers en el dashboard deben construirse usando todos los routePositions ordenados de la ventana de tiempo seleccionada.
+- No se debe recortar el historial mostrado usando MAX_HISTORY_PER_TRACKER ni ningún otro límite artificial: la visualización debe reflejar exactamente todos los puntos devueltos por la consulta para la ventana activa.
+- Esto asegura que el usuario vea el historial completo de la ventana seleccionada, sin saltos ni truncamientos inesperados.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.

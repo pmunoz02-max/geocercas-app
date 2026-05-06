@@ -2400,8 +2400,7 @@ export default function TrackerDashboard() {
       .map((group, idx) => {
         const sorted = group.points
           .slice()
-          .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0))
-          .slice(-MAX_HISTORY_PER_TRACKER);
+          .sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
 
         return {
           trackerId: group.trackerId,
@@ -2445,8 +2444,7 @@ export default function TrackerDashboard() {
 
     const trackerRoutePositions = (Array.isArray(routePositions) ? routePositions : [])
       .filter((p) => getTrackerKey(p) === selectedTrackerId)
-      .sort((a, b) => getPositionTs(a) - getPositionTs(b))
-      .slice(-MAX_HISTORY_PER_TRACKER);
+      .sort((a, b) => getPositionTs(a) - getPositionTs(b));
 
     const latlngs = trackerRoutePositions
       .map((p) => [Number(p?.lat), Number(p?.lng)])
