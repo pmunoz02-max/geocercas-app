@@ -276,3 +276,15 @@ Desde 2026-05, el endpoint `/api/auth/ensure-context` **ya no crea organización
 - Solo si el usuario ya tiene al menos una membresía, se resuelve contexto normal y se expone la organización activa.
 
 Esto evita crear organizaciones basura y permite flujos de onboarding controlados para testers y usuarios invitados.
+
+---
+
+## Ruta /logout: salida fuerte y cambio de cuenta
+
+- La ruta `/logout` implementa un cierre de sesión fuerte: ejecuta `signOut` de Supabase, limpia `localStorage` y `sessionStorage`, y redirige automáticamente a `/login?mode=magic`.
+- Úsala siempre que se requiera cambiar de cuenta, limpiar sesión corrupta o forzar reautenticación.
+- Es la vía recomendada para:
+  - Apps TWA (Trusted Web Activity) que necesitan asegurar cambio de usuario.
+  - Revisores o testers que alternan entre cuentas.
+  - Trackers o usuarios atrapados con sesión incorrecta o tokens caducados.
+- No basta con cerrar sesión visualmente: esta ruta garantiza que no quedan residuos de sesión previa en el navegador.

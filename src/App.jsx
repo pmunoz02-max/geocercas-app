@@ -1,3 +1,4 @@
+import Logout from "./pages/Logout.jsx";
 import VerGeocerca from "./pages/VerGeocerca.jsx";
 import Privacy from "./pages/Privacy.jsx";
 import Terms from "./pages/Terms.jsx";
@@ -115,6 +116,7 @@ function MainAppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<RootEntry />} />
+      <Route path="/logout" element={<Logout />} />
 
       {/* Public */}
       <Route path="/privacy" element={<Privacy />} />
