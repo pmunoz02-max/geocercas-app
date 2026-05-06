@@ -35,6 +35,8 @@ Este documento es la referencia actual y viva del flujo de invitación y trackin
 - Nunca dejar al usuario sin feedback visual o con la app bloqueada sin explicación.
 
 ### Botón para instalar app de tracking
+- El nombre del package Android **debe obtenerse siempre** de la variable de entorno `VITE_ANDROID_PACKAGE_NAME`.
+- Nunca debe hardcodearse el package antiguo ni ningún valor fijo en el frontend o backend.
 
 - En este estado, la pantalla muestra un botón visible que lleva a `/tracker-install` para instalar o abrir la app de tracking GPS.
 - En `/tracker-install`, el botón "Instalar desde Google Play" solo se muestra si existe la variable de entorno `VITE_ANDROID_PLAY_URL`.

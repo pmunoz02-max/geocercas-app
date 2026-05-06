@@ -2,10 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 const BUILD_TAG = "tracker_open_runtime_exchange_v6_20260428";
+
 const androidPlayUrl = (import.meta.env.VITE_ANDROID_PLAY_URL || "").trim();
 const hasAndroidPlayUrl = androidPlayUrl.length > 0;
 const PLAY_STORE_URL = androidPlayUrl;
 const PLAY_STORE_WEB_URL = androidPlayUrl;
+
+const ANDROID_PACKAGE = (import.meta.env.VITE_ANDROID_PACKAGE_NAME || "").trim();
+const hasAndroidPackage = ANDROID_PACKAGE.length > 0;
 
 function clean(value) {
   return String(value || "").trim();
@@ -57,6 +61,7 @@ function buildTrackerGpsUrl({ runtimeToken, orgId, trackerUserId }) {
 }
 
 function buildAndroidIntentUrl({ runtimeToken, orgId, trackerUserId }) {
+  if (!hasAndroidPackage) return null;
   const params = new URLSearchParams();
 
   // IMPORTANTE: token debe ser SIEMPRE runtime token, nunca invite token.
@@ -79,7 +84,9 @@ function buildAndroidIntentUrl({ runtimeToken, orgId, trackerUserId }) {
 
   params.set("source", "tracker-open-runtime");
 
-  const fallbackUrl = encodeURIComponent(PLAY_STORE_WEB_URL);
+  const fallbackUrl = encodeURIComponent(
+    PLAY_STORE_WEB_URL || `${window.location.origin}/tracker-install`
+  );
   return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=${ANDROID_PACKAGE};S.browser_fallback_url=${fallbackUrl};end`;
 }
 
