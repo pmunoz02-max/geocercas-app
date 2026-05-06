@@ -1,10 +1,11 @@
 // src/pages/SignUp.tsx
+
 import { FormEvent, useState } from "react";
-// Detecta si Google está habilitado por variable de entorno (solo si === "true")
-const googleEnabled = import.meta.env.VITE_AUTH_GOOGLE_ENABLED === "true";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
+// Detecta si Google está habilitado por variable de entorno (solo si === "true")
+const googleEnabled = import.meta.env.VITE_AUTH_GOOGLE_ENABLED === "true";
 
 export default function SignUp() {
   const { t } = useTranslation();
