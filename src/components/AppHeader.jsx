@@ -1,4 +1,4 @@
-﻿// src/components/AppHeader.jsx
+// src/components/AppHeader.jsx
 import { Link } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { useTranslation } from "react-i18next";
@@ -65,7 +65,7 @@ export default function AppHeader() {
           </div>
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-semibold text-slate-900">
-              {safeText(t("landing.brandName", { defaultValue: "App Geocercas" }))}
+              {safeText(t("landing.brandName", { defaultValue: "GeoField GPS" }))}
             </span>
             <span className="text-[11px] text-slate-500">
               {safeText(

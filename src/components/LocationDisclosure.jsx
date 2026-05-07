@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+﻿import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 const LS_DISCLOSURE_ACCEPTED = "geocercas_location_disclosure_accepted_v1";
@@ -63,7 +63,7 @@ export default function LocationDisclosure({ onAccepted, title, body1, body2, co
             {body1 ||
               tr(
                 "trackerGps.disclosure.body1",
-                "App Geocercas collects your location even when the app is closed or the phone is locked in order to record positions and validate geofence entry and exit during the workday."
+                "GeoField GPS collects your location even when the app is closed or the phone is locked in order to record positions and validate geofence entry and exit during the workday."
               )}
           </p>
 
@@ -98,3 +98,4 @@ export default function LocationDisclosure({ onAccepted, title, body1, body2, co
 }
 
 export { LS_DISCLOSURE_ACCEPTED };
+

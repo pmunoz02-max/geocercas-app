@@ -1,4 +1,4 @@
-﻿// src/components/Layout.jsx
+// src/components/Layout.jsx
 import { Outlet, Link } from "react-router-dom";
 import { useTranslation } from 'react-i18next';
 import MainNav from "@/components/MainNav";
@@ -20,7 +20,7 @@ export default function Layout() {
       <header className="sticky top-0 z-50 border-b bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <Link to="/inicio" className="font-semibold text-lg whitespace-nowrap">
-            ðŸ›°ï¸ App Geocercas
+            ðŸ›°ï¸ GeoField GPS
           </Link>
 
           {/* CONTEXTO + NAV */}
@@ -52,9 +52,10 @@ export default function Layout() {
 
       {/* FOOTER */}
       <footer className="border-t text-xs text-slate-600 text-center py-3 bg-white">
-        Â© {new Date().getFullYear()} App Geocercas â€” Todos los derechos reservados.
+        Â© {new Date().getFullYear()} GeoField GPS â€” Todos los derechos reservados.
       </footer>
     </div>
   );
 }
+
 

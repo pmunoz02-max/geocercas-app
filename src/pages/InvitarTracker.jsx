@@ -377,7 +377,7 @@ export default function InvitarTracker() {
   function buildTrackerOnboardingMessage() {
     const email = normalizeEmail(emailInput) || "[correo]";
 
-    return `Hola, primero debes instalar la app Geocercas GPS y crear una cuenta usando este mismo correo: ${email}.
+    return `Hola, primero debes instalar la app GeoField GPS y crear una cuenta usando este mismo correo: ${email}.
 
 Después de crear la cuenta, entra una vez a la app. No tienes que configurar nada todavía.
 
@@ -690,7 +690,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
             <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm">
               <li>
                 {t("inviteTracker.identity.stepInstall", {
-                  defaultValue: "Instalar Geocercas GPS.",
+                  defaultValue: "Instalar GeoField GPS.",
                 })}
               </li>
               <li>

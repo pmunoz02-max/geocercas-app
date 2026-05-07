@@ -1,4 +1,4 @@
-// src/pages/DeleteAccountPage.jsx
+﻿// src/pages/DeleteAccountPage.jsx
 import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -111,7 +111,7 @@ export default function DeleteAccountPage() {
           <p className="mt-2 text-sm text-slate-600">
             {t("deleteAccount.subtitle", {
               defaultValue:
-                "Request permanent deletion of your App Geocercas account and associated data.",
+                "Request permanent deletion of your GeoField GPS account and associated data.",
             })}
           </p>
         </div>
@@ -286,7 +286,7 @@ export default function DeleteAccountPage() {
               </button>
               {!canSubmit && (
                 <p className="text-xs text-slate-500 mt-2">
-                  Debes cancelar tu suscripción antes de eliminar la cuenta
+                  Debes cancelar tu suscripciÃ³n antes de eliminar la cuenta
                 </p>
               )}
 

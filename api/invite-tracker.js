@@ -33,10 +33,12 @@ function buildTrackerLinks({ req, org_id, inviteToken, runtimeToken, trackerUser
 
   const webFallbackUrl = `${origin}/tracker-accept?${webParams.toString()}`;
 
+  const androidPackage = (process.env.VITE_ANDROID_PACKAGE_NAME || "com.fenice.geofieldgps").trim();
+
   return {
     native_deep_link: nativeDeepLink,
     web_fallback_url: webFallbackUrl,
-    android_package: "com.fenice.geocercas",
+    android_package: androidPackage,
   };
 }
 
@@ -184,7 +186,7 @@ export default async function handler(req, res) {
         // Respaldo web: https://.../tracker-accept?inviteToken=...&org_id=...
         native_scheme: "geocercas",
         native_host: "tracker",
-        android_package: "com.fenice.geocercas",
+        android_package: (process.env.VITE_ANDROID_PACKAGE_NAME || "com.fenice.geofieldgps").trim(),
         web_origin: origin,
         web_fallback_path: "/tracker-accept",
       }),

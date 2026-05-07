@@ -1,9 +1,9 @@
-import React, { useMemo } from "react";
+﻿import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 /**
  * VideoDemoPage
- * - Página protegida (la protección la hace App.jsx con AuthGuard + Shell).
+ * - PÃ¡gina protegida (la protecciÃ³n la hace App.jsx con AuthGuard + Shell).
  * - Embed por defecto via URL (YouTube/Vimeo/Drive/etc).
  * - Universal: permite cambiar el origen sin tocar el componente,
  *   solo cambiando VITE_HELP_VIDEO_URL en Vercel/.env.
@@ -19,7 +19,7 @@ export default function VideoDemoPage() {
     // o cualquier embed permitido.
     const envUrl = (import.meta.env.VITE_HELP_VIDEO_URL || "").trim();
 
-    // Fallback seguro (no rompe build). Si no hay URL, se mostrará un aviso.
+    // Fallback seguro (no rompe build). Si no hay URL, se mostrarÃ¡ un aviso.
     return envUrl || "";
   }, []);
 
@@ -35,7 +35,7 @@ export default function VideoDemoPage() {
             Video demo
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Una vista rápida del flujo principal: geocercas, personal, tracker y
+            Una vista rÃ¡pida del flujo principal: geocercas, personal, tracker y
             reportes.
           </p>
         </div>
@@ -64,7 +64,7 @@ export default function VideoDemoPage() {
         {!videoUrl ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
             <div className="text-sm font-semibold text-amber-900">
-              Video no configurado todavía
+              Video no configurado todavÃ­a
             </div>
             <p className="mt-1 text-sm text-amber-800">
               Para habilitar el video, define la variable{" "}
@@ -90,14 +90,14 @@ export default function VideoDemoPage() {
         ) : (
           <div>
             <div className="mb-3 text-sm font-medium text-slate-800">
-              Reproducción
+              ReproducciÃ³n
             </div>
 
             {/* Responsive 16:9 */}
             <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200 bg-black shadow-sm">
               <div className="pb-[56.25%]" />
               <iframe
-                title="App Geocercas - Video demo"
+                title="GeoField GPS - Video demo"
                 src={videoUrl}
                 className="absolute inset-0 h-full w-full"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -108,10 +108,10 @@ export default function VideoDemoPage() {
 
             <div className="mt-4 rounded-xl bg-slate-50 p-4">
               <div className="text-sm font-semibold text-slate-900">
-                Tip (monetización)
+                Tip (monetizaciÃ³n)
               </div>
               <p className="mt-1 text-sm text-slate-600">
-                Puedes tener 2 videos: uno público (básico) y otro PRO (avanzado)
+                Puedes tener 2 videos: uno pÃºblico (bÃ¡sico) y otro PRO (avanzado)
                 cambiando la URL por plan. Lo dejamos listo para eso con una
                 sola variable de entorno por entorno/plan.
               </p>
@@ -122,3 +122,4 @@ export default function VideoDemoPage() {
     </div>
   );
 }
+

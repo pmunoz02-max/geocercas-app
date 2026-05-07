@@ -85,7 +85,11 @@ function clearLegacyTrackerTokens() {
   }
 }
 
+const ANDROID_PACKAGE = (import.meta.env.VITE_ANDROID_PACKAGE_NAME || "com.fenice.geofieldgps").trim();
+const hasAndroidPackage = ANDROID_PACKAGE.length > 0;
+
 function buildNativeIntentUrl(runtimeToken, trackerUserId, orgId) {
+  if (!hasAndroidPackage) return null;
   const params = new URLSearchParams();
   params.set("token", runtimeToken || "");
   params.set("tracker_runtime_token", runtimeToken || "");
@@ -93,7 +97,7 @@ function buildNativeIntentUrl(runtimeToken, trackerUserId, orgId) {
   params.set("tracker_user_id", trackerUserId || "");
   params.set("org_id", orgId || "");
 
-  return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=com.fenice.geocercas;end`;
+  return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=${ANDROID_PACKAGE};end`;
 }
 
 function requestCurrentPositionOnce() {
@@ -569,7 +573,7 @@ export default function TrackerInviteStart() {
               {t("common.actions.continueInBrowser", "Continuar en navegador")}
             </button>
             <p className="mt-3 text-xs text-green-700">
-              {t("tracker.invite.nativeReadyHint", "Si Android pregunta con qué app abrir, elige Geocercas.")}
+              {t("tracker.invite.nativeReadyHint", "Si Android pregunta con qué app abrir, elige GeoField GPS.")}
             </p>
           </div>
         )}

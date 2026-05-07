@@ -76,7 +76,7 @@ export default function Header() {
         {/* Marca */}
         <div className="flex items-center gap-3" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span className="text-lg font-semibold tracking-wide" style={{ fontSize: '1.125rem', fontWeight: 600 }}>
-            App Geocercas
+            GeoField GPS
           </span>
         </div>
 
@@ -119,4 +119,5 @@ export default function Header() {
     </header>
   );
 }
+
 

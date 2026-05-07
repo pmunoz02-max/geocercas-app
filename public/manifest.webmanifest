@@ -1,6 +1,6 @@
 {
-  "name": "App Geocercas",
-  "short_name": "Geocercas",
+  "name": "GeoField GPS",
+  "short_name": "GeoField GPS",
   "description": "Control de personal por geocercas. Asigna personal a zonas, registra actividades y calcula costos en tiempo real.",
   "start_url": "/",
   "scope": "/",
@@ -35,3 +35,4 @@
     }
   ]
 }
+

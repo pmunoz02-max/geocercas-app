@@ -65,7 +65,7 @@ export default function OnboardingCreateOrgPage() {
       <div style={styles.card}>
         <h1 style={styles.title}>Crea tu organizaciÃ³n</h1>
         <p style={styles.text}>
-          Para usar App Geocercas necesitas una organizaciÃ³n. Esto habilita el
+          Para usar GeoField GPS necesitas una organizaciÃ³n. Esto habilita el
           modelo multi-tenant y la seguridad por organizaciÃ³n.
         </p>
 
@@ -133,4 +133,5 @@ const styles = {
   },
   msg: { marginTop: 12, color: "#e2e8f0" },
 };
+
 

@@ -64,7 +64,7 @@
     "title": "Administradores"
   },
   "app": {
-    "brand": "App Geocercas",
+    "brand": "GeoField GPS",
     "header": {
       "goToPanel": "Ir al panel",
       "loggedAs": "Sesión iniciada como",
@@ -99,7 +99,7 @@
       "billing": "Facturation",
       "tracker": "Tracker"
     },
-    "title": "App Geocercas"
+    "title": "GeoField GPS"
   },
   "asignaciones": {
     "actions": {
@@ -410,7 +410,7 @@
     }
   },
   "dashboard": {
-    "welcome": "Bienvenue sur App Geocercas",
+    "welcome": "Bienvenue sur GeoField GPS",
     "sessionAs": "Connecté en tant que {{role}}",
     "email": "E-mail",
     "organizationId": "ID de l’organisation",
@@ -1000,7 +1000,7 @@
   },
   "deleteAccount": {
     "title": "Eliminar cuenta",
-    "subtitle": "Solicita la eliminación permanente de tu cuenta de App Geocercas y de los datos asociados.",
+    "subtitle": "Solicita la eliminación permanente de tu cuenta de GeoField GPS y de los datos asociados.",
     "warning": {
       "title": "Advertencia",
       "body": "Eliminar tu cuenta es permanente y no se puede deshacer."
@@ -1067,9 +1067,9 @@
       },
       "queEs": {
         "badge": "Información",
-        "body": "Conoce la visión, los casos de uso y los beneficios de App Geocercas para tu organización.",
+        "body": "Conoce la visión, los casos de uso y los beneficios de GeoField GPS para tu organización.",
         "cta": "Leer más",
-        "title": "¿Qué es App Geocercas?"
+        "title": "¿Qué es GeoField GPS?"
       },
       "soporte": {
         "badge": "Soporte",
@@ -1079,14 +1079,14 @@
       },
       "videoDemo": {
         "badge": "Video",
-        "body": "Mira una demostración corta de cómo funciona App Geocercas en la vida real.",
+        "body": "Mira una demostración corta de cómo funciona GeoField GPS en la vida real.",
         "cta": "Ver video demo",
         "title": "Video demo"
       }
     },
     "header": {
       "badge": "Centro de ayuda y recursos",
-      "subtitle": "Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de App Geocercas.",
+      "subtitle": "Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de GeoField GPS.",
       "title": "Bienvenido a tu panel"
     },
     "userInfo": {
@@ -1171,7 +1171,7 @@
     "accessTitle": "Acceso con cuenta autorizada",
     "assistanceControlBody": "Verifica quién estuvo dentro de cada geocerca, en qué horario y en qué actividad.",
     "assistanceControlTitle": "Control de asistencia",
-    "brandName": "App Geocercas",
+    "brandName": "GeoField GPS",
     "brandTagline": "Control de personal por geocercas",
     "bulletCostsBody": "Consulta paneles tipo Power BI con los costos por persona, actividad y geocerca.",
     "bulletCostsTitle": "Costos",
@@ -1189,7 +1189,7 @@
     "goPanel": "Ir al panel",
     "goToDashboard": "Ir al panel",
     "heroBadge": "Contrôle intelligent sur le terrain",
-    "heroSubtitle": "App Geocercas vous permet d’assigner des personnes à des zones, enregistrer des activités et calculer les coûts en temps réel.",
+    "heroSubtitle": "GeoField GPS vous permet d’assigner des personnes à des zones, enregistrer des activités et calculer les coûts en temps réel.",
     "heroTitle": "Gérez votre équipe avec des géofences intelligentes partout dans le monde",
     "heroTitleHighlight": "des géofences intelligentes",
     "heroTitlePrefix": "Gérez votre équipe avec",
@@ -1298,7 +1298,7 @@
     "showPassword": "Afficher le mot de passe",
     "submit": "Se connecter",
     "submitting": "Connexion en cours…",
-    "subtitle": "Accédez à votre compte App Geocercas",
+    "subtitle": "Accédez à votre compte GeoField GPS",
     "title": "Se connecter",
     "userNotAuthorized": "Cet e-mail n'est pas autorisé. Demandez une invitation à l'administrateur."
   },
@@ -1755,7 +1755,7 @@
     },
     "disclosure": {
       "title": "Ubicación en segundo plano",
-      "body1": "App Geocercas recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
+      "body1": "GeoField GPS recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
       "body2": "Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión.",
       "continue": "Continuar"
     },

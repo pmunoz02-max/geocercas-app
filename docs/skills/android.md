@@ -1,4 +1,5 @@
-# Skill: Android (TWA + Native Tracking)
+
+# Skill: Android (GeoField GPS, TWA + Native Tracking)
 
 ## Objetivo
 Garantizar que la app Android (TWA + servicios nativos) funcione sin pantallas en blanco, mantenga tracking estable y cumpla requisitos de Google Play.
@@ -7,57 +8,62 @@ Garantizar que la app Android (TWA + servicios nativos) funcione sin pantallas e
 
 ## Arquitectura actual
 
-La app Android usa:
+La app Android oficial es **GeoField GPS** (`com.fenice.geofieldgps`).
 
-```txt
+Host de producción: `app.tugeocercas.com`
+
+No usar ni referenciar el package antiguo ni Google Play anterior.
+
+Para vinculación TWA y verificación de dominio, el archivo `assetlinks.json` debe contener el SHA-256 real de la firma de producción.
+
+---
+
+La app usa:
+
+```
 TWA / WebView + Backend (Vercel + Supabase) + Servicio nativo de ubicación
+```
+
 Flujo:
 
-Usuario abre app
-WebView carga app web
-Usuario login
-Se inicia tracking desde UI
-Android recibe tokens
-Servicio nativo envía GPS al backend
-Backend guarda posiciones
-Dashboard refleja datos
-Regla crítica
-Android NO debe depender solo del WebView para tracking
+- Usuario abre app
+- WebView carga app web
+- Usuario login
+- Se inicia tracking desde UI
+- Android recibe tokens
+- Servicio nativo envía GPS al backend
+- Backend guarda posiciones
+- Dashboard refleja datos
 
-El tracking debe seguir funcionando en background.
+Regla crítica: Android NO debe depender solo del WebView para tracking. El tracking debe seguir funcionando en background.
 
-Permisos obligatorios
-INTERNET
-ACCESS_NETWORK_STATE
-ACCESS_FINE_LOCATION
-ACCESS_COARSE_LOCATION
-ACCESS_BACKGROUND_LOCATION
-FOREGROUND_SERVICE
-FOREGROUND_SERVICE_LOCATION
-RECEIVE_BOOT_COMPLETED
-Tracking nativo
+Permisos obligatorios:
+- INTERNET
+- ACCESS_NETWORK_STATE
+- ACCESS_FINE_LOCATION
+- ACCESS_COARSE_LOCATION
+- ACCESS_BACKGROUND_LOCATION
+- FOREGROUND_SERVICE
+- FOREGROUND_SERVICE_LOCATION
+- RECEIVE_BOOT_COMPLETED
 
-Debe usar:
-
-Foreground Service + FusedLocationProviderClient
+Tracking nativo:
+- Foreground Service + FusedLocationProviderClient
 
 Responsabilidades:
+- obtener ubicación periódica
+- enviar a /api/send-position
+- manejar reconexión
+- usar access_token válido
 
-obtener ubicación periódica
-enviar a /api/send-position
-manejar reconexión
-usar access_token válido
-Tokens
-
+Tokens:
 Flujo:
+- WebView obtiene sesión
+- JS envía tokens a Android: `window.Android.startTracking(accessToken, refreshToken)`
+- Android guarda en TokenStore
+- Servicio usa tokens para enviar posiciones
 
-WebView obtiene sesión
-JS envía tokens a Android:
-window.Android.startTracking(accessToken, refreshToken)
-Android guarda en:
-TokenStore
-Servicio usa tokens para enviar posiciones
-Regla crítica de tokens
+Regla crítica de tokens:
 No perder tokens al cerrar app
 Manejar refresh_token
 No enviar requests sin token válido
