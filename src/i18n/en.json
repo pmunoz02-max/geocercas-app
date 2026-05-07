@@ -101,7 +101,7 @@
     "title": "Administrators"
   },
   "app": {
-    "brand": "App Geofences",
+    "brand": "GeoField GPS",
     "header": {
       "goToPanel": "Go to panel",
       "loggedAs": "Signed in as",
@@ -135,7 +135,7 @@
       "billing": "Billing",
       "tracker": "Tracker"
     },
-    "title": "App Geofences"
+    "title": "GeoField GPS"
   },
   "asignaciones": {
     "actions": {
@@ -447,7 +447,7 @@
     }
   },
   "dashboard": {
-    "welcome": "Welcome to App Geofences",
+    "welcome": "Welcome to GeoField GPS",
     "sessionAs": "Signed in as {{role}}",
     "email": "Email",
     "organizationId": "Organization ID",
@@ -1037,7 +1037,7 @@
   },
   "deleteAccount": {
     "title": "Delete account",
-    "subtitle": "Request permanent deletion of your App Geofences account and associated data.",
+    "subtitle": "Request permanent deletion of your GeoField GPS account and associated data.",
     "warning": {
       "title": "Warning",
       "body": "Deleting your account is permanent and cannot be undone."
@@ -1104,9 +1104,9 @@
       },
       "queEs": {
         "badge": "Information",
-        "body": "Learn about the vision, use cases and benefits of App Geofences for your organization.",
+        "body": "Learn about the vision, use cases and benefits of GeoField GPS for your organization.",
         "cta": "Read more",
-        "title": "What is App Geofences?"
+        "title": "What is GeoField GPS?"
       },
       "soporte": {
         "badge": "Support",
@@ -1116,14 +1116,14 @@
       },
       "videoDemo": {
         "badge": "Video",
-        "body": "Watch a short demo of how App Geofences works in real life.",
+        "body": "Watch a short demo of how GeoField GPS works in real life.",
         "cta": "View video demo",
         "title": "Video demo"
       }
     },
     "header": {
       "badge": "Help center and resources",
-      "subtitle": "From here you can access instructions, frequently asked questions, support and App Geofences updates.",
+      "subtitle": "From here you can access instructions, frequently asked questions, support and GeoField GPS updates.",
       "title": "Welcome to your panel"
     },
     "userInfo": {
@@ -1208,7 +1208,7 @@
     "accessTitle": "Access with authorized account",
     "assistanceControlBody": "Verify who was inside each geofence, at what time and in what activity.",
     "assistanceControlTitle": "Attendance control",
-    "brandName": "App Geofences",
+    "brandName": "GeoField GPS",
     "brandTagline": "Personnel control with geofences",
     "bulletCostsBody": "Consult Power BI-style panels with costs by person, activity and geofence.",
     "bulletCostsTitle": "Costs",
@@ -1226,7 +1226,7 @@
     "goPanel": "Go to panel",
     "goToDashboard": "Go to panel",
     "heroBadge": "Smart field control",
-    "heroSubtitle": "App Geofences lets you assign people to zones, track activities and calculate costs in real time.",
+    "heroSubtitle": "GeoField GPS lets you assign people to zones, track activities and calculate costs in real time.",
     "heroTitle": "Manage your team with smart geofences anywhere in the world",
     "heroTitleHighlight": "smart geofences",
     "heroTitlePrefix": "Manage your team with",
@@ -1335,7 +1335,7 @@
     "showPassword": "Show password",
     "submit": "Sign in",
     "submitting": "Signing in...",
-    "subtitle": "Access your App Geofences account",
+    "subtitle": "Access your GeoField GPS account",
     "title": "Sign in",
     "userNotAuthorized": "This email is not authorized. Request an invite from the administrator."
   },
@@ -1782,7 +1782,7 @@
     },
     "disclosure": {
       "title": "Background location",
-      "body1": "App Geofences collects your location even when the app is closed or the phone is locked, to record positions and validate entry and exit from geofences during your work shift.",
+      "body1": "GeoField GPS collects your location even when the app is closed or the phone is locked, to record positions and validate entry and exit from geofences during your work shift.",
       "body2": "This information is used solely for operational purposes of the organization and is not shared with third parties or used for advertising. You can stop tracking by revoking the location permission or signing out.",
       "continue": "Continue"
     },
