@@ -10,7 +10,7 @@ export default function RequireOrg({ children }) {
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="text-sm opacity-70">Loadingâ€¦</div>
+        <div className="text-sm opacity-70">Loading…</div>
       </div>
     );
   }

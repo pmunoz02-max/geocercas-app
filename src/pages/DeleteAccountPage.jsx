@@ -286,7 +286,7 @@ export default function DeleteAccountPage() {
               </button>
               {!canSubmit && (
                 <p className="text-xs text-slate-500 mt-2">
-                  Debes cancelar tu suscripciÃ³n antes de eliminar la cuenta
+                  Debes cancelar tu suscripción antes de eliminar la cuenta
                 </p>
               )}
 

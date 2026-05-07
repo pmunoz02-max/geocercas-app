@@ -9,19 +9,19 @@ export default function OnboardingCreateOrgPage() {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    // Si ya tiene org, no deberÃ­a estar aquÃ­ (tu router lo redirigirÃ¡; igual protegemos)
-    if (currentOrg?.id) setMsg("Ya tienes una organizaciÃ³n activa.");
+    // Si ya tiene org, no debería estar aquí (tu router lo redirigirá; igual protegemos)
+    if (currentOrg?.id) setMsg("Ya tienes una organización activa.");
   }, [currentOrg]);
 
   async function createOrg() {
     try {
       setMsg("");
       if (!user) {
-        setMsg("Debes iniciar sesiÃ³n.");
+          setMsg("Debes iniciar sesión.");
         return;
       }
       if (!name.trim()) {
-        setMsg("Escribe el nombre de tu organizaciÃ³n.");
+        setMsg("Escribe el nombre de tu organización.");
         return;
       }
 
@@ -34,17 +34,17 @@ export default function OnboardingCreateOrgPage() {
 
       if (error) throw error;
 
-      // data devuelve org_id (uuid) en la mayorÃ­a de implementaciones.
-      // Pero el estado canÃ³nico debe venir de org_members + organizations.
+      // data devuelve org_id (uuid) en la mayoría de implementaciones.
+      // Pero el estado canónico debe venir de org_members + organizations.
       // 1) refrescamos AuthContext
       if (typeof reloadAuth === "function") {
         await reloadAuth();
       } else if (typeof setCurrentOrg === "function" && data) {
-        // Fallback (si reloadAuth no existe por alguna razÃ³n)
+        // Fallback (si reloadAuth no existe por alguna razón)
         setCurrentOrg({ id: data, name: name.trim() });
       }
 
-      setMsg("OrganizaciÃ³n creada. Redirigiendoâ€¦");
+      setMsg("Organización creada. Redirigiendo…");
       window.location.replace("/app");
     } catch (e) {
       console.error("[OnboardingCreateOrgPage] createOrg error:", e);
@@ -53,7 +53,7 @@ export default function OnboardingCreateOrgPage() {
         e?.message ||
         e?.details ||
         (typeof e === "string" ? e : null) ||
-        "No se pudo crear la organizaciÃ³n.";
+        "No se pudo crear la organización.";
       setMsg(friendly);
     } finally {
       setBusy(false);
@@ -63,23 +63,23 @@ export default function OnboardingCreateOrgPage() {
   return (
     <div style={styles.screen}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Crea tu organizaciÃ³n</h1>
+        <h1 style={styles.title}>Crea tu organización</h1>
         <p style={styles.text}>
-          Para usar GeoField GPS necesitas una organizaciÃ³n. Esto habilita el
-          modelo multi-tenant y la seguridad por organizaciÃ³n.
+          Para usar GeoField GPS necesitas una organización. Esto habilita el
+           modelo multi-tenant y la seguridad por organización.
         </p>
 
-        <label style={styles.label}>Nombre de la organizaciÃ³n</label>
+        <label style={styles.label}>Nombre de la organización</label>
         <input
           style={styles.input}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: Org de Pietro (producciÃ³n)"
+          placeholder="Ej: Org de Pietro (producción)"
           disabled={busy}
         />
 
         <button style={styles.btn} onClick={createOrg} disabled={busy}>
-          {busy ? "Creandoâ€¦" : "Crear mi organizaciÃ³n"}
+          {busy ? "Creando…" : "Crear mi organización"}
         </button>
 
         {msg && <div style={styles.msg}>{msg}</div>}

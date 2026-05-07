@@ -5,16 +5,16 @@ import { useAuth } from "@/context/auth.js";
 /**
  * RouteGuard
  * - Protege rutas privadas por rol.
- * - IMPORTANTE: NO usar para /auth/callback (debe ser pÃºblica).
+ * - IMPORTANTE: NO usar para /auth/callback (debe ser pública).
  */
 export default function RouteGuard({ allow, children }) {
   const { session, role, loading } = useAuth();
   const location = useLocation();
 
-  // Mientras AuthProvider resuelve sesiÃ³n/rol, NO redirigir (evita loops)
+  // Mientras AuthProvider resuelve sesión/rol, NO redirigir (evita loops)
   if (loading) return null;
 
-  // Si NO hay sesiÃ³n -> login (guardando returnTo)
+  // Si NO hay sesión -> login (guardando returnTo)
   if (!session) {
     const returnTo = location.pathname + location.search + location.hash;
     return (
@@ -25,7 +25,7 @@ export default function RouteGuard({ allow, children }) {
     );
   }
 
-  // Hay sesiÃ³n pero rol todavÃ­a no llegÃ³ -> espera (muy comÃºn post-callback)
+  // Hay sesión pero rol todavía no llegó -> espera (muy común post-callback)
   if (!role) return null;
 
   // Si se especifica allow, validar rol

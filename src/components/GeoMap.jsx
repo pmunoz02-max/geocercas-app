@@ -13,8 +13,8 @@ import { useAuth } from "@/context/auth.js";
  * GeoMap (API-first / multi-tenant safe):
  * - Renderiza SOLO lo que llega por props.geocercas.
  * - NO persiste geocercas en localStorage (nunca).
- * - Limpia caches legacy "geocerca_*" que venÃ­an de versiones antiguas.
- * - Dibuja (segÃºn `geocercas`) y emite eventos:
+ * - Limpia caches legacy "geocerca_*" que venían de versiones antiguas.
+ * - Dibuja (según `geocercas`) y emite eventos:
  *    - onCreateFeature({ orgId, nombre, color, geojson, polygon, layer })
  *    - onEditFeature({ orgId, id, geojson, polygon, nombre, color, layer })
  *    - onDeleteFeature({ orgId, id, layer })
@@ -51,7 +51,7 @@ function safeParseJSON(input, label = "JSON") {
       } catch (_) {}
     }
 
-    console.warn(`[GeoMap] ${label} invÃ¡lido (no se pudo parsear):`, input);
+    console.warn(`[GeoMap] ${label} inválido (no se pudo parsear):`, input);
     return null;
   }
 }
@@ -77,7 +77,7 @@ function latLngsFromGeomField(geomInput) {
   if (g.type === "Polygon" && Array.isArray(g.coordinates[0])) {
     ring = g.coordinates[0]; // [[lng,lat], ...]
   } else if (g.type === "MultiPolygon" && Array.isArray(g.coordinates[0])) {
-    ring = g.coordinates[0][0]; // primer polÃ­gono, primer anillo
+    ring = g.coordinates[0][0]; // primer polígono, primer anillo
   } else {
     console.warn("[GeoMap] geom no es Polygon/MultiPolygon:", g.type);
     return null;
@@ -152,7 +152,7 @@ function drawGeocercaOnGroup(fg, row, canEdit) {
 
   const shape = getLatLngsFromRow(row);
   if (!shape) {
-    console.warn("[GeoMap] geocerca sin geometrÃ­a usable, id:", id, row);
+    console.warn("[GeoMap] geocerca sin geometría usable, id:", id, row);
     return false;
   }
 
@@ -200,7 +200,7 @@ function cleanupLegacyGeocercaCache() {
     if (typeof window === "undefined") return;
     const keys = Object.keys(window.localStorage || {});
     for (const k of keys) {
-      // âœ… legacy: geocerca_<Nombre>
+      // OK legacy: geocerca_<Nombre>
       if (String(k).toLowerCase().startsWith("geocerca_")) {
         window.localStorage.removeItem(k);
       }
@@ -230,12 +230,12 @@ export default function GeoMap({
   const center = useMemo(() => [-1.8312, -78.1834], []); // Ecuador
   const zoom = 6;
 
-  // âœ… Limpia cache legacy UNA vez al montar
+  // OK Limpia cache legacy UNA vez al montar
   useEffect(() => {
     cleanupLegacyGeocercaCache();
   }, []);
 
-  // Debug Ãºtil
+  // Debug útil
   useEffect(() => {
     if (typeof window !== "undefined") {
       window.__debug_orgId = orgId || null;
@@ -273,7 +273,7 @@ export default function GeoMap({
       controlsAddedRef.current = true;
     }
 
-    // Habilitar / deshabilitar modos globales segÃºn permisos
+    // Habilitar / deshabilitar modos globales según permisos
     try {
       map.pm.disableGlobalEditMode?.();
       map.pm.disableGlobalDragMode?.();
@@ -281,7 +281,7 @@ export default function GeoMap({
       map.pm.disableDraw?.();
     } catch {}
 
-    // âœ… SOLO lo que viene por props.geocercas
+    // OK SOLO lo que viene por props.geocercas
     fg.clearLayers();
 
     const safeRows = Array.isArray(geocercas) ? geocercas : [];
@@ -489,7 +489,7 @@ export default function GeoMap({
       });
     };
 
-    // âœ… register events
+    // OK register events
     map.on("pm:create", onCreate);
     map.on("pm:edit", onEdit);
     map.on("pm:remove", onRemove);

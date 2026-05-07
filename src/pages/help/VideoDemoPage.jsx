@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 
 /**
  * VideoDemoPage
- * - PÃ¡gina protegida (la protecciÃ³n la hace App.jsx con AuthGuard + Shell).
+ * - Página protegida (la protección la hace App.jsx con AuthGuard + Shell).
  * - Embed por defecto via URL (YouTube/Vimeo/Drive/etc).
  * - Universal: permite cambiar el origen sin tocar el componente,
  *   solo cambiando VITE_HELP_VIDEO_URL en Vercel/.env.
@@ -19,7 +19,7 @@ export default function VideoDemoPage() {
     // o cualquier embed permitido.
     const envUrl = (import.meta.env.VITE_HELP_VIDEO_URL || "").trim();
 
-    // Fallback seguro (no rompe build). Si no hay URL, se mostrarÃ¡ un aviso.
+    // Fallback seguro (no rompe build). Si no hay URL, se mostrará un aviso.
     return envUrl || "";
   }, []);
 
@@ -35,7 +35,7 @@ export default function VideoDemoPage() {
             Video demo
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Una vista rÃ¡pida del flujo principal: geocercas, personal, tracker y
+            Una vista rápida del flujo principal: geocercas, personal, tracker y
             reportes.
           </p>
         </div>
@@ -64,7 +64,7 @@ export default function VideoDemoPage() {
         {!videoUrl ? (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
             <div className="text-sm font-semibold text-amber-900">
-              Video no configurado todavÃ­a
+              Video no configurado todavía
             </div>
             <p className="mt-1 text-sm text-amber-800">
               Para habilitar el video, define la variable{" "}
@@ -90,7 +90,7 @@ export default function VideoDemoPage() {
         ) : (
           <div>
             <div className="mb-3 text-sm font-medium text-slate-800">
-              ReproducciÃ³n
+              Reproducción
             </div>
 
             {/* Responsive 16:9 */}
@@ -108,10 +108,10 @@ export default function VideoDemoPage() {
 
             <div className="mt-4 rounded-xl bg-slate-50 p-4">
               <div className="text-sm font-semibold text-slate-900">
-                Tip (monetizaciÃ³n)
+                Tip (monetización)
               </div>
               <p className="mt-1 text-sm text-slate-600">
-                Puedes tener 2 videos: uno pÃºblico (bÃ¡sico) y otro PRO (avanzado)
+                Puedes tener 2 videos: uno público (básico) y otro PRO (avanzado)
                 cambiando la URL por plan. Lo dejamos listo para eso con una
                 sola variable de entorno por entorno/plan.
               </p>

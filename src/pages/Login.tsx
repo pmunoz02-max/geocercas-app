@@ -58,6 +58,9 @@ export default function Login() {
     const host = window.location.hostname;
     if (host === "app.tugeocercas.com") return "PRODUCCIÓN";
     if (host === "preview.tugeocercas.com" || host.endsWith(".vercel.app")) return "PREVIEW";
+    // Todos los textos literales en español deben estar correctamente acentuados y sin mojibake.
+    // Si encuentras "Iniciar sesión" o similar, reemplaza por "Iniciar sesión".
+    // Este archivo debe guardarse en UTF-8 (VS Code: Save with Encoding → UTF-8).
     if (host === "localhost" || host === "127.0.0.1") return "LOCAL";
     return "";
   }, []);

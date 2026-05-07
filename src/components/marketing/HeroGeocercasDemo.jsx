@@ -228,18 +228,18 @@ export default function HeroGeocercasDemo() {
           </h1>
 
           <p className="max-w-2xl text-pretty text-base leading-relaxed text-slate-600 sm:text-lg">
-            GeoField GPS convierte posiciones GPS en una vista operativa clara: quiÃ©n se moviÃ³, quiÃ©n entrÃ³,
-            quiÃ©n saliÃ³ y quÃ© estÃ¡ pasando ahora mismo en el mapa.
+            GeoField GPS convierte posiciones GPS en una vista operativa clara: quién se movió, quién entró,
+            quién salió y qué está pasando ahora mismo en el mapa.
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button as={Link} to="/demo">
               Probar demo interactiva
-              <span aria-hidden="true">â†’</span>
+              <span aria-hidden="true">→</span>
             </Button>
             <Button variant="outline">
-              Solicitar presentaciÃ³n
-              <span aria-hidden="true">â†’</span>
+              Solicitar presentación
+              <span aria-hidden="true">→</span>
             </Button>
           </div>
 

@@ -21,7 +21,7 @@ function Modal({ open, title, children, onClose }) {
             onClick={onClose}
             type="button"
           >
-            âœ•
+            ✕
           </button>
         </div>
         <div className="p-5">{children}</div>
@@ -172,7 +172,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionCreate", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -187,13 +187,13 @@ export default function Personal() {
         activeOrgId
       );
 
-      // âœ… Si el backend no devolviÃ³ item, tratamos como error real
+      // ✅ Si el backend no devolvió item, tratamos como error real
       const newId = getRowId(item);
       if (!item || !newId) {
         throw new Error("Save succeeded but server did not return item.");
       }
 
-      // âœ… UI inmediata (NO dependemos del GET)
+      // ✅ UI inmediata (NO dependemos del GET)
       setItems((curr) => upsertIntoList(curr, item));
 
       // cerrar modal + reset
@@ -206,7 +206,7 @@ export default function Personal() {
         vigente: true,
       });
 
-      // limpiar bÃºsqueda para que no te oculte lo reciÃ©n creado
+      // limpiar búsqueda para que no te oculte lo recién creado
       setQ("");
 
       // opcional: refrescar lista real (pero no bloquea la UI)
@@ -238,7 +238,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionEdit", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -318,7 +318,7 @@ export default function Personal() {
     if (!canEdit) {
       setMsg(
         t("personal.errorNoPermissionDelete", {
-          defaultValue: "You donâ€™t have permission.",
+          defaultValue: "You don’t have permission.",
         })
       );
       return;
@@ -335,14 +335,14 @@ export default function Personal() {
     );
     if (!ok) return;
 
-    // âœ… UI inmediato
+    // OK UI inmediato
     const prevItems = items;
     setItems((curr) => curr.filter((r) => getRowId(r) !== id));
 
     try {
       setBusy(true);
       await deletePersonal(id, activeOrgId);
-      // NO hacemos load() aquÃ­ para evitar que reaparezca si el backend es soft-delete + list cache.
+      // NO hacemos load() aquí para evitar que reaparezca si el backend es soft-delete + list cache.
       setMsg(t("personal.bannerDeleted", { defaultValue: "Deleted." }));
     } catch (e) {
       if (

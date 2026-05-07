@@ -1,16 +1,16 @@
 ﻿// src/pages/SeleccionarOrganizacion.jsx
-// Pantalla para elegir organizaciÃ³n despuÃ©s del login.
+// Pantalla para elegir organización después del login.
 //
-// LÃ³gica universal:
+// Lógica universal:
 //  - Las organizaciones se obtienen SIEMPRE del AuthContext (orgs).
-//  - Si ya existe currentOrg, se redirige automÃ¡ticamente:
-//      * TRACKER  â†’ /tracker
-//      * OWNER/ADMIN (u otros) â†’ /inicio
-//  - Si el usuario tiene una sola organizaciÃ³n, se autoselecciona.
+//  - Si ya existe currentOrg, se redirige automáticamente:
+//      * TRACKER  → /tracker
+//      * OWNER/ADMIN (u otros) → /inicio
+//  - Si el usuario tiene una sola organización, se autoselecciona.
 //  - Si tiene varias, elige manualmente tocando la tarjeta.
 //
 // Esto evita rebotes tipo: /inicio se ve un instante y luego va a
-// /seleccionar-organizacion, porque la decisiÃ³n depende de loading
+// /seleccionar-organizacion, porque la decisión depende de loading
 // y del estado real de currentOrg en AuthContext.
 
 import React, { useEffect } from "react";
@@ -23,7 +23,7 @@ function SeleccionarOrganizacion() {
   const { t } = useTranslation();
   const {
     user,
-    loading,       // loading global del AuthContext (sesiÃ³n + datos)
+    loading,       // loading global del AuthContext (sesión + datos)
     orgs,          // organizaciones normalizadas
     currentOrg,
     currentRole,
@@ -44,7 +44,7 @@ function SeleccionarOrganizacion() {
   };
 
   // ------------------------------------------------------------
-  // 1) Si no hay usuario y ya no estamos cargando â†’ a /login
+  // 1) Si no hay usuario y ya no estamos cargando → a /login
   // ------------------------------------------------------------
   useEffect(() => {
     if (loading) return;
@@ -52,8 +52,8 @@ function SeleccionarOrganizacion() {
   }, [loading, user, navigate]);
 
   // ------------------------------------------------------------
-  // 2) Si YA hay currentOrg, no tiene sentido estar aquÃ­
-  //    â†’ redirigir directo segÃºn el rol
+  // 2) Si YA hay currentOrg, no tiene sentido estar aquí
+  //    → redirigir directo según el rol
   // ------------------------------------------------------------
   useEffect(() => {
     if (loading) return;
@@ -66,8 +66,8 @@ function SeleccionarOrganizacion() {
   }, [loading, user, currentOrg, currentRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------
-  // 3) Si no hay currentOrg pero sÃ³lo hay una organizaciÃ³n,
-  //    autoseleccionarla y redirigir automÃ¡ticamente.
+  // 3) Si no hay currentOrg pero sólo hay una organización,
+  //    autoseleccionarla y redirigir automáticamente.
   // ------------------------------------------------------------
   useEffect(() => {
     if (loading) return;
@@ -82,7 +82,7 @@ function SeleccionarOrganizacion() {
   }, [loading, user, currentOrg, orgs, setCurrentOrg]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ------------------------------------------------------------
-  // 4) SelecciÃ³n manual de organizaciÃ³n (card click)
+  // 4) Selección manual de organización (card click)
   // ------------------------------------------------------------
   const handleSelectOrg = (org) => {
     if (!org) return;
@@ -92,7 +92,7 @@ function SeleccionarOrganizacion() {
   };
 
   // ------------------------------------------------------------
-  // 5) Render segÃºn estado
+  // 5) Render según estado
   // ------------------------------------------------------------
   if (loading) {
     return (
@@ -136,10 +136,10 @@ function SeleccionarOrganizacion() {
     );
   }
 
-  // Si llegamos aquÃ­:
+  // Si llegamos aquí:
   // - hay usuario
   // - hay organizaciones
-  // - currentOrg es null (o la autoselecciÃ³n aÃºn no ha corrido)
+  // - currentOrg es null (o la autoselección aún no ha corrido)
   // Mostramos la lista para que el usuario escoja.
   return (
     <div className="p-6 max-w-2xl mx-auto">

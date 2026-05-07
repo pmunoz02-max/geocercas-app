@@ -2,7 +2,7 @@
 import { useAuth } from "@/context/auth.js";
 
 /**
- * OrgSelector â€” vOrgStable-1
+ * OrgSelector — vOrgStable-1
  * - Usa organizations/currentOrg/selectOrg desde AuthContext
  * - Visible para owner/admin/root (isAdmin)
  * - Nunca renderiza objetos en JSX
@@ -41,7 +41,7 @@ export default function OrgSelector({ className = "" }) {
       .map((o) => {
         const id = safeText(o?.id, "");
         const name = safeText(o?.name, "");
-        const label = name || "OrganizaciÃ³n";
+        const label = name || "Organización";
         return { id, label };
       })
       .filter((o) => !!o.id);
@@ -53,7 +53,7 @@ export default function OrgSelector({ className = "" }) {
     return (
       <div className={safeText(className)}>
         <select className="border rounded px-2 py-1 text-xs opacity-70" disabled value="">
-          <option value="">Cargandoâ€¦</option>
+          <option value="">Cargando…</option>
         </select>
       </div>
     );
@@ -71,11 +71,11 @@ export default function OrgSelector({ className = "" }) {
         disabled={switchingOrg}
       >
         {orgOptions.length === 0 ? (
-          <option value="">OrganizaciÃ³n</option>
+          <option value="">Organización</option>
         ) : (
           orgOptions.map(({ id, label }) => (
             <option key={id} value={id}>
-              {safeText(label, "OrganizaciÃ³n")}
+              {safeText(label, "Organización")}
             </option>
           ))
         )}

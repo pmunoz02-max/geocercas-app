@@ -10,11 +10,11 @@ import { formatPlanPrice } from "../config/pricing";
 const FALLBACKS = {
   "app.brand": {
     es: "GeoField GPS",
-    en: "App Geofences",
-    fr: "App GÃ©orepÃ¨res",
+    en: "GeoField GPS",
+    fr: "GeoField GPS",
   },
   "app.header.login": {
-    es: "Iniciar sesiÃ³n",
+    es: "Iniciar sesión",
     en: "Sign in",
     fr: "Se connecter",
   },
@@ -31,27 +31,27 @@ const FALLBACKS = {
   "landing.footerPrivacy": {
     es: "Privacidad",
     en: "Privacy",
-    fr: "ConfidentialitÃ©",
+    fr: "Confidentialité",
   },
   "landing.footerTerms": {
-    es: "TÃ©rminos",
+    es: "Términos",
     en: "Terms",
     fr: "Conditions",
   },
   "landing.heroBadge": {
     es: "Plataforma SaaS para control GPS y geocercas",
     en: "SaaS platform for GPS control and geofences",
-    fr: "Plateforme SaaS pour le contrÃ´le GPS et les gÃ©orepÃ¨res",
+    fr: "Plateforme SaaS pour le contrôle GPS et les géorepères",
   },
   "landing.heroTitle": {
     es: "Convierte posiciones GPS en control operativo",
     en: "Turn GPS positions into operational control",
-    fr: "Transformez les positions GPS en contrÃ´le opÃ©rationnel",
+    fr: "Transformez les positions GPS en contrôle opérationnel",
   },
   "landing.heroSubtitle": {
     es: "GeoField GPS ayuda a empresas a supervisar trackers, validar presencia en zonas definidas y consultar reportes operativos desde una plataforma web segura.",
-    en: "App Geofences helps companies supervise trackers, validate presence in defined zones, and review operational reports from a secure web platform.",
-    fr: "App GÃ©orepÃ¨res aide les entreprises Ã  superviser les trackers, valider la prÃ©sence dans des zones dÃ©finies et consulter des rapports opÃ©rationnels depuis une plateforme web sÃ©curisÃ©e.",
+    en: "GeoField GPS helps companies supervise trackers, validate presence in defined zones, and review operational reports from a secure web platform.",
+    fr: "GeoField GPS aide les entreprises à superviser les trackers, valider la présence dans des zones définies et consulter des rapports opérationnels depuis une plateforme web sécurisée.",
   },
   "landing.ctaStart": {
     es: "Empezar ahora",
@@ -61,22 +61,22 @@ const FALLBACKS = {
   "landing.panelTitle": {
     es: "Panel operativo",
     en: "Operations panel",
-    fr: "Panneau opÃ©rationnel",
+    fr: "Panneau opérationnel",
   },
   "landing.demoBadge": {
     es: "Monitoreo GPS con geocercas en tiempo real",
     en: "Real-time GPS monitoring with geofences",
-    fr: "Suivi GPS en temps rÃ©el avec gÃ©orepÃ¨res",
+    fr: "Suivi GPS en temps réel avec géorepères",
   },
   "landing.demoTitle": {
     es: "Visualiza personal, rutas y eventos dentro de tus geocercas.",
     en: "Visualize staff, routes, and events inside your geofences.",
-    fr: "Visualisez le personnel, les itinÃ©raires et les Ã©vÃ©nements dans vos gÃ©orepÃ¨res.",
+    fr: "Visualisez le personnel, les itinéraires et les événements dans vos géorepères.",
   },
   "landing.demoSubtitle": {
     es: "GeoField GPS convierte posiciones GPS en una vista operativa clara para tu equipo.",
-    en: "App Geofences turns GPS positions into a clear operational view for your team.",
-    fr: "App GÃ©orepÃ¨res transforme les positions GPS en une vue opÃ©rationnelle claire pour votre Ã©quipe.",
+    en: "GeoField GPS turns GPS positions into a clear operational view for your team.",
+    fr: "GeoField GPS transforme les positions GPS en une vue opérationnelle claire pour votre équipe.",
   },
   "landing.demoMapLabel": {
     es: "Mapa en vivo",
@@ -86,7 +86,7 @@ const FALLBACKS = {
   "landing.demoEventsLabel": {
     es: "Eventos",
     en: "Events",
-    fr: "Ã‰vÃ©nements",
+    fr: "Événements",
   },
   "landing.demoReportsLabel": {
     es: "Reportes",
@@ -96,12 +96,12 @@ const FALLBACKS = {
   "landing.featureGeofencesTitle": {
     es: "Geocercas operativas",
     en: "Operational geofences",
-    fr: "GÃ©orepÃ¨res opÃ©rationnels",
+    fr: "Géorepères opérationnels",
   },
   "landing.featureGeofencesBody": {
     es: "Define zonas de trabajo y valida entradas, salidas y permanencia del personal en campo.",
     en: "Define work zones and validate entries, exits, and field staff presence.",
-    fr: "DÃ©finissez des zones de travail et validez les entrÃ©es, sorties et la prÃ©sence du personnel sur le terrain.",
+    fr: "Définissez des zones de travail et validez les entrées, sorties et la présence du personnel sur le terrain.",
   },
   "landing.featureTrackingTitle": {
     es: "Tracking GPS",
@@ -109,29 +109,29 @@ const FALLBACKS = {
     fr: "Suivi GPS",
   },
   "landing.featureTrackingBody": {
-    es: "Consulta posiciones recientes de trackers autorizados para mejorar la supervisiÃ³n diaria.",
+    es: "Consulta posiciones recientes de trackers autorizados para mejorar la supervisión diaria.",
     en: "Check recent positions from authorized trackers to improve daily supervision.",
-    fr: "Consultez les positions rÃ©centes des trackers autorisÃ©s pour amÃ©liorer la supervision quotidienne.",
+    fr: "Consultez les positions récentes des trackers autorisés pour améliorer la supervision quotidienne.",
   },
   "landing.featureReportsTitle": {
-    es: "Reportes de operaciÃ³n",
+    es: "Reportes de operación",
     en: "Operations reports",
-    fr: "Rapports opÃ©rationnels",
+    fr: "Rapports opérationnels",
   },
   "landing.featureReportsBody": {
-    es: "Convierte movimientos GPS en informaciÃ³n Ãºtil para control, auditorÃ­a y gestiÃ³n.",
+    es: "Convierte movimientos GPS en información útil para control, auditoría y gestión.",
     en: "Turn GPS movements into useful information for control, auditing, and management.",
-    fr: "Transformez les mouvements GPS en informations utiles pour le contrÃ´le, lâ€™audit et la gestion.",
+    fr: "Transformez les mouvements GPS en informations utiles pour le contrôle, l’audit et la gestion.",
   },
   "landing.featureAccessTitle": {
     es: "Acceso empresarial",
     en: "Business access",
-    fr: "AccÃ¨s entreprise",
+    fr: "Accès entreprise",
   },
   "landing.featureAccessBody": {
     es: "Gestiona usuarios, trackers y organizaciones desde una plataforma web segura.",
     en: "Manage users, trackers, and organizations from a secure web platform.",
-    fr: "GÃ©rez les utilisateurs, les trackers et les organisations depuis une plateforme web sÃ©curisÃ©e.",
+    fr: "Gérez les utilisateurs, les trackers et les organisations depuis une plateforme web sécurisée.",
   },
   "landing.pricingTitle": {
     es: "Precios",
@@ -139,19 +139,19 @@ const FALLBACKS = {
     fr: "Tarifs",
   },
   "landing.pricingSubtitle": {
-    es: "Planes simples para empezar y escalar segÃºn el tamaÃ±o de tu operaciÃ³n.",
+    es: "Planes simples para empezar y escalar según el tamaño de tu operación.",
     en: "Simple plans to start and scale according to the size of your operation.",
-    fr: "Des forfaits simples pour dÃ©marrer et Ã©voluer selon la taille de votre opÃ©ration.",
+    fr: "Des forfaits simples pour démarrer et évoluer selon la taille de votre opération.",
   },
   "landing.planBasicTitle": {
-    es: "BÃ¡sico",
+    es: "Básico",
     en: "Basic",
     fr: "Basique",
   },
   "landing.planBasicDesc": {
-    es: "Para pruebas y equipos pequeÃ±os.",
+    es: "Para pruebas y equipos pequeños.",
     en: "For tests and small teams.",
-    fr: "Pour les tests et les petites Ã©quipes.",
+    fr: "Pour les tests et les petites équipes.",
   },
   "landing.planBasicPrice": {
     es: "Gratis",
@@ -161,7 +161,7 @@ const FALLBACKS = {
   "landing.planBasicDetail": {
     es: "Hasta 3 trackers.",
     en: "Up to 3 trackers.",
-    fr: "Jusquâ€™Ã  3 trackers.",
+    fr: "Jusqu’à 3 trackers.",
   },
   "landing.planProTitle": {
     es: "Pro",
@@ -169,14 +169,14 @@ const FALLBACKS = {
     fr: "Pro",
   },
   "landing.planProDesc": {
-    es: "Para organizaciones en operaciÃ³n.",
+    es: "Para organizaciones en operación.",
     en: "For active organizations.",
-    fr: "Pour les organisations en activitÃ©.",
+    fr: "Pour les organisations en activité.",
   },
   "landing.planProDetail": {
-    es: "Hasta 50 trackers por organizaciÃ³n.",
+    es: "Hasta 50 trackers por organización.",
     en: "Up to 50 trackers per organization.",
-    fr: "Jusquâ€™Ã  50 trackers par organisation.",
+    fr: "Jusqu’à 50 trackers par organisation.",
   },
   "landing.planEnterpriseTitle": {
     es: "Empresas",
@@ -186,27 +186,27 @@ const FALLBACKS = {
   "landing.planEnterpriseDesc": {
     es: "Para operaciones grandes.",
     en: "For large operations.",
-    fr: "Pour les grandes opÃ©rations.",
+    fr: "Pour les grandes opérations.",
   },
   "landing.planEnterpriseDetail": {
-    es: "MÃ¡s de 50 trackers y soporte comercial.",
+    es: "Más de 50 trackers y soporte comercial.",
     en: "More than 50 trackers and commercial support.",
     fr: "Plus de 50 trackers et support commercial.",
   },
   "landing.finalCtaTitle": {
     es: "Convierte posiciones GPS en control operativo",
     en: "Turn GPS positions into operational control",
-    fr: "Transformez les positions GPS en contrÃ´le opÃ©rationnel",
+    fr: "Transformez les positions GPS en contrôle opérationnel",
   },
   "landing.finalCtaSubtitle": {
-    es: "Para soporte, ventas o revisiÃ³n de cuenta, contÃ¡ctanos por correo.",
+    es: "Para soporte, ventas o revisión de cuenta, contáctanos por correo.",
     en: "For support, sales, or account review, contact us by email.",
-    fr: "Pour le support, les ventes ou la rÃ©vision de compte, contactez-nous par e-mail.",
+    fr: "Pour le support, les ventes ou la révision de compte, contactez-nous par e-mail.",
   },
   "landing.footerCopyright": {
     es: "Todos los derechos reservados.",
     en: "All rights reserved.",
-    fr: "Tous droits rÃ©servÃ©s.",
+    fr: "Tous droits réservés.",
   },
 };
 
@@ -284,7 +284,7 @@ export default function Landing() {
         navigate("/dashboard", { replace: true });
       }
     } catch (err) {
-      setLoginError(err.message || "Error de autenticaciÃ³n");
+      setLoginError(err.message || "Error de autenticación");
     }
   }
 
@@ -321,7 +321,7 @@ export default function Landing() {
 
       <main>
         <div style={{ maxWidth: 320, margin: "32px auto", textAlign: "center" }}>
-          <h2>Iniciar sesiÃ³n</h2>
+          <h2>Iniciar sesión</h2>
           <a
             href="/login?mode=magic"
             style={{
@@ -339,18 +339,18 @@ export default function Landing() {
               transition: "background 0.2s"
             }}
           >
-            Entrar con link mÃ¡gico
+            Entrar con link mágico
           </a>
           <div style={{ marginTop: 8, marginBottom: 8 }}>
-            <span style={{ color: "#cbd5e1" }}>Â¿No tienes cuenta? </span>
+            <span style={{ color: "#cbd5e1" }}>¿No tienes cuenta? </span>
             <a href="/signup" style={{ color: "#0ea5e9", fontWeight: 500, textDecoration: "underline" }}>
               Crear cuenta
             </a>
           </div>
           <div style={{ marginTop: 8 }}>
-            <span style={{ color: "#cbd5e1" }}>Â¿Ya tienes contraseÃ±a? </span>
+            <span style={{ color: "#cbd5e1" }}>¿Ya tienes contraseña? </span>
             <a href="/login?mode=password" style={{ color: "#0ea5e9", fontWeight: 500, textDecoration: "underline" }}>
-              Entrar con contraseÃ±a
+              Entrar con contraseña
             </a>
           </div>
         </div>
@@ -489,7 +489,7 @@ export default function Landing() {
 
       <footer className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
         <p>
-          Â© {new Date().getFullYear()} {tr("app.brand")}. {tr("landing.footerCopyright")}
+          © {new Date().getFullYear()} {tr("app.brand")}. {tr("landing.footerCopyright")}
         </p>
         <div className="flex flex-wrap gap-4">
           <Link to="/privacy" className="hover:text-sky-300">

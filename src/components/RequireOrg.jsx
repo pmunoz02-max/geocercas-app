@@ -38,7 +38,7 @@ export default function RequireOrg({ children }) {
   const initLoggedRef = useRef(false);
   const orgHydrationLoggedRef = useRef(false);
 
-  // AutocuraciÃ³n: si estÃ¡ logueado y hay orgs pero falta currentOrg, selecciona la primera
+  // Autocuración: si está logueado y hay orgs pero falta currentOrg, selecciona la primera
   useEffect(() => {
     if (loading || !ready) return;
     if (!isLoggedIn) return;
@@ -60,13 +60,13 @@ export default function RequireOrg({ children }) {
     return <FullScreenLoader text={t("auth.requireOrg.loading")} />;
   }
 
-  // 2) Sin sesiÃ³n -> login
+  // 2) Sin sesión -> login
   if (!isLoggedIn) {
     const next = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?next=${next}`} replace />;
   }
 
-  // 3) Tiene orgs pero todavÃ­a no se asentÃ³ currentOrg (1 render)
+  // 3) Tiene orgs pero todavía no se asentó currentOrg (1 render)
   if (!currentOrg?.id && Array.isArray(organizations) && organizations.length > 0) {
     if (!orgHydrationLoggedRef.current) {
       console.log("[RequireOrg] waiting for currentOrg resolution", {

@@ -14,7 +14,7 @@ export default function NoOrgSelected() {
   const canSelect = Array.isArray(orgs) && orgs.length > 0;
 
   async function refreshHard() {
-    // AuthContext actual no expone refreshContext, asÃ­ que forzamos recarga:
+    // AuthContext actual no expone refreshContext, así que forzamos recarga:
     window.location.reload();
   }
 

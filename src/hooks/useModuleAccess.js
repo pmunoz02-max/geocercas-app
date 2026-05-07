@@ -5,7 +5,7 @@ import { canAccessModule, normalizeRole } from "../lib/permissions";
 export function useModuleAccess(moduleKey) {
   const { role: rawRole, loading } = useAuth();
 
-  // Mientras AuthContext estÃ¡ cargando, NO bloquear nada
+  // Mientras AuthContext está cargando, NO bloquear nada
   if (loading) {
     return {
       role: null,
