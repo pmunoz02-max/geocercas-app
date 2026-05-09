@@ -574,7 +574,15 @@ export default function TrackerInviteStart() {
             </a>
             <button
               type="button"
-              onClick={() => navigate("/tracker-gps", { replace: true })}
+              onClick={() => {
+                // Redirige directo a /tracker-gps con org_id y runtimeToken
+                try {
+                  const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session?.runtimeToken || "")}&tracker_user_id=${encodeURIComponent(session?.trackerUserId || "")}&org_id=${encodeURIComponent(session?.orgId || "")}`;
+                  window.location.replace(url);
+                } catch {
+                  navigate("/tracker-gps", { replace: true });
+                }
+              }}
               className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
             >
               {t("common.actions.continueInBrowser", "Continuar en navegador")}
