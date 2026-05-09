@@ -400,7 +400,14 @@ export default function TrackerInviteStart() {
       }
 
       const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
-      navigate(url, { replace: true });
+
+      // Guardar org_id como currentOrgId y en sessionStorage
+      localStorage.setItem("currentOrgId", session.orgId);
+      sessionStorage.setItem("trackerAcceptedOrgId", session.orgId);
+      sessionStorage.setItem("trackerAcceptedRedirect", url);
+
+      // Redirigir usando window.location.replace para evitar guards/routers
+      window.location.replace(url);
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
       setStatus("accept_failed");

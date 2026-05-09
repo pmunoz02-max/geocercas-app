@@ -37,7 +37,7 @@ function SeleccionarOrganizacion() {
   const goToHomeByRole = (role) => {
     const r = normalizeRole(role);
     if (r === "tracker") {
-      navigate("/tracker", { replace: true });
+      navigate("/tracker-gps", { replace: true });
     } else {
       navigate("/inicio", { replace: true });
     }

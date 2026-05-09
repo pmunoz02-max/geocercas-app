@@ -80,7 +80,20 @@ function RootEntry() {
 
   if (!auth || !auth.initialized) return null;
 
-  if (auth.user) return <Navigate to="/dashboard" replace />;
+  if (auth.user) {
+    // Respeta trackerAcceptedRedirect y rutas /tracker-gps
+    if (typeof window !== "undefined") {
+      const trackerAcceptedRedirect = sessionStorage.getItem("trackerAcceptedRedirect");
+      if (trackerAcceptedRedirect) {
+        sessionStorage.removeItem("trackerAcceptedRedirect");
+        return <Navigate to={trackerAcceptedRedirect} replace />;
+      }
+      if (window.location.pathname.startsWith("/tracker-gps")) {
+        return null; // Ya está en /tracker-gps, no redirigir
+      }
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return <Landing />;
 }

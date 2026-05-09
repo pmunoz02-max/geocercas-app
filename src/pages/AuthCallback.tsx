@@ -227,7 +227,17 @@ export default function AuthCallback() {
           window.history.replaceState({}, document.title, cleanUrl);
         } catch {}
 
-        window.location.replace(next);
+        // Si sessionStorage.trackerAcceptedRedirect existe, redirigir ahí y borrarlo
+        const trackerAcceptedRedirect =
+          typeof window !== "undefined"
+            ? sessionStorage.getItem("trackerAcceptedRedirect")
+            : null;
+        if (trackerAcceptedRedirect) {
+          sessionStorage.removeItem("trackerAcceptedRedirect");
+          window.location.replace(trackerAcceptedRedirect);
+        } else {
+          window.location.replace(next);
+        }
       } catch (e: any) {
         if (!alive) return;
 
