@@ -574,13 +574,16 @@ export default function TrackerInviteStart() {
             </a>
             <button
               type="button"
-              onClick={() => {
-                // Redirige directo a /tracker-gps con org_id y runtimeToken
+              onClick={async () => {
+                // Reutiliza acceptInviteAndContinue y termina con window.location.replace(url)
                 try {
-                  const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session?.runtimeToken || "")}&tracker_user_id=${encodeURIComponent(session?.trackerUserId || "")}&org_id=${encodeURIComponent(session?.orgId || "")}`;
-                  window.location.replace(url);
-                } catch {
-                  navigate("/tracker-gps", { replace: true });
+                  const session = await acceptInviteAndContinue();
+                  if (session) {
+                    const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
+                    window.location.replace(url);
+                  }
+                } catch (e) {
+                  setAcceptError("No se pudo continuar. Intenta de nuevo.");
                 }
               }}
               className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
