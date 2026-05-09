@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 const INVITE_TOKEN_KEYS = [
@@ -49,44 +48,55 @@ function getInviteParams() {
   };
 }
 
+function getStorageItem(key) {
+  if (typeof window === "undefined") return null;
+
+  try {
+    return localStorage.getItem(key) || sessionStorage.getItem(key) || null;
+  } catch {
+    return null;
+  }
+}
+
 function setStorageItem(key, value) {
+  if (typeof window === "undefined") return;
+
   try {
     if (value == null || value === "") return;
-    localStorage.setItem(key, value);
-    sessionStorage.setItem(key, value);
-  } catch {
-    // no-op
-  }
-          <button
-            type="button"
-            onClick={handleAlreadyHasAppClick}
-            className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
-          >
-            {t("common.actions.continueInBrowser", "Continuar en navegador")}
-          </button>
-      "geocercas-tracker-auth",
-    ].forEach((key) => {
-      localStorage.removeItem(key);
-      sessionStorage.removeItem(key);
-    });
+    localStorage.setItem(key, String(value));
+    sessionStorage.setItem(key, String(value));
   } catch {
     // no-op
   }
 }
 
-const ANDROID_PACKAGE = (import.meta.env.VITE_ANDROID_PACKAGE_NAME || "com.fenice.geofieldgps").trim();
-const hasAndroidPackage = ANDROID_PACKAGE.length > 0;
+function removeStorageItem(key) {
+  if (typeof window === "undefined") return;
 
-function buildNativeIntentUrl(runtimeToken, trackerUserId, orgId) {
-  if (!hasAndroidPackage) return null;
+  try {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  } catch {
+    // no-op
+  }
+}
+
+function clearLegacyTrackerTokens() {
+  [
+    "runtimeInviteToken",
+    "trackerRuntimeToken",
+    "tracker_runtime_token",
+    "tracker_access_token",
+    "geocercas-tracker-auth",
+  ].forEach(removeStorageItem);
+}
+
+function buildTrackerGpsUrl(session) {
   const params = new URLSearchParams();
-  params.set("token", runtimeToken || "");
-  params.set("tracker_runtime_token", runtimeToken || "");
-  params.set("userId", trackerUserId || "");
-  params.set("tracker_user_id", trackerUserId || "");
-  params.set("org_id", orgId || "");
-
-  return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=${ANDROID_PACKAGE};end`;
+  params.set("tracker_runtime_token", session.runtimeToken);
+  params.set("tracker_user_id", session.trackerUserId);
+  params.set("org_id", session.orgId);
+  return `/tracker-gps?${params.toString()}`;
 }
 
 function requestCurrentPositionOnce() {
@@ -107,20 +117,6 @@ function requestCurrentPositionOnce() {
 function getGeoErrorMessage(error, t) {
   const code = error?.code;
   const raw = String(error?.message || "").toLowerCase();
-  // Handler para el botón "Ya tengo la app"
-  async function handleAlreadyHasAppClick() {
-    console.log("[tracker-invite] already-has-app clicked");
-    try {
-      const session = await acceptInviteAndContinue();
-      if (session) {
-        const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
-        console.log("[tracker-invite] redirecting to tracker gps", url);
-        window.location.replace(url);
-      }
-    } catch (e) {
-      setAcceptError("No se pudo continuar. Intenta de nuevo.");
-    }
-  }
 
   if (code === 1 || raw.includes("permission")) {
     return t("tracker.invite.errors.blockedSite");
@@ -175,16 +171,13 @@ async function ensureGeolocationPermissionByPrompt(t) {
 }
 
 export default function TrackerInviteStart() {
-  const navigate = useNavigate();
   const { t } = useTranslation();
-
   const initialInviteParams = useMemo(() => getInviteParams(), []);
 
   const [acceptError, setAcceptError] = useState("");
   const [status, setStatus] = useState("ready");
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [nativeLaunchUrl, setNativeLaunchUrl] = useState("");
   const [inviteToken, setInviteToken] = useState(initialInviteParams.inviteToken || "");
   const [orgId, setOrgId] = useState(initialInviteParams.orgId || "");
   const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(
@@ -206,8 +199,10 @@ export default function TrackerInviteStart() {
       setOrgId(latest.orgId);
     }
 
-    console.log("INVITE_TOKEN", latest.inviteToken || inviteToken || null);
-    console.log("INVITE_ORG_ID", latest.orgId || orgId || null);
+    console.log("[tracker-invite] params", {
+      inviteToken: latest.inviteToken || inviteToken || null,
+      orgId: latest.orgId || orgId || null,
+    });
   }, [inviteToken, orgId]);
 
   useEffect(() => {
@@ -218,11 +213,13 @@ export default function TrackerInviteStart() {
     }
 
     setStorageItem("inviteToken", inviteToken);
-    console.log("[tracker] inviteToken saved", inviteToken);
+    console.log("[tracker-invite] inviteToken saved", { hasInviteToken: !!inviteToken });
 
     if (orgId) {
       setStorageItem("tracker_org_id", orgId);
-      console.log("[tracker] orgId saved", orgId);
+      setStorageItem("org_id", orgId);
+      setStorageItem("currentOrgId", orgId);
+      console.log("[tracker-invite] orgId saved", orgId);
     }
   }, [inviteToken, orgId, t]);
 
@@ -232,6 +229,7 @@ export default function TrackerInviteStart() {
     orgId ||
     getStorageItem("tracker_org_id") ||
     getStorageItem("org_id") ||
+    getStorageItem("currentOrgId") ||
     (typeof window !== "undefined" ? window.orgId || null : null);
 
   const isAndroid = useMemo(
@@ -253,12 +251,39 @@ export default function TrackerInviteStart() {
   }, []);
 
   async function persistTrackerSessionFromResponse(data) {
-    const runtimeToken = data?.tracker_runtime_token || null;
-    const resolvedTrackerUserId = data?.tracker_user_id || null;
-    const persistedOrgId = data?.org_id || resolvedOrgId || null;
-    const inviteId = data?.invite_id || null;
+    const runtimeToken =
+      data?.tracker_runtime_token ||
+      data?.runtimeToken ||
+      data?.runtime_token ||
+      data?.session?.tracker_runtime_token ||
+      data?.session?.runtimeToken ||
+      null;
+
+    const resolvedTrackerUserId =
+      data?.tracker_user_id ||
+      data?.trackerUserId ||
+      data?.user_id ||
+      data?.session?.tracker_user_id ||
+      data?.session?.trackerUserId ||
+      null;
+
+    const persistedOrgId =
+      data?.org_id ||
+      data?.orgId ||
+      data?.session?.org_id ||
+      data?.session?.orgId ||
+      resolvedOrgId ||
+      null;
+
+    const inviteId = data?.invite_id || data?.inviteId || data?.session?.invite_id || null;
 
     if (!runtimeToken || !resolvedTrackerUserId || !persistedOrgId) {
+      console.error("[tracker-invite] accept response missing runtime fields", {
+        hasRuntimeToken: !!runtimeToken,
+        hasTrackerUserId: !!resolvedTrackerUserId,
+        hasOrgId: !!persistedOrgId,
+        data,
+      });
       throw new Error("accept_response_missing_runtime_fields");
     }
 
@@ -273,6 +298,7 @@ export default function TrackerInviteStart() {
 
     setStorageItem("tracker_org_id", persistedOrgId);
     setStorageItem("org_id", persistedOrgId);
+    setStorageItem("currentOrgId", persistedOrgId);
 
     if (inviteId) {
       setStorageItem("tracker_invite_id", inviteId);
@@ -336,85 +362,70 @@ export default function TrackerInviteStart() {
   }
 
   function startNativeBridge(session) {
+    if (typeof window === "undefined" || !window.Android) return false;
+
     const runtimeToken = session?.runtimeToken;
     const trackerUserId = session?.trackerUserId;
     const persistedOrgId = session?.orgId;
 
-    if (!window.Android) return false;
-
-    console.log("[TrackerInviteStart] Android bridge disponible", {
+    console.log("[tracker-invite] Android bridge available", {
       hasRuntimeToken: !!runtimeToken,
       trackerUserId,
       orgId: persistedOrgId,
     });
 
-    if (window.Android.saveTrackerSession) {
-      window.Android.saveTrackerSession(runtimeToken, trackerUserId, persistedOrgId);
-    } else if (window.Android.startTracking) {
-      window.Android.startTracking(runtimeToken, trackerUserId, persistedOrgId);
-    }
+    try {
+      if (window.Android.saveTrackerSession) {
+        window.Android.saveTrackerSession(runtimeToken, trackerUserId, persistedOrgId);
+      } else if (window.Android.startTracking) {
+        window.Android.startTracking(runtimeToken, trackerUserId, persistedOrgId);
+      }
 
-    if (window.Android.requestStartTracking) {
-      window.Android.requestStartTracking();
-    }
+      if (window.Android.requestStartTracking) {
+        window.Android.requestStartTracking();
+      }
 
-    return true;
+      return true;
+    } catch (error) {
+      console.warn("[tracker-invite] Android bridge failed; continuing in web GPS page", error);
+      return false;
+    }
   }
 
-  function buildNativeLaunchUrl(session) {
-    const url = buildNativeIntentUrl(
-      session?.runtimeToken,
-      session?.trackerUserId,
-      session?.orgId,
-    );
+  function redirectToTrackerGps(session) {
+    const url = buildTrackerGpsUrl(session);
 
-    console.log("[TrackerInviteStart] native app intent ready", {
-      hasRuntimeToken: !!session?.runtimeToken,
-      trackerUserId: session?.trackerUserId,
-      orgId: session?.orgId,
-      url,
-    });
+    setStorageItem("currentOrgId", session.orgId);
+    setStorageItem("trackerAcceptedOrgId", session.orgId);
+    setStorageItem("trackerAcceptedRedirect", url);
 
-    return url;
+    console.log("[tracker-invite] redirecting to tracker gps", url);
+    window.location.replace(url);
   }
 
   async function acceptInviteAndContinue() {
     try {
       setSubmitting(true);
       setAcceptError("");
-      setNativeLaunchUrl("");
       setStatus("accepting");
 
       const session = await acceptInvite();
-      if (!session) return;
+      if (!session) return null;
 
-      if (startNativeBridge(session)) {
+      // Save to the Android bridge when available, but never stop in an intermediate
+      // install/open-app screen. The authoritative next step is always TrackerGpsPage.
+      const bridgeStarted = startNativeBridge(session);
+      if (bridgeStarted) {
         setStatus("native_bridge_started");
-        return;
       }
 
-      if (isAndroid) {
-        // Chrome/Custom Tabs can block intent:// if fired after an async fetch.
-        // Render a real link so the next tap is a fresh user gesture.
-        const launchUrl = buildNativeLaunchUrl(session);
-        setNativeLaunchUrl(launchUrl);
-        setStatus("ready_to_open_native_app");
-        return;
-      }
-
-      const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
-
-      // Guardar org_id como currentOrgId y en sessionStorage
-      localStorage.setItem("currentOrgId", session.orgId);
-      sessionStorage.setItem("trackerAcceptedOrgId", session.orgId);
-      sessionStorage.setItem("trackerAcceptedRedirect", url);
-
-      // Redirigir usando window.location.replace para evitar guards/routers
-      window.location.replace(url);
+      redirectToTrackerGps(session);
+      return session;
     } catch (error) {
       console.error("[tracker-invite] accept failed", error);
       setStatus("accept_failed");
       setAcceptError(error?.message || "accept_tracker_invite_failed");
+      return null;
     } finally {
       setSubmitting(false);
     }
@@ -436,8 +447,9 @@ export default function TrackerInviteStart() {
       return;
     }
 
-    // En Android externo no pedimos geolocalización web. Aceptamos invitación y abrimos la app nativa.
-    if (isAndroid && !androidBridgeAvailable) {
+    // Android/TWA tracking permissions are handled by TrackerGpsPage. Do not stop
+    // on the old “Ya tengo la app” intermediate activation screen.
+    if (isAndroid || androidBridgeAvailable) {
       await acceptInviteAndContinue();
       return;
     }
@@ -494,25 +506,21 @@ export default function TrackerInviteStart() {
     await handleGrantLocation();
   }
 
-  async function handleOpenApp() {
+  async function handleAlreadyHasAppClick() {
+    console.log("[tracker-invite] already-has-app clicked");
     await acceptInviteAndContinue();
   }
-
-  const handleInstall = () => {
-    window.location.href = "/tracker-gps";
-  };
 
   const showPermissionCard =
     status === "geo_permission_step" ||
     status === "requesting_geo_permission";
 
   const showBlockedCard = status === "geo_permission_required";
-  const showNativeOpenCard = status === "ready_to_open_native_app" && !!nativeLaunchUrl;
 
   const primaryLabel = submitting
     ? t("tracker.invite.processing")
-    : isAndroid && !androidBridgeAvailable
-      ? t("tracker.invite.openAppButton")
+    : isAndroid || androidBridgeAvailable
+      ? t("tracker.invite.openAppButton", "Ya tengo la app")
       : t("tracker.invite.acceptContinue");
 
   return (
@@ -537,10 +545,7 @@ export default function TrackerInviteStart() {
               setConsent(e.target.checked);
               if (e.target.checked) {
                 setAcceptError("");
-                if (
-                  status === "consent_required" ||
-                  status === "accept_failed"
-                ) {
+                if (status === "consent_required" || status === "accept_failed") {
                   setStatus("ready");
                 }
               }
@@ -550,53 +555,15 @@ export default function TrackerInviteStart() {
           <span>{t("tracker.invite.consentLabel")}</span>
         </label>
 
-        {!showPermissionCard && !showBlockedCard && !showNativeOpenCard && (
+        {!showPermissionCard && !showBlockedCard && (
           <button
             type="button"
-            onClick={startPermissionStep}
+            onClick={isAndroid || androidBridgeAvailable ? handleAlreadyHasAppClick : startPermissionStep}
             disabled={submitting || !authToken}
             className="w-full mt-5 rounded-xl bg-blue-600 text-white py-3 font-medium disabled:opacity-60"
           >
             {primaryLabel}
           </button>
-        )}
-
-        {showNativeOpenCard && (
-          <div className="mt-4 rounded-xl border border-green-200 bg-green-50 p-4">
-            <p className="text-green-800 font-semibold">
-              {t("tracker.invite.nativeReadyTitle", "Invitación aceptada")}
-            </p>
-            <p className="mt-2 text-sm text-green-700">
-              {t("tracker.invite.nativeReadyBody", "Ahora toca el botón para abrir la app e iniciar el seguimiento.")}
-            </p>
-            <a
-              href={nativeLaunchUrl}
-              className="block w-full mt-3 rounded-lg bg-blue-600 text-center text-white py-3 font-medium"
-            >
-              {t("tracker.invite.openAppButton")}
-            </a>
-            <button
-              type="button"
-              onClick={async () => {
-                // Reutiliza acceptInviteAndContinue y termina con window.location.replace(url)
-                try {
-                  const session = await acceptInviteAndContinue();
-                  if (session) {
-                    const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
-                    window.location.replace(url);
-                  }
-                } catch (e) {
-                  setAcceptError("No se pudo continuar. Intenta de nuevo.");
-                }
-              }}
-              className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
-            >
-              {t("common.actions.continueInBrowser", "Continuar en navegador")}
-            </button>
-            <p className="mt-3 text-xs text-green-700">
-              {t("tracker.invite.nativeReadyHint", "Si Android pregunta con qué app abrir, elige GeoField GPS.")}
-            </p>
-          </div>
         )}
 
         {showPermissionCard && (
@@ -651,24 +618,14 @@ export default function TrackerInviteStart() {
             </button>
 
             {isAndroid ? (
-              <>
-                <button
-                  type="button"
-                  onClick={handleOpenApp}
-                  disabled={submitting || !authToken}
-                  className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800 disabled:opacity-60"
-                >
-                  {t("common.actions.openApp")}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleInstall}
-                  className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
-                >
-                  {t("common.actions.installApp")}
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={handleAlreadyHasAppClick}
+                disabled={submitting || !authToken}
+                className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800 disabled:opacity-60"
+              >
+                {t("tracker.invite.openAppButton", "Ya tengo la app")}
+              </button>
             ) : null}
 
             {isInAppBrowser ? (
