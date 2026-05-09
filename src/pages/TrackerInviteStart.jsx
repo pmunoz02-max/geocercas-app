@@ -57,24 +57,13 @@ function setStorageItem(key, value) {
   } catch {
     // no-op
   }
-}
-
-function getStorageItem(key) {
-  try {
-    return localStorage.getItem(key) || sessionStorage.getItem(key) || "";
-  } catch {
-    return "";
-  }
-}
-
-function clearLegacyTrackerTokens() {
-  try {
-    [
-      "auth_token",
-      "owner_token",
-      "session_token",
-      "tracker_token",
-      "access_token",
+          <button
+            type="button"
+            onClick={handleAlreadyHasAppClick}
+            className="w-full mt-2 rounded-lg border border-slate-300 bg-white py-3 font-medium text-slate-800"
+          >
+            {t("common.actions.continueInBrowser", "Continuar en navegador")}
+          </button>
       "geocercas-tracker-auth",
     ].forEach((key) => {
       localStorage.removeItem(key);
@@ -118,6 +107,20 @@ function requestCurrentPositionOnce() {
 function getGeoErrorMessage(error, t) {
   const code = error?.code;
   const raw = String(error?.message || "").toLowerCase();
+  // Handler para el botón "Ya tengo la app"
+  async function handleAlreadyHasAppClick() {
+    console.log("[tracker-invite] already-has-app clicked");
+    try {
+      const session = await acceptInviteAndContinue();
+      if (session) {
+        const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(session.runtimeToken)}&tracker_user_id=${encodeURIComponent(session.trackerUserId)}&org_id=${encodeURIComponent(session.orgId)}`;
+        console.log("[tracker-invite] redirecting to tracker gps", url);
+        window.location.replace(url);
+      }
+    } catch (e) {
+      setAcceptError("No se pudo continuar. Intenta de nuevo.");
+    }
+  }
 
   if (code === 1 || raw.includes("permission")) {
     return t("tracker.invite.errors.blockedSite");
