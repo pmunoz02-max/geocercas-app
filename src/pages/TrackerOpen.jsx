@@ -1,680 +1,130 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 
-const BUILD_TAG = "tracker_open_runtime_exchange_v6_20260428";
-
-const androidPlayUrl = (import.meta.env.VITE_ANDROID_PLAY_URL || "").trim();
-const hasAndroidPlayUrl = androidPlayUrl.length > 0;
-const PLAY_STORE_URL = androidPlayUrl;
-const PLAY_STORE_WEB_URL = androidPlayUrl;
-
-const ANDROID_PACKAGE = (import.meta.env.VITE_ANDROID_PACKAGE_NAME || "").trim();
-const hasAndroidPackage = ANDROID_PACKAGE.length > 0;
+// TRACKER_OPEN_LEGACY_REDIRECT_V1
 
 function clean(value) {
-  return String(value || "").trim();
+  return typeof value === "string" && value.trim() ? value.trim() : "";
 }
 
-function firstParam(params, keys) {
-  for (const key of keys) {
-    const value = clean(params.get(key));
-    if (value) return value;
-  }
-  return "";
-}
-
-function tokenPrefix(value) {
-  const token = clean(value);
-  if (!token) return "";
-  return `${token.slice(0, 8)}…len:${token.length}`;
-}
-
-function safeJson(value) {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function buildTrackerGpsUrl({ runtimeToken, orgId, trackerUserId }) {
-  const params = new URLSearchParams();
-
-  if (runtimeToken) {
-    params.set("tracker_runtime_token", runtimeToken);
-    params.set("runtimeToken", runtimeToken);
-  }
-
-  if (orgId) {
-    params.set("org_id", orgId);
-    params.set("orgId", orgId);
-  }
-
-  if (trackerUserId) {
-    params.set("tracker_user_id", trackerUserId);
-    params.set("user_id", trackerUserId);
-    params.set("userId", trackerUserId);
-  }
-
-  const query = params.toString();
-  return query ? `/tracker-gps?${query}` : "/tracker-gps";
-}
-
-function buildAndroidIntentUrl({ runtimeToken, orgId, trackerUserId }) {
-  if (!hasAndroidPackage) return null;
-  const params = new URLSearchParams();
-
-  // IMPORTANTE: token debe ser SIEMPRE runtime token, nunca invite token.
-  if (runtimeToken) {
-    params.set("token", runtimeToken);
-    params.set("tracker_runtime_token", runtimeToken);
-    params.set("runtimeToken", runtimeToken);
-  }
-
-  if (orgId) {
-    params.set("org_id", orgId);
-    params.set("orgId", orgId);
-  }
-
-  if (trackerUserId) {
-    params.set("tracker_user_id", trackerUserId);
-    params.set("user_id", trackerUserId);
-    params.set("userId", trackerUserId);
-  }
-
-  params.set("source", "tracker-open-runtime");
-
-  const fallbackUrl = encodeURIComponent(
-    PLAY_STORE_WEB_URL || `${window.location.origin}/tracker-install`
-  );
-  return `intent://tracker?${params.toString()}#Intent;scheme=geocercas;package=${ANDROID_PACKAGE};S.browser_fallback_url=${fallbackUrl};end`;
-}
-
-function buildNativeDeepLink({ runtimeToken, orgId, trackerUserId }) {
-  const params = new URLSearchParams();
-
-  if (runtimeToken) {
-    params.set("token", runtimeToken);
-    params.set("tracker_runtime_token", runtimeToken);
-    params.set("runtimeToken", runtimeToken);
-  }
-
-  if (orgId) {
-    params.set("org_id", orgId);
-    params.set("orgId", orgId);
-  }
-
-  if (trackerUserId) {
-    params.set("tracker_user_id", trackerUserId);
-    params.set("user_id", trackerUserId);
-    params.set("userId", trackerUserId);
-  }
-
-  params.set("source", "tracker-open-runtime");
-  return `geocercas://tracker?${params.toString()}`;
-}
-
-function persistTrackerRuntime({ runtimeToken, orgId, trackerUserId }) {
-  const token = clean(runtimeToken);
-  const org = clean(orgId);
-  const user = clean(trackerUserId);
-
-  if (token) {
-    localStorage.setItem("tracker_runtime_token", token);
-    localStorage.setItem("tracker_access_token", token);
-    localStorage.setItem("tracker_token", token);
-
-    // Android/legacy fallback: algunos bridges nativos todavía buscan access_token.
-    localStorage.setItem("access_token", token);
-  }
-
-  if (org) {
-    localStorage.setItem("org_id", org);
-    localStorage.setItem("orgId", org);
-    localStorage.setItem("tracker_org_id", org);
-  }
-
-  if (user) {
-    localStorage.setItem("tracker_user_id", user);
-    localStorage.setItem("user_id", user);
-    localStorage.setItem("userId", user);
-  }
-}
-
-function pickRuntimeToken(data) {
-  return clean(
-    data?.tracker_runtime_token ||
-      data?.tracker_access_token ||
-      data?.runtimeToken ||
-      data?.runtime_token ||
-      data?.access_token ||
-      data?.session?.tracker_runtime_token ||
-      data?.session?.tracker_access_token ||
-      data?.session?.runtimeToken ||
-      data?.session?.access_token
-  );
-}
-
-function pickTrackerUserId(data, fallbackUserId) {
-  return clean(
-    data?.tracker_user_id ||
-      data?.trackerUserId ||
-      data?.user_id ||
-      data?.userId ||
-      data?.session?.tracker_user_id ||
-      data?.session?.trackerUserId ||
-      data?.session?.user_id ||
-      data?.session?.userId ||
-      fallbackUserId
-  );
-}
-
-function pickOrgId(data, fallbackOrgId) {
-  return clean(data?.org_id || data?.orgId || data?.session?.org_id || data?.session?.orgId || fallbackOrgId);
-}
-
-async function parseResponse(response) {
-  const text = await response.text();
-  if (!text) return {};
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
-}
-
-async function acceptTrackerInvite({ inviteToken, orgId, userId }) {
-  const body = {
-    token: inviteToken,
-    invite_token: inviteToken,
-    inviteToken,
-    org_id: orgId,
-    orgId,
-    tracker_user_id: userId,
-    user_id: userId,
-    userId,
-    source: "tracker-open",
-  };
-
-  const postResponse = await fetch("/api/accept-tracker-invite", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const postData = await parseResponse(postResponse);
-
-  if (postResponse.ok) {
-    return postData;
-  }
-
-  // Compatibilidad temporal: si el endpoint preview aún acepta GET, probar GET.
-  // Nunca se hace fallback al invite token.
+function buildQuery(params) {
   const query = new URLSearchParams();
-  query.set("token", inviteToken);
-  query.set("invite_token", inviteToken);
-  if (orgId) query.set("org_id", orgId);
-  if (userId) query.set("userId", userId);
 
-  const getResponse = await fetch(`/api/accept-tracker-invite?${query.toString()}`, {
-    method: "GET",
+  Object.entries(params).forEach(([key, value]) => {
+    const cleaned = clean(value);
+    if (cleaned) query.set(key, cleaned);
   });
 
-  const getData = await parseResponse(getResponse);
-
-  if (getResponse.ok) {
-    return getData;
-  }
-
-  throw new Error(
-    `accept_tracker_invite_failed post=${postResponse.status} get=${getResponse.status} postBody=${safeJson(
-      postData
-    ).slice(0, 240)} getBody=${safeJson(getData).slice(0, 240)}`
-  );
+  return query.toString();
 }
 
-function getAndroidBridge() {
-  return window.Android || null;
-}
-
-function primeAndroidBridge({ runtimeToken, orgId, trackerUserId }) {
-  const bridge = getAndroidBridge();
-  if (!bridge || !runtimeToken) return;
-
-  const candidates = [
-    "saveTrackerSession",
-    "saveSession",
-    "setTrackerSession",
-    "setRuntimeSession",
-  ];
-
-  for (const method of candidates) {
-    if (typeof bridge[method] === "function") {
-      try {
-        bridge[method](runtimeToken, trackerUserId || "", orgId || "");
-      } catch (error) {
-        console.warn(`[TrackerOpen] bridge_${method}_failed`, error);
-      }
-    }
+function safeSetStorage(storage, key, value) {
+  try {
+    const cleaned = clean(value);
+    if (cleaned) storage.setItem(key, cleaned);
+  } catch {
+    // Ignore storage errors in restricted browsers/WebViews.
   }
 }
 
 export default function TrackerOpen() {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-
-  const inviteToken = firstParam(params, ["token", "invite_token", "inviteToken"]);
-  const runtimeTokenFromUrl = firstParam(params, [
-    "tracker_runtime_token",
-    "runtimeToken",
-    "runtime_token",
-    "tracker_access_token",
-  ]);
-  const orgIdFromUrl = firstParam(params, ["org_id", "orgId"]);
-  const userIdFromUrl = firstParam(params, ["tracker_user_id", "user_id", "userId", "trackerUserId"]);
-
-  const [mode, setMode] = useState("opening");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [runtimeSession, setRuntimeSession] = useState({
-    runtimeToken: "",
-    orgId: "",
-    trackerUserId: "",
-  });
-  // Debug UI y estado eliminados. Se conservan logs internos si existen.
-  const patchDebug = useCallback((patch) => {
-    console.log("[TrackerOpen]", patch);
-  }, []);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    let cancelled = false;
+    const inviteToken =
+      clean(searchParams.get("inviteToken")) ||
+      clean(searchParams.get("invite_token")) ||
+      clean(searchParams.get("token"));
 
-    async function prepareRuntimeSession() {
-      setMode("opening");
-      setErrorMessage("");
+    const runtimeToken =
+      clean(searchParams.get("tracker_runtime_token")) ||
+      clean(searchParams.get("runtimeToken")) ||
+      clean(searchParams.get("runtime_token"));
 
-      const orgId = orgIdFromUrl;
-      const userId = userIdFromUrl;
+    const orgId =
+      clean(searchParams.get("org_id")) ||
+      clean(searchParams.get("orgId")) ||
+      clean(searchParams.get("org"));
 
-      if (!inviteToken && !runtimeTokenFromUrl) {
-        setMode("missing_token");
-        patchDebug({ missing_token: true });
-        return;
+    const trackerUserId =
+      clean(searchParams.get("tracker_user_id")) ||
+      clean(searchParams.get("trackerUserId")) ||
+      clean(searchParams.get("userId")) ||
+      clean(searchParams.get("user_id"));
+
+    if (runtimeToken) {
+      const query = buildQuery({
+        tracker_runtime_token: runtimeToken,
+        tracker_user_id: trackerUserId,
+        org_id: orgId,
+      });
+
+      if (orgId) {
+        safeSetStorage(window.localStorage, "currentOrgId", orgId);
+        safeSetStorage(window.sessionStorage, "trackerAcceptedOrgId", orgId);
       }
 
-      try {
-        let nextSession;
-
-        if (runtimeTokenFromUrl) {
-          // Caso Android/WebView abrió con runtime token desde intent://.
-          nextSession = {
-            runtimeToken: runtimeTokenFromUrl,
-            orgId,
-            trackerUserId: userId,
-          };
-
-          patchDebug({
-            runtime_param_used: true,
-            runtime_token_prefix: tokenPrefix(runtimeTokenFromUrl),
-          });
-        } else {
-          // Caso email/browser: token URL es invite token. Debe intercambiarse.
-          patchDebug({
-            accept_called: true,
-            invite_token_prefix: tokenPrefix(inviteToken),
-          });
-
-          const data = await acceptTrackerInvite({ inviteToken, orgId, userId });
-          const runtimeToken = pickRuntimeToken(data);
-          const trackerUserId = pickTrackerUserId(data, userId);
-          const resolvedOrgId = pickOrgId(data, orgId);
-
-          if (!runtimeToken) {
-            throw new Error(`accept_ok_but_missing_runtime_token body=${safeJson(data).slice(0, 300)}`);
-          }
-
-          nextSession = {
-            runtimeToken,
-            orgId: resolvedOrgId,
-            trackerUserId,
-          };
-
-          patchDebug({
-            accept_ok: true,
-            runtime_token_prefix: tokenPrefix(runtimeToken),
-            resolved_org_id_present: Boolean(resolvedOrgId),
-            resolved_tracker_user_id_present: Boolean(trackerUserId),
-          });
-
-          // Bridge nativo: window.Android || window.AndroidBridge
-          const nativeBridge =
-            typeof window !== "undefined"
-              ? window.Android || window.AndroidBridge
-              : null;
-
-          const hasAndroidBridge = !!nativeBridge;
-          let nativeBridgeCalled = false;
-          let nativeStartCalled = false;
-
-          try {
-            if (nativeBridge && runtimeToken) {
-              if (typeof nativeBridge.saveTrackerSession === "function") {
-                nativeBridge.saveTrackerSession(
-                  runtimeToken,
-                  trackerUserId || "",
-                  resolvedOrgId || ""
-                );
-                nativeBridgeCalled = true;
-              }
-
-              if (typeof nativeBridge.startTracking === "function") {
-                nativeBridge.startTracking(
-                  runtimeToken,
-                  trackerUserId || "",
-                  resolvedOrgId || ""
-                );
-                nativeStartCalled = true;
-              }
-            }
-
-            patchDebug({
-              has_android_bridge: hasAndroidBridge,
-              native_bridge_called: nativeBridgeCalled,
-              native_start_called: nativeStartCalled,
-              runtime_token_prefix: runtimeToken ? runtimeToken.slice(0, 8) : null,
-            });
-          } catch (err) {
-            patchDebug({
-              has_android_bridge: hasAndroidBridge,
-              native_bridge_called: nativeBridgeCalled,
-              native_start_called: nativeStartCalled,
-              android_bridge_error: String(err?.message || err),
-            });
-          }
-        }
-
-        if (!nextSession.runtimeToken) {
-          throw new Error("missing_runtime_token_after_prepare");
-        }
-
-        if (!nextSession.orgId) {
-          throw new Error("missing_org_id_after_prepare");
-        }
-
-        if (cancelled) return;
-
-        persistTrackerRuntime(nextSession);
-        setRuntimeSession(nextSession);
-
-        if (getAndroidBridge()) {
-          primeAndroidBridge(nextSession);
-          const trackerGpsUrl = buildTrackerGpsUrl(nextSession);
-          patchDebug({
-            android_bridge_detected: true,
-            navigate_to: "/tracker-gps",
-            intent_uses_runtime_token: true,
-          });
-          navigate(trackerGpsUrl, { replace: true });
-          return;
-        }
-
-        patchDebug({
-          browser_fallback_ready: true,
-          intent_uses_runtime_token: true,
-        });
-        setMode("install");
-      } catch (error) {
-        if (cancelled) return;
-
-        const message = String(error?.message || error || "accept_tracker_invite_failed");
-        console.error("[TrackerOpen] runtime_prepare_failed", error);
-        setErrorMessage(message);
-        setMode("accept_error");
-        patchDebug({
-          accept_ok: false,
-          error: message.slice(0, 240),
-        });
-      }
-    }
-
-    prepareRuntimeSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [inviteToken, runtimeTokenFromUrl, orgIdFromUrl, userIdFromUrl, navigate, patchDebug]);
-
-  const intentUrl = useMemo(() => {
-    if (!runtimeSession.runtimeToken) return "";
-    return buildAndroidIntentUrl(runtimeSession);
-  }, [runtimeSession]);
-
-  const nativeDeepLink = useMemo(() => {
-    if (!runtimeSession.runtimeToken) return "";
-    return buildNativeDeepLink(runtimeSession);
-  }, [runtimeSession]);
-
-
-  const installApp = () => {
-    if (hasAndroidPlayUrl) {
-      window.location.href = androidPlayUrl;
-    }
-  };
-
-  // Redirige directo a /tracker-gps con storage y parámetros
-  const goToTrackerGps = () => {
-    if (
-      !runtimeSession ||
-      !runtimeSession.runtimeToken ||
-      !runtimeSession.trackerUserId ||
-      !runtimeSession.orgId
-    ) {
-      console.warn("[TrackerOpen] missing runtime session for tracker gps redirect", runtimeSession);
+      const target = query ? `/tracker-gps?${query}` : "/tracker-gps";
+      safeSetStorage(window.sessionStorage, "trackerAcceptedRedirect", target);
+      window.location.replace(target);
       return;
     }
 
-    const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeSession.runtimeToken)}&tracker_user_id=${encodeURIComponent(runtimeSession.trackerUserId)}&org_id=${encodeURIComponent(runtimeSession.orgId)}`;
+    if (inviteToken) {
+      const query = buildQuery({
+        inviteToken,
+        org_id: orgId,
+      });
 
-    localStorage.setItem("currentOrgId", runtimeSession.orgId);
-    sessionStorage.setItem("trackerAcceptedOrgId", runtimeSession.orgId);
-    sessionStorage.setItem("trackerAcceptedRedirect", url);
+      window.location.replace(`/tracker-accept?${query}`);
+      return;
+    }
 
-    console.log("[TrackerOpen] redirecting directly to tracker gps", url);
-    window.location.replace(url);
-  };
-
-  if (mode === "opening") {
-    return (
-      <main style={styles.page}>
-        <section style={styles.card}>
-          <div style={styles.icon}>📍</div>
-          <h1 style={styles.title}>Abriendo Geocercas...</h1>
-          <p style={styles.text}>Estamos preparando tu invitación de seguimiento.</p>
-          {/* Debug UI eliminado */}
-        </section>
-      </main>
-    );
-  }
-
-  if (mode === "missing_token") {
-    return (
-      <main style={styles.page}>
-        <section style={styles.card}>
-          <div style={styles.icon}>⚠️</div>
-          <h1 style={styles.title}>Invitación inválida</h1>
-          <p style={styles.text}>El enlace no contiene un token válido. Solicita una nueva invitación.</p>
-          {/* Debug UI eliminado */}
-        </section>
-      </main>
-    );
-  }
-
-  if (mode === "accept_error") {
-    return (
-      <main style={styles.page}>
-        <section style={styles.card}>
-          <div style={styles.icon}>⚠️</div>
-          <h1 style={styles.title}>No se pudo activar la invitación</h1>
-          <p style={styles.text}>
-            No se generó la sesión segura de seguimiento. Solicita una nueva invitación o vuelve a abrir el enlace original.
-          </p>
-          <p style={styles.error}>{errorMessage}</p>
-          <div style={styles.actions}>
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={goToTrackerGps}
-              disabled={
-                !(
-                  runtimeSession &&
-                  runtimeSession.runtimeToken &&
-                  runtimeSession.trackerUserId &&
-                  runtimeSession.orgId
-                )
-              }
-            >
-              Ya tengo la app
-            </button>
-            {hasAndroidPlayUrl && (
-              <button type="button" style={styles.secondaryButton} onClick={installApp}>
-                Instalar desde Google Play
-              </button>
-            )}
-            {!hasAndroidPlayUrl && (
-              <div style={{marginTop: 8, color: '#64748b', fontSize: 14}}>
-                Si ya instalaste GeoField GPS, usa este botón para activar el seguimiento.
-              </div>
-            )}
-          </div>
-          {/* Debug UI eliminado */}
-        </section>
-      </main>
-    );
-  }
+    window.location.replace("/tracker-install");
+  }, [searchParams]);
 
   return (
     <main style={styles.page}>
       <section style={styles.card}>
         <div style={styles.icon}>✅</div>
-        <h1 style={styles.title}>Activa GeoField GPS</h1>
+        <h1 style={styles.title}>Redirigiendo a GeoField GPS</h1>
         <p style={styles.text}>
-          Tu invitación ya fue validada. Para compartir tu ubicación, abre GeoField GPS desde este botón.
+          Estamos preparando tu invitación de seguimiento.
         </p>
-
-        <div style={styles.actions}>
-          <button
-            type="button"
-            style={styles.primaryButton}
-            onClick={() => {
-              if (runtimeSession && runtimeSession.runtimeToken && runtimeSession.trackerUserId && runtimeSession.orgId) {
-                const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeSession.runtimeToken)}&tracker_user_id=${encodeURIComponent(runtimeSession.trackerUserId)}&org_id=${encodeURIComponent(runtimeSession.orgId)}`;
-                localStorage.setItem("currentOrgId", runtimeSession.orgId);
-                sessionStorage.setItem("trackerAcceptedOrgId", runtimeSession.orgId);
-                sessionStorage.setItem("trackerAcceptedRedirect", url);
-                window.location.replace(url);
-              }
-            }}
-            disabled={!(runtimeSession && runtimeSession.runtimeToken && runtimeSession.trackerUserId && runtimeSession.orgId)}
-          >
-            Ya tengo la app
-          </button>
-        </div>
-
-        {/* Instrucciones neutrales cuando no hay URL oficial de instalación */}
-
-        {/* Debug UI eliminado */}
       </section>
     </main>
   );
 }
 
-
-
 const styles = {
   page: {
     minHeight: "100vh",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
+    display: "grid",
+    placeItems: "center",
     background: "#f8fafc",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    padding: 24,
   },
   card: {
     width: "100%",
-    maxWidth: 440,
-    padding: 24,
-    borderRadius: 20,
+    maxWidth: 460,
+    borderRadius: 24,
     background: "#ffffff",
-    boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
+    padding: 32,
     textAlign: "center",
+    boxShadow: "0 20px 60px rgba(15, 23, 42, 0.08)",
   },
   icon: {
-    width: 72,
-    height: 72,
-    margin: "0 auto 16px",
-    borderRadius: 999,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#dcfce7",
-    fontSize: 34,
+    fontSize: 48,
+    marginBottom: 16,
   },
   title: {
-    margin: "0 0 10px",
+    margin: 0,
+    fontSize: 24,
     color: "#0f172a",
-    fontSize: 26,
-    lineHeight: 1.15,
   },
   text: {
-    margin: "0 auto 20px",
+    marginTop: 12,
     color: "#475569",
-    fontSize: 16,
     lineHeight: 1.5,
   },
-  actions: {
-    display: "grid",
-    gap: 12,
-    marginTop: 18,
-  },
-  primaryButton: {
-    width: "100%",
-    border: 0,
-    borderRadius: 999,
-    padding: "14px 18px",
-    background: "#16a34a",
-    color: "#ffffff",
-    fontWeight: 700,
-    fontSize: 16,
-    cursor: "pointer",
-  },
-  secondaryButton: {
-    width: "100%",
-    border: "1px solid #cbd5e1",
-    borderRadius: 999,
-    padding: "14px 18px",
-    background: "#ffffff",
-    color: "#0f172a",
-    fontWeight: 700,
-    fontSize: 16,
-    cursor: "pointer",
-  },
-  note: {
-    margin: "18px 0 0",
-    color: "#64748b",
-    fontSize: 13,
-    lineHeight: 1.45,
-  },
-  error: {
-    margin: "12px 0 18px",
-    padding: 12,
-    borderRadius: 12,
-    background: "#fef2f2",
-    color: "#991b1b",
-    fontSize: 12,
-    lineHeight: 1.45,
-    textAlign: "left",
-    wordBreak: "break-word",
-  },
-
 };
