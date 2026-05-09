@@ -454,15 +454,33 @@ export default function TrackerOpen() {
     return buildNativeDeepLink(runtimeSession);
   }, [runtimeSession]);
 
+
   const installApp = () => {
     if (hasAndroidPlayUrl) {
       window.location.href = androidPlayUrl;
     }
   };
 
-  const openAndroid = () => {
-    if (!intentUrl) return;
-    window.location.href = intentUrl;
+  // Redirige directo a /tracker-gps con storage y parámetros
+  const goToTrackerGps = () => {
+    if (
+      !runtimeSession ||
+      !runtimeSession.runtimeToken ||
+      !runtimeSession.trackerUserId ||
+      !runtimeSession.orgId
+    ) {
+      console.warn("[TrackerOpen] missing runtime session for tracker gps redirect", runtimeSession);
+      return;
+    }
+
+    const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeSession.runtimeToken)}&tracker_user_id=${encodeURIComponent(runtimeSession.trackerUserId)}&org_id=${encodeURIComponent(runtimeSession.orgId)}`;
+
+    localStorage.setItem("currentOrgId", runtimeSession.orgId);
+    sessionStorage.setItem("trackerAcceptedOrgId", runtimeSession.orgId);
+    sessionStorage.setItem("trackerAcceptedRedirect", url);
+
+    console.log("[TrackerOpen] redirecting directly to tracker gps", url);
+    window.location.replace(url);
   };
 
   if (mode === "opening") {
@@ -505,8 +523,15 @@ export default function TrackerOpen() {
             <button
               type="button"
               style={styles.primaryButton}
-              onClick={openAndroid}
-              disabled={!intentUrl}
+              onClick={goToTrackerGps}
+              disabled={
+                !(
+                  runtimeSession &&
+                  runtimeSession.runtimeToken &&
+                  runtimeSession.trackerUserId &&
+                  runtimeSession.orgId
+                )
+              }
             >
               Ya tengo la app
             </button>
@@ -517,8 +542,7 @@ export default function TrackerOpen() {
             )}
             {!hasAndroidPlayUrl && (
               <div style={{marginTop: 8, color: '#64748b', fontSize: 14}}>
-                La instalación oficial para Android todavía no está disponible desde esta pantalla.<br />
-                Abre esta página desde tu teléfono y usa “Ya tengo la app” después de instalar o abrir la app autorizada.
+                Si ya instalaste GeoField GPS, usa este botón para activar el seguimiento.
               </div>
             )}
           </div>
