@@ -532,31 +532,28 @@ export default function TrackerOpen() {
     <main style={styles.page}>
       <section style={styles.card}>
         <div style={styles.icon}>✅</div>
-        <h1 style={styles.title}>Activa tu seguimiento</h1>
+        <h1 style={styles.title}>Activa GeoField GPS</h1>
         <p style={styles.text}>
-          Tu invitación ya fue validada. Para compartir tu ubicación, abre Geocercas desde este botón.
+          Tu invitación ya fue validada. Para compartir tu ubicación, abre GeoField GPS desde este botón.
         </p>
 
         <div style={styles.actions}>
           <button
             type="button"
             style={styles.primaryButton}
-            onClick={openAndroid}
-            disabled={!intentUrl}
+            onClick={() => {
+              if (runtimeSession && runtimeSession.runtimeToken && runtimeSession.trackerUserId && runtimeSession.orgId) {
+                const url = `/tracker-gps?tracker_runtime_token=${encodeURIComponent(runtimeSession.runtimeToken)}&tracker_user_id=${encodeURIComponent(runtimeSession.trackerUserId)}&org_id=${encodeURIComponent(runtimeSession.orgId)}`;
+                localStorage.setItem("currentOrgId", runtimeSession.orgId);
+                sessionStorage.setItem("trackerAcceptedOrgId", runtimeSession.orgId);
+                sessionStorage.setItem("trackerAcceptedRedirect", url);
+                window.location.replace(url);
+              }
+            }}
+            disabled={!(runtimeSession && runtimeSession.runtimeToken && runtimeSession.trackerUserId && runtimeSession.orgId)}
           >
             Ya tengo la app
           </button>
-          {hasAndroidPlayUrl && (
-            <button type="button" style={styles.secondaryButton} onClick={installApp}>
-              Instalar desde Google Play
-            </button>
-          )}
-          {!hasAndroidPlayUrl && (
-            <div style={{marginTop: 8, color: '#64748b', fontSize: 14}}>
-                La instalación oficial para Android todavía no está disponible desde esta pantalla.<br />
-              Abre esta página desde tu teléfono y usa “Ya tengo la app” después de instalar o abrir la app autorizada.
-            </div>
-          )}
         </div>
 
         {/* Instrucciones neutrales cuando no hay URL oficial de instalación */}
