@@ -60,3 +60,38 @@ Esto evita crear organizaciones basura y permite flujos de onboarding controlado
 ## Histórico
 
 - Docs antiguos sobre invite-tracker, asignaciones, tracker_assignments y tracker_positions quedan obsoletos a partir de este documento.
+
+---
+
+## Validación cerrada — Invite Tracker / GeoField GPS
+
+Fecha: 2026-05-09
+
+El flujo de invitación y activación de trackers quedó validado de extremo a extremo.
+
+Flujo oficial validado:
+
+1. Owner/Admin envía invitación a tracker desde la plataforma.
+2. El tracker recibe email o link de invitación.
+3. El link oficial abre `/tracker-accept?inviteToken=...&org_id=...`.
+4. El backend valida la invitación y genera runtime token.
+5. El tracker entra a `/tracker-gps`.
+6. GeoField GPS envía posiciones correctamente.
+
+Resultado validado:
+
+`Owner/Admin → invitar tracker → email/link → /tracker-accept → runtime token → /tracker-gps → posiciones activas`
+
+Reglas vigentes:
+
+- `/tracker-accept` es el único flujo soportado para onboarding y activación de seguimiento.
+- `/tracker-open` queda solo como redirect legacy para compatibilidad con enlaces antiguos.
+- `/tracker-open` no debe usarse directamente ni enlazarse en emails, deep links nuevos ni apps.
+- Cualquier email, deep link o fallback web nuevo debe apuntar a `/tracker-accept`.
+- Package Android oficial: `com.fenice.geofieldgps`.
+- Installer válido para pruebas productivas: `com.android.vending`.
+- App Links validado: `app.tugeocercas.com: verified`.
+- SHA-256 Google Play App Signing:
+  `6B:CF:82:23:06:62:28:20:51:11:0E:72:26:1A:21:D5:37:CF:92:EB:F5:74:AE:A5:D2:76:71:6C:A8:FC:55:D2`
+- No validar App Links productivos con instalaciones sideload (`installer=null`).
+- No agregar SHA locales/sideload a `assetlinks.json` productivo.

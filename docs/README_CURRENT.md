@@ -29,3 +29,9 @@ servicio válido: ForegroundLocationService
 entry point: WebViewActivity
 deep link válido: /tracker-accept
 carpeta _deprecated no usar para implementar
+
+---
+
+## Nota de cierre
+
+El flujo completo de invitación de tracker, onboarding Android GeoField GPS y envío de posiciones quedó validado en producción (`app.tugeocercas.com`) usando Google Play Internal Testing.
