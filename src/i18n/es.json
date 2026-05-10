@@ -1940,7 +1940,6 @@
     },
     "upgrade": {
       "productTitle": "Geocercas PRO",
-      "priceLabel": "USD $29/mes",
       "orgIdLabel": "Org ID",
       "notResolved": "(no resuelta)",
       "organizationInputLabel": "Organization ID (org_id)",

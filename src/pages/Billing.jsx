@@ -7,6 +7,7 @@ import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import ManageSubscriptionButton from "../components/Billing/ManageSubscriptionButton";
+import { formatPlanPrice } from "../config/pricing";
 
 function resolveDateLocale(language) {
   const lang = String(language || "").toLowerCase();
@@ -382,7 +383,7 @@ export default function Billing() {
                 {tr("billing.upgrade.productTitle", "Geocercas PRO")}
               </div>
               <div className="mt-1 text-sm text-slate-700">
-                {tr("billing.upgrade.priceLabel", "USD $29/month")}
+                {formatPlanPrice("pro", i18n.language)}
               </div>
               <div className="mt-2 text-xs text-slate-700">
                 <b>{tr("billing.upgrade.orgIdLabel", "Org ID")}:</b>{" "}
