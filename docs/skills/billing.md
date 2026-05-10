@@ -245,3 +245,40 @@ Push corto:
 git add docs/skills/billing.md
 git commit -m "docs: add billing skill [allow-docs]"
 git push origin preview
+```
+
+## Pricing source of truth
+
+Los precios visibles de planes SaaS deben salir únicamente de `src/config/pricing.ts`.
+
+No duplicar precios en:
+- Landing
+- Pricing
+- Billing
+- i18n
+
+i18n solo debe contener textos comerciales, no valores de precio.
+
+## Paddle Catalog current state
+
+Paddle LIVE remains blocked until account/domain approval.
+
+Current catalog structure:
+- Geocercas GPS PRO
+  - Active
+  - USD 29/month
+  - plan_code = pro
+- Geocercas GPS Enterprise
+  - Active
+  - USD 99/month
+  - plan_code = enterprise
+- Geocercas Pro
+  - Archived legacy product
+  - Do not reactivate
+  - Do not use for new checkout flows
+
+Rules:
+- Do not copy LIVE price IDs into code until Paddle approval.
+- Do not activate LIVE checkout before approval.
+- Do not configure productive webhooks before approval.
+- A new Paddle LIVE API key must be created before activation because the previous key was revoked.
