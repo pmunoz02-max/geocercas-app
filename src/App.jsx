@@ -2,6 +2,7 @@ import Logout from "./pages/Logout.jsx";
 import VerGeocerca from "./pages/VerGeocerca.jsx";
 import Privacy from "./pages/Privacy.jsx";
 import Terms from "./pages/Terms.jsx";
+import AccountDeletion from "./pages/AccountDeletion.jsx";
 // src/App.jsx
 import React from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -133,6 +134,8 @@ function MainAppRoutes() {
       {/* Public */}
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
+      <Route path="/account-deletion" element={<AccountDeletion />} />
+      <Route path="/delete-account" element={<AccountDeletion />} />
       <Route path="/demo" element={<DemoGeocercas />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />

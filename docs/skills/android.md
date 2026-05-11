@@ -404,6 +404,23 @@ Reglas:
 
 ---
 
+## Public Account Deletion Routes (Google Play Compliance)
+
+GeoField GPS provides public web routes for account and data deletion requests, as required by Google Play policies:
+
+- **/account-deletion**
+- **/delete-account**
+
+These pages are accessible without login and explain:
+- How users can request deletion of their account and data
+- What data is deleted and what may be retained
+- The response timeframe (within 30 days)
+- Contact email: soporte@tugeocercas.com
+
+See the `AccountDeletion.jsx` page for full bilingual (English/Spanish) content and legal details.
+
+---
+
 ## Estado actual
 
 Con esto el bloque Android queda alineado con:
