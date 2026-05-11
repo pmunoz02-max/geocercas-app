@@ -24,7 +24,7 @@ function setHeaders(res) {
   res.setHeader("Expires", "0");
   res.setHeader("CDN-Cache-Control", "no-store");
   res.setHeader("Surrogate-Control", "no-store");
-  res.setHeader("Vary", "Cookie");
+  res.setHeader("Vary", "Origin, Cookie");
 }
 
 function json(res, status, payload) {
@@ -124,13 +124,22 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
     };
   }
 
-  // Accept tg_at cookie or Authorization Bearer token
+
+  // Prefer Authorization Bearer over tg_at cookie.
+  // Cookie is only a fallback for older/browser flows.
   const cookieToken = getCookie(req, "tg_at");
   const authHeader = req.headers.authorization || "";
-  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const accessToken = cookieToken || bearerToken;
+  const bearerToken =
+    typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7).trim()
+      : null;
 
-  if (!accessToken) {
+  const tokenCandidates = [
+    { source: "bearer", token: bearerToken },
+    { source: "cookie", token: cookieToken },
+  ].filter((item) => Boolean(item.token));
+
+  if (tokenCandidates.length === 0) {
     return {
       ok: false,
       status: 401,
@@ -140,16 +149,40 @@ async function resolveContext(req, { requestedOrgId = null } = {}) {
   }
 
   const supaUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const { data: userData, error: userErr } = await supaUser.auth.getUser();
-  if (userErr || !userData?.user?.id) {
-    return { ok: false, status: 401, error: "Invalid session", details: userErr?.message || "No user" };
+  let user = null;
+  let accessToken = null;
+  let userErr = null;
+
+  for (const candidate of tokenCandidates) {
+    const { data: userData, error } = await supaUser.auth.getUser(candidate.token);
+
+    if (!error && userData?.user?.id) {
+      user = userData.user;
+      accessToken = candidate.token;
+      userErr = null;
+      break;
+    }
+
+    userErr = error;
   }
 
-  const user = userData.user;
+  if (!user?.id) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Invalid session",
+      details: userErr?.message || "No user",
+      debug: {
+        hasAuthHeader: Boolean(authHeader),
+        hasBearerToken: Boolean(bearerToken),
+        hasCookieToken: Boolean(cookieToken),
+        triedBearerFirst: Boolean(bearerToken),
+      },
+    };
+  }
 
   const supaSrv = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -690,7 +723,7 @@ export default async function handler(req, res) {
     if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 
     if (req.method === "OPTIONS") {

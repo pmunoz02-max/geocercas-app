@@ -290,3 +290,5 @@ Esto evita crear organizaciones basura y permite flujos de onboarding controlado
   - Revisores o testers que alternan entre cuentas.
   - Trackers o usuarios atrapados con sesión incorrecta o tokens caducados.
 - No basta con cerrar sesión visualmente: esta ruta garantiza que no quedan residuos de sesión previa en el navegador, incluyendo datos persistentes de cookies, caches, service workers e IndexedDB, lo cual es crítico en TWA/Chrome Android.
+
+> Nota: Las APIs backend deben preferir el uso de Authorization Bearer para autenticación. El cookie tg_at solo debe usarse como fallback si no hay Bearer válido.
