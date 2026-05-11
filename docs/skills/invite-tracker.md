@@ -95,3 +95,5 @@ Reglas vigentes:
   `6B:CF:82:23:06:62:28:20:51:11:0E:72:26:1A:21:D5:37:CF:92:EB:F5:74:AE:A5:D2:76:71:6C:A8:FC:55:D2`
 - No validar App Links productivos con instalaciones sideload (`installer=null`).
 - No agregar SHA locales/sideload a `assetlinks.json` productivo.
+
+> Nota: invite edge valida primero memberships activas y usa org_members solo como fallback legacy.

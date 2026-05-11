@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-const BUILD_TAG = "send-tracker-invite-brevo-2026-04-28-tracker-open-v16-used-at-fix"
+const BUILD_TAG = "send-tracker-invite-brevo-2026-05-11-memberships-canonical-v17"
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -123,29 +123,53 @@ async function ensureMembership(
   orgId: string,
   userId: string,
 ) {
-  const lookup = await supabaseAdmin
+  const membershipLookup = await supabaseAdmin
+    .from("memberships")
+    .select("org_id,user_id,role")
+    .eq("org_id", orgId)
+    .eq("user_id", userId)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  if (membershipLookup.error) {
+    console.error("[invite-edge] memberships lookup failed", {
+      message: membershipLookup.error.message,
+      details: membershipLookup.error.details,
+      hint: membershipLookup.error.hint,
+      code: membershipLookup.error.code,
+    });
+    return { membership: null, error: "membership_lookup_failed" as const };
+  }
+
+  if (membershipLookup.data) {
+    return { membership: membershipLookup.data, error: null };
+  }
+
+  const legacyLookup = await supabaseAdmin
     .from("org_members")
     .select("org_id,user_id,role")
     .eq("org_id", orgId)
     .eq("user_id", userId)
-    .maybeSingle()
+    .eq("is_active", true)
+    .maybeSingle();
 
-  if (lookup.error) {
+  if (legacyLookup.error) {
     console.error("[invite-edge] org_members lookup failed", {
-      message: lookup.error.message,
-      details: lookup.error.details,
-      hint: lookup.error.hint,
-      code: lookup.error.code,
-    })
-    return { membership: null, error: "membership_lookup_failed" as const }
+      message: legacyLookup.error.message,
+      details: legacyLookup.error.details,
+      hint: legacyLookup.error.hint,
+      code: legacyLookup.error.code,
+    });
+    return { membership: null, error: "membership_lookup_failed" as const };
   }
 
-  if (!lookup.data) {
-    return { membership: null, error: "membership_required" as const }
+  if (!legacyLookup.data) {
+    return { membership: null, error: "membership_required" as const };
   }
 
-  return { membership: lookup.data, error: null }
+  return { membership: legacyLookup.data, error: null };
 }
+
 
 async function closeExistingConflictingInvites(
   supabaseAdmin: ReturnType<typeof createClient>,
