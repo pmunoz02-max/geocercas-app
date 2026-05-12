@@ -1540,13 +1540,13 @@
     },
     "invite": {
       "title": "Autorisation de localisation",
-      "intro": "Cette invitation a besoin de votre position pour démarrer le tracker et valider les trajets et géorepérages.",
+      "intro": "GeoField GPS utilise votre localisation avec votre consentement pendant une session de suivi autorisée, la partage avec l’organisation qui vous a invité et maintient les géorepérages et rapports opérationnels à jour, même lorsque l’app est en arrière-plan ou n’est pas visible.",
       "introStep": {
-        "before": "Vous acceptez d'abord l'avis. Ensuite, vous verrez un écran pour autoriser la localisation. Il vous suffit d'appuyer sur",
+        "before": "Acceptez d'abord cet avis. Ensuite, vous verrez un écran système pour autoriser la localisation. Il vous suffit d'appuyer sur",
         "allow": "Autoriser",
         "after": "."
       },
-      "consentLabel": "J'accepte le suivi de localisation",
+      "consentLabel": "Je comprends et j’accepte de partager ma localisation pendant cette session de suivi autorisée, même lorsque l’app est en arrière-plan ou n’est pas visible.",
       "acceptContinue": "Accepter et continuer",
       "processing": "Traitement en cours...",
       "permissionCardTitle": "Autoriser l'utilisation de la localisation",

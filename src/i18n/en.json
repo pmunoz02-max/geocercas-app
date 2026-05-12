@@ -1567,13 +1567,13 @@
     },
     "invite": {
       "title": "Location permission",
-      "intro": "This invite needs your location to start the tracker and validate routes and geofences.",
+      "intro": "GeoField GPS uses your location with your consent to start an authorized tracking session, share it with the organization that invited you, and keep geofences and operational reports updated, even when the app is in the background or not visible.",
       "introStep": {
-        "before": "First you accept the notice. Then you will see a screen to allow location. You only need to tap",
+        "before": "First accept this notice. Then you will see a system screen to allow location. You only need to tap",
         "allow": "Allow",
         "after": "."
       },
-      "consentLabel": "I accept location tracking",
+      "consentLabel": "I understand and agree to share my location during this authorized tracking session, even when the app is in the background or not visible.",
       "acceptContinue": "Accept and continue",
       "processing": "Processing...",
       "permissionCardTitle": "Allow location usage",
