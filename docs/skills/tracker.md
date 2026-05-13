@@ -426,6 +426,15 @@ El endpoint `api/send-position` debe tomar los valores de `tracker_user_id` y `o
 
 ---
 
+## Geofences en Tracker Dashboard
+
+- El dashboard de trackers debe cargar y mostrar **todas** las geofences activas de la organización.
+- No se deben filtrar las geofences por asignaciones de trackers.
+- No se debe usar ningún fallback que limite la visualización a solo 1 geofence activa.
+- El selector y la visualización deben reflejar el total de geofences activas del org.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.

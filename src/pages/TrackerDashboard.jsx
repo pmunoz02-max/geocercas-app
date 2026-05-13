@@ -1124,38 +1124,22 @@ export default function TrackerDashboard() {
     // No active assignments: previously setInfoMsg for diagnostics (removed)
   }, [todayStrUtc, tOr]);
 
-  const fetchGeofences = useCallback(async (currentOrgId, assignmentRows) => {
+
+  const fetchGeofences = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
-      if (!safeOrgId) return;
+    if (!safeOrgId) return;
 
     setDiag((d) => ({ ...d, lastGeofencesError: null }));
     setErrorMsg("");
 
-    const assignedIds = Array.from(
-      new Set(
-        (assignmentRows || [])
-          .map((r) => r?.geofence_id || r?.geocerca_id)
-          .filter(Boolean)
-          .map(String)
-      )
-    );
-
-    let q = supabase
+    const res = await supabase
       .from("geofences")
       .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
       .eq("org_id", safeOrgId)
-      .eq("active", true);
-
-    if (assignedIds.length > 0) {
-      q = q.in("id", assignedIds);
-    } else {
-      q = q
-        .order("is_default", { ascending: false })
-        .order("updated_at", { ascending: false })
-        .order("created_at", { ascending: false });
-    }
-
-    const res = await q;
+      .eq("active", true)
+      .order("is_default", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false });
 
     if (res.error) {
       setDiag((d) => ({
@@ -1173,24 +1157,7 @@ export default function TrackerDashboard() {
       return;
     }
 
-    let rows = Array.isArray(res.data) ? res.data : [];
-
-    let pickedFallbackFirstActive = false;
-    if (assignedIds.length === 0 && rows.length === 0) {
-      const fb = await supabase
-        .from("geofences")
-        .select("id, org_id, name, geojson, lat, lng, radius_m, active, is_default")
-        .eq("org_id", safeOrgId)
-        .eq("active", true)
-        .order("updated_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (!fb.error && Array.isArray(fb.data) && fb.data.length > 0) {
-        rows = fb.data;
-        pickedFallbackFirstActive = true;
-      }
-    }
+    const rows = Array.isArray(res.data) ? res.data : [];
 
     const normalized = rows
       .filter((r) => r.active === true)
@@ -1211,12 +1178,10 @@ export default function TrackerDashboard() {
 
     setGeofenceRows(normalized);
 
-    if (assignedIds.length === 0) {
-      const defaultIds = normalized.filter((g) => g.is_default === true).map((g) => String(g.id));
-      setSelectedGeofenceIds(defaultIds.length ? defaultIds : []);
-    } else {
-      setSelectedGeofenceIds([]);
-    }
+    const defaultIds = normalized
+      .filter((g) => g.is_default === true)
+      .map((g) => String(g.id));
+    setSelectedGeofenceIds(defaultIds.length ? defaultIds : []);
 
     setDiag((d) => ({
       ...d,
@@ -1224,36 +1189,24 @@ export default function TrackerDashboard() {
       geofencePolys: polysCount,
       geofenceCircles: circlesCount,
       skippedZeroZero: skipped,
+      selectedGeofences: defaultIds.length,
     }));
 
     if (normalized.length === 0) {
-      if (assignedIds.length > 0) {
-        setInfoMsg(
-          t("trackerDashboard.messages.noActiveGeofencesForAssignments", {
-            orgId: currentOrgId,
-            defaultValue: `There are assignments, but there are no active geofences for those assignments in org (${currentOrgId}).`,
-          })
-        );
-      } else if (pickedFallbackFirstActive) {
-        setInfoMsg(
-          tOr(
-            "trackerDashboard.messages.fallbackGeofenceShown",
-            "No active geofences were found; 1 active geofence was shown as a fallback so the dashboard does not remain empty."
-          )
-        );
-      } else {
-        setInfoMsg(
-          t("trackerDashboard.messages.noActiveGeofencesForOrg", {
-            orgId: currentOrgId,
-            defaultValue: `There are no active geofences available for this org (${currentOrgId}).`,
-          })
-        );
-      }
+      setInfoMsg(
+        t("trackerDashboard.messages.noActiveGeofencesForOrg", {
+          orgId: currentOrgId,
+          defaultValue: `There are no active geofences available for this org (${currentOrgId}).`,
+        })
+      );
     }
 
     setFitSignal((x) => x + 1);
   }, [t, tOr]);
 
+
+
+  // --- fetchPersonalCatalog ---
   const fetchPersonalCatalog = useCallback(async (currentOrgId) => {
     const safeOrgId = normalizeUuid(currentOrgId);
     if (!safeOrgId) {
@@ -1268,13 +1221,6 @@ export default function TrackerDashboard() {
       .eq("id", safeOrgId)
       .maybeSingle();
 
-    if (orgError) {
-      console.warn("[tracker-dashboard] owner lookup failed", orgError);
-      setOrgOwnerId(null);
-    } else {
-      setOrgOwnerId(normalizeUuid(orgRow?.owner_id));
-    }
-
     const { data, error } = await supabase
       .from("personal")
       .select("*")
@@ -1286,6 +1232,7 @@ export default function TrackerDashboard() {
       return;
     }
     setPersonalRows(Array.isArray(data) ? data : []);
+    if (orgRow && orgRow.owner_id) setOrgOwnerId(orgRow.owner_id);
   }, []);
 
   async function loadLatestPositions(currentOrgId, assignmentTrackers = []) {
@@ -1918,8 +1865,8 @@ export default function TrackerDashboard() {
 
   useEffect(() => {
     if (!resolvedOrgId || entitlementsLoading || isFree) return;
-    fetchGeofences(resolvedOrgId, assignments);
-  }, [resolvedOrgId, assignments, entitlementsLoading, isFree, fetchGeofences]);
+    fetchGeofences(resolvedOrgId);
+  }, [resolvedOrgId, entitlementsLoading, isFree, fetchGeofences]);
 
   useEffect(() => {
     if (!resolvedOrgId || entitlementsLoading || isFree) return;
