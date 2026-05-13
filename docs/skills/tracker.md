@@ -416,6 +416,16 @@ El dashboard debe renderizar todas las posiciones canónicas de la tabla `tracke
 
 ---
 
+## Regla de identidad en api/send-position
+
+El endpoint `api/send-position` debe tomar los valores de `tracker_user_id` y `org_id` exclusivamente de la runtime session válida (obtenida vía token Bearer), ignorando cualquier identidad enviada en el body o headers.
+
+- No debe aceptar user_id, tracker_user_id ni org_id del body ni de headers como fuente de verdad.
+- Esto previene contaminación de rutas y datos entre trackers, asegurando aislamiento y seguridad.
+- Si la runtime session no es válida o falta alguno de estos campos, debe responder 401 `invalid_runtime_session`.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.

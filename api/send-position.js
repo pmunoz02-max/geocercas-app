@@ -109,36 +109,26 @@ export default async function handler(req, res) {
       return res.status(401).json({ ok: false, error: "missing_bearer_token" });
     }
 
+
     const runtimeToken = authHeader.replace("Bearer ", "").trim();
     const runtimeTokenHashPrefix = sha256Hex(runtimeToken).slice(0, 12);
     const body = await readBody(req);
 
     const session = await resolveRuntimeSession(runtimeToken);
 
-    // Usar solo user_id (no tracker_user_id) para la tabla tracker_positions
-    const userId =
-      body.tracker_user_id ||
-      body.user_id ||
-      session?.tracker_user_id ||
-      null;
+    // Exigir sesión runtime válida y usar solo session.tracker_user_id y session.org_id
+    if (!session?.tracker_user_id || !session?.org_id) {
+      return res.status(401).json({
+        ok: false,
+        error: "invalid_runtime_session",
+      });
+    }
 
-    const orgId =
-      body.org_id ||
-      body.orgId ||
-      getHeader(req, "x-org-id") ||
-      session?.org_id ||
-      null;
+    const userId = session.tracker_user_id;
+    const orgId = session.org_id;
 
     const lat = body.lat ?? body.latitude;
     const lng = body.lng ?? body.longitude;
-
-    if (!userId) {
-      return res.status(400).json({ ok: false, error: "missing_user_id" });
-    }
-
-    if (!orgId) {
-      return res.status(400).json({ ok: false, error: "missing_org_id" });
-    }
 
     if (!isFiniteNumber(lat) || !isFiniteNumber(lng)) {
       return res.status(400).json({ ok: false, error: "invalid_coordinates" });
