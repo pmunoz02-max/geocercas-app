@@ -89,6 +89,343 @@ async function resolveRuntimeSession(token) {
   return null;
 }
 
+function supabaseRestHeaders() {
+  return {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    Accept: "application/json",
+  };
+}
+
+async function fetchSupabaseRows(queryPath, logLabel) {
+  const baseUrl = SUPABASE_URL.replace(/\/$/, "");
+  const response = await fetch(`${baseUrl}/rest/v1/${queryPath}`, {
+    method: "GET",
+    headers: supabaseRestHeaders(),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    console.error("[api/send-position] supabase_lookup_failed", {
+      lookup: logLabel,
+      status: response.status,
+      body: body?.slice?.(0, 300),
+    });
+    throw new Error(`${logLabel}_lookup_failed`);
+  }
+
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows : [];
+}
+
+function uniq(values = []) {
+  return Array.from(
+    new Set(
+      values
+        .filter(Boolean)
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+function normalizeAssignmentStatus(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isActiveAssignment(row, now = new Date()) {
+  if (!row || row.is_deleted === true) return false;
+
+  const status = normalizeAssignmentStatus(row.status || row.estado);
+  if (
+    status &&
+    !["active", "activa", "activo", "enabled", "vigente"].includes(status)
+  ) {
+    return false;
+  }
+
+  const nowMs = now.getTime();
+
+  if (row.start_time) {
+    const startTimeMs = Date.parse(row.start_time);
+    if (Number.isFinite(startTimeMs) && startTimeMs > nowMs) return false;
+  }
+
+  if (row.end_time) {
+    const endTimeMs = Date.parse(row.end_time);
+    if (Number.isFinite(endTimeMs) && endTimeMs < nowMs) return false;
+  }
+
+  const todayIso = now.toISOString().slice(0, 10);
+  if (row.start_date && String(row.start_date).slice(0, 10) > todayIso) return false;
+  if (row.end_date && String(row.end_date).slice(0, 10) < todayIso) return false;
+
+  return true;
+}
+
+async function resolvePersonalIdForTracker({ orgId, userId }) {
+  const params = new URLSearchParams({
+    select: "id",
+    org_id: `eq.${orgId}`,
+    user_id: `eq.${userId}`,
+    limit: "1",
+  });
+
+  const rows = await fetchSupabaseRows(`personal?${params.toString()}`, "personal");
+  return rows?.[0]?.id ? String(rows[0].id) : null;
+}
+
+async function loadActiveAssignments({ orgId, userId }) {
+  const personalId = await resolvePersonalIdForTracker({ orgId, userId });
+
+  const params = new URLSearchParams({
+    select:
+      "id,org_id,user_id,personal_id,geofence_id,geocerca_id,status,estado,is_deleted,start_time,end_time,start_date,end_date",
+    org_id: `eq.${orgId}`,
+  });
+
+  if (personalId) {
+    params.set("or", `(user_id.eq.${userId},personal_id.eq.${personalId})`);
+  } else {
+    params.set("user_id", `eq.${userId}`);
+  }
+
+  const rows = await fetchSupabaseRows(`asignaciones?${params.toString()}`, "assignments");
+  return rows.filter((row) => isActiveAssignment(row));
+}
+
+async function loadAssignedActiveGeofences({ orgId, assignments }) {
+  const geofenceIds = uniq(assignments.map((row) => row.geofence_id));
+  const sourceGeocercaIds = uniq(assignments.map((row) => row.geocerca_id));
+  const rows = [];
+
+  if (geofenceIds.length > 0) {
+    const params = new URLSearchParams({
+      select:
+        "id,org_id,name,geojson,polygon_geojson,lat,lng,radius_m,active,source_geocerca_id",
+      org_id: `eq.${orgId}`,
+      active: "eq.true",
+      id: `in.(${geofenceIds.join(",")})`,
+    });
+
+    rows.push(...(await fetchSupabaseRows(`geofences?${params.toString()}`, "geofences_by_id")));
+  }
+
+  if (sourceGeocercaIds.length > 0) {
+    const params = new URLSearchParams({
+      select:
+        "id,org_id,name,geojson,polygon_geojson,lat,lng,radius_m,active,source_geocerca_id",
+      org_id: `eq.${orgId}`,
+      active: "eq.true",
+      source_geocerca_id: `in.(${sourceGeocercaIds.join(",")})`,
+    });
+
+    rows.push(...(await fetchSupabaseRows(`geofences?${params.toString()}`, "geofences_by_source")));
+  }
+
+  const seen = new Set();
+  return rows.filter((row) => {
+    const id = row?.id ? String(row.id) : null;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function haversineDistanceMeters(lat1, lng1, lat2, lng2) {
+  const toRad = (value) => (Number(value) * Math.PI) / 180;
+  const earthRadiusM = 6371000;
+  const dLat = toRad(lat2) - toRad(lat1);
+  const dLng = toRad(lng2) - toRad(lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * earthRadiusM * Math.asin(Math.sqrt(a));
+}
+
+function isPointInsideCircle({ lat, lng, geofence }) {
+  if (
+    !isFiniteNumber(lat) ||
+    !isFiniteNumber(lng) ||
+    !isFiniteNumber(geofence?.lat) ||
+    !isFiniteNumber(geofence?.lng) ||
+    !isFiniteNumber(geofence?.radius_m)
+  ) {
+    return false;
+  }
+
+  const radiusM = Number(geofence.radius_m);
+  if (radiusM <= 0) return false;
+
+  const distanceM = haversineDistanceMeters(
+    Number(lat),
+    Number(lng),
+    Number(geofence.lat),
+    Number(geofence.lng)
+  );
+
+  return distanceM <= radiusM;
+}
+
+function parseGeoJsonMaybe(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
+}
+
+function pointInRing({ lng, lat, ring }) {
+  if (!Array.isArray(ring) || ring.length < 3) return false;
+
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const current = ring[i];
+    const previous = ring[j];
+    if (!Array.isArray(current) || !Array.isArray(previous)) continue;
+
+    const xi = Number(current[0]);
+    const yi = Number(current[1]);
+    const xj = Number(previous[0]);
+    const yj = Number(previous[1]);
+
+    if (![xi, yi, xj, yj].every(Number.isFinite)) continue;
+
+    const intersects =
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+
+    if (intersects) inside = !inside;
+  }
+
+  return inside;
+}
+
+function pointInPolygonCoordinates({ lng, lat, rings }) {
+  if (!Array.isArray(rings) || rings.length === 0) return false;
+  if (!pointInRing({ lng, lat, ring: rings[0] })) return false;
+
+  for (let i = 1; i < rings.length; i += 1) {
+    if (pointInRing({ lng, lat, ring: rings[i] })) return false;
+  }
+
+  return true;
+}
+
+function collectGeoJsonGeometries(value, geometries = []) {
+  const parsed = parseGeoJsonMaybe(value);
+  if (!parsed || typeof parsed !== "object") return geometries;
+
+  if (parsed.type === "FeatureCollection" && Array.isArray(parsed.features)) {
+    for (const feature of parsed.features) {
+      collectGeoJsonGeometries(feature, geometries);
+    }
+    return geometries;
+  }
+
+  if (parsed.type === "Feature" && parsed.geometry) {
+    collectGeoJsonGeometries(parsed.geometry, geometries);
+    return geometries;
+  }
+
+  if (parsed.type === "GeometryCollection" && Array.isArray(parsed.geometries)) {
+    for (const geometry of parsed.geometries) {
+      collectGeoJsonGeometries(geometry, geometries);
+    }
+    return geometries;
+  }
+
+  if (parsed.type === "Polygon" || parsed.type === "MultiPolygon") {
+    geometries.push(parsed);
+  }
+
+  return geometries;
+}
+
+function isPointInsideGeoJson({ lat, lng, geojson }) {
+  if (!isFiniteNumber(lat) || !isFiniteNumber(lng)) return false;
+
+  const geometries = collectGeoJsonGeometries(geojson);
+  for (const geometry of geometries) {
+    if (geometry.type === "Polygon") {
+      if (
+        pointInPolygonCoordinates({
+          lng: Number(lng),
+          lat: Number(lat),
+          rings: geometry.coordinates,
+        })
+      ) {
+        return true;
+      }
+    }
+
+    if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+      for (const rings of geometry.coordinates) {
+        if (
+          pointInPolygonCoordinates({
+            lng: Number(lng),
+            lat: Number(lat),
+            rings,
+          })
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function isPointInsideGeofence({ lat, lng, geofence }) {
+  if (isPointInsideCircle({ lat, lng, geofence })) return true;
+
+  return (
+    isPointInsideGeoJson({ lat, lng, geojson: geofence?.geojson }) ||
+    isPointInsideGeoJson({ lat, lng, geojson: geofence?.polygon_geojson })
+  );
+}
+
+async function assertPositionInsideAssignedGeofence({ orgId, userId, lat, lng }) {
+  const assignments = await loadActiveAssignments({ orgId, userId });
+
+  if (!assignments.length) {
+    return {
+      allowed: false,
+      reason: "no_active_geofence_assignment",
+      assignmentsChecked: 0,
+      geofencesChecked: 0,
+    };
+  }
+
+  const geofences = await loadAssignedActiveGeofences({ orgId, assignments });
+
+  if (!geofences.length) {
+    return {
+      allowed: false,
+      reason: "no_active_assigned_geofence",
+      assignmentsChecked: assignments.length,
+      geofencesChecked: 0,
+    };
+  }
+
+  const insideAnyAssignedGeofence = geofences.some((geofence) =>
+    isPointInsideGeofence({ lat, lng, geofence })
+  );
+
+  return {
+    allowed: insideAnyAssignedGeofence,
+    reason: insideAnyAssignedGeofence ? null : "outside_assigned_geofence",
+    assignmentsChecked: assignments.length,
+    geofencesChecked: geofences.length,
+  };
+}
 export default async function handler(req, res) {
   console.log("[api/send-position] proxy_start", {
     method: req.method,
@@ -134,7 +471,29 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "invalid_coordinates" });
     }
 
-    // Insert directo a tracker_positions
+    const geofenceGate = await assertPositionInsideAssignedGeofence({
+      orgId,
+      userId,
+      lat: Number(lat),
+      lng: Number(lng),
+    });
+
+    if (!geofenceGate.allowed) {
+      console.log("[api/send-position] position_not_stored", {
+        reason: geofenceGate.reason,
+        assignments_checked: geofenceGate.assignmentsChecked,
+        geofences_checked: geofenceGate.geofencesChecked,
+        runtime_token_hash_prefix: runtimeTokenHashPrefix,
+      });
+
+      return res.status(200).json({
+        ok: true,
+        stored: false,
+        reason: geofenceGate.reason,
+      });
+    }
+
+    // Insert directo a tracker_positions solo cuando el punto está dentro de una geocerca asignada activa
     const insertPayload = {
       org_id: orgId,
       user_id: userId,

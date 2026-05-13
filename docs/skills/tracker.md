@@ -435,6 +435,17 @@ El endpoint `api/send-position` debe tomar los valores de `tracker_user_id` y `o
 
 ---
 
+## Regla de almacenamiento en /api/send-position
+
+- El endpoint `/api/send-position` solo debe guardar posiciones si el tracker está dentro de una geofence activa asignada a ese tracker.
+- Si el tracker está fuera de cualquier geofence activa asignada, la respuesta debe ser:
+  - `stored: false`
+  - `reason: outside_assigned_geofence`
+- No se debe guardar la posición en la base de datos si no cumple la condición de geofence activa asignada.
+- Esta lógica es obligatoria para evitar registros fuera de zonas autorizadas.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.
