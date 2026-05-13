@@ -1657,13 +1657,9 @@ export default function TrackerDashboard() {
         const selectedWindowHours = Math.max(1, Math.round(windowConfig.ms / (60 * 60 * 1000)));
 
         const latestRes = await loadLatestPositions(safeOrgId);
-        let latestRows = latestRes?.rows || [];
 
-        // Only filter if assignments is not empty
-        let finalRows =
-          allowedAssignmentUserIds && allowedAssignmentUserIds.size > 0
-            ? latestRows.filter((r) => allowedAssignmentUserIds.has(String(r.user_id)))
-            : latestRows;
+        let latestRows = latestRes?.rows || [];
+        let finalRows = latestRows;
 
         let source = "tracker_latest";
 

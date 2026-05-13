@@ -406,6 +406,16 @@ export function getTrackerKey(row) {
 
 ---
 
+## Regla de visualización en dashboard
+
+El dashboard debe renderizar todas las posiciones canónicas de la tabla `tracker_positions` que sean válidas, sin descartarlas por ausencia de registros en `tracker_assignments`.
+
+- No se debe filtrar por asignaciones activas al mostrar posiciones.
+- Todas las posiciones válidas (lat/lng válidos) deben ser visibles para admins y operadores de la organización.
+- Esto asegura que ningún tracker quede oculto por falta de asignación formal.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.
