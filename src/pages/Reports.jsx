@@ -242,11 +242,11 @@ export default function Reports() {
         return;
       }
 
-      if (reportType === "cost" && (!start || !end)) {
+      if (!start || !end) {
         setErrorMsg(
           tr(
             "reports.errors.missingStartEnd",
-            "Please select both a start and end date to generate the costs report."
+            "Please select both a start and end date to generate the report."
           )
         );
         return;

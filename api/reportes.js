@@ -69,6 +69,147 @@ async function resolveCurrentOrgId(supabase) {
   return null;
 }
 
+
+function normalizeLower(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function uniqueStrings(values = []) {
+  return Array.from(
+    new Set(
+      values
+        .filter(Boolean)
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+async function resolvePersonalIdsFromEmails(supabase, orgId, emails) {
+  const normalizedEmails = uniqueStrings(emails.map(normalizeLower));
+  if (!normalizedEmails.length) return [];
+
+  const [normRes, rawRes] = await Promise.all([
+    supabase
+      .from("personal")
+      .select("id, email_norm")
+      .eq("org_id", orgId)
+      .in("email_norm", normalizedEmails),
+    supabase
+      .from("personal")
+      .select("id, email")
+      .eq("org_id", orgId)
+      .in("email", normalizedEmails),
+  ]);
+
+  const errors = [normRes.error, rawRes.error].filter(Boolean);
+  if (errors.length) {
+    throw new Error(errors.map((e) => e.message).join(" | "));
+  }
+
+  return uniqueStrings([
+    ...(normRes.data || []).map((row) => row?.id),
+    ...(rawRes.data || []).map((row) => row?.id),
+  ]);
+}
+
+async function resolveGeofenceFilterIdsFromNames(supabase, orgId, geocercaNames) {
+  const names = uniqueStrings(geocercaNames);
+  if (!names.length) return { geofenceIds: [], sourceGeocercaIds: [] };
+
+  const { data, error } = await supabase
+    .from("geofences")
+    .select("id, source_geocerca_id, name")
+    .eq("org_id", orgId)
+    .in("name", names);
+
+  if (error) throw error;
+
+  return {
+    geofenceIds: uniqueStrings((data || []).map((row) => row?.id)),
+    sourceGeocercaIds: uniqueStrings((data || []).map((row) => row?.source_geocerca_id)),
+  };
+}
+
+function buildGeofenceOrFilter(ids) {
+  const cleanIds = uniqueStrings(ids);
+  if (!cleanIds.length) return null;
+  const packed = cleanIds.join(",");
+  return `geofence_id.in.(${packed}),geocerca_id.in.(${packed})`;
+}
+
+async function resolveAllowedAssignmentIdsForReportFilters({
+  supabase,
+  orgId,
+  geocercaIds,
+  geocercaNames,
+  personalIds,
+  emails,
+  asignacionIds,
+}) {
+  const hasAssignmentScopedFilter =
+    geocercaIds.length > 0 ||
+    geocercaNames.length > 0 ||
+    personalIds.length > 0 ||
+    emails.length > 0 ||
+    asignacionIds.length > 0;
+
+  if (!hasAssignmentScopedFilter) return null;
+
+  const emailPersonalIds = await resolvePersonalIdsFromEmails(supabase, orgId, emails);
+  const combinedPersonalIds = uniqueStrings([...personalIds, ...emailPersonalIds]);
+
+  if (emails.length > 0 && combinedPersonalIds.length === 0) return new Set();
+
+  const geofenceNameFilters = await resolveGeofenceFilterIdsFromNames(
+    supabase,
+    orgId,
+    geocercaNames
+  );
+
+  if (
+    geocercaNames.length > 0 &&
+    geofenceNameFilters.geofenceIds.length === 0 &&
+    geofenceNameFilters.sourceGeocercaIds.length === 0
+  ) {
+    return new Set();
+  }
+
+  let query = supabase
+    .from("asignaciones")
+    .select("id, geofence_id, geocerca_id, personal_id, is_deleted")
+    .eq("org_id", orgId);
+
+  if (asignacionIds.length) query = query.in("id", asignacionIds);
+  if (combinedPersonalIds.length) query = query.in("personal_id", combinedPersonalIds);
+
+  const directGeofenceFilter = buildGeofenceOrFilter(geocercaIds);
+  if (directGeofenceFilter) query = query.or(directGeofenceFilter);
+
+  const geofenceNameIds = uniqueStrings([
+    ...geofenceNameFilters.geofenceIds,
+    ...geofenceNameFilters.sourceGeocercaIds,
+  ]);
+  const nameBasedGeofenceFilter = buildGeofenceOrFilter(geofenceNameIds);
+  if (nameBasedGeofenceFilter) query = query.or(nameBasedGeofenceFilter);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return new Set(
+    (data || [])
+      .filter((row) => row?.id && row?.is_deleted !== true)
+      .map((row) => String(row.id))
+  );
+}
+
+function sortReportRowsDesc(rows = []) {
+  return [...rows].sort((a, b) =>
+    String(b?.work_date || b?.date || "").localeCompare(String(a?.work_date || a?.date || ""))
+  );
+}
+
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "GET") {
@@ -193,8 +334,26 @@ export default async function handler(req, res) {
       const start = req.query.start ? String(req.query.start) : "";
       const end = req.query.end ? String(req.query.end) : "";
 
-      if (start && end && start > end) {
-        return res.status(400).json({ error: 'La fecha "Desde" no puede ser mayor que "Hasta".' });
+      if (!start || !end) {
+        return res.status(400).json({
+          ok: false,
+          error: "Missing required parameters: start, end",
+        });
+      }
+
+      if (start > end) {
+        return res.status(400).json({
+          ok: false,
+          error: 'La fecha "Desde" no puede ser mayor que "Hasta".',
+        });
+      }
+
+      const orgId = await resolveCurrentOrgId(supabase);
+      if (!orgId) {
+        return res.status(401).json({
+          ok: false,
+          error: "No active org for report.",
+        });
       }
 
       const geocercaIds = parseCsvParam(req.query.geocerca_ids);
@@ -207,36 +366,64 @@ export default async function handler(req, res) {
       const limit = normalizeLimit(req.query.limit, 200, 1000);
       const offset = normalizeOffset(req.query.offset);
 
-      let query = supabase
-        .from("v_reportes_diario_con_asignacion")
-        .select("*")
-        .order("work_day", { ascending: false });
+      const { data: rpcRows, error: rpcError } = await supabase.rpc(
+        "calculate_tracker_costs_preview",
+        {
+          p_org_id: orgId,
+          p_date_from: start,
+          p_date_to: end,
+        }
+      );
 
-      if (start) query = query.gte("work_day", start);
-      if (end) query = query.lte("work_day", end);
-
-      if (geocercaIds.length) query = query.in("geocerca_id", geocercaIds);
-      if (geocercaNames.length) query = query.in("geofence_name", geocercaNames);
-      if (personalIds.length) query = query.in("personal_id", personalIds);
-      if (emails.length) query = query.in("email_norm", emails);
-      if (activityIds.length) query = query.in("activity_id", activityIds);
-      if (asignacionIds.length) query = query.in("asignacion_id", asignacionIds);
-
-      query = query.range(offset, offset + limit - 1);
-
-      const { data, error } = await query;
-
-      if (error) {
-        return res.status(400).json({
-          error: error.message,
-          hint:
-            "Revisa v_reportes_* y RLS. get_current_org_id() debe estar funcionando (tabla user_current_org).",
+      if (rpcError) {
+        return res.status(500).json({
+          ok: false,
+          error: rpcError.message || "RPC error",
         });
       }
 
+      let rows = Array.isArray(rpcRows) ? rpcRows : [];
+
+      const allowedAssignmentIds = await resolveAllowedAssignmentIdsForReportFilters({
+        supabase,
+        orgId,
+        geocercaIds,
+        geocercaNames,
+        personalIds,
+        emails,
+        asignacionIds,
+      });
+
+      if (allowedAssignmentIds) {
+        rows = rows.filter((row) => allowedAssignmentIds.has(String(row?.assignment_id || "")));
+      }
+
+      if (activityIds.length) {
+        const allowedActivityIds = new Set(activityIds.map(String));
+        rows = rows.filter((row) => allowedActivityIds.has(String(row?.activity_id || "")));
+      }
+
+      rows = sortReportRowsDesc(rows).map((row) => ({
+        ...row,
+        date: row?.work_date || null,
+        // Campo legacy que Reports.jsx sabe mostrar como "—" cuando no viene desde la RPC.
+        minutos_sin_cobertura: row?.minutos_sin_cobertura ?? null,
+      }));
+
+      const totalFiltered = rows.length;
+      const pagedRows = rows.slice(offset, offset + limit);
+
       return res.status(200).json({
-        data: data || [],
-        meta: { limit, offset, returned: (data || []).length },
+        ok: true,
+        data: pagedRows,
+        meta: {
+          source: "calculate_tracker_costs_preview",
+          limit,
+          offset,
+          returned: pagedRows.length,
+          total_filtered: totalFiltered,
+          org_id: orgId,
+        },
       });
     }
 

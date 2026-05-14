@@ -179,3 +179,14 @@ Push corto:
 git add docs/skills/reports.md
 git commit -m "docs: add reports skill [allow-docs]"
 git push origin preview
+```
+
+---
+
+## Cambio en fuente de datos de /api/reportes?action=report
+
+- El endpoint `/api/reportes?action=report` **ya no utiliza** la vista `v_reportes_diario_con_asignacion`.
+- Ahora utiliza la RPC oficial `calculate_tracker_costs_preview` como fuente de datos.
+- Las fechas de inicio y fin son **obligatorias** en la llamada a la RPC.
+- Se mantienen los filtros y parámetros compatibles con la lógica de filtrado usada en `Reports.jsx`.
+- Este cambio asegura consistencia y precisión en los reportes generados desde el dashboard y las exportaciones.
