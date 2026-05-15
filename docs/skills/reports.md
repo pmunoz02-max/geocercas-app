@@ -209,3 +209,5 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 
 - Reports.jsx debe formatear los campos `costo_total` y `costo_final` usando `Intl.NumberFormat`, pasando el `currency_code` de cada fila y el locale de `i18n.language` para mostrar el símbolo de moneda correcto según el idioma y la moneda.
 - Ejemplo: para USD y locale `es-MX`, se mostrará `$26.62`.
+
+- La RPC `calculate_tracker_costs_preview` debe incluir únicamente posiciones de `tracker_positions` que estén dentro de la geofence activa asignada, usando validación espacial contra `geofences.geom` con `ST_Covers`.
