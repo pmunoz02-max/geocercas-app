@@ -209,6 +209,142 @@ function sortReportRowsDesc(rows = []) {
   );
 }
 
+function formatPersonalDisplayName(row) {
+  if (!row) return "—";
+  const fullName = [row.nombre, row.apellido]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  return fullName || String(row.email || "").trim() || "—";
+}
+
+async function enrichReportRowsWithNames({ supabase, orgId, rows }) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  if (!safeRows.length) return [];
+
+  const trackerUserIds = uniqueStrings(safeRows.map((row) => row?.tracker_user_id));
+  const assignmentIds = uniqueStrings(safeRows.map((row) => row?.assignment_id));
+  const activityIds = uniqueStrings(safeRows.map((row) => row?.activity_id));
+
+  const [personasRes, asignacionesRes, activitiesRes] = await Promise.all([
+    trackerUserIds.length
+      ? supabase
+          .from("personal")
+          .select("id, user_id, nombre, apellido, email")
+          .eq("org_id", orgId)
+          .in("user_id", trackerUserIds)
+      : Promise.resolve({ data: [], error: null }),
+    assignmentIds.length
+      ? supabase
+          .from("asignaciones")
+          .select("id, geofence_id, geocerca_id")
+          .eq("org_id", orgId)
+          .in("id", assignmentIds)
+      : Promise.resolve({ data: [], error: null }),
+    activityIds.length
+      ? supabase
+          .from("activities")
+          .select("id, name")
+          .eq("org_id", orgId)
+          .in("id", activityIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const enrichmentErrors = [
+    personasRes.error && { source: "personal", error: personasRes.error.message },
+    asignacionesRes.error && { source: "asignaciones", error: asignacionesRes.error.message },
+    activitiesRes.error && { source: "activities", error: activitiesRes.error.message },
+  ].filter(Boolean);
+
+  if (enrichmentErrors.length) {
+    throw new Error(
+      `No se pudieron resolver nombres del reporte: ${enrichmentErrors
+        .map((item) => `${item.source}: ${item.error}`)
+        .join(" | ")}`
+    );
+  }
+
+  const asignaciones = asignacionesRes.data || [];
+  const geofenceIds = uniqueStrings(asignaciones.map((row) => row?.geofence_id));
+  const geocercaIds = uniqueStrings(asignaciones.map((row) => row?.geocerca_id));
+
+  const [geofencesRes, geocercasRes] = await Promise.all([
+    geofenceIds.length
+      ? supabase
+          .from("geofences")
+          .select("id, name")
+          .eq("org_id", orgId)
+          .in("id", geofenceIds)
+      : Promise.resolve({ data: [], error: null }),
+    geocercaIds.length
+      ? supabase
+          .from("geocercas")
+          .select("id, nombre, name")
+          .eq("org_id", orgId)
+          .in("id", geocercaIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  const geofenceErrors = [
+    geofencesRes.error && { source: "geofences", error: geofencesRes.error.message },
+    geocercasRes.error && { source: "geocercas", error: geocercasRes.error.message },
+  ].filter(Boolean);
+
+  if (geofenceErrors.length) {
+    throw new Error(
+      `No se pudieron resolver geocercas del reporte: ${geofenceErrors
+        .map((item) => `${item.source}: ${item.error}`)
+        .join(" | ")}`
+    );
+  }
+
+  const personaByUserId = new Map(
+    (personasRes.data || [])
+      .filter((row) => row?.user_id)
+      .map((row) => [String(row.user_id), row])
+  );
+  const assignmentById = new Map(
+    asignaciones
+      .filter((row) => row?.id)
+      .map((row) => [String(row.id), row])
+  );
+  const activityById = new Map(
+    (activitiesRes.data || [])
+      .filter((row) => row?.id)
+      .map((row) => [String(row.id), row])
+  );
+  const geofenceById = new Map(
+    (geofencesRes.data || [])
+      .filter((row) => row?.id)
+      .map((row) => [String(row.id), row])
+  );
+  const geocercaById = new Map(
+    (geocercasRes.data || [])
+      .filter((row) => row?.id)
+      .map((row) => [String(row.id), row])
+  );
+
+  return safeRows.map((row) => {
+    const assignment = assignmentById.get(String(row?.assignment_id || ""));
+    const tracker = personaByUserId.get(String(row?.tracker_user_id || ""));
+    const activity = activityById.get(String(row?.activity_id || ""));
+    const geofence = assignment?.geofence_id
+      ? geofenceById.get(String(assignment.geofence_id))
+      : null;
+    const geocerca = assignment?.geocerca_id
+      ? geocercaById.get(String(assignment.geocerca_id))
+      : null;
+
+    return {
+      ...row,
+      tracker_nombre: formatPersonalDisplayName(tracker),
+      geofence_nombre:
+        String(geofence?.name || geocerca?.nombre || geocerca?.name || "").trim() || "—",
+      activity_nombre: String(activity?.name || "").trim() || "—",
+    };
+  });
+}
+
 
 export default async function handler(req, res) {
   try {
@@ -409,6 +545,8 @@ export default async function handler(req, res) {
         // Campo legacy que Reports.jsx sabe mostrar como "—" cuando no viene desde la RPC.
         minutos_sin_cobertura: row?.minutos_sin_cobertura ?? null,
       }));
+
+      rows = await enrichReportRowsWithNames({ supabase, orgId, rows });
 
       const totalFiltered = rows.length;
       const pagedRows = rows.slice(offset, offset + limit);

@@ -715,9 +715,9 @@ export default function Reports() {
                 <thead className="bg-gray-50 text-gray-900">
                   <tr className="border-b border-gray-200">
                     <th className="p-2 text-left font-semibold">Fecha</th>
-                    <th className="p-2 text-left font-semibold">Tracker User ID</th>
-                    <th className="p-2 text-left font-semibold">Assignment ID</th>
-                    <th className="p-2 text-left font-semibold">Activity ID</th>
+                    <th className="p-2 text-left font-semibold">Tracker</th>
+                    <th className="p-2 text-left font-semibold">Geocerca</th>
+                    <th className="p-2 text-left font-semibold">Actividad</th>
                     <th className="p-2 text-right font-semibold">Km observados</th>
                     <th className="p-2 text-right font-semibold">Horas observadas</th>
                     <th className="p-2 text-right font-semibold">Min sin cobertura</th>
@@ -736,9 +736,9 @@ export default function Reports() {
                       }`}
                     >
                       <td className="p-2 text-gray-900">{r.date || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.tracker_user_id || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.assignment_id || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.activity_id || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.tracker_nombre || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.geofence_nombre || "—"}</td>
+                      <td className="p-2 text-gray-900">{r.activity_nombre || "—"}</td>
                       <td className="p-2 text-right text-gray-900">{r.km_observados ?? "—"}</td>
                       <td className="p-2 text-right text-gray-900">{r.horas_observadas ?? "—"}</td>
                       <td className="p-2 text-right text-gray-900">
