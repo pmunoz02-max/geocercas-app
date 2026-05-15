@@ -1,4 +1,4 @@
-﻿# Skill: Reports & Cost Engine
+# Skill: Reports & Cost Engine
 
 ## Objetivo
 Mantener reportes, mÃ©tricas y exportaciones consistentes entre dashboard, reports y futuros archivos descargables.
@@ -11,7 +11,7 @@ Mantener reportes, mÃ©tricas y exportaciones consistentes entre dashboard, rep
 - No hacer push a `main`.
 - No mezclar preview con producciÃ³n.
 - No recalcular mÃ©tricas crÃ­ticas en frontend.
-- Toda mÃ©trica oficial debe venir de una fuente Ãºnica.
+- Toda mÃ©trica oficial debe venir de una fuente única.
 
 ---
 
@@ -211,3 +211,18 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 - Ejemplo: para USD y locale `es-MX`, se mostrará `$26.62`.
 
 - La RPC `calculate_tracker_costs_preview` debe incluir únicamente posiciones de `tracker_positions` que estén dentro de la geofence activa asignada, usando validación espacial contra `geofences.geom` con `ST_Covers`.
+
+---
+
+## Consumo de costos para dashboard
+
+- El endpoint `/api/reportes?action=costs` **debe reutilizar** la RPC oficial `calculate_tracker_costs_preview` como fuente única de datos.
+- Debe aplicar los **mismos filtros** de personal, geocerca y actividad que el endpoint `/api/reportes?action=report`.
+- Cada fila devuelta debe transformarse al shape compatible con `CostosDashboardPage`:
+    - `horas` = `horas_observadas`
+    - `costo_base` = `costo_total`
+    - `costo_final` = `costo_total`
+    - Además, debe enriquecer cada fila con los nombres humanos: `personal_nombre`, `geocerca_nombre`, `actividad_nombre` (usando la misma lógica de enriquecimiento que en `action=report`).
+- Los campos originales de la RPC se conservan para trazabilidad, pero la UI solo debe mostrar los nombres y métricas legibles.
+
+**Regla:** No duplicar lógica de cálculo ni de enriquecimiento de nombres en frontend. Toda la transformación y enriquecimiento debe ocurrir en backend antes de devolver los datos al dashboard.
