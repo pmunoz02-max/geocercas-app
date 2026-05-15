@@ -247,3 +247,11 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 - El total se muestra siempre, independientemente de si la tabla está agrupada o no.
 - Los totales se actualizan automáticamente al cambiar filtros, agrupaciones o fechas.
 - Esto asegura que el usuario siempre vea un resumen fiel de los datos mostrados en pantalla, sin recalcular métricas de origen: el frontend solo totaliza filas ya calculadas por backend.
+
+---
+
+## Simplificación de columnas en tabla de Asistencia (UI)
+
+- Desde mayo 2026, la tabla visual de Asistencia en Reports.jsx se simplificó eliminando las columnas "Min sin cobertura", "# Huecos", "% Cobertura" y "Nivel confianza".
+- Estos campos siguen estando disponibles en la respuesta del backend y en la exportación CSV, pero ya no se muestran ni se ofrecen como opciones de agrupación en la UI principal.
+- El objetivo es hacer la tabla más clara y enfocada para el usuario final, manteniendo la trazabilidad y el acceso a datos completos para análisis avanzados fuera de la UI.

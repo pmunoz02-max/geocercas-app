@@ -737,19 +737,6 @@ export default function Reports() {
             { value: "activity_nombre", label: tr("reports.groupBy.activity", "Actividad") },
             { value: "km_observados", label: tr("reports.groupBy.km", "Km observados") },
             { value: "horas_observadas", label: tr("reports.groupBy.hoursObserved", "Horas observadas") },
-            {
-              value: "minutos_sin_cobertura",
-              label: tr("reports.groupBy.uncoveredMinutes", "Min sin cobertura"),
-            },
-            { value: "numero_huecos", label: tr("reports.groupBy.gaps", "# Huecos") },
-            {
-              value: "porcentaje_cobertura",
-              label: tr("reports.groupBy.coverage", "% Cobertura"),
-            },
-            {
-              value: "nivel_confianza",
-              label: tr("reports.groupBy.confidenceLevel", "Nivel confianza"),
-            },
             { value: "costo_total", label: tr("reports.groupBy.totalCost", "Costo total") },
           ],
     [reportType, i18n.language]
@@ -869,10 +856,6 @@ export default function Reports() {
         <td className="p-2 text-gray-900">{row.activity_nombre || row.actividad_nombre || "—"}</td>
         <td className="p-2 text-right text-gray-900">{row.km_observados ?? "—"}</td>
         <td className="p-2 text-right text-gray-900">{row.horas_observadas ?? "—"}</td>
-        <td className="p-2 text-right text-gray-900">{row.minutos_sin_cobertura ?? "—"}</td>
-        <td className="p-2 text-right text-gray-900">{row.numero_huecos ?? "—"}</td>
-        <td className="p-2 text-right text-gray-900">{row.porcentaje_cobertura ?? "—"}</td>
-        <td className="p-2 text-right text-gray-900">{row.nivel_confianza ?? "—"}</td>
         <td className="p-2 text-right text-gray-900">
           {formatCurrency(row.costo_total, row.currency_code, i18n.language)}
         </td>
@@ -970,16 +953,6 @@ export default function Reports() {
           <td className="p-2 text-right font-semibold text-emerald-950">
             {formatNumericSummary(summary.horas_observadas, 3)}
           </td>
-          <td className="p-2 text-right font-semibold text-emerald-950">
-            {formatNumericSummary(summary.minutos_sin_cobertura, 1)}
-          </td>
-          <td className="p-2 text-right font-semibold text-emerald-950">
-            {formatNumericSummary(summary.numero_huecos, 0)}
-          </td>
-          <td className="p-2 text-right font-semibold text-emerald-950">
-            {formatCoverageSummary(summary.porcentaje_cobertura)}
-          </td>
-          <td className="p-2 text-right text-emerald-950">{summary.nivel_confianza}</td>
           <td className="p-2 text-right font-semibold text-emerald-950">
             {formatCurrency(summary.costo_total, summary.currency_code, i18n.language)}
           </td>
@@ -1416,10 +1389,6 @@ export default function Reports() {
                     <th className="p-2 text-left font-semibold">Actividad</th>
                     <th className="p-2 text-right font-semibold">Km observados</th>
                     <th className="p-2 text-right font-semibold">Horas observadas</th>
-                    <th className="p-2 text-right font-semibold">Min sin cobertura</th>
-                    <th className="p-2 text-right font-semibold"># Huecos</th>
-                    <th className="p-2 text-right font-semibold">% Cobertura</th>
-                    <th className="p-2 text-right font-semibold">Nivel confianza</th>
                     <th className="p-2 text-right font-semibold">Costo total</th>
                   </tr>
                 </thead>
@@ -1439,16 +1408,6 @@ export default function Reports() {
                     <td className="p-2 text-right">
                       {formatNumericSummary(totalSummary.horas_observadas, 3)}
                     </td>
-                    <td className="p-2 text-right">
-                      {formatNumericSummary(totalSummary.minutos_sin_cobertura, 1)}
-                    </td>
-                    <td className="p-2 text-right">
-                      {formatNumericSummary(totalSummary.numero_huecos, 0)}
-                    </td>
-                    <td className="p-2 text-right">
-                      {formatCoverageSummary(totalSummary.porcentaje_cobertura)}
-                    </td>
-                    <td className="p-2 text-right">{totalSummary.nivel_confianza}</td>
                     <td className="p-2 text-right">
                       {formatCurrency(totalSummary.costo_total, totalSummary.currency_code, i18n.language)}
                     </td>
