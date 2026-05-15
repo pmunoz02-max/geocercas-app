@@ -202,3 +202,10 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 - Los IDs siguen presentes en la respuesta para trazabilidad, pero la tabla principal solo muestra los nombres.
 
 - La RPC `calculate_tracker_costs_preview` debe leer `tracker_positions` y `asignaciones`, no las fuentes legacy `positions` ni `tracker_assignments`.
+
+---
+
+## Formato de moneda en reportes
+
+- Reports.jsx debe formatear los campos `costo_total` y `costo_final` usando `Intl.NumberFormat`, pasando el `currency_code` de cada fila y el locale de `i18n.language` para mostrar el símbolo de moneda correcto según el idioma y la moneda.
+- Ejemplo: para USD y locale `es-MX`, se mostrará `$26.62`.

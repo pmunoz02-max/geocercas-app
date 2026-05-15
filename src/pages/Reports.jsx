@@ -112,6 +112,7 @@ function getConfidenceBadgeClass(level) {
   }
 }
 
+
 function formatMoney(value) {
   if (value === null || value === undefined || value === "") return "—";
   const n = Number(value);
@@ -119,9 +120,29 @@ function formatMoney(value) {
   return n.toFixed(2);
 }
 
+// Helper para mostrar moneda con símbolo
+function formatCurrency(value, currencyCode, locale = "es-MX") {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = Number(value);
+  if (Number.isNaN(n)) return String(value);
+  // Fallback seguro: si no hay currencyCode, solo dos decimales
+  if (!currencyCode) return n.toFixed(2);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return n.toFixed(2);
+  }
+}
+
+
 export default function Reports() {
   const [reportType, setReportType] = useState("attendance");
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { ready, authenticated, currentOrg } = useAuth();
 
   const tr = (key, fallback, options = {}) =>
@@ -702,7 +723,7 @@ export default function Reports() {
                             </span>
                           </td>
                           <td className="p-2 text-right font-semibold text-gray-900">
-                            {formatMoney(r.costo_final)}
+                            {formatCurrency(r.costo_final, r.currency_code, i18n.language)}
                           </td>
                         </tr>
                       );
@@ -751,7 +772,7 @@ export default function Reports() {
                       <td className="p-2 text-right text-gray-900">
                         {r.nivel_confianza ?? "—"}
                       </td>
-                      <td className="p-2 text-right text-gray-900">{r.costo_total ?? "—"}</td>
+                      <td className="p-2 text-right text-gray-900">{formatCurrency(r.costo_total, r.currency_code, i18n.language)}</td>
                     </tr>
                   ))}
                 </tbody>
