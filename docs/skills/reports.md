@@ -237,3 +237,13 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 - Los totales y subtotales se calculan dinámicamente según el nivel de agrupación expandido.
 
 **Regla:** La experiencia de filtrado y agrupación debe ser intuitiva, rápida y sin exponer identificadores técnicos al usuario final.
+
+---
+
+## Fila Total general en tablas de Reports.jsx
+
+- Desde mayo 2026, Reports.jsx incluye una fila <tfoot> “Total general” al pie de las tablas de Asistencia y Costos.
+- Esta fila de totales se calcula dinámicamente usando summarizeGroupedRows sobre las filas actualmente filtradas, reflejando los datos visibles tras aplicar filtros y rango de fechas.
+- El total se muestra siempre, independientemente de si la tabla está agrupada o no.
+- Los totales se actualizan automáticamente al cambiar filtros, agrupaciones o fechas.
+- Esto asegura que el usuario siempre vea un resumen fiel de los datos mostrados en pantalla, sin recalcular métricas de origen: el frontend solo totaliza filas ya calculadas por backend.

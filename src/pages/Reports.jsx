@@ -760,6 +760,11 @@ export default function Reports() {
     [rows, groupByFields, groupableFields, reportType]
   );
 
+  const totalSummary = useMemo(
+    () => summarizeGroupedRows(rows, reportType),
+    [rows, reportType]
+  );
+
   const allGroupIds = useMemo(
     () => collectGroupNodeIds(groupedReportTree),
     [groupedReportTree]
@@ -1381,6 +1386,24 @@ export default function Reports() {
                       ? renderCostGroupedRows(groupedReportTree)
                       : rows.map((row, index) => renderCostDetailRow(row, index))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-emerald-300 bg-emerald-50 font-semibold text-emerald-950">
+                      <td className="p-2 text-left" colSpan={4}>
+                        {tr("reports.totals.general", "Total general")}
+                      </td>
+                      <td className="p-2 text-right">
+                        {formatNumericSummary(totalSummary.horas, 3)}
+                      </td>
+                      <td className="p-2 text-right">
+                        {formatCurrency(totalSummary.costo_base, totalSummary.currency_code, i18n.language)}
+                      </td>
+                      <td className="p-2 text-right">—</td>
+                      <td className="p-2 text-right">—</td>
+                      <td className="p-2 text-right">
+                        {formatCurrency(totalSummary.costo_final, totalSummary.currency_code, i18n.language)}
+                      </td>
+                    </tr>
+                  </tfoot>
                 </table>
               </>
             ) : (
@@ -1405,6 +1428,32 @@ export default function Reports() {
                     ? renderAttendanceGroupedRows(groupedReportTree)
                     : rows.map((row, index) => renderAttendanceDetailRow(row, index))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-emerald-300 bg-emerald-50 font-semibold text-emerald-950">
+                    <td className="p-2 text-left" colSpan={4}>
+                      {tr("reports.totals.general", "Total general")}
+                    </td>
+                    <td className="p-2 text-right">
+                      {formatNumericSummary(totalSummary.km_observados, 3)}
+                    </td>
+                    <td className="p-2 text-right">
+                      {formatNumericSummary(totalSummary.horas_observadas, 3)}
+                    </td>
+                    <td className="p-2 text-right">
+                      {formatNumericSummary(totalSummary.minutos_sin_cobertura, 1)}
+                    </td>
+                    <td className="p-2 text-right">
+                      {formatNumericSummary(totalSummary.numero_huecos, 0)}
+                    </td>
+                    <td className="p-2 text-right">
+                      {formatCoverageSummary(totalSummary.porcentaje_cobertura)}
+                    </td>
+                    <td className="p-2 text-right">{totalSummary.nivel_confianza}</td>
+                    <td className="p-2 text-right">
+                      {formatCurrency(totalSummary.costo_total, totalSummary.currency_code, i18n.language)}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             )}
           </div>
