@@ -198,7 +198,7 @@ function MultiSelectDropdown({
       <div className="relative">
         <button
           type="button"
-          className={`block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 pr-20 text-left text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed ${
+          className={`block w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 pr-20 text-left text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed ${
             selectedOptions.length === 0 ? "text-gray-500" : ""
           }`}
           onClick={() => setOpen((current) => !current)}
@@ -213,7 +213,7 @@ function MultiSelectDropdown({
           {selectedOptions.length > 0 && !disabled && (
             <button
               type="button"
-              className="rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              className="rounded-md px-1.5 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
               onClick={(event) => {
                 event.stopPropagation();
                 clearSelection();
@@ -224,13 +224,13 @@ function MultiSelectDropdown({
               ×
             </button>
           )}
-          <span className="pointer-events-none text-xs text-gray-500">{open ? "▲" : "▼"}</span>
+          <span className="pointer-events-none text-xs text-emerald-700">{open ? "▲" : "▼"}</span>
         </div>
       </div>
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-xl"
+          className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl shadow-emerald-950/10"
           role="listbox"
           aria-multiselectable="true"
         >
@@ -243,10 +243,10 @@ function MultiSelectDropdown({
                 <button
                   key={option.value}
                   type="button"
-                  className={`flex w-full items-start gap-2 rounded-md px-3 py-2 text-left text-sm ${
+                  className={`flex w-full items-start gap-2 rounded-xl px-3 py-2.5 text-left text-sm transition ${
                     selected
-                      ? "bg-emerald-50 text-emerald-900"
-                      : "text-gray-800 hover:bg-gray-50"
+                      ? "bg-emerald-100/80 text-emerald-950"
+                      : "text-gray-800 hover:bg-emerald-50"
                   }`}
                   onClick={() => toggleOption(option.value)}
                   role="option"
@@ -466,24 +466,24 @@ export default function Reports() {
   );
 
   const inputBase =
-    "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
-    "placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
+    "block w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm text-gray-900 " +
+    "placeholder:text-gray-400 shadow-sm shadow-emerald-900/5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 " +
     "disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed";
 
   const selectBase =
-    "block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 " +
-    "shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 " +
+    "block w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm text-gray-900 " +
+    "shadow-sm shadow-emerald-900/5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 " +
     "disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed";
 
   const buttonPrimary =
-    "inline-flex items-center justify-center rounded-lg bg-emerald-700 px-4 py-2 text-sm font-medium text-white shadow-sm " +
-    "hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 " +
-    "disabled:opacity-60 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 " +
+    "transition hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 " +
+    "disabled:translate-y-0 disabled:opacity-60 disabled:cursor-not-allowed";
 
   const buttonSecondary =
-    "inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow-sm " +
-    "hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 " +
-    "disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center rounded-xl border border-emerald-100 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 shadow-sm shadow-emerald-900/5 " +
+    "transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 " +
+    "disabled:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed";
 
   async function apiGet(url) {
     const resp = await authFetch(url, {
@@ -868,7 +868,7 @@ export default function Reports() {
       const expanded = expandedGroupKeys.has(group.id);
       const summary = group.summary;
       const rowElements = [
-        <tr key={`${group.id}-group`} className="border-t border-emerald-100 bg-emerald-50/70">
+        <tr key={`${group.id}-group`} className="border-t border-emerald-100 bg-emerald-50/80">
           <td colSpan={4} className="p-2 text-sm text-emerald-950">
             <button
               type="button"
@@ -876,7 +876,7 @@ export default function Reports() {
               className="flex w-full items-center gap-2 text-left font-medium"
               style={{ paddingLeft: `${level * 18}px` }}
             >
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-300 bg-white text-xs">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-emerald-300 bg-white text-xs shadow-sm">
                 {expanded ? "−" : "+"}
               </span>
               <span>
@@ -925,7 +925,7 @@ export default function Reports() {
       const expanded = expandedGroupKeys.has(group.id);
       const summary = group.summary;
       const rowElements = [
-        <tr key={`${group.id}-group`} className="border-t border-emerald-100 bg-emerald-50/70">
+        <tr key={`${group.id}-group`} className="border-t border-emerald-100 bg-emerald-50/80">
           <td colSpan={4} className="p-2 text-sm text-emerald-950">
             <button
               type="button"
@@ -933,7 +933,7 @@ export default function Reports() {
               className="flex w-full items-center gap-2 text-left font-medium"
               style={{ paddingLeft: `${level * 18}px` }}
             >
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-300 bg-white text-xs">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-emerald-300 bg-white text-xs shadow-sm">
                 {expanded ? "−" : "+"}
               </span>
               <span>
@@ -988,7 +988,7 @@ export default function Reports() {
   if (!authenticated) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm font-medium text-red-800 shadow-sm shadow-red-900/5">
           {tr("reports.states.noActiveSession", "There is no active session. Sign in again.")}
         </div>
       </div>
@@ -998,7 +998,7 @@ export default function Reports() {
   if (!currentOrg?.id) {
     return (
       <div className="p-4 md:p-6 max-w-6xl mx-auto">
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm font-medium text-red-800 shadow-sm shadow-red-900/5">
           {tr("reports.states.noActiveOrg", "There is no active organization for this user.")}
         </div>
       </div>
@@ -1008,54 +1008,90 @@ export default function Reports() {
   const filtersDisabled = loadingFilters || loadingReport;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
-      <div className="flex items-center gap-4 mb-2">
-        <label className="text-sm font-medium text-gray-900">Tipo de reporte:</label>
-        <label className="inline-flex items-center gap-1">
-          <input
-            type="radio"
-            name="reportType"
-            value="attendance"
-            checked={reportType === "attendance"}
-            onChange={() => setReportType("attendance")}
-            className="accent-emerald-700"
-          />
-          <span>Asistencia</span>
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <input
-            type="radio"
-            name="reportType"
-            value="cost"
-            checked={reportType === "cost"}
-            onChange={() => setReportType("cost")}
-            className="accent-emerald-700"
-          />
-          <span>Costos</span>
-        </label>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
 
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {tr("reports.title", "Reports")}
-        </h1>
-        <p className="text-xs text-gray-600">
-          {tr("reports.labels.currentOrg", "Current org")}:{" "}
-          <span className="font-medium text-gray-900">
-            {currentOrg?.name || currentOrg?.id}
-          </span>
-        </p>
-      </div>
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {tr("reports.sections.results", "Reportes")}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {tr("reports.title", "Reports")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {tr(
+                  "reports.help.filters",
+                  "Select ranges and lists. Then press Generate."
+                )}
+              </p>
+            </div>
+            <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-white/15 bg-white/10 px-3 py-2 text-sm text-emerald-50 backdrop-blur-sm">
+              <span className="text-xs font-semibold uppercase tracking-wide text-emerald-100">
+                {tr("reports.labels.currentOrg", "Current org")}
+              </span>
+              <span className="rounded-full bg-white px-3 py-1 font-semibold text-emerald-900 shadow-sm">
+                {currentOrg?.name || currentOrg?.id}
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full rounded-3xl border border-white/15 bg-white/10 p-2 shadow-lg shadow-emerald-950/10 backdrop-blur-sm lg:w-auto">
+            <p className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-emerald-100">
+              {tr("reports.labels.reportType", "Tipo de reporte")}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <label
+                className={`cursor-pointer rounded-2xl px-4 py-3 text-center text-sm font-semibold transition ${
+                  reportType === "attendance"
+                    ? "bg-white text-emerald-900 shadow-md"
+                    : "text-emerald-50 hover:bg-white/10"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="reportType"
+                  value="attendance"
+                  checked={reportType === "attendance"}
+                  onChange={() => setReportType("attendance")}
+                  className="sr-only"
+                />
+                <span>{tr("reports.tabs.attendance", "Asistencia")}</span>
+              </label>
+              <label
+                className={`cursor-pointer rounded-2xl px-4 py-3 text-center text-sm font-semibold transition ${
+                  reportType === "cost"
+                    ? "bg-white text-emerald-900 shadow-md"
+                    : "text-emerald-50 hover:bg-white/10"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="reportType"
+                  value="cost"
+                  checked={reportType === "cost"}
+                  onChange={() => setReportType("cost")}
+                  className="sr-only"
+                />
+                <span>{tr("reports.tabs.costs", "Costos")}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {errorMsg && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-200 bg-red-50/90 px-4 py-3 text-sm font-medium text-red-800 shadow-sm shadow-red-900/5">
           {errorMsg}
         </div>
       )}
 
       <div className="grid grid-cols-1 gap-6">
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-4 py-3">
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
+          <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-teal-50 px-4 py-4 md:px-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-gray-900">
@@ -1097,8 +1133,8 @@ export default function Reports() {
             </div>
           </div>
 
-          <div className="p-4 space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div className="space-y-5 p-4 md:p-5">
+            <div className="grid grid-cols-1 items-end gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 md:grid-cols-12">
               <div className="md:col-span-3">
                 <label className="block text-sm font-medium text-gray-900">
                   {tr("reports.labels.from", "From")}
@@ -1146,7 +1182,7 @@ export default function Reports() {
               </div>
 
               <div className="md:col-span-12">
-                <div className="text-xs text-gray-600">
+                <div className="rounded-xl border border-emerald-100 bg-white/80 px-3 py-2 text-xs text-gray-700 shadow-sm shadow-emerald-900/5">
                   <span className="font-medium text-gray-900">
                     {tr("reports.labels.tip", "Tip")}:
                   </span>{" "}
@@ -1244,8 +1280,8 @@ export default function Reports() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-gray-100 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <section className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 bg-gradient-to-r from-white via-emerald-50/70 to-teal-50 px-4 py-4 md:px-5">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">
                 {tr("reports.sections.results", "Results")}
@@ -1263,7 +1299,7 @@ export default function Reports() {
             </div>
           </div>
 
-          <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+          <div className="border-b border-emerald-100 bg-emerald-50/50 px-4 py-4 md:px-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div className="min-w-0 flex-1">
                 <label className="block text-sm font-medium text-gray-900">
@@ -1321,11 +1357,11 @@ export default function Reports() {
 
           <div className="overflow-x-auto">
             {loadingReport ? (
-              <p className="p-4 text-sm text-gray-700">
+              <p className="m-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm text-gray-700">
                 {tr("reports.states.loading", "Loading…")}
               </p>
             ) : rows.length === 0 ? (
-              <p className="p-4 text-sm text-gray-700">
+              <p className="m-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 text-sm text-gray-700">
                 {tr(
                   "reports.states.noDataWithFilters",
                   "There is no data with the selected filters."
@@ -1333,16 +1369,16 @@ export default function Reports() {
               </p>
             ) : reportType === "cost" ? (
               <>
-                <div className="mb-2 px-4 pt-3 text-xs text-gray-600">
+                <div className="mx-4 mb-3 mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-xs leading-5 text-gray-700">
                   <span className="font-medium">Nota:</span> El reporte híbrido usa{" "}
                   <b>costo base administrativo</b> y, cuando existe histórico técnico, agrega{" "}
                   <b>confianza</b> y <b>estado de auditoría</b>. Si no hay histórico GPS para el
                   período, el costo final queda igual al costo base.
                 </div>
 
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-900">
-                    <tr className="border-b border-gray-200">
+                <table className="min-w-full border-separate border-spacing-0 text-sm">
+                  <thead className="bg-emerald-50/80 text-emerald-950">
+                    <tr className="border-b border-emerald-100">
                       <th className="p-2 text-left font-semibold">Fecha</th>
                       <th className="p-2 text-left font-semibold">Colaborador</th>
                       <th className="p-2 text-left font-semibold">Actividad</th>
@@ -1360,7 +1396,7 @@ export default function Reports() {
                       : rows.map((row, index) => renderCostDetailRow(row, index))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t-2 border-emerald-300 bg-emerald-50 font-semibold text-emerald-950">
+                    <tr className="border-t-2 border-emerald-300 bg-gradient-to-r from-emerald-100 via-emerald-50 to-teal-50 font-semibold text-emerald-950">
                       <td className="p-2 text-left" colSpan={4}>
                         {tr("reports.totals.general", "Total general")}
                       </td>
@@ -1380,9 +1416,9 @@ export default function Reports() {
                 </table>
               </>
             ) : (
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-gray-900">
-                  <tr className="border-b border-gray-200">
+              <table className="min-w-full border-separate border-spacing-0 text-sm">
+                <thead className="bg-emerald-50/80 text-emerald-950">
+                  <tr className="border-b border-emerald-100">
                     <th className="p-2 text-left font-semibold">Fecha</th>
                     <th className="p-2 text-left font-semibold">Tracker</th>
                     <th className="p-2 text-left font-semibold">Geocerca</th>
@@ -1398,7 +1434,7 @@ export default function Reports() {
                     : rows.map((row, index) => renderAttendanceDetailRow(row, index))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-emerald-300 bg-emerald-50 font-semibold text-emerald-950">
+                  <tr className="border-t-2 border-emerald-300 bg-gradient-to-r from-emerald-100 via-emerald-50 to-teal-50 font-semibold text-emerald-950">
                     <td className="p-2 text-left" colSpan={4}>
                       {tr("reports.totals.general", "Total general")}
                     </td>

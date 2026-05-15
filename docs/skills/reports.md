@@ -255,3 +255,15 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 - Desde mayo 2026, la tabla visual de Asistencia en Reports.jsx se simplificó eliminando las columnas "Min sin cobertura", "# Huecos", "% Cobertura" y "Nivel confianza".
 - Estos campos siguen estando disponibles en la respuesta del backend y en la exportación CSV, pero ya no se muestran ni se ofrecen como opciones de agrupación en la UI principal.
 - El objetivo es hacer la tabla más clara y enfocada para el usuario final, manteniendo la trazabilidad y el acceso a datos completos para análisis avanzados fuera de la UI.
+
+---
+
+## Refresh visual en Reports.jsx (mayo 2026)
+
+- Reports.jsx recibió una modernización visual completa:
+    - Nuevo hero superior con título destacado y descripción.
+    - Selector de modo Asistencia/Costos tipo “pills” con transición suave.
+    - Cards y paneles con bordes suaves, sombras y paleta emerald/green.
+    - Panel de filtros y sección de agrupación más atractivos y compactos.
+    - Tablas y filas de totales con mejor jerarquía visual y separación clara.
+- No hubo cambios en la lógica de negocio ni en las métricas calculadas: solo se mejoró la experiencia visual y de uso.
