@@ -226,3 +226,14 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 - Los campos originales de la RPC se conservan para trazabilidad, pero la UI solo debe mostrar los nombres y métricas legibles.
 
 **Regla:** No duplicar lógica de cálculo ni de enriquecimiento de nombres en frontend. Toda la transformación y enriquecimiento debe ocurrir en backend antes de devolver los datos al dashboard.
+
+---
+
+## UI de filtros y agrupación en Reports.jsx
+
+- Desde mayo 2026, la interfaz de Reports.jsx utiliza filtros compactos tipo dropdown multiselección para geocercas, personas, actividades y asignaciones.
+- Las asignaciones se muestran y seleccionan usando etiquetas humanas (persona + geocerca + actividad), sin exponer IDs internos en la UI.
+- El usuario puede agrupar o desagrupar filas del reporte al estilo Excel por cualquier columna disponible, incluida la fecha, mostrando totales y permitiendo expandir/colapsar niveles de agrupación.
+- Los totales y subtotales se calculan dinámicamente según el nivel de agrupación expandido.
+
+**Regla:** La experiencia de filtrado y agrupación debe ser intuitiva, rápida y sin exponer identificadores técnicos al usuario final.

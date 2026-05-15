@@ -1,5 +1,5 @@
 ﻿// src/pages/Reports.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { authFetch } from "../lib/authFetch";
 import { useTranslation } from "react-i18next";
 import { listGeofences } from "../lib/geofencesApi";
@@ -139,6 +139,295 @@ function formatCurrency(value, currencyCode, locale = "es-MX") {
   }
 }
 
+function MultiSelectDropdown({
+  options = [],
+  value = [],
+  onChange,
+  disabled = false,
+  placeholder = "Selecciona...",
+  emptyLabel = "Sin opciones",
+  clearLabel = "Limpiar",
+  selectedCountLabel = "seleccionados",
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const handleOutsideClick = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open]);
+
+  const selectedValues = Array.isArray(value) ? value.map((item) => String(item)) : [];
+  const optionByValue = new Map(
+    options.map((option) => [String(option.value), option])
+  );
+  const selectedOptions = selectedValues
+    .map((selectedValue) => optionByValue.get(selectedValue))
+    .filter(Boolean);
+
+  const summary =
+    selectedOptions.length === 0
+      ? placeholder
+      : selectedOptions.length <= 2
+      ? selectedOptions.map((option) => option.label).join(", ")
+      : `${selectedOptions.length} ${selectedCountLabel}`;
+
+  const toggleOption = (optionValue) => {
+    const normalized = String(optionValue);
+    if (selectedValues.includes(normalized)) {
+      onChange(selectedValues.filter((selectedValue) => selectedValue !== normalized));
+      return;
+    }
+    onChange([...selectedValues, normalized]);
+  };
+
+  const clearSelection = () => {
+    onChange([]);
+  };
+
+  return (
+    <div ref={rootRef} className="relative mt-1">
+      <div className="relative">
+        <button
+          type="button"
+          className={`block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 pr-20 text-left text-sm text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed ${
+            selectedOptions.length === 0 ? "text-gray-500" : ""
+          }`}
+          onClick={() => setOpen((current) => !current)}
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <span className="block truncate">{summary}</span>
+        </button>
+
+        <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+          {selectedOptions.length > 0 && !disabled && (
+            <button
+              type="button"
+              className="rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              onClick={(event) => {
+                event.stopPropagation();
+                clearSelection();
+              }}
+              title={clearLabel}
+              aria-label={clearLabel}
+            >
+              ×
+            </button>
+          )}
+          <span className="pointer-events-none text-xs text-gray-500">{open ? "▲" : "▼"}</span>
+        </div>
+      </div>
+
+      {open && !disabled && (
+        <div
+          className="absolute z-30 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-gray-200 bg-white p-1 shadow-xl"
+          role="listbox"
+          aria-multiselectable="true"
+        >
+          {options.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">{emptyLabel}</div>
+          ) : (
+            options.map((option) => {
+              const selected = selectedValues.includes(String(option.value));
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`flex w-full items-start gap-2 rounded-md px-3 py-2 text-left text-sm ${
+                    selected
+                      ? "bg-emerald-50 text-emerald-900"
+                      : "text-gray-800 hover:bg-gray-50"
+                  }`}
+                  onClick={() => toggleOption(option.value)}
+                  role="option"
+                  aria-selected={selected}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected}
+                    readOnly
+                    className="mt-0.5 shrink-0 accent-emerald-700"
+                  />
+                  <span className="min-w-0 break-words">{option.label}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function toFiniteNumber(value) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
+
+function formatNumericSummary(value, decimals = 3) {
+  if (value === null || value === undefined || value === "") return "—";
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return String(value);
+  return numberValue.toFixed(decimals);
+}
+
+function formatCoverageSummary(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) return String(value);
+  return numberValue.toFixed(4);
+}
+
+function getGroupFieldValue(row, fieldKey) {
+  if (fieldKey === "date") return row?.date || row?.work_date || "—";
+  if (fieldKey === "work_date") return row?.work_date || row?.date || "—";
+  const rawValue = row?.[fieldKey];
+  return rawValue === null || rawValue === undefined || rawValue === "" ? "—" : rawValue;
+}
+
+function summarizeGroupedRows(rows, reportType) {
+  const safeRows = Array.isArray(rows) ? rows : [];
+  const currencyCodes = Array.from(
+    new Set(
+      safeRows
+        .map((row) => String(row?.currency_code || "").trim())
+        .filter(Boolean)
+    )
+  );
+  const currencyCode = currencyCodes.length === 1 ? currencyCodes[0] : "";
+
+  if (reportType === "cost") {
+    return {
+      rowCount: safeRows.length,
+      horas: safeRows.reduce(
+        (total, row) => total + toFiniteNumber(row?.horas ?? row?.horas_observadas),
+        0
+      ),
+      costo_base: safeRows.reduce(
+        (total, row) => total + toFiniteNumber(row?.costo_base ?? row?.costo_total),
+        0
+      ),
+      costo_final: safeRows.reduce(
+        (total, row) => total + toFiniteNumber(row?.costo_final ?? row?.costo_total),
+        0
+      ),
+      currency_code: currencyCode,
+    };
+  }
+
+  const pointsCount = safeRows.reduce(
+    (total, row) => total + toFiniteNumber(row?.points_count),
+    0
+  );
+  const horasObservadas = safeRows.reduce(
+    (total, row) => total + toFiniteNumber(row?.horas_observadas),
+    0
+  );
+  const expectedHours = safeRows.reduce(
+    (total, row) => total + toFiniteNumber(row?.expected_hours),
+    0
+  );
+  const porcentajeCobertura =
+    expectedHours > 0 ? horasObservadas / expectedHours : null;
+
+  let nivelConfianza = "—";
+  if (pointsCount < 2) {
+    nivelConfianza = "INSUFICIENTE";
+  } else if (porcentajeCobertura !== null && porcentajeCobertura >= 0.85) {
+    nivelConfianza = "ALTO";
+  } else if (porcentajeCobertura !== null && porcentajeCobertura >= 0.6) {
+    nivelConfianza = "MEDIO";
+  } else if (porcentajeCobertura !== null) {
+    nivelConfianza = "BAJO";
+  }
+
+  return {
+    rowCount: safeRows.length,
+    km_observados: safeRows.reduce(
+      (total, row) => total + toFiniteNumber(row?.km_observados),
+      0
+    ),
+    horas_observadas: horasObservadas,
+    minutos_sin_cobertura: safeRows.reduce(
+      (total, row) => total + toFiniteNumber(row?.minutos_sin_cobertura),
+      0
+    ),
+    numero_huecos: safeRows.reduce(
+      (total, row) => total + toFiniteNumber(row?.numero_huecos),
+      0
+    ),
+    porcentaje_cobertura: porcentajeCobertura,
+    nivel_confianza: nivelConfianza,
+    costo_total: safeRows.reduce(
+      (total, row) => total + toFiniteNumber(row?.costo_total),
+      0
+    ),
+    currency_code: currencyCode,
+  };
+}
+
+function buildGroupedReportTree(rows, groupKeys, groupFields, reportType, level = 0, parentId = "root") {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  if (!Array.isArray(groupKeys) || level >= groupKeys.length) return [];
+
+  const fieldKey = groupKeys[level];
+  const field = groupFields.find((candidate) => candidate.value === fieldKey);
+  if (!field) return [];
+
+  const buckets = new Map();
+
+  rows.forEach((row) => {
+    const rawValue = getGroupFieldValue(row, fieldKey);
+    const normalizedValue = String(rawValue);
+    if (!buckets.has(normalizedValue)) {
+      buckets.set(normalizedValue, {
+        rawValue,
+        rows: [],
+      });
+    }
+    buckets.get(normalizedValue).rows.push(row);
+  });
+
+  return Array.from(buckets.entries()).map(([normalizedValue, bucket]) => {
+    const id = `${parentId}|${fieldKey}:${encodeURIComponent(normalizedValue)}`;
+    return {
+      id,
+      fieldKey,
+      fieldLabel: field.label,
+      valueLabel: String(bucket.rawValue ?? "—"),
+      rows: bucket.rows,
+      summary: summarizeGroupedRows(bucket.rows, reportType),
+      children: buildGroupedReportTree(
+        bucket.rows,
+        groupKeys,
+        groupFields,
+        reportType,
+        level + 1,
+        id
+      ),
+    };
+  });
+}
+
+function collectGroupNodeIds(groups = []) {
+  const ids = [];
+  groups.forEach((group) => {
+    ids.push(group.id);
+    ids.push(...collectGroupNodeIds(group.children));
+  });
+  return ids;
+}
+
 
 export default function Reports() {
   const [reportType, setReportType] = useState("attendance");
@@ -168,6 +457,8 @@ export default function Reports() {
   const [selectedAsignacionIds, setSelectedAsignacionIds] = useState([]);
 
   const [rows, setRows] = useState([]);
+  const [groupByFields, setGroupByFields] = useState([]);
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState(() => new Set());
 
   const canRun = useMemo(
     () => ready && authenticated && !!currentOrg?.id,
@@ -317,12 +608,6 @@ export default function Reports() {
     }
   }
 
-  function onMultiSelectChange(setter) {
-    return (e) => {
-      const values = Array.from(e.target.selectedOptions).map((o) => o.value);
-      setter(values);
-    };
-  }
 
   function clearSelections() {
     setSelectedGeocercaIds([]);
@@ -336,6 +621,380 @@ export default function Reports() {
     if (!ok) {
       setErrorMsg(tr("reports.errors.noDataToExport", "There is no data to export."));
     }
+  }
+
+
+  const geocercaFilterOptions = useMemo(
+    () =>
+      (filters.geocercas || []).map((geocerca) => ({
+        value: String(geocerca.id),
+        label: geocerca.nombre || "—",
+      })),
+    [filters.geocercas]
+  );
+
+  const personalFilterOptions = useMemo(
+    () =>
+      (filters.personas || []).map((persona) => ({
+        value: String(persona.id),
+        label:
+          `${persona.nombre || ""} ${persona.apellido || ""}`.trim() ||
+          persona.email ||
+          "—",
+      })),
+    [filters.personas]
+  );
+
+  const activityFilterOptions = useMemo(
+    () =>
+      (filters.activities || []).map((activity) => ({
+        value: String(activity.id),
+        label:
+          `${activity.name || "—"}${
+            activity.hourly_rate
+              ? ` (${activity.hourly_rate} ${activity.currency_code || ""})`
+              : ""
+          }`,
+      })),
+    [filters.activities]
+  );
+
+  const assignmentFilterOptions = useMemo(() => {
+    const personasById = new Map(
+      (filters.personas || [])
+        .filter((persona) => persona?.id)
+        .map((persona) => [String(persona.id), persona])
+    );
+    const activitiesById = new Map(
+      (filters.activities || [])
+        .filter((activity) => activity?.id)
+        .map((activity) => [String(activity.id), activity])
+    );
+    const geocercasById = new Map(
+      (filters.geocercas || [])
+        .filter((geocerca) => geocerca?.id)
+        .map((geocerca) => [String(geocerca.id), geocerca])
+    );
+    const geocercasBySourceId = new Map(
+      (filters.geocercas || [])
+        .filter((geocerca) => geocerca?.source_geocerca_id)
+        .map((geocerca) => [String(geocerca.source_geocerca_id), geocerca])
+    );
+
+    return (filters.asignaciones || []).map((assignment) => {
+      const persona = assignment?.personal_id
+        ? personasById.get(String(assignment.personal_id))
+        : null;
+      const activity = assignment?.activity_id
+        ? activitiesById.get(String(assignment.activity_id))
+        : null;
+      const geocerca =
+        (assignment?.geofence_id
+          ? geocercasById.get(String(assignment.geofence_id))
+          : null) ||
+        (assignment?.geocerca_id
+          ? geocercasBySourceId.get(String(assignment.geocerca_id)) ||
+            geocercasById.get(String(assignment.geocerca_id))
+          : null);
+
+      const personaLabel =
+        `${persona?.nombre || ""} ${persona?.apellido || ""}`.trim() ||
+        persona?.email ||
+        "";
+      const geocercaLabel = geocerca?.nombre || "";
+      const activityLabel = activity?.name || "";
+      const labelParts = [personaLabel, geocercaLabel, activityLabel].filter(Boolean);
+
+      return {
+        value: String(assignment.id),
+        label:
+          labelParts.join(" — ") ||
+          assignment.status ||
+          assignment.estado ||
+          tr("reports.labels.assignment", "Asignación"),
+      };
+    });
+  }, [filters.asignaciones, filters.personas, filters.activities, filters.geocercas, i18n.language]);
+
+  const groupableFields = useMemo(
+    () =>
+      reportType === "cost"
+        ? [
+            { value: "work_date", label: tr("reports.groupBy.date", "Fecha") },
+            { value: "personal_nombre", label: tr("reports.groupBy.person", "Colaborador") },
+            { value: "activity_nombre", label: tr("reports.groupBy.activity", "Actividad") },
+            { value: "geofence_nombre", label: tr("reports.groupBy.geofence", "Geocerca") },
+            { value: "horas", label: tr("reports.groupBy.hours", "Horas") },
+            { value: "costo_base", label: tr("reports.groupBy.baseCost", "Costo base") },
+            { value: "nivel_confianza", label: tr("reports.groupBy.confidence", "Confianza") },
+            { value: "estado_auditoria", label: tr("reports.groupBy.audit", "Auditoría") },
+            { value: "costo_final", label: tr("reports.groupBy.finalCost", "Costo final") },
+          ]
+        : [
+            { value: "date", label: tr("reports.groupBy.date", "Fecha") },
+            { value: "tracker_nombre", label: tr("reports.groupBy.tracker", "Tracker") },
+            { value: "geofence_nombre", label: tr("reports.groupBy.geofence", "Geocerca") },
+            { value: "activity_nombre", label: tr("reports.groupBy.activity", "Actividad") },
+            { value: "km_observados", label: tr("reports.groupBy.km", "Km observados") },
+            { value: "horas_observadas", label: tr("reports.groupBy.hoursObserved", "Horas observadas") },
+            {
+              value: "minutos_sin_cobertura",
+              label: tr("reports.groupBy.uncoveredMinutes", "Min sin cobertura"),
+            },
+            { value: "numero_huecos", label: tr("reports.groupBy.gaps", "# Huecos") },
+            {
+              value: "porcentaje_cobertura",
+              label: tr("reports.groupBy.coverage", "% Cobertura"),
+            },
+            {
+              value: "nivel_confianza",
+              label: tr("reports.groupBy.confidenceLevel", "Nivel confianza"),
+            },
+            { value: "costo_total", label: tr("reports.groupBy.totalCost", "Costo total") },
+          ],
+    [reportType, i18n.language]
+  );
+
+  const groupedReportTree = useMemo(
+    () => buildGroupedReportTree(rows, groupByFields, groupableFields, reportType),
+    [rows, groupByFields, groupableFields, reportType]
+  );
+
+  const allGroupIds = useMemo(
+    () => collectGroupNodeIds(groupedReportTree),
+    [groupedReportTree]
+  );
+  const allGroupIdsKey = allGroupIds.join("||");
+
+  useEffect(() => {
+    setExpandedGroupKeys(new Set(allGroupIds));
+  }, [allGroupIdsKey]);
+
+  useEffect(() => {
+    setGroupByFields([]);
+    setExpandedGroupKeys(new Set());
+  }, [reportType]);
+
+  const isGrouped = groupByFields.length > 0;
+
+  function toggleGroup(groupId) {
+    setExpandedGroupKeys((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
+
+  function expandAllGroups() {
+    setExpandedGroupKeys(new Set(allGroupIds));
+  }
+
+  function collapseAllGroups() {
+    setExpandedGroupKeys(new Set());
+  }
+
+  function renderCostDetailRow(row, index, keyPrefix = "cost", level = 0) {
+    const rowKey =
+      row?.asignacion_id || row?.assignment_id
+        ? `${keyPrefix}-${row.asignacion_id || row.assignment_id}-${row.work_date || row.date || index}`
+        : `${keyPrefix}-${index}`;
+
+    return (
+      <tr
+        key={rowKey}
+        className={`border-t border-gray-100 hover:bg-gray-50 ${
+          index % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+        }`}
+      >
+        <td className="p-2 text-gray-900" style={{ paddingLeft: `${8 + level * 14}px` }}>
+          {row.work_date || row.date || "—"}
+        </td>
+        <td className="p-2 text-gray-900">{row.personal_nombre || row.tracker_nombre || "—"}</td>
+        <td className="p-2 text-gray-900">{row.activity_nombre || row.actividad_nombre || "—"}</td>
+        <td className="p-2 text-gray-900">{row.geofence_nombre || row.geocerca_nombre || "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.horas ?? row.horas_observadas ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">{formatMoney(row.costo_base)}</td>
+        <td className="p-2 text-right">
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getConfidenceBadgeClass(
+              row.nivel_confianza
+            )}`}
+          >
+            {row.nivel_confianza ?? "—"}
+          </span>
+        </td>
+        <td className="p-2 text-right">
+          <span
+            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getAuditBadgeClass(
+              row.estado_auditoria
+            )}`}
+          >
+            {row.estado_auditoria ?? "—"}
+          </span>
+        </td>
+        <td className="p-2 text-right font-semibold text-gray-900">
+          {formatCurrency(row.costo_final, row.currency_code, i18n.language)}
+        </td>
+      </tr>
+    );
+  }
+
+  function renderAttendanceDetailRow(row, index, keyPrefix = "attendance", level = 0) {
+    const rowKey =
+      row?.assignment_id
+        ? `${keyPrefix}-${row.assignment_id}-${row.date || row.work_date || index}`
+        : `${keyPrefix}-${index}`;
+
+    return (
+      <tr
+        key={rowKey}
+        className={`border-t border-gray-100 hover:bg-gray-50 ${
+          index % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+        }`}
+      >
+        <td className="p-2 text-gray-900" style={{ paddingLeft: `${8 + level * 14}px` }}>
+          {row.date || row.work_date || "—"}
+        </td>
+        <td className="p-2 text-gray-900">{row.tracker_nombre || row.personal_nombre || "—"}</td>
+        <td className="p-2 text-gray-900">{row.geofence_nombre || row.geocerca_nombre || "—"}</td>
+        <td className="p-2 text-gray-900">{row.activity_nombre || row.actividad_nombre || "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.km_observados ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.horas_observadas ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.minutos_sin_cobertura ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.numero_huecos ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.porcentaje_cobertura ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">{row.nivel_confianza ?? "—"}</td>
+        <td className="p-2 text-right text-gray-900">
+          {formatCurrency(row.costo_total, row.currency_code, i18n.language)}
+        </td>
+      </tr>
+    );
+  }
+
+  function renderCostGroupedRows(groups, level = 0) {
+    return groups.flatMap((group) => {
+      const expanded = expandedGroupKeys.has(group.id);
+      const summary = group.summary;
+      const rowElements = [
+        <tr key={`${group.id}-group`} className="border-t border-emerald-100 bg-emerald-50/70">
+          <td colSpan={4} className="p-2 text-sm text-emerald-950">
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.id)}
+              className="flex w-full items-center gap-2 text-left font-medium"
+              style={{ paddingLeft: `${level * 18}px` }}
+            >
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-300 bg-white text-xs">
+                {expanded ? "−" : "+"}
+              </span>
+              <span>
+                {group.fieldLabel}: <span className="font-semibold">{group.valueLabel}</span>
+              </span>
+              <span className="text-xs font-normal text-emerald-700">
+                ({summary.rowCount}{" "}
+                {summary.rowCount === 1
+                  ? tr("reports.grouping.row", "fila")
+                  : tr("reports.grouping.rows", "filas")})
+              </span>
+            </button>
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatNumericSummary(summary.horas, 3)}
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatCurrency(summary.costo_base, summary.currency_code, i18n.language)}
+          </td>
+          <td className="p-2 text-right text-emerald-800">—</td>
+          <td className="p-2 text-right text-emerald-800">—</td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatCurrency(summary.costo_final, summary.currency_code, i18n.language)}
+          </td>
+        </tr>,
+      ];
+
+      if (expanded) {
+        if (group.children.length) {
+          rowElements.push(...renderCostGroupedRows(group.children, level + 1));
+        } else {
+          rowElements.push(
+            ...group.rows.map((row, index) =>
+              renderCostDetailRow(row, index, `${group.id}-detail`, level + 1)
+            )
+          );
+        }
+      }
+
+      return rowElements;
+    });
+  }
+
+  function renderAttendanceGroupedRows(groups, level = 0) {
+    return groups.flatMap((group) => {
+      const expanded = expandedGroupKeys.has(group.id);
+      const summary = group.summary;
+      const rowElements = [
+        <tr key={`${group.id}-group`} className="border-t border-emerald-100 bg-emerald-50/70">
+          <td colSpan={4} className="p-2 text-sm text-emerald-950">
+            <button
+              type="button"
+              onClick={() => toggleGroup(group.id)}
+              className="flex w-full items-center gap-2 text-left font-medium"
+              style={{ paddingLeft: `${level * 18}px` }}
+            >
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded border border-emerald-300 bg-white text-xs">
+                {expanded ? "−" : "+"}
+              </span>
+              <span>
+                {group.fieldLabel}: <span className="font-semibold">{group.valueLabel}</span>
+              </span>
+              <span className="text-xs font-normal text-emerald-700">
+                ({summary.rowCount}{" "}
+                {summary.rowCount === 1
+                  ? tr("reports.grouping.row", "fila")
+                  : tr("reports.grouping.rows", "filas")})
+              </span>
+            </button>
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatNumericSummary(summary.km_observados, 3)}
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatNumericSummary(summary.horas_observadas, 3)}
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatNumericSummary(summary.minutos_sin_cobertura, 1)}
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatNumericSummary(summary.numero_huecos, 0)}
+          </td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatCoverageSummary(summary.porcentaje_cobertura)}
+          </td>
+          <td className="p-2 text-right text-emerald-950">{summary.nivel_confianza}</td>
+          <td className="p-2 text-right font-semibold text-emerald-950">
+            {formatCurrency(summary.costo_total, summary.currency_code, i18n.language)}
+          </td>
+        </tr>,
+      ];
+
+      if (expanded) {
+        if (group.children.length) {
+          rowElements.push(...renderAttendanceGroupedRows(group.children, level + 1));
+        } else {
+          rowElements.push(
+            ...group.rows.map((row, index) =>
+              renderAttendanceDetailRow(row, index, `${group.id}-detail`, level + 1)
+            )
+          );
+        }
+      }
+
+      return rowElements;
+    });
   }
 
   if (!ready) {
@@ -513,10 +1172,10 @@ export default function Reports() {
                   <span className="font-medium text-gray-900">
                     {tr("reports.labels.tip", "Tip")}:
                   </span>{" "}
-                  {tr("reports.help.multiSelectIntro", "In multi-select lists use")}{" "}
-                  <span className="font-medium text-gray-900">Ctrl</span> (Windows) /{" "}
-                  <span className="font-medium text-gray-900">Command</span> (Mac){" "}
-                  {tr("reports.help.multiSelectOutro", "to select multiple items.")}
+                  {tr(
+                    "reports.help.dropdownFilters",
+                    "Open each dropdown and mark one or more values. The filter panel stays compact."
+                  )}
                 </div>
               </div>
             </div>
@@ -529,19 +1188,16 @@ export default function Reports() {
                     ({tr("reports.labels.multi", "multi")})
                   </span>
                 </label>
-                <select
-                  multiple
+                <MultiSelectDropdown
+                  options={geocercaFilterOptions}
                   value={selectedGeocercaIds}
-                  onChange={onMultiSelectChange(setSelectedGeocercaIds)}
-                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  onChange={setSelectedGeocercaIds}
                   disabled={loadingFilters}
-                >
-                  {filters.geocercas.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.nombre}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={tr("reports.placeholders.geofences", "Selecciona geocercas")}
+                  emptyLabel={tr("reports.placeholders.noGeofences", "Sin geocercas")}
+                  clearLabel={tr("reports.actions.clearFilter", "Limpiar filtro")}
+                  selectedCountLabel={tr("reports.labels.selected", "seleccionados")}
+                />
               </div>
 
               <div>
@@ -551,25 +1207,16 @@ export default function Reports() {
                     ({tr("reports.labels.multi", "multi")})
                   </span>
                 </label>
-                <select
-                  multiple
+                <MultiSelectDropdown
+                  options={personalFilterOptions}
                   value={selectedPersonalIds}
-                  onChange={onMultiSelectChange(setSelectedPersonalIds)}
-                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  onChange={setSelectedPersonalIds}
                   disabled={loadingFilters}
-                >
-                  {filters.personas.map((p) => {
-                    const label =
-                      `${p.nombre || ""} ${p.apellido || ""}`.trim() ||
-                      p.email ||
-                      p.id;
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {label}
-                      </option>
-                    );
-                  })}
-                </select>
+                  placeholder={tr("reports.placeholders.people", "Selecciona personas")}
+                  emptyLabel={tr("reports.placeholders.noPeople", "Sin personas")}
+                  clearLabel={tr("reports.actions.clearFilter", "Limpiar filtro")}
+                  selectedCountLabel={tr("reports.labels.selected", "seleccionados")}
+                />
               </div>
 
               <div>
@@ -579,20 +1226,16 @@ export default function Reports() {
                     ({tr("reports.labels.multi", "multi")})
                   </span>
                 </label>
-                <select
-                  multiple
+                <MultiSelectDropdown
+                  options={activityFilterOptions}
                   value={selectedActivityIds}
-                  onChange={onMultiSelectChange(setSelectedActivityIds)}
-                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  onChange={setSelectedActivityIds}
                   disabled={loadingFilters}
-                >
-                  {filters.activities.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                      {a.hourly_rate ? ` (${a.hourly_rate} ${a.currency_code || ""})` : ""}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={tr("reports.placeholders.activities", "Selecciona actividades")}
+                  emptyLabel={tr("reports.placeholders.noActivities", "Sin actividades")}
+                  clearLabel={tr("reports.actions.clearFilter", "Limpiar filtro")}
+                  selectedCountLabel={tr("reports.labels.selected", "seleccionados")}
+                />
               </div>
 
               <div>
@@ -602,26 +1245,20 @@ export default function Reports() {
                     ({tr("reports.labels.multi", "multi")})
                   </span>
                 </label>
-                <select
-                  multiple
+                <MultiSelectDropdown
+                  options={assignmentFilterOptions}
                   value={selectedAsignacionIds}
-                  onChange={onMultiSelectChange(setSelectedAsignacionIds)}
-                  className={`${selectBase} mt-1 min-h-[160px]`}
+                  onChange={setSelectedAsignacionIds}
                   disabled={loadingFilters}
-                >
-                  {filters.asignaciones.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {(a.status || a.estado || tr("reports.labels.assignment", "assignment"))} —{" "}
-                      {String(a.id).slice(0, 8)}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={tr("reports.placeholders.assignments", "Selecciona asignaciones")}
+                  emptyLabel={tr("reports.placeholders.noAssignments", "Sin asignaciones")}
+                  clearLabel={tr("reports.actions.clearFilter", "Limpiar filtro")}
+                  selectedCountLabel={tr("reports.labels.selected", "seleccionados")}
+                />
                 <p className="mt-1 text-[11px] text-gray-600">
-                  {tr("reports.help.assignmentsNoteIntro", "Note: if your assignments do not have")}{" "}
-                  <span className="font-medium">personal_id</span>,{" "}
                   {tr(
-                    "reports.help.assignmentsNoteOutro",
-                    "the match against attendance marks may come back empty."
+                    "reports.help.assignmentsHumanLabels",
+                    "Las asignaciones se muestran como persona, geocerca y actividad para evitar IDs técnicos."
                   )}
                 </p>
               </div>
@@ -645,6 +1282,62 @@ export default function Reports() {
                       "There is no data yet. Adjust filters and generate."
                     )}
               </p>
+            </div>
+          </div>
+
+          <div className="border-b border-gray-100 bg-gray-50/60 px-4 py-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0 flex-1">
+                <label className="block text-sm font-medium text-gray-900">
+                  {tr("reports.grouping.title", "Agrupar / totalizar")}
+                </label>
+                <MultiSelectDropdown
+                  options={groupableFields}
+                  value={groupByFields}
+                  onChange={setGroupByFields}
+                  disabled={!rows.length || loadingReport}
+                  placeholder={tr(
+                    "reports.grouping.placeholder",
+                    "Sin agrupación: detalle completo"
+                  )}
+                  emptyLabel={tr("reports.grouping.noOptions", "Sin columnas disponibles")}
+                  clearLabel={tr("reports.actions.clearGrouping", "Desagrupar")}
+                  selectedCountLabel={tr("reports.labels.selected", "seleccionados")}
+                />
+                <p className="mt-1 text-xs text-gray-600">
+                  {tr(
+                    "reports.grouping.help",
+                    "Selecciona columnas en el orden deseado. Los grupos se pueden expandir y contraer como en Excel, con totales por nivel."
+                  )}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setGroupByFields([])}
+                  disabled={!groupByFields.length}
+                  className={buttonSecondary}
+                >
+                  {tr("reports.actions.ungroup", "Desagrupar")}
+                </button>
+                <button
+                  type="button"
+                  onClick={expandAllGroups}
+                  disabled={!isGrouped || !allGroupIds.length}
+                  className={buttonSecondary}
+                >
+                  {tr("reports.actions.expandAll", "Expandir todo")}
+                </button>
+                <button
+                  type="button"
+                  onClick={collapseAllGroups}
+                  disabled={!isGrouped || !allGroupIds.length}
+                  className={buttonSecondary}
+                >
+                  {tr("reports.actions.collapseAll", "Contraer todo")}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -684,50 +1377,9 @@ export default function Reports() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r, i) => {
-                      const rowKey = r.asignacion_id
-                        ? `${r.asignacion_id}-${r.work_date || i}`
-                        : i;
-
-                      return (
-                        <tr
-                          key={rowKey}
-                          className={`border-t border-gray-100 hover:bg-gray-50 ${
-                            i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                          }`}
-                        >
-                          <td className="p-2 text-gray-900">{r.work_date || "—"}</td>
-                          <td className="p-2 text-gray-900">{r.personal_nombre || "—"}</td>
-                          <td className="p-2 text-gray-900">{r.activity_nombre || "—"}</td>
-                          <td className="p-2 text-gray-900">{r.geofence_nombre || "—"}</td>
-                          <td className="p-2 text-right text-gray-900">{r.horas ?? "—"}</td>
-                          <td className="p-2 text-right text-gray-900">
-                            {formatMoney(r.costo_base)}
-                          </td>
-                          <td className="p-2 text-right">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getConfidenceBadgeClass(
-                                r.nivel_confianza
-                              )}`}
-                            >
-                              {r.nivel_confianza ?? "—"}
-                            </span>
-                          </td>
-                          <td className="p-2 text-right">
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getAuditBadgeClass(
-                                r.estado_auditoria
-                              )}`}
-                            >
-                              {r.estado_auditoria ?? "—"}
-                            </span>
-                          </td>
-                          <td className="p-2 text-right font-semibold text-gray-900">
-                            {formatCurrency(r.costo_final, r.currency_code, i18n.language)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {isGrouped
+                      ? renderCostGroupedRows(groupedReportTree)
+                      : rows.map((row, index) => renderCostDetailRow(row, index))}
                   </tbody>
                 </table>
               </>
@@ -749,32 +1401,9 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
-                    <tr
-                      key={r.assignment_id ? `${r.assignment_id}-${i}` : i}
-                      className={`border-t border-gray-100 hover:bg-gray-50 ${
-                        i % 2 === 0 ? "bg-white" : "bg-gray-50/40"
-                      }`}
-                    >
-                      <td className="p-2 text-gray-900">{r.date || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.tracker_nombre || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.geofence_nombre || "—"}</td>
-                      <td className="p-2 text-gray-900">{r.activity_nombre || "—"}</td>
-                      <td className="p-2 text-right text-gray-900">{r.km_observados ?? "—"}</td>
-                      <td className="p-2 text-right text-gray-900">{r.horas_observadas ?? "—"}</td>
-                      <td className="p-2 text-right text-gray-900">
-                        {r.minutos_sin_cobertura ?? "—"}
-                      </td>
-                      <td className="p-2 text-right text-gray-900">{r.numero_huecos ?? "—"}</td>
-                      <td className="p-2 text-right text-gray-900">
-                        {r.porcentaje_cobertura ?? "—"}
-                      </td>
-                      <td className="p-2 text-right text-gray-900">
-                        {r.nivel_confianza ?? "—"}
-                      </td>
-                      <td className="p-2 text-right text-gray-900">{formatCurrency(r.costo_total, r.currency_code, i18n.language)}</td>
-                    </tr>
-                  ))}
+                  {isGrouped
+                    ? renderAttendanceGroupedRows(groupedReportTree)
+                    : rows.map((row, index) => renderAttendanceDetailRow(row, index))}
                 </tbody>
               </table>
             )}
