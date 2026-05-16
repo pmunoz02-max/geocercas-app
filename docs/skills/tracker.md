@@ -446,6 +446,18 @@ El endpoint `api/send-position` debe tomar los valores de `tracker_user_id` y `o
 
 ---
 
+## Polilíneas históricas en TrackerDashboard
+
+Desde mayo 2026, TrackerDashboard renderiza las polilíneas históricas usando exclusivamente la RPC `get_tracker_route_positions_preview`. Esta función devuelve únicamente las posiciones que están dentro de la geocerca asignada, validando cada punto con `ST_Covers` sobre la geometría de la geocerca.
+
+Esto blinda los datos históricos contra posiciones contaminadas fuera de la geocerca asignada y asegura que solo se visualicen trayectorias válidas para cada asignación.
+
+**Regla:** No se debe volver a consultar la tabla `tracker_positions` directamente para obtener `routePositions`. Toda obtención de rutas históricas debe pasar por la RPC validada.
+
+**Alcance:** Esta regla aplica a `routePositions` y al renderizado de polilíneas históricas. No modifica por sí sola la fuente de `latest positions` o markers del dashboard, que deben revisarse por separado si se desea aplicar el mismo blindaje visual a la última posición.
+
+---
+
 # Fuente viva: Tracker (2026)
 
 Este documento es la referencia actual y viva para el flujo y arquitectura de trackers en GeocercasApp.

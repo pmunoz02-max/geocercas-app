@@ -1470,18 +1470,12 @@ export default function TrackerDashboard() {
 
     const safeHours = Math.max(1, Number(hoursBack || 6));
     const fromIso = new Date(Date.now() - safeHours * 60 * 60 * 1000).toISOString();
-    const orTime = `recorded_at.gte.${fromIso},and(recorded_at.is.null,created_at.gte.${fromIso})`;
 
-    const { data, error } = await supabase
-      .from("tracker_positions")
-      .select("id, org_id, user_id, personal_id, asignacion_id, lat, lng, accuracy, speed, heading, battery, is_mock, source, recorded_at, created_at")
-      .eq("org_id", safeOrgId)
-      .not("lat", "is", null)
-      .not("lng", "is", null)
-      .or(orTime)
-      .order("recorded_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false, nullsFirst: false })
-      .limit(5000);
+    const { data, error } = await supabase.rpc("get_tracker_route_positions_preview", {
+      p_org_id: safeOrgId,
+      p_from_ts: fromIso,
+      p_to_ts: new Date().toISOString(),
+    });
 
     if (error) {
       console.warn("[tracker-dashboard] route positions error:", error);

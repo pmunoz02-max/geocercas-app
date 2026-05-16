@@ -212,6 +212,20 @@ Desde mayo 2026, el endpoint `/api/reportes?action=report` enriquece cada fila c
 
 - La RPC `calculate_tracker_costs_preview` debe incluir únicamente posiciones de `tracker_positions` que estén dentro de la geofence activa asignada, usando validación espacial contra `geofences.geom` con `ST_Covers`.
 
+### Alineación entre reportes y rutas históricas
+
+La RPC `calculate_tracker_costs_preview` sigue siendo la fuente única para métricas de asistencia y costos.
+
+La visualización de polilíneas históricas en `TrackerDashboard` usa una fuente distinta y especializada: `get_tracker_route_positions_preview`.
+
+Ambas fuentes deben mantenerse alineadas en la regla espacial de negocio:
+
+- usar posiciones canónicas de `tracker_positions`;
+- validar asignación vigente;
+- considerar únicamente puntos dentro de la geocerca asignada mediante `ST_Covers`.
+
+**Regla:** No reutilizar la RPC de costos para renderizar rutas ni usar la RPC de rutas para calcular métricas. Cada una cumple una responsabilidad distinta, pero ambas deben respetar el mismo blindaje espacial.
+
 ---
 
 ## Consumo de costos para dashboard

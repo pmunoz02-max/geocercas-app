@@ -2,7 +2,7 @@
 
 **Proyecto:** Geocercas App  
 **Ambiente válido:** Preview only  
-**Última actualización:** Abril 2026
+**Última actualización:** Mayo 2026
 
 ---
 
@@ -381,10 +381,10 @@ Si alguna respuesta es no, el cambio debe revisarse antes de continuar.
 
 ---
 
-## 5. Renderizado de rutas en TrackerDashboard
+## 18. Renderizado de rutas en TrackerDashboard
 
-- El dashboard muestra dos tipos de datos principales:
-  - **positions**: contiene los últimos marcadores (latest positions) de cada tracker, usados para mostrar la ubicación actual de cada uno.
-  - **routePositions**: contiene el historial de posiciones de `tracker_positions` (no deduplicado por usuario), usado para renderizar polilíneas de rutas históricas en el mapa.
-- No implica cambios en la base de datos, API ni Android; es solo lógica de frontend y visualización.
-- El estado `routePositions` permite mostrar la trayectoria recorrida por cada tracker, mientras que `positions` muestra solo la última posición conocida.
+Desde mayo 2026, el renderizado de rutas históricas (`routePositions`) en TrackerDashboard ya no se realiza leyendo directamente la tabla `tracker_positions`. Ahora, todas las polilíneas históricas se obtienen exclusivamente mediante la RPC `get_tracker_route_positions_preview`, la cual filtra y retorna únicamente las posiciones que están dentro de la geocerca asignada, usando validación espacial con `ST_Covers`.
+
+Este cambio blinda las rutas históricas contra posiciones contaminadas fuera de la geocerca y garantiza que solo se visualicen trayectorias válidas para cada asignación.
+
+**Nota:** El flujo de obtención de posiciones recientes (`positions`/latest markers) se mantiene sin cambios y sigue usando la fuente actual. Este ajuste introduce una fuente backend especializada únicamente para rutas históricas, sin modificar la lógica de los marcadores de última posición.
