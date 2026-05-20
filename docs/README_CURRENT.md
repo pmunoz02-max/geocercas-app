@@ -41,3 +41,4 @@ El flujo completo de invitación de tracker, onboarding Android GeoField GPS y e
 - El listado de geocercas ahora recibe el campo `area_m2`, calculado en el backend/PostGIS mediante la función `list_geofences_with_area_preview`.
 - En la interfaz de NuevaGeocerca, se muestra el área de cada geocerca y se permite elegir la unidad de área (m², ha, km² o acres), persistiendo la preferencia del usuario en `localStorage`.
 - El área canónica de cada geocerca se calcula exclusivamente en el backend; el frontend solo realiza la conversión y formato para visualización, pero no calcula el área.
+- La función `list_geofences_with_area_preview` ahora también devuelve `centroid_lat` y `centroid_lng`, calculados en PostGIS con `ST_Centroid(geom)`. El componente NuevaGeocerca utiliza este centro geométrico para mostrar Lat/Lng, evitando mostrar valores legacy 0/0.

@@ -141,10 +141,23 @@ function centerFromAnyGeo(input) {
   }
 }
 
+
 function getGeofenceCenter(row) {
+  // Prioriza centroid_lat y centroid_lng si existen y son finitos
+  const centroidLat = Number(row?.centroid_lat);
+  const centroidLng = Number(row?.centroid_lng);
+  if (Number.isFinite(centroidLat) && Number.isFinite(centroidLng)) {
+    return { lat: centroidLat, lng: centroidLng };
+  }
+
+  // Solo usa lat/lng si ambos son finitos y no son exactamente 0,0
   const lat = Number(row?.lat);
   const lng = Number(row?.lng);
-  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+  if (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    !(lat === 0 && lng === 0)
+  ) {
     return { lat, lng };
   }
 
