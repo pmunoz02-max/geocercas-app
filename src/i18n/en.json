@@ -614,6 +614,8 @@
     "title": "Reset password"
   },
   "geocercas": {
+    "areaUnitLabel": "Area unit",
+    "areaLabel": "Area",
     "buttonClearCanvas": "Clear map",
     "buttonDeleteSelected": "Delete selected",
     "buttonDrawByCoords": "Draw by coordinates",

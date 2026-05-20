@@ -35,3 +35,9 @@ carpeta _deprecated no usar para implementar
 ## Nota de cierre
 
 El flujo completo de invitación de tracker, onboarding Android GeoField GPS y envío de posiciones quedó validado en producción (`app.tugeocercas.com`) usando Google Play Internal Testing.
+
+## Nota (mayo 2026)
+
+- El listado de geocercas ahora recibe el campo `area_m2`, calculado en el backend/PostGIS mediante la función `list_geofences_with_area_preview`.
+- En la interfaz de NuevaGeocerca, se muestra el área de cada geocerca y se permite elegir la unidad de área (m², ha, km² o acres), persistiendo la preferencia del usuario en `localStorage`.
+- El área canónica de cada geocerca se calcula exclusivamente en el backend; el frontend solo realiza la conversión y formato para visualización, pero no calcula el área.

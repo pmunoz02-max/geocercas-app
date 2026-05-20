@@ -577,6 +577,8 @@
     "title": "Réinitialiser le mot de passe"
   },
   "geocercas": {
+    "areaUnitLabel": "Unité de surface",
+    "areaLabel": "Surface",
     "buttonClearCanvas": "Effacer la carte",
     "buttonDeleteSelected": "Supprimer la sélection",
     "buttonDrawByCoords": "Dessiner par coordonnées",

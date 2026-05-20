@@ -606,6 +606,8 @@
     "title": "Restablecer contraseña"
   },
   "geocercas": {
+    "areaUnitLabel": "Unidad de área",
+    "areaLabel": "Área",
     "buttonClearCanvas": "Limpiar mapa",
     "buttonDeleteSelected": "Eliminar seleccionadas",
     "buttonDrawByCoords": "Dibujar por coordenadas",
@@ -1784,7 +1786,7 @@
     },
     "disclosure": {
       "title": "Ubicación en segundo plano",
-      "body1": "GeoField GPS recopila tu ubicación incluso cuando la app está cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
+      "body1": "GeoField GPS recopila tu ubicación incluso cuando la app esté cerrada o el teléfono bloqueado para registrar posiciones y validar entrada y salida de geocercas durante la jornada laboral.",
       "body2": "Esta información se utiliza únicamente para fines operativos de la organización y no se comparte con terceros ni se usa para publicidad. Puedes detener el seguimiento revocando el permiso de ubicación o cerrando sesión.",
       "continue": "Continuar"
     },

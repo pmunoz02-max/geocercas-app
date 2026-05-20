@@ -413,11 +413,12 @@ async function listGeofences(sbDb, orgId, onlyActive) {
   const items = [];
   const seen = new Set();
 
-  // Query principal por org_id
-  let q1 = sbDb.from("geofences").select("*").eq("org_id", orgId);
-  if (onlyActive) q1 = q1.eq("active", true);
+  // Consulta canónica por org_id con área calculada en backend/PostGIS.
+  const r1 = await sbDb.rpc("list_geofences_with_area_preview", {
+    p_org_id: orgId,
+    p_only_active: onlyActive,
+  });
 
-  const r1 = await q1.order("name", { ascending: true });
   if (r1.error) throw r1.error;
 
   for (const row of r1.data || []) {
@@ -458,7 +459,6 @@ async function listGeofences(sbDb, orgId, onlyActive) {
 
   return items;
 }
-
 async function countReferences(sbDb, table, id) {
   const checks = ["geofence_id", "geocerca_id"];
 

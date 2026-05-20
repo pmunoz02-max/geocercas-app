@@ -1,4 +1,10 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import {
+  AREA_UNIT_OPTIONS,
+  getStoredAreaUnit,
+  setStoredAreaUnit,
+  formatAreaFromM2,
+} from "@/lib/areaUnits.js";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, GeoJSON, FeatureGroup, Pane, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 
@@ -320,7 +326,7 @@ function isPlanLimitError(err) {
 }
 
 export default function NuevaGeocerca() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { currentOrg } = useAuthSafe();
 
   const {
@@ -343,6 +349,11 @@ export default function NuevaGeocerca() {
   const lastCreatedLayerRef = useRef(null);
 
   const [banner, setBanner] = useState(null);
+  const [areaUnit, setAreaUnit] = useState(getStoredAreaUnit());
+    const handleAreaUnitChange = (unit) => {
+      setAreaUnit(unit);
+      setStoredAreaUnit(unit);
+    };
   const [geofenceName, setGeofenceName] = useState("");
   const [geofenceList, setGeofenceList] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -1342,6 +1353,22 @@ export default function NuevaGeocerca() {
                 </button>
               </div>
 
+              <div className="mb-4">
+                <label className="block text-xs font-semibold mb-1 text-slate-300">
+                  {t("geocercas.areaUnitLabel", { defaultValue: "Unidad de área" })}
+                </label>
+                <select
+                  className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-slate-100"
+                  value={areaUnit}
+                  onChange={e => handleAreaUnitChange(e.target.value)}
+                >
+                  {AREA_UNIT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="mt-3 max-h-[24svh] overflow-auto pr-1 sm:max-h-[26svh]">
                 {geofenceList.length === 0 ? (
                   <div className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-3 text-sm text-slate-400">
@@ -1378,6 +1405,9 @@ export default function NuevaGeocerca() {
                               Lat: {g.centerLat.toFixed(6)} | Lng: {g.centerLng.toFixed(6)}
                             </div>
                           ) : null}
+                          <div className="text-xs text-slate-400 mt-1">
+                            {t("geocercas.areaLabel", { defaultValue: "Área" })}: {formatAreaFromM2(g.area_m2, areaUnit, i18n.language)}
+                          </div>
                         </div>
                       </label>
                     ))}
