@@ -281,3 +281,6 @@ Ambas fuentes deben mantenerse alineadas en la regla espacial de negocio:
     - Panel de filtros y sección de agrupación más atractivos y compactos.
     - Tablas y filas de totales con mejor jerarquía visual y separación clara.
 - No hubo cambios en la lógica de negocio ni en las métricas calculadas: solo se mejoró la experiencia visual y de uso.
+
+> [!NOTE]
+> A partir del 21 de mayo de 2026, las columnas visibles **Confianza** y **Auditoría** fueron retiradas del reporte de costos (tabla, exportación CSV y agrupación). Los campos `nivel_confianza` y `estado_auditoria` pueden conservarse internamente para cálculos, auditoría técnica o lógica futura, pero **no deben mostrarse como columnas visibles por defecto**.

@@ -33,8 +33,6 @@ function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendanc
       { key: "geofence_nombre", label: "Geocerca" },
       { key: "horas", label: "Horas" },
       { key: "costo_base", label: "Costo base" },
-      { key: "nivel_confianza", label: "Confianza" },
-      { key: "estado_auditoria", label: "Auditoría" },
       { key: "costo_final", label: "Costo final" },
     ];
 
@@ -726,8 +724,6 @@ export default function Reports() {
             { value: "geofence_nombre", label: tr("reports.groupBy.geofence", "Geocerca") },
             { value: "horas", label: tr("reports.groupBy.hours", "Horas") },
             { value: "costo_base", label: tr("reports.groupBy.baseCost", "Costo base") },
-            { value: "nivel_confianza", label: tr("reports.groupBy.confidence", "Confianza") },
-            { value: "estado_auditoria", label: tr("reports.groupBy.audit", "Auditoría") },
             { value: "costo_final", label: tr("reports.groupBy.finalCost", "Costo final") },
           ]
         : [
@@ -810,24 +806,6 @@ export default function Reports() {
         <td className="p-2 text-gray-900">{row.geofence_nombre || row.geocerca_nombre || "—"}</td>
         <td className="p-2 text-right text-gray-900">{row.horas ?? row.horas_observadas ?? "—"}</td>
         <td className="p-2 text-right text-gray-900">{formatMoney(row.costo_base)}</td>
-        <td className="p-2 text-right">
-          <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getConfidenceBadgeClass(
-              row.nivel_confianza
-            )}`}
-          >
-            {row.nivel_confianza ?? "—"}
-          </span>
-        </td>
-        <td className="p-2 text-right">
-          <span
-            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getAuditBadgeClass(
-              row.estado_auditoria
-            )}`}
-          >
-            {row.estado_auditoria ?? "—"}
-          </span>
-        </td>
         <td className="p-2 text-right font-semibold text-gray-900">
           {formatCurrency(row.costo_final, row.currency_code, i18n.language)}
         </td>
@@ -896,8 +874,6 @@ export default function Reports() {
           <td className="p-2 text-right font-semibold text-emerald-950">
             {formatCurrency(summary.costo_base, summary.currency_code, i18n.language)}
           </td>
-          <td className="p-2 text-right text-emerald-800">—</td>
-          <td className="p-2 text-right text-emerald-800">—</td>
           <td className="p-2 text-right font-semibold text-emerald-950">
             {formatCurrency(summary.costo_final, summary.currency_code, i18n.language)}
           </td>
@@ -1385,8 +1361,6 @@ export default function Reports() {
                       <th className="p-2 text-left font-semibold">Geocerca</th>
                       <th className="p-2 text-right font-semibold">Horas</th>
                       <th className="p-2 text-right font-semibold">Costo base</th>
-                      <th className="p-2 text-right font-semibold">Confianza</th>
-                      <th className="p-2 text-right font-semibold">Auditoría</th>
                       <th className="p-2 text-right font-semibold">Costo final</th>
                     </tr>
                   </thead>
@@ -1406,8 +1380,6 @@ export default function Reports() {
                       <td className="p-2 text-right">
                         {formatCurrency(totalSummary.costo_base, totalSummary.currency_code, i18n.language)}
                       </td>
-                      <td className="p-2 text-right">—</td>
-                      <td className="p-2 text-right">—</td>
                       <td className="p-2 text-right">
                         {formatCurrency(totalSummary.costo_final, totalSummary.currency_code, i18n.language)}
                       </td>
