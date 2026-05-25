@@ -207,11 +207,11 @@ function MultiSelectDropdown({
           <span className="block truncate">{summary}</span>
         </button>
 
-        <div className="absolute inset-y-0 right-2 flex items-center gap-1">
+        <div className="pointer-events-none absolute inset-y-0 right-2 flex items-center gap-1">
           {selectedOptions.length > 0 && !disabled && (
             <button
               type="button"
-              className="rounded-md px-1.5 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
+              className="pointer-events-auto rounded-md px-1.5 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
               onClick={(event) => {
                 event.stopPropagation();
                 clearSelection();
@@ -228,7 +228,7 @@ function MultiSelectDropdown({
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl shadow-emerald-950/10"
+          className="absolute z-[9999] mt-2 max-h-72 w-full overflow-auto rounded-2xl border border-emerald-100 bg-white p-1.5 shadow-2xl shadow-emerald-950/10"
           role="listbox"
           aria-multiselectable="true"
         >
