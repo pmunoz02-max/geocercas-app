@@ -396,25 +396,39 @@ function buildGroupedReportTree(rows, groupKeys, groupFields, reportType, level 
     buckets.get(normalizedValue).rows.push(row);
   });
 
-  return Array.from(buckets.entries()).map(([normalizedValue, bucket]) => {
-    const id = `${parentId}|${fieldKey}:${encodeURIComponent(normalizedValue)}`;
-    return {
-      id,
-      fieldKey,
-      fieldLabel: field.label,
-      valueLabel: String(bucket.rawValue ?? "—"),
-      rows: bucket.rows,
-      summary: summarizeGroupedRows(bucket.rows, reportType),
-      children: buildGroupedReportTree(
-        bucket.rows,
-        groupKeys,
-        groupFields,
-        reportType,
-        level + 1,
-        id
-      ),
-    };
-  });
+  // Ordenar los grupos por el valor de la columna agrupada
+  function compareGroupValues(a, b) {
+    const aRaw = buckets.get(a[0])?.rawValue;
+    const bRaw = buckets.get(b[0])?.rawValue;
+    const aNum = Number(aRaw);
+    const bNum = Number(bRaw);
+    if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+      return aNum - bNum;
+    }
+    return String(aRaw).localeCompare(String(bRaw), undefined, { sensitivity: 'base' });
+  }
+
+  return Array.from(buckets.entries())
+    .sort(compareGroupValues)
+    .map(([normalizedValue, bucket]) => {
+      const id = `${parentId}|${fieldKey}:${encodeURIComponent(normalizedValue)}`;
+      return {
+        id,
+        fieldKey,
+        fieldLabel: field.label,
+        valueLabel: String(bucket.rawValue ?? "—"),
+        rows: bucket.rows,
+        summary: summarizeGroupedRows(bucket.rows, reportType),
+        children: buildGroupedReportTree(
+          bucket.rows,
+          groupKeys,
+          groupFields,
+          reportType,
+          level + 1,
+          id
+        ),
+      };
+    });
 }
 
 function collectGroupNodeIds(groups = []) {
@@ -1256,7 +1270,7 @@ export default function Reports() {
           </div>
         </section>
 
-        <section className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-100 bg-gradient-to-r from-white via-emerald-50/70 to-teal-50 px-4 py-4 md:px-5">
             <div>
               <h2 className="text-sm font-semibold text-gray-900">
