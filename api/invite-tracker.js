@@ -53,8 +53,9 @@ export default async function handler(req, res) {
 
   try {
     const { org_id, email } = req.body || {};
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!org_id || !email) {
+    if (!org_id || !normalizedEmail) {
       return res.status(400).json({
         ok: false,
         error: "missing_org_id_or_email",
@@ -98,20 +99,62 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // 🔒 VALIDAR IDENTIDAD TRACKER (personal.email+org_id y user_id)
+    // 🔒 VALIDAR IDENTIDAD TRACKER
+    // personal.email + org_id + user_id
+    // Si auth.users existe pero personal.user_id está vacío,
+    // sincroniza identidad y membership tracker automáticamente.
     // ===============================
     const { data: personalRow, error: personalError } = await supabase
       .from("personal")
       .select("id, user_id")
       .eq("org_id", org_id)
-      .eq("email", email)
+      .ilike("email", normalizedEmail)
       .maybeSingle();
 
     if (personalError) {
       throw personalError;
     }
 
-    if (!personalRow || !personalRow.user_id) {
+    let resolvedPersonalRow = personalRow;
+
+    if (!resolvedPersonalRow || !resolvedPersonalRow.user_id) {
+      const { data: syncResult, error: syncError } = await supabase.rpc(
+        "sync_tracker_identity_for_invite",
+        {
+          p_org_id: org_id,
+          p_email: normalizedEmail,
+        },
+      );
+
+      if (syncError) {
+        console.warn("[api/invite-tracker] tracker identity sync failed", {
+          org_id,
+          email: normalizedEmail,
+          message: syncError.message,
+        });
+      } else {
+        console.log("[api/invite-tracker] tracker identity sync result", {
+          org_id,
+          email: normalizedEmail,
+          result: syncResult,
+        });
+      }
+
+      const { data: retriedPersonalRow, error: retriedPersonalError } = await supabase
+        .from("personal")
+        .select("id, user_id")
+        .eq("org_id", org_id)
+        .ilike("email", normalizedEmail)
+        .maybeSingle();
+
+      if (retriedPersonalError) {
+        throw retriedPersonalError;
+      }
+
+      resolvedPersonalRow = retriedPersonalRow;
+    }
+
+    if (!resolvedPersonalRow || !resolvedPersonalRow.user_id) {
       return res.status(409).json({
         ok: false,
         error: "tracker_identity_required",
@@ -178,7 +221,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         org_id,
-        email,
+        email: normalizedEmail,
 
         // Native-first tracker onboarding.
         // La Edge Function debe usar estos valores para armar el email:
@@ -225,20 +268,15 @@ export default async function handler(req, res) {
       upstreamJson?.runtime_token ||
       null;
 
-    // Asegurar que userId sea personal.user_id del invitado si existe
+    // Asegurar que userId sea personal.user_id del invitado si existe.
+    // Si la Edge Function no lo devuelve, usamos el user_id ya resuelto/sincronizado aquí.
     let trackerUserId = null;
     if (upstreamJson?.personal && upstreamJson.personal.user_id) {
       trackerUserId = upstreamJson.personal.user_id;
     } else if (upstreamJson?.tracker_user_id) {
       trackerUserId = upstreamJson.tracker_user_id;
-    } else {
-      trackerUserId = null;
-    }
-
-    // Si no existe user_id válido, omitir userId en el deep link y respuesta
-    if (!trackerUserId) {
-      // Opcional: devolver error controlado si es obligatorio
-      // return res.status(409).json({ ok: false, error: "tracker_identity_missing" });
+    } else if (resolvedPersonalRow?.user_id) {
+      trackerUserId = resolvedPersonalRow.user_id;
     }
 
     const trackerLinks = buildTrackerLinks({
@@ -249,12 +287,12 @@ export default async function handler(req, res) {
       trackerUserId,
     });
 
-    // Construir respuesta sin userId si no existe
     const response = {
       ok: true,
       ...(upstreamJson || {}),
       tracker_links: trackerLinks,
     };
+
     if (trackerUserId) {
       response.tracker_user_id = trackerUserId;
       response.user_id = trackerUserId;

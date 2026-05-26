@@ -12,9 +12,14 @@ Este documento es la referencia actual y viva del flujo de invitación y trackin
 - **tracker_assignments**: Espejo runtime de asignaciones activas, sincronizado automáticamente tras enlazar `personal.user_id` y mediante el procedimiento `bootstrap_tracker_assignment_current_user`.
 - **tracker_positions**: Única fuente canónica de posiciones para dashboard y reportes. El dashboard solo debe consultar esta tabla, usando `personal.user_id` o `tracker_assignments.tracker_user_id` como clave.
 
+
 ## Reglas y flujo principal
 
-1. **Invitación**: Se genera solo si existe un registro en `personal` con `user_id` no nulo.
+1. **Invitación**: El endpoint `api/invite-tracker` intenta sincronizar la identidad antes de bloquear la invitación. Si `personal.user_id` falta, llama la función `sync_tracker_identity_for_invite` (SQL, SECURITY DEFINER) que:
+  - Busca el usuario en `auth.users` por email.
+  - Sincroniza `personal.user_id` si está null.
+  - Crea o reactiva el membership en `memberships` con rol `tracker`, pero nunca degrada un rol `owner` o `admin` existente.
+  - Solo si tras este proceso sigue sin haber `user_id`, devuelve el error `tracker_identity_required`.
 2. **users_public**: Se asegura/sincroniza automáticamente al aceptar la invitación o enlazar el usuario.
 3. **Asignaciones**: Se crean en la tabla `asignaciones` y solo se reflejan en `tracker_assignments` si hay `user_id` válido.
 4. **tracker_assignments**: Se sincroniza automáticamente tras enlazar `personal.user_id` y es idempotente.
