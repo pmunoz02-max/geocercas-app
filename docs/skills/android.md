@@ -87,7 +87,19 @@ Responsabilidades:
 - Manejar reconexión.
 - No enviar requests sin token válido.
 - Mantener estado de tracking consistente.
+
 - Recuperarse si el servicio se cae, cuando aplique.
+
+### Nota — Permisos críticos del tracker
+
+En `/tracker-gps` existe un panel **Permisos críticos del tracker** con accesos a:
+
+- Ubicación siempre
+- Batería sin restricción
+- Autoinicio
+- Datos en segundo plano
+
+Estos accesos ayudan a evitar desconexiones tras reposo o reinicio en Android, especialmente en móviles que bloquean autoinicio o procesos en segundo plano.
 
 ---
 

@@ -134,6 +134,20 @@ function callNativeBridge(bridge, session) {
   }
 }
 
+function openNativeSetting(methodNames, fallbackMessage) {
+  const bridge = getNativeBridge();
+  const names = Array.isArray(methodNames) ? methodNames : [methodNames];
+
+  for (const methodName of names) {
+    if (bridge && typeof bridge[methodName] === "function") {
+      bridge[methodName]();
+      return;
+    }
+  }
+
+  alert(fallbackMessage);
+}
+
 export default function TrackerGpsPage() {
   const { t } = useTranslation();
 
@@ -297,7 +311,7 @@ export default function TrackerGpsPage() {
 
   const cardStyle = {
     width: "100%",
-    maxWidth: 520,
+    maxWidth: 560,
     background: "#ffffff",
     border: "1px solid #e5e7eb",
     borderRadius: 16,
@@ -354,6 +368,26 @@ export default function TrackerGpsPage() {
     lineHeight: 1.45,
   };
 
+  const criticalPermissionsPanelStyle = {
+    marginTop: 32,
+    padding: 20,
+    border: "1.5px solid #fbbf24",
+    borderRadius: 14,
+    background: "#fffbea",
+    textAlign: "left",
+  };
+
+  const permissionButtonStyle = {
+    padding: "10px 16px",
+    borderRadius: 8,
+    border: "1px solid #eab308",
+    background: "#fef9c3",
+    color: "#78350f",
+    fontWeight: 600,
+    cursor: "pointer",
+    minWidth: 170,
+  };
+
   return (
     <div style={pageStyle}>
       <div style={cardStyle}>
@@ -390,6 +424,72 @@ export default function TrackerGpsPage() {
             {debugInfo.lastError}
           </div>
         )}
+
+        {/* Panel de permisos críticos del tracker */}
+        <div style={criticalPermissionsPanelStyle}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "#b45309" }}>
+            Permisos críticos del tracker
+          </div>
+
+          <div style={{ fontSize: 14, color: "#92400e", marginBottom: 16, lineHeight: 1.45 }}>
+            Para que GeoField GPS siga funcionando después de reiniciar el móvil o dejarlo en reposo,
+            activa estos permisos críticos.
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+            <button
+              type="button"
+              style={permissionButtonStyle}
+              onClick={() => {
+                openNativeSetting(
+                  "requestLocationPermissions",
+                  "Activa ubicación SIEMPRE: Ajustes > Apps > GeoField GPS > Permisos > Ubicación > Permitir siempre.",
+                );
+              }}
+            >
+              Ubicación siempre
+            </button>
+
+            <button
+              type="button"
+              style={permissionButtonStyle}
+              onClick={() => {
+                openNativeSetting(
+                  ["requestIgnoreBatteryOptimizations", "openAppBatterySettings"],
+                  "Activa batería sin restricciones: Ajustes > Apps > GeoField GPS > Batería > Sin restricciones o No optimizar.",
+                );
+              }}
+            >
+              Batería sin restricción
+            </button>
+
+            <button
+              type="button"
+              style={permissionButtonStyle}
+              onClick={() => {
+                openNativeSetting(
+                  "openAutoStartSettings",
+                  "Activa autoinicio: Ajustes / Phone Master / Power Center > Auto-start management > GeoField GPS > Permitir.",
+                );
+              }}
+            >
+              Autoinicio
+            </button>
+
+            <button
+              type="button"
+              style={permissionButtonStyle}
+              onClick={() => {
+                openNativeSetting(
+                  "openAppBatterySettings",
+                  "Permite actividad y datos en segundo plano: Ajustes > Apps > GeoField GPS > Datos móviles / Batería > Permitir segundo plano.",
+                );
+              }}
+            >
+              Datos en segundo plano
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
