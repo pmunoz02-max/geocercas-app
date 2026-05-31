@@ -1772,6 +1772,18 @@
       "lat": "lat",
       "lng": "lng",
       "acc": "acc"
+    },
+    "perms": {
+      "panelTitle": "Autorisations critiques du traceur",
+      "panelDesc": "Pour que GeoField GPS continue de fonctionner après le redémarrage du téléphone ou une période de repos, activez ces autorisations critiques.",
+      "locationAlways": "Position toujours autorisée",
+      "locationAlwaysAlert": "Activez la position TOUJOURS : Paramètres > Applications > GeoField GPS > Autorisations > Position > Toujours autoriser.",
+      "batteryUnrestricted": "Batterie sans restriction",
+      "batteryUnrestrictedAlert": "Désactivez les restrictions de batterie : Paramètres > Applications > GeoField GPS > Batterie > Sans restriction ou Ne pas optimiser.",
+      "autostart": "Démarrage automatique",
+      "autostartAlert": "Activez le démarrage automatique : Paramètres / Phone Master / Power Center > Gestion du démarrage automatique > GeoField GPS > Autoriser.",
+      "backgroundData": "Données en arrière-plan",
+      "backgroundDataAlert": "Autorisez l’activité et les données en arrière-plan : Paramètres > Applications > GeoField GPS > Données mobiles / Batterie > Autoriser l’arrière-plan."
     }
   },
   "pricing": {

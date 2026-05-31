@@ -425,15 +425,14 @@ export default function TrackerGpsPage() {
           </div>
         )}
 
-        {/* Panel de permisos críticos del tracker */}
+        {/* Critical tracker permissions panel */}
         <div style={criticalPermissionsPanelStyle}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "#b45309" }}>
-            Permisos críticos del tracker
+            {t("trackerGps.perms.panelTitle")}
           </div>
 
           <div style={{ fontSize: 14, color: "#92400e", marginBottom: 16, lineHeight: 1.45 }}>
-            Para que GeoField GPS siga funcionando después de reiniciar el móvil o dejarlo en reposo,
-            activa estos permisos críticos.
+            {t("trackerGps.perms.panelDesc")}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
@@ -443,11 +442,11 @@ export default function TrackerGpsPage() {
               onClick={() => {
                 openNativeSetting(
                   "requestLocationPermissions",
-                  "Activa ubicación SIEMPRE: Ajustes > Apps > GeoField GPS > Permisos > Ubicación > Permitir siempre.",
+                  t("trackerGps.perms.locationAlwaysAlert"),
                 );
               }}
             >
-              Ubicación siempre
+              {t("trackerGps.perms.locationAlways")}
             </button>
 
             <button
@@ -456,11 +455,11 @@ export default function TrackerGpsPage() {
               onClick={() => {
                 openNativeSetting(
                   ["requestIgnoreBatteryOptimizations", "openAppBatterySettings"],
-                  "Activa batería sin restricciones: Ajustes > Apps > GeoField GPS > Batería > Sin restricciones o No optimizar.",
+                  t("trackerGps.perms.batteryUnrestrictedAlert"),
                 );
               }}
             >
-              Batería sin restricción
+              {t("trackerGps.perms.batteryUnrestricted")}
             </button>
 
             <button
@@ -469,11 +468,11 @@ export default function TrackerGpsPage() {
               onClick={() => {
                 openNativeSetting(
                   "openAutoStartSettings",
-                  "Activa autoinicio: Ajustes / Phone Master / Power Center > Auto-start management > GeoField GPS > Permitir.",
+                  t("trackerGps.perms.autostartAlert"),
                 );
               }}
             >
-              Autoinicio
+              {t("trackerGps.perms.autostart")}
             </button>
 
             <button
@@ -482,11 +481,11 @@ export default function TrackerGpsPage() {
               onClick={() => {
                 openNativeSetting(
                   "openAppBatterySettings",
-                  "Permite actividad y datos en segundo plano: Ajustes > Apps > GeoField GPS > Datos móviles / Batería > Permitir segundo plano.",
+                  t("trackerGps.perms.backgroundDataAlert"),
                 );
               }}
             >
-              Datos en segundo plano
+              {t("trackerGps.perms.backgroundData")}
             </button>
           </div>
         </div>

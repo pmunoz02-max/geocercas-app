@@ -1801,6 +1801,18 @@
       "lat": "lat",
       "lng": "lng",
       "acc": "acc"
+    },
+    "perms": {
+      "panelTitle": "Permisos críticos del tracker",
+      "panelDesc": "Para que GeoField GPS siga funcionando después de reiniciar el móvil o dejarlo en reposo, activa estos permisos críticos.",
+      "locationAlways": "Ubicación siempre",
+      "locationAlwaysAlert": "Activa ubicación SIEMPRE: Ajustes > Apps > GeoField GPS > Permisos > Ubicación > Permitir siempre.",
+      "batteryUnrestricted": "Batería sin restricción",
+      "batteryUnrestrictedAlert": "Activa batería sin restricciones: Ajustes > Apps > GeoField GPS > Batería > Sin restricciones o No optimizar.",
+      "autostart": "Autoinicio",
+      "autostartAlert": "Activa autoinicio: Ajustes / Phone Master / Power Center > Auto-start management > GeoField GPS > Permitir.",
+      "backgroundData": "Datos en segundo plano",
+      "backgroundDataAlert": "Permite actividad y datos en segundo plano: Ajustes > Apps > GeoField GPS > Datos móviles / Batería > Permitir segundo plano."
     }
   },
   "pricing": {
@@ -2302,4 +2314,3 @@
     }
   }
 }
-

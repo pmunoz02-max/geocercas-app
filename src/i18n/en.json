@@ -1799,6 +1799,18 @@
       "lat": "lat",
       "lng": "lng",
       "acc": "acc"
+    },
+    "perms": {
+      "panelTitle": "Critical tracker permissions",
+      "panelDesc": "To keep GeoField GPS working after restarting the phone or leaving it idle, enable these critical permissions.",
+      "locationAlways": "Always allow location",
+      "locationAlwaysAlert": "Enable ALWAYS location: Settings > Apps > GeoField GPS > Permissions > Location > Allow all the time.",
+      "batteryUnrestricted": "Unrestricted battery",
+      "batteryUnrestrictedAlert": "Disable battery restrictions: Settings > Apps > GeoField GPS > Battery > Unrestricted or Do not optimize.",
+      "autostart": "Auto-start",
+      "autostartAlert": "Enable auto-start: Settings / Phone Master / Power Center > Auto-start management > GeoField GPS > Allow.",
+      "backgroundData": "Background data",
+      "backgroundDataAlert": "Allow background activity and data: Settings > Apps > GeoField GPS > Mobile data / Battery > Allow background usage."
     }
   },
   "pricing": {
