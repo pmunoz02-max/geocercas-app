@@ -29,7 +29,7 @@ export default function Pay() {
         console.log("[PAY] token present:", Boolean(token));
 
         if (!token) {
-          console.error("[PAY] Missing Paddle client token");
+          console.error("[PAY] Missing payment provider client token");
           return;
         }
 
@@ -51,7 +51,7 @@ export default function Pay() {
           transactionId,
         });
       } catch (err) {
-        console.error("[PAY] Paddle error:", err);
+        console.error("[PAY] Payment provider error:", err);
       }
     };
 
@@ -85,7 +85,7 @@ export default function Pay() {
   return (
     <div style={{ padding: 40 }}>
       <h2>Abriendo checkout seguro...</h2>
-      <p>Por favor espera, estamos redirigiéndote a Paddle.</p>
+      <p>Por favor espera, estamos redirigiéndote al checkout seguro.</p>
     </div>
   );
 }

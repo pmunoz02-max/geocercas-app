@@ -1962,9 +1962,9 @@
       "processing": "Processing...",
       "noticeTitle": "Notice",
       "messages": {
-        "paddleError": "PADDLE ERROR:\n{{details}}",
+        "paddleError": "PAYMENT PROVIDER ERROR:\n{{details}}",
         "checkoutUrlMissing": "CHECKOUT URL MISSING:\n{{details}}",
-        "paddleException": "PADDLE EXCEPTION:\n{{details}}"
+        "paddleException": "PAYMENT PROVIDER EXCEPTION:\n{{details}}"
       },
       "errors": {
         "invalidOrgId": "Invalid Org ID. Copy the Organization ID (UUID) and paste it here."

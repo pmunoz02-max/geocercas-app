@@ -1935,9 +1935,9 @@
       "processing": "Traitement en cours...",
       "noticeTitle": "Avis",
       "messages": {
-        "paddleError": "ERREUR PADDLE:\n{{details}}",
+        "paddleError": "ERREUR DU FOURNISSEUR DE PAIEMENT:\n{{details}}",
         "checkoutUrlMissing": "URL CHECKOUT MANQUANTE:\n{{details}}",
-        "paddleException": "EXCEPTION PADDLE:\n{{details}}"
+        "paddleException": "EXCEPTION DU FOURNISSEUR DE PAIEMENT:\n{{details}}"
       },
       "errors": {
         "invalidOrgId": "ID d’organisation invalide. Copiez l’UUID et collez-le ici."

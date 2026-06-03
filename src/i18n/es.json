@@ -1963,9 +1963,9 @@
       "processing": "Procesando...",
       "noticeTitle": "Aviso",
       "messages": {
-        "paddleError": "ERROR DE PADDLE:\n{{details}}",
+        "paddleError": "ERROR DEL PROVEEDOR DE PAGOS:\n{{details}}",
         "checkoutUrlMissing": "FALTA CHECKOUT URL:\n{{details}}",
-        "paddleException": "EXCEPCION DE PADDLE:\n{{details}}"
+        "paddleException": "EXCEPCION DEL PROVEEDOR DE PAGOS:\n{{details}}"
       },
       "errors": {
         "invalidOrgId": "Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí."

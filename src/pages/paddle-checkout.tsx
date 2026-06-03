@@ -22,7 +22,7 @@ export default function PaddleCheckoutPage() {
     const initCheckout = async () => {
       try {
         if (!window.Paddle) {
-          setMsg("Error: Paddle.js no está disponible");
+          setMsg("Error: el proveedor de pagos no está disponible");
           return;
         }
 
@@ -34,7 +34,7 @@ export default function PaddleCheckoutPage() {
         console.log("[PADDLE DEBUG] TOKEN prefix:", token?.slice(0, 10));
 
         if (!token) {
-          setMsg("Error: Paddle client token no configurado");
+          setMsg("Error: configuración de checkout no disponible");
           return;
         }
 
@@ -65,7 +65,7 @@ export default function PaddleCheckoutPage() {
             if (eventName.includes("error")) {
               console.error("[PADDLE CHECKOUT] error", event);
               setMsg(
-                `Error de Paddle: ${JSON.stringify(
+                `Error del proveedor de pagos: ${JSON.stringify(
                   event?.data || event,
                   null,
                   2
@@ -110,7 +110,7 @@ export default function PaddleCheckoutPage() {
     script.onload = () => { initCheckout(); };
     script.onerror = () => {
       console.error("[PADDLE PAGE] error", "No se pudo cargar Paddle.js");
-      setMsg("Error cargando Paddle.js");
+      setMsg("Error cargando el proveedor de pagos");
     };
 
     document.body.appendChild(script);

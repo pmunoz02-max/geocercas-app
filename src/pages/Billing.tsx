@@ -36,7 +36,7 @@ export default function BillingPage() {
 
       {/* Bloque de management separado, copy neutral */}
       <div style={{ marginTop: 32, fontSize: 13, opacity: 0.8, maxWidth: 720 }}>
-        <b>Portal de suscripción:</b> Portal de suscripción temporalmente deshabilitado mientras migramos a Paddle.
+        <b>Portal de suscripción:</b> Portal de suscripción temporalmente deshabilitado mientras configuramos el proveedor de pagos.
       </div>
 
       <div style={{ marginTop: 18, fontSize: 13, opacity: 0.8, maxWidth: 720 }}>
