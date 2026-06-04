@@ -7,6 +7,18 @@
 - `tracker_positions` es la fuente de datos para el dashboard y reportes de posiciones.
 - El endpoint `invite-tracker` bloquea la invitación si `personal.user_id` es null (no permite invitar sin usuario enlazado).
 
+### Actualización Preview — Tracker pairing codes (2026-06-04)
+
+- Nuevo flujo Preview documentado en [docs/tracker-onboarding.md](docs/tracker-onboarding.md).
+- Arquitectura validada: Magic Link como identidad mínima, pairing code para emparejar organización/persona/tracker, y runtime token opaco para GPS.
+- Tabla DB: `tracker_pairing_codes`.
+- RPCs validadas en Supabase Preview con prueba transaccional y `ROLLBACK`:
+  - `rpc_create_tracker_pairing_code`
+  - `rpc_claim_tracker_pairing_code`
+- Estado: DB/RPCs validadas en Preview.
+- Pendiente: API admin, API tracker, UI admin, UI tracker y validación Android end-to-end en Preview.
+- No promover a Production hasta orden explícita.
+
 ### Nuevos alias de rutas para geocercas (web)
 
 - `/geofences` ahora redirige a `/geocercas`.

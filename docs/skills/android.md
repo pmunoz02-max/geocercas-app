@@ -123,6 +123,19 @@ Reglas:
 - No perder token al cerrar app si el tracking debe seguir activo.
 - No enviar GPS sin auth válida.
 
+## Tracker pairing codes / Android Preview
+
+Estado: solo Preview, no Production todavía.
+
+- GeoField GPS debe mantener Magic Link como autenticación mínima antes de reclamar un código.
+- El código de emparejamiento no reemplaza la identidad del tracker.
+- El código solo vincula organización, persona y tracker autenticado.
+- El runtime GPS sigue usando tracker runtime token opaco.
+- Flujo futuro: Magic Link → ingresar código → reclamar pairing code → recibir runtime token → entrar a `/tracker-gps`.
+- Tabla DB: `tracker_pairing_codes`.
+- RPCs: `rpc_create_tracker_pairing_code` y `rpc_claim_tracker_pairing_code`.
+- Pendiente: API, UI admin, UI tracker y validación Android end-to-end en Preview.
+
 ---
 
 ## WebView / TWA

@@ -12,6 +12,21 @@ Este documento es la referencia actual y viva del flujo de invitación y trackin
 - **tracker_assignments**: Espejo runtime de asignaciones activas, sincronizado automáticamente tras enlazar `personal.user_id` y mediante el procedimiento `bootstrap_tracker_assignment_current_user`.
 - **tracker_positions**: Única fuente canónica de posiciones para dashboard y reportes. El dashboard solo debe consultar esta tabla, usando `personal.user_id` o `tracker_assignments.tracker_user_id` como clave.
 
+## Referencia Preview — Tracker pairing codes
+
+El nuevo flujo Preview de emparejamiento de trackers por código está documentado en `docs/tracker-onboarding.md`.
+
+Resumen:
+
+- Magic Link se usa solo como identidad mínima del tracker.
+- El pairing code vincula organización, persona y tracker autenticado.
+- El tracking operativo sigue usando runtime token opaco.
+- Tabla Preview: `tracker_pairing_codes`.
+- RPCs Preview: `rpc_create_tracker_pairing_code` y `rpc_claim_tracker_pairing_code`.
+- Estado: DB/RPCs validadas en Preview con `ROLLBACK`.
+- Pendiente: API, UI admin, UI tracker y validación Android end-to-end.
+- No promover a Production hasta orden explícita.
+
 
 ## Reglas y flujo principal
 
