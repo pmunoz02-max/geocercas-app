@@ -15,6 +15,9 @@ const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_KEY;
 
+const DEFAULT_PAIRING_EXPIRES_HOURS = 72;
+const MAX_PAIRING_EXPIRES_HOURS = 24 * 14;
+
 const DEFAULT_RUNTIME_EXPIRES_HOURS = 720;
 const MAX_RUNTIME_EXPIRES_HOURS = 24 * 90;
 
@@ -75,10 +78,29 @@ async function readBody(req) {
   });
 }
 
+function normalizeUuid(value) {
+  const clean = String(value || "").trim();
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRe.test(clean) ? clean : "";
+}
+
 function normalizePositiveInt(value, fallback, maxValue) {
   const n = Number.parseInt(String(value ?? ""), 10);
   if (!Number.isFinite(n) || n < 1) return fallback;
   return Math.min(n, maxValue);
+}
+
+function createPairingCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(12);
+  let out = "";
+
+  for (let i = 0; i < 12; i += 1) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+
+  return `${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8, 12)}`;
 }
 
 function normalizePairingCode(code) {
@@ -114,44 +136,120 @@ function supabaseService() {
   });
 }
 
-export default async function handler(req, res) {
-  setCors(res);
-
-  if (req.method === "OPTIONS") {
-    return res.status(204).end();
-  }
-
-  if (req.method !== "POST") {
-    return json(res, 405, {
-      ok: false,
-      error: "method_not_allowed",
-    });
-  }
-
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return json(res, 500, {
-      ok: false,
-      error: "server_env_missing",
-    });
-  }
-
+async function getAuthenticatedUser(req) {
   const accessToken = getAccessToken(req);
 
   if (!accessToken) {
-    return json(res, 401, {
+    return {
       ok: false,
+      status: 401,
       error: "missing_auth",
+    };
+  }
+
+  const sbUser = supabaseAnonWithToken(accessToken);
+  const { data, error } = await sbUser.auth.getUser(accessToken);
+
+  const user = data?.user || null;
+
+  if (error || !user?.id) {
+    return {
+      ok: false,
+      status: 401,
+      error: "invalid_auth",
+    };
+  }
+
+  return {
+    ok: true,
+    accessToken,
+    user,
+  };
+}
+
+async function handleCreate(req, res, body, auth) {
+  const orgId = normalizeUuid(body?.org_id || body?.orgId);
+  const personalId = normalizeUuid(body?.personal_id || body?.personalId);
+
+  const expiresHours = normalizePositiveInt(
+    body?.expires_hours || body?.expiresHours,
+    DEFAULT_PAIRING_EXPIRES_HOURS,
+    MAX_PAIRING_EXPIRES_HOURS
+  );
+
+  const email = String(body?.email || "").trim() || null;
+  const maxUses = 1;
+  const revokeExisting = body?.revoke_existing !== false;
+
+  if (!orgId) {
+    return json(res, 400, {
+      ok: false,
+      error: "org_id_required",
     });
   }
 
-  const body = await readBody(req);
+  if (!personalId) {
+    return json(res, 400, {
+      ok: false,
+      error: "personal_id_required",
+    });
+  }
 
-  const rawCode =
-    body?.pairing_code ||
-    body?.pairingCode ||
-    body?.code ||
-    "";
+  const pairingCode = createPairingCode();
+  const normalizedCode = normalizePairingCode(pairingCode);
+  const codeHash = sha256Hex(normalizedCode);
 
+  const sbService = supabaseService();
+
+  const { data, error } = await sbService.rpc("rpc_create_tracker_pairing_code", {
+    p_org_id: orgId,
+    p_personal_id: personalId,
+    p_code_hash: codeHash,
+    p_created_by_user_id: auth.user.id,
+    p_expires_hours: expiresHours,
+    p_email: email,
+    p_max_uses: maxUses,
+    p_revoke_existing: revokeExisting,
+  });
+
+  if (error) {
+    console.error("[tracker-pairing-code] create rpc error", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+
+    return json(res, 500, {
+      ok: false,
+      error: "rpc_error",
+    });
+  }
+
+  const result = data && typeof data === "object" ? data : {};
+
+  if (!result.ok) {
+    return json(res, 400, {
+      ok: false,
+      error: result.error || "pairing_code_create_failed",
+      details: result.details || null,
+    });
+  }
+
+  return json(res, 200, {
+    ok: true,
+    pairing_code: pairingCode,
+    pairing_code_normalized: normalizedCode,
+    pairing_code_id: result.pairing_code_id || null,
+    org_id: result.org_id || orgId,
+    personal_id: result.personal_id || personalId,
+    expires_at: result.expires_at || null,
+    max_uses: result.max_uses || maxUses,
+  });
+}
+
+async function handleClaim(req, res, body, auth) {
+  const rawCode = body?.pairing_code || body?.pairingCode || body?.code || "";
   const normalizedCode = normalizePairingCode(rawCode);
 
   if (normalizedCode.length < 8) {
@@ -167,32 +265,20 @@ export default async function handler(req, res) {
     MAX_RUNTIME_EXPIRES_HOURS
   );
 
-  const sbUser = supabaseAnonWithToken(accessToken);
-  const { data: userData, error: userError } = await sbUser.auth.getUser(accessToken);
-
-  const trackerUser = userData?.user || null;
-  const trackerUserId = trackerUser?.id || null;
-  const trackerEmail = String(trackerUser?.email || "").trim() || null;
-
-  if (userError || !trackerUserId) {
-    return json(res, 401, {
-      ok: false,
-      error: "invalid_auth",
-    });
-  }
-
+  const trackerEmail = String(auth.user?.email || "").trim() || null;
   const codeHash = sha256Hex(normalizedCode);
+
   const sbService = supabaseService();
 
   const { data, error } = await sbService.rpc("rpc_claim_tracker_pairing_code", {
     p_code_hash: codeHash,
-    p_tracker_user_id: trackerUserId,
+    p_tracker_user_id: auth.user.id,
     p_tracker_email: trackerEmail,
     p_runtime_expires_hours: runtimeExpiresHours,
   });
 
   if (error) {
-    console.error("[tracker-pairing-code-claim] rpc error", {
+    console.error("[tracker-pairing-code] claim rpc error", {
       message: error.message,
       details: error.details,
       hint: error.hint,
@@ -232,9 +318,57 @@ export default async function handler(req, res) {
     ok: true,
     org_id: result.org_id || null,
     personal_id: result.personal_id || null,
-    tracker_user_id: result.tracker_user_id || trackerUserId,
+    tracker_user_id: result.tracker_user_id || auth.user.id,
     tracker_runtime_token: runtimeToken,
     tracker_access_token: runtimeToken,
     runtime_expires_at: result.runtime_expires_at || null,
   });
+}
+
+export default async function handler(req, res) {
+  setCors(res);
+
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+
+  if (req.method !== "POST") {
+    return json(res, 405, {
+      ok: false,
+      error: "method_not_allowed",
+    });
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    return json(res, 500, {
+      ok: false,
+      error: "server_env_missing",
+    });
+  }
+
+  const body = await readBody(req);
+  const action = String(body?.action || "").trim().toLowerCase();
+
+  if (!["create", "claim"].includes(action)) {
+    return json(res, 400, {
+      ok: false,
+      error: "invalid_action",
+      allowed_actions: ["create", "claim"],
+    });
+  }
+
+  const auth = await getAuthenticatedUser(req);
+
+  if (!auth.ok) {
+    return json(res, auth.status || 401, {
+      ok: false,
+      error: auth.error || "invalid_auth",
+    });
+  }
+
+  if (action === "create") {
+    return handleCreate(req, res, body, auth);
+  }
+
+  return handleClaim(req, res, body, auth);
 }
