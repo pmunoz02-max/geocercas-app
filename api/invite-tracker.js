@@ -1,4 +1,50 @@
+import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+
+const DEFAULT_PAIRING_EXPIRES_HOURS = 72;
+const MAX_PAIRING_EXPIRES_HOURS = 24 * 14;
+
+function normalizeUuid(value) {
+  const clean = String(value || "").trim();
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRe.test(clean) ? clean : "";
+}
+
+function normalizePositiveInt(value, fallback, maxValue) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, maxValue);
+}
+
+function createPairingCode() {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(12);
+  let out = "";
+
+  for (let i = 0; i < 12; i += 1) {
+    out += alphabet[bytes[i] % alphabet.length];
+  }
+
+  return `${out.slice(0, 4)}-${out.slice(4, 8)}-${out.slice(8, 12)}`;
+}
+
+function normalizePairingCode(code) {
+  return String(code || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function sha256Hex(value) {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function extractBearerToken(req) {
+  const auth = req.headers?.authorization || req.headers?.Authorization || "";
+  const bearer = String(auth || "").match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const xUserJwt = req.headers?.["x-user-jwt"] || req.headers?.["X-User-Jwt"] || "";
+  return bearer || String(xUserJwt || "").trim();
+}
 
 function getOrigin(req) {
   const proto =
@@ -42,6 +88,104 @@ function buildTrackerLinks({ req, org_id, inviteToken, runtimeToken, trackerUser
   };
 }
 
+async function handleCreatePairingCode(req, res) {
+  const body = req.body || {};
+
+  const org_id = normalizeUuid(body.org_id || body.orgId);
+  const personal_id = normalizeUuid(body.personal_id || body.personalId);
+  const expiresHours = normalizePositiveInt(
+    body.expires_hours || body.expiresHours,
+    DEFAULT_PAIRING_EXPIRES_HOURS,
+    MAX_PAIRING_EXPIRES_HOURS
+  );
+
+  if (!org_id) {
+    return res.status(400).json({ ok: false, error: "org_id_required" });
+  }
+
+  if (!personal_id) {
+    return res.status(400).json({ ok: false, error: "personal_id_required" });
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey =
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.VITE_SUPABASE_ANON_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey || !anonKey) {
+    return res.status(500).json({ ok: false, error: "missing_supabase_env" });
+  }
+
+  const accessToken = extractBearerToken(req);
+
+  if (!accessToken) {
+    return res.status(401).json({ ok: false, error: "missing_auth" });
+  }
+
+  const supabaseUser = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+  });
+
+  const { data: userData, error: userError } = await supabaseUser.auth.getUser(accessToken);
+  const actorUserId = userData?.user?.id || null;
+
+  if (userError || !actorUserId) {
+    return res.status(401).json({ ok: false, error: "invalid_auth" });
+  }
+
+  const pairingCode = createPairingCode();
+  const normalizedCode = normalizePairingCode(pairingCode);
+  const codeHash = sha256Hex(normalizedCode);
+
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+  const { data, error } = await supabase.rpc("rpc_create_tracker_pairing_code", {
+    p_org_id: org_id,
+    p_personal_id: personal_id,
+    p_code_hash: codeHash,
+    p_created_by_user_id: actorUserId,
+    p_expires_hours: expiresHours,
+    p_email: String(body.email || "").trim() || null,
+    p_max_uses: 1,
+    p_revoke_existing: body.revoke_existing !== false,
+  });
+
+  if (error) {
+    console.error("[api/invite-tracker] create_pairing_code rpc error", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+
+    return res.status(500).json({ ok: false, error: "rpc_error" });
+  }
+
+  const result = data && typeof data === "object" ? data : {};
+
+  if (!result.ok) {
+    return res.status(400).json({
+      ok: false,
+      error: result.error || "pairing_code_create_failed",
+      details: result.details || null,
+    });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    pairing_code: pairingCode,
+    pairing_code_normalized: normalizedCode,
+    pairing_code_id: result.pairing_code_id || null,
+    org_id: result.org_id || org_id,
+    personal_id: result.personal_id || personal_id,
+    expires_at: result.expires_at || null,
+    max_uses: result.max_uses || 1,
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -52,6 +196,12 @@ export default async function handler(req, res) {
   }
 
   try {
+    const action = String(req.body?.action || "").trim().toLowerCase();
+
+    if (action === "create_pairing_code") {
+      return await handleCreatePairingCode(req, res);
+    }
+
     const { org_id, email } = req.body || {};
     const normalizedEmail = String(email || "").trim().toLowerCase();
 
@@ -75,7 +225,7 @@ export default async function handler(req, res) {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // ===============================
-    // 🔒 VALIDAR PLAN (source of truth)
+    // VALIDAR PLAN (source of truth)
     // ===============================
     const { data: billing, error: billingError } = await supabase
       .from("org_billing")
@@ -99,7 +249,7 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // 🔒 VALIDAR IDENTIDAD TRACKER
+    // VALIDAR IDENTIDAD TRACKER
     // personal.email + org_id + user_id
     // Si auth.users existe pero personal.user_id está vacío,
     // sincroniza identidad y membership tracker automáticamente.
@@ -123,7 +273,7 @@ export default async function handler(req, res) {
         {
           p_org_id: org_id,
           p_email: normalizedEmail,
-        },
+        }
       );
 
       if (syncError) {
@@ -163,7 +313,7 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // 🔒 OBTENER LÍMITES DEL PLAN
+    // OBTENER LÍMITES DEL PLAN
     // ===============================
     const { data: planLimits, error: limitsError } = await supabase
       .from("plan_limits")
@@ -178,7 +328,7 @@ export default async function handler(req, res) {
     const maxTrackers = planLimits?.max_trackers ?? 0;
 
     // ===============================
-    // 🔒 CONTAR TRACKERS ACTIVOS
+    // CONTAR TRACKERS ACTIVOS
     // ===============================
     const { count: trackerCount, error: countError } = await supabase
       .from("tracker_memberships")
@@ -199,14 +349,14 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // 🔑 USER JWT
+    // USER JWT
     // ===============================
     const userJwt =
       req.headers["x-user-jwt"] ||
       (req.headers.authorization || "").replace("Bearer ", "");
 
     // ===============================
-    // 🚀 EDGE FUNCTION (crea invitación + envío email)
+    // EDGE FUNCTION (crea invitación + envío email)
     // ===============================
     const edgeUrl = `${supabaseUrl}/functions/v1/send-tracker-invite-brevo`;
 

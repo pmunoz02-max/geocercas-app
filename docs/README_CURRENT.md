@@ -54,3 +54,13 @@ El flujo completo de invitación de tracker, onboarding Android GeoField GPS y e
 - En la interfaz de NuevaGeocerca, se muestra el área de cada geocerca y se permite elegir la unidad de área (m², ha, km² o acres), persistiendo la preferencia del usuario en `localStorage`.
 - El área canónica de cada geocerca se calcula exclusivamente en el backend; el frontend solo realiza la conversión y formato para visualización, pero no calcula el área.
 - La función `list_geofences_with_area_preview` ahora también devuelve `centroid_lat` y `centroid_lng`, calculados en PostGIS con `ST_PointOnSurface(geom)`. El componente NuevaGeocerca utiliza este punto interno representativo para mostrar Lat/Lng, garantizando que siempre esté dentro del polígono, lo cual es útil incluso para geocercas con linderos irregulares.
+
+### Ajuste Preview — límite Vercel Hobby y pairing API (2026-06-04)
+
+- Para respetar el límite de Serverless Functions del plan Vercel Hobby, no se usa un endpoint nuevo `/api/tracker-pairing-code`.
+- La creación admin de pairing code queda integrada en `api/invite-tracker.js` mediante `action: "create_pairing_code"`.
+- Se elimina `api/tracker-pairing-code.js`.
+- Se elimina `api/health.js` para dejar margen bajo el límite de funciones.
+- Estado actual: solo create pairing code en API Preview.
+- Reclamar pairing code, UI admin, UI tracker y validación Android end-to-end siguen pendientes.
+- No promover a Production hasta orden explícita.
