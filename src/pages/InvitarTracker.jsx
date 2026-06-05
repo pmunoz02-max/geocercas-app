@@ -59,6 +59,11 @@ export default function InvitarTracker() {
   const [inviteLink, setInviteLink] = useState("");
   const [inviteMeta, setInviteMeta] = useState(null);
   const [trackerIdentityBlocked, setTrackerIdentityBlocked] = useState(false);
+  const [pairingCode, setPairingCode] = useState("");
+  const [pairingCodeId, setPairingCodeId] = useState("");
+  const [pairingCodeExpiresAt, setPairingCodeExpiresAt] = useState("");
+  const [pairingLoading, setPairingLoading] = useState(false);
+  const [pairingError, setPairingError] = useState(null);
 
   // =========================
   // DERIVADOS BASE
@@ -364,6 +369,51 @@ export default function InvitarTracker() {
   // =========================
   // HELPERS / HANDLERS
   // =========================
+  async function createPairingCodeForSelectedPerson() {
+    setPairingLoading(true);
+    setPairingError(null);
+    setPairingCode("");
+    setPairingCodeId("");
+    setPairingCodeExpiresAt("");
+
+    try {
+      if (!orgId) throw new Error("No se pudo determinar la organización activa.");
+      if (!selectedPerson?.id) throw new Error("Selecciona una persona.");
+
+      const accessToken = await getAccessToken();
+      if (!accessToken) throw new Error("No se encontró una sesión válida.");
+
+      const response = await fetch(INVITE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessToken,
+          "x-user-jwt": accessToken,
+        },
+        body: JSON.stringify({
+          action: "create_pairing_code",
+          org_id: orgId,
+          personal_id: selectedPerson.id,
+          expires_hours: 72,
+        }),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.ok || !result?.pairing_code) {
+        throw new Error(result?.message || result?.error || "No se pudo generar el código.");
+      }
+
+      setPairingCode(result.pairing_code);
+      setPairingCodeId(result.pairing_code_id || "");
+      setPairingCodeExpiresAt(result.expires_at || "");
+    } catch (error) {
+      console.error("[invite-tracker] create pairing code failed", error);
+      setPairingError(error?.message || String(error));
+    } finally {
+      setPairingLoading(false);
+    }
+  }
   async function getAccessToken() {
     const directToken = auth?.session?.access_token || auth?.access_token || auth?.token || null;
     if (directToken) return directToken;
@@ -890,6 +940,69 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
                   label: selectedOption.label,
                 })}
               </p>
+            ) : null}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">
+                  Codigo de emparejamiento Preview
+                </div>
+                <p className="mt-1 text-xs text-slate-600">
+                  Genera un codigo para que el tracker lo ingrese despues de iniciar sesion con Magic Link.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={createPairingCodeForSelectedPerson}
+                disabled={pairingLoading || !selectedPerson?.id}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pairingLoading ? "Generando..." : "Generar codigo"}
+              </button>
+            </div>
+
+            {pairingError ? (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                {pairingError}
+              </div>
+            ) : null}
+
+            {pairingCode ? (
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-white p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  Codigo generado
+                </div>
+
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <code className="rounded-lg bg-slate-100 px-3 py-2 text-lg font-bold tracking-widest text-slate-900">
+                    {pairingCode}
+                  </code>
+
+                  <button
+                    type="button"
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                    onClick={() => navigator.clipboard.writeText(pairingCode)}
+                  >
+                    Copiar codigo
+                  </button>
+                </div>
+
+                <div className="mt-3 text-xs text-slate-600">
+                  {pairingCodeId ? (
+                    <div>
+                      <b>pairing_code_id:</b> <span className="break-all">{pairingCodeId}</span>
+                    </div>
+                  ) : null}
+                  {pairingCodeExpiresAt ? (
+                    <div>
+                      <b>Expira:</b> <span>{pairingCodeExpiresAt}</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             ) : null}
           </div>
 

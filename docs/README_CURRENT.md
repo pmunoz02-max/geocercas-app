@@ -74,3 +74,12 @@ El flujo completo de invitación de tracker, onboarding Android GeoField GPS y e
 - Si el código es válido, devuelve runtime token opaco para continuar el flujo GPS.
 - Estado: API implementada en Preview; pendiente validar endpoint en Deploy Preview y luego crear UI tracker.
 - No promover a Production hasta orden explícita.
+
+### Ajuste Preview — UI admin pairing code (2026-06-05)
+
+- Se agregó en `src/pages/InvitarTracker.jsx` una sección admin para generar y copiar códigos de emparejamiento.
+- La UI llama a `POST /api/invite-tracker` con `action: "create_pairing_code"`.
+- El flujo anterior de invitación por email no se reemplaza ni se elimina.
+- Estado: UI admin implementada en Preview; pendiente validar visualmente en Deploy Preview.
+- Pendiente siguiente: UI tracker para ingresar código después de Magic Link.
+- No promover a Production hasta orden explícita.
