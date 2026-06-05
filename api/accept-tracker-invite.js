@@ -8,6 +8,14 @@ const SUPABASE_URL =
 
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+const SUPABASE_ANON_KEY =
+  process.env.SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const DEFAULT_RUNTIME_EXPIRES_HOURS = 720;
+const MAX_RUNTIME_EXPIRES_HOURS = 24 * 90;
+
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -20,6 +28,18 @@ function createOpaqueRuntimeToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 
+function normalizePositiveInt(value, fallback, maxValue) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(n, maxValue);
+}
+
+function normalizePairingCode(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
 function getSupabase() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error("missing_supabase_env");
@@ -27,6 +47,24 @@ function getSupabase() {
 
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
+  });
+}
+
+function getSupabaseAnonWithToken(accessToken) {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    throw new Error("missing_supabase_anon_env");
+  }
+
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
   });
 }
 
@@ -334,6 +372,107 @@ async function markInviteUsed(supabase, inviteId, trackerUserId) {
   }
 }
 
+async function handleClaimPairingCode(req, res, body) {
+  const accessToken = extractBearerToken(req);
+
+  if (!accessToken) {
+    return res.status(401).json({ ok: false, error: "missing_auth" });
+  }
+
+  const rawCode = body?.pairing_code || body?.pairingCode || body?.code || "";
+  const normalizedCode = normalizePairingCode(rawCode);
+
+  if (normalizedCode.length < 8) {
+    return res.status(400).json({ ok: false, error: "pairing_code_required" });
+  }
+
+  let trackerUser = null;
+
+  try {
+    const supabaseUser = getSupabaseAnonWithToken(accessToken);
+    const { data: userData, error: userError } = await supabaseUser.auth.getUser(accessToken);
+
+    if (userError || !userData?.user?.id) {
+      return res.status(401).json({ ok: false, error: "invalid_auth" });
+    }
+
+    trackerUser = userData.user;
+  } catch (error) {
+    console.error("[api/accept-tracker-invite] claim auth failed", {
+      error: String(error?.message || error),
+    });
+
+    return res.status(500).json({ ok: false, error: "claim_auth_failed" });
+  }
+
+  const runtimeExpiresHours = normalizePositiveInt(
+    body?.runtime_expires_hours || body?.runtimeExpiresHours,
+    DEFAULT_RUNTIME_EXPIRES_HOURS,
+    MAX_RUNTIME_EXPIRES_HOURS
+  );
+
+  const codeHash = sha256Hex(normalizedCode);
+  const trackerEmail = normalizeEmail(trackerUser.email);
+
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase.rpc("rpc_claim_tracker_pairing_code", {
+    p_code_hash: codeHash,
+    p_tracker_user_id: trackerUser.id,
+    p_tracker_email: trackerEmail || null,
+    p_runtime_expires_hours: runtimeExpiresHours,
+  });
+
+  if (error) {
+    console.error("[api/accept-tracker-invite] claim_pairing_code rpc error", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+
+    return res.status(500).json({ ok: false, error: "rpc_error" });
+  }
+
+  const result = data && typeof data === "object" ? data : {};
+
+  if (!result.ok) {
+    return res.status(400).json({
+      ok: false,
+      error: result.error || "pairing_code_claim_failed",
+      details: result.details || null,
+      existing_personal_id: result.existing_personal_id || null,
+    });
+  }
+
+  const runtimeToken =
+    result.tracker_runtime_token ||
+    result.tracker_access_token ||
+    null;
+
+  if (!runtimeToken) {
+    return res.status(500).json({ ok: false, error: "runtime_token_missing" });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    org_id: result.org_id || null,
+    orgId: result.org_id || null,
+    personal_id: result.personal_id || null,
+    personalId: result.personal_id || null,
+    tracker_user_id: result.tracker_user_id || trackerUser.id,
+    user_id: result.tracker_user_id || trackerUser.id,
+    userId: result.tracker_user_id || trackerUser.id,
+    tracker_runtime_token: runtimeToken,
+    runtimeToken,
+    tracker_access_token: runtimeToken,
+    access_token: runtimeToken,
+    runtime_expires_at: result.runtime_expires_at || null,
+    expires_at: result.runtime_expires_at || null,
+    frequency_minutes: 1,
+  });
+}
+
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
@@ -341,6 +480,12 @@ export default async function handler(req, res) {
     }
 
     const body = await readBody(req);
+    const action = String(body?.action || "").trim().toLowerCase();
+
+    if (action === "claim_pairing_code") {
+      return await handleClaimPairingCode(req, res, body);
+    }
+
     const inviteToken = extractInviteToken(req, body);
 
     console.log("[api/accept-tracker-invite] request", {

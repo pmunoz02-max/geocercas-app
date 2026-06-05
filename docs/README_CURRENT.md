@@ -64,3 +64,13 @@ El flujo completo de invitación de tracker, onboarding Android GeoField GPS y e
 - Estado actual: solo create pairing code en API Preview.
 - Reclamar pairing code, UI admin, UI tracker y validación Android end-to-end siguen pendientes.
 - No promover a Production hasta orden explícita.
+
+### Ajuste Preview — claim pairing code API (2026-06-05)
+
+- Se integra la acción tracker `claim_pairing_code` dentro de `api/accept-tracker-invite.js`.
+- No se crea un endpoint nuevo para evitar superar el límite de Serverless Functions de Vercel Hobby.
+- La acción espera un tracker autenticado por Magic Link y un `pairing_code`.
+- La validación llama a `rpc_claim_tracker_pairing_code`.
+- Si el código es válido, devuelve runtime token opaco para continuar el flujo GPS.
+- Estado: API implementada en Preview; pendiente validar endpoint en Deploy Preview y luego crear UI tracker.
+- No promover a Production hasta orden explícita.
