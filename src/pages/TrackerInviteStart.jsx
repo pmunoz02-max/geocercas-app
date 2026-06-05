@@ -70,6 +70,32 @@ function setStorageItem(key, value) {
   }
 }
 
+function readSupabaseAccessToken() {
+  if (typeof window === "undefined") return "";
+
+  const stores = [window.localStorage, window.sessionStorage].filter(Boolean);
+
+  for (const store of stores) {
+    try {
+      for (let i = 0; i < store.length; i += 1) {
+        const key = store.key(i);
+        if (!key || !key.startsWith("sb-") || !key.endsWith("-auth-token")) continue;
+
+        const raw = store.getItem(key);
+        if (!raw) continue;
+
+        const parsed = JSON.parse(raw);
+        const accessToken = parsed?.access_token || parsed?.currentSession?.access_token || "";
+        if (accessToken) return accessToken;
+      }
+    } catch {
+      // try next storage
+    }
+  }
+
+  return "";
+}
+
 function removeStorageItem(key) {
   if (typeof window === "undefined") return;
 
@@ -178,6 +204,9 @@ export default function TrackerInviteStart() {
   const [status, setStatus] = useState("ready");
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [pairingCodeInput, setPairingCodeInput] = useState("");
+  const [pairingSubmitting, setPairingSubmitting] = useState(false);
+  const [pairingClaimError, setPairingClaimError] = useState("");
   const [inviteToken, setInviteToken] = useState(initialInviteParams.inviteToken || "");
   const [orgId, setOrgId] = useState(initialInviteParams.orgId || "");
   const [androidBridgeAvailable, setAndroidBridgeAvailable] = useState(
@@ -207,8 +236,8 @@ export default function TrackerInviteStart() {
 
   useEffect(() => {
     if (!inviteToken) {
-      setStatus("missing_invite_token");
-      setAcceptError(t("tracker.invite.errors.missingToken"));
+      setStatus("ready");
+      setAcceptError("");
       return;
     }
 
@@ -361,6 +390,67 @@ export default function TrackerInviteStart() {
     return session;
   }
 
+  async function claimPairingCodeAndContinue(e) {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
+    const pairingCode = pairingCodeInput.trim();
+
+    if (!pairingCode) {
+      setPairingClaimError("Ingresa el codigo de emparejamiento.");
+      return null;
+    }
+
+    const accessToken = readSupabaseAccessToken();
+
+    if (!accessToken) {
+      setPairingClaimError("Primero inicia sesion con Magic Link y luego ingresa el codigo.");
+      return null;
+    }
+
+    try {
+      setPairingSubmitting(true);
+      setPairingClaimError("");
+      setAcceptError("");
+      setStatus("claiming_pairing_code");
+
+      const response = await fetch("/api/accept-tracker-invite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + accessToken,
+        },
+        body: JSON.stringify({
+          action: "claim_pairing_code",
+          pairing_code: pairingCode,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.message || data?.code || data?.error || "claim_pairing_code_failed");
+      }
+
+      const session = await persistTrackerSessionFromResponse(data);
+      setStatus("accepted");
+
+      const bridgeStarted = startNativeBridge(session);
+      if (bridgeStarted) {
+        setStatus("native_bridge_started");
+      }
+
+      redirectToTrackerGps(session);
+      return session;
+    } catch (error) {
+      console.error("[tracker-invite] claim pairing code failed", error);
+      setStatus("claim_pairing_failed");
+      setPairingClaimError(error?.message || "claim_pairing_code_failed");
+      return null;
+    } finally {
+      setPairingSubmitting(false);
+    }
+  }
   function startNativeBridge(session) {
     if (typeof window === "undefined" || !window.Android) return false;
 
@@ -537,6 +627,37 @@ export default function TrackerInviteStart() {
           </p>
         </div>
 
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <p className="font-semibold text-emerald-900">Codigo de emparejamiento</p>
+          <p className="mt-1 text-sm text-emerald-800">
+            Si ya iniciaste sesion con Magic Link, ingresa aqui el codigo que te dio el administrador.
+          </p>
+
+          <input
+            className="mt-3 w-full rounded-lg border border-emerald-200 bg-white px-3 py-2 text-center text-lg font-semibold tracking-widest text-slate-900 outline-none focus:ring"
+            value={pairingCodeInput}
+            onChange={(e) => {
+              setPairingCodeInput(e.target.value.toUpperCase());
+              setPairingClaimError("");
+            }}
+            placeholder="ABCD-1234-EFGH"
+            autoCapitalize="characters"
+            autoComplete="one-time-code"
+          />
+
+          <button
+            type="button"
+            onClick={claimPairingCodeAndContinue}
+            disabled={pairingSubmitting || !pairingCodeInput.trim()}
+            className="mt-3 w-full rounded-xl bg-emerald-700 py-3 font-medium text-white disabled:opacity-60"
+          >
+            {pairingSubmitting ? "Validando codigo..." : "Activar tracking con codigo"}
+          </button>
+
+          {pairingClaimError ? (
+            <p className="mt-2 text-sm text-red-700">{pairingClaimError}</p>
+          ) : null}
+        </div>
         <label className="mt-4 flex items-start gap-3 text-sm text-slate-700">
           <input
             type="checkbox"
