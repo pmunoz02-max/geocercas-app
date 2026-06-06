@@ -724,6 +724,10 @@
           "a": "The administrator selects the person in Invite tracker, generates a code, and copies it. The tracker must sign in with Magic Link, open /tracker-accept, paste the code, and press Activate tracking with code. The code does not replace identity: it only links the organization, person, and authenticated tracker."
         },
         {
+          "q": "Can I measure areas with the app?",
+          "a": "Yes. When you create or edit a geofence, the app calculates the polygon area and can show it in units such as m², hectares, or acres, depending on the selected unit."
+        },
+        {
           "q": "What happens if the link expired?",
           "a": "Request a new invitation from the organization."
         }

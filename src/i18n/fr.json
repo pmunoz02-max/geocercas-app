@@ -687,6 +687,10 @@
           "a": "L’administrateur sélectionne la personne dans Inviter un tracker, génère un code et le copie. Le tracker doit se connecter avec Magic Link, ouvrir /tracker-accept, coller le code et appuyer sur Activer le suivi avec le code. Le code ne remplace pas l’identité : il relie uniquement l’organisation, la personne et le tracker authentifié."
         },
         {
+          "q": "Puis-je mesurer des surfaces avec l’application ?",
+          "a": "Oui. Lorsque vous créez ou modifiez une géofence, l’application calcule la surface du polygone et peut l’afficher en m², hectares ou acres, selon l’unité sélectionnée."
+        },
+        {
           "q": "Que se passe-t-il si le lien a expiré ?",
           "a": "Demandez une nouvelle invitation depuis l’organisation."
         }

@@ -708,6 +708,10 @@
           "a": "El administrador selecciona a la persona en Invitar tracker, genera un código y lo copia. El tracker debe iniciar sesión con Magic Link, abrir /tracker-accept, pegar el código y presionar Activar tracking con código. El código no reemplaza la identidad: solo vincula la organización, la persona y el tracker autenticado."
         },
         {
+          "q": "¿Puedo medir áreas con la app?",
+          "a": "Sí. Al crear o editar una geocerca, la app calcula el área del polígono y permite verla en unidades como m², hectáreas o acres, según la unidad configurada."
+        },
+        {
           "q": "¿Qué pasa si el enlace venció?",
           "a": "Solicita una nueva invitación desde la organización."
         }
