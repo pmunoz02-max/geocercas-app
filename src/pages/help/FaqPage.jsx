@@ -22,9 +22,16 @@ export default function FaqPage() {
 
         <div className="flex flex-col gap-4">
           {items.map((item, idx) => (
-            <section key={idx} className="rounded-xl border border-slate-200 p-4">
-              <h3 className="text-sm font-semibold">{item?.q || ""}</h3>
-              <p className="mt-1 text-sm text-slate-600">{item?.a || ""}</p>
+            <section
+              key={idx}
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/70"
+            >
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {item?.q || ""}
+              </h3>
+              <p className="mt-3 text-[15px] leading-7 text-slate-700 dark:text-slate-200">
+                {item?.a || ""}
+              </p>
             </section>
           ))}
         </div>
