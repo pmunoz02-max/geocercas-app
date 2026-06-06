@@ -704,6 +704,10 @@
           "a": "Ve a Invitar tracker, escribe el correo y envía la invitación."
         },
         {
+          "q": "¿Cómo activo un tracker con código de emparejamiento?",
+          "a": "El administrador selecciona a la persona en Invitar tracker, genera un código y lo copia. El tracker debe iniciar sesión con Magic Link, abrir /tracker-accept, pegar el código y presionar Activar tracking con código. El código no reemplaza la identidad: solo vincula la organización, la persona y el tracker autenticado."
+        },
+        {
           "q": "¿Qué pasa si el enlace venció?",
           "a": "Solicita una nueva invitación desde la organización."
         }
@@ -810,6 +814,13 @@
             ]
           },
           {
+            "title": "Activa con código si tu administrador te lo dio",
+            "items": [
+              "Inicia sesión con Magic Link.",
+              "Abre /tracker-accept, pega el código y presiona Activar tracking con código."
+            ]
+          },
+          {
             "title": "Abre el enlace en tu teléfono",
             "items": [
               "Ábrelo en el mismo teléfono que usarás para el tracker."
@@ -868,6 +879,10 @@
           {
             "title": "No puedo aceptar la invitación",
             "desc": "Abre el enlace más reciente que te enviaron. Si ya venció o aparece error, pide una nueva invitación."
+          },
+          {
+            "title": "El código de emparejamiento no funciona",
+            "desc": "Asegúrate de iniciar sesión primero con Magic Link en el mismo navegador o teléfono. Luego pega el código más reciente en /tracker-accept. Si aparece que el usuario ya está vinculado a otra persona, el administrador debe generar el código para la persona correcta o usar otro correo tracker."
           },
           {
             "title": "El enlace no funciona",

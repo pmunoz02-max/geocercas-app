@@ -720,6 +720,10 @@
           "a": "Go to Invite tracker, enter the email address, and send the invitation."
         },
         {
+          "q": "How do I activate a tracker with a pairing code?",
+          "a": "The administrator selects the person in Invite tracker, generates a code, and copies it. The tracker must sign in with Magic Link, open /tracker-accept, paste the code, and press Activate tracking with code. The code does not replace identity: it only links the organization, person, and authenticated tracker."
+        },
+        {
           "q": "What happens if the link expired?",
           "a": "Request a new invitation from the organization."
         }
@@ -826,6 +830,13 @@
             ]
           },
           {
+            "title": "Activate with a code if your administrator gave you one",
+            "items": [
+              "Sign in with Magic Link.",
+              "Open /tracker-accept, paste the code, and press Activate tracking with code."
+            ]
+          },
+          {
             "title": "Open the link on your phone",
             "items": [
               "Open it on the same phone you will use for the tracker."
@@ -867,6 +878,10 @@
           {
             "title": "I can’t accept the invitation",
             "desc": "Open the most recent link you received. If it expired or shows an error, ask for a new invitation."
+          },
+          {
+            "title": "The pairing code does not work",
+            "desc": "Make sure you first sign in with Magic Link in the same browser or phone. Then paste the most recent code in /tracker-accept. If you see that the user is already linked to another person, the administrator must generate the code for the correct person or use another tracker email."
           },
           {
             "title": "The link does not work",

@@ -683,6 +683,10 @@
           "a": "Allez dans Inviter un tracker, saisissez l’e-mail et envoyez l’invitation."
         },
         {
+          "q": "Comment activer un tracker avec un code d’appairage ?",
+          "a": "L’administrateur sélectionne la personne dans Inviter un tracker, génère un code et le copie. Le tracker doit se connecter avec Magic Link, ouvrir /tracker-accept, coller le code et appuyer sur Activer le suivi avec le code. Le code ne remplace pas l’identité : il relie uniquement l’organisation, la personne et le tracker authentifié."
+        },
+        {
           "q": "Que se passe-t-il si le lien a expiré ?",
           "a": "Demandez une nouvelle invitation depuis l’organisation."
         }
@@ -789,6 +793,13 @@
             ]
           },
           {
+            "title": "Activez avec un code si votre administrateur vous en a donné un",
+            "items": [
+              "Connectez-vous avec Magic Link.",
+              "Ouvrez /tracker-accept, collez le code et appuyez sur Activer le suivi avec le code."
+            ]
+          },
+          {
             "title": "Ouvrez le lien sur votre téléphone",
             "items": [
               "Ouvrez-le sur le même téléphone que vous utiliserez pour le tracker."
@@ -830,6 +841,10 @@
           {
             "title": "Je ne peux pas accepter l’invitation",
             "desc": "Ouvrez le lien le plus récent que vous avez reçu. S’il a expiré ou affiche une erreur, demandez une nouvelle invitation."
+          },
+          {
+            "title": "Le code d’appairage ne fonctionne pas",
+            "desc": "Assurez-vous d’abord de vous connecter avec Magic Link dans le même navigateur ou téléphone. Collez ensuite le code le plus récent dans /tracker-accept. Si un message indique que l’utilisateur est déjà lié à une autre personne, l’administrateur doit générer le code pour la bonne personne ou utiliser un autre e-mail de tracker."
           },
           {
             "title": "Le lien ne fonctionne pas",
