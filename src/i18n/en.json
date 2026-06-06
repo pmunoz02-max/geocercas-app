@@ -625,7 +625,7 @@
     "buttonShowSelected": "Show selected",
     "cardListBody": "Soon you will be able to see the list of existing geofences and their details here. For now, use the New geofence option to create and edit.",
     "cardListTitle": "Geofence list",
-    "cardNewBody": "Create a new geofence on the map and assign it to your staff or activities.",
+    "cardNewBody": "Create a new geofence on the map, measure its surface, and assign it to your staff or activities.",
     "cardNewCta": "Go to New geofence →",
     "cardNewTitle": "New geofence",
     "currentOrgLabel": "Current organization:",
@@ -650,7 +650,7 @@
     "modalTitle": "Draw by coordinates",
     "noGeofences": "You have no geofences yet.",
     "noOrgFallback": "— (no organization selected)",
-    "pageSubtitle": "Manage your organization's geofences. From here you can create new geofences and review existing ones.",
+    "pageSubtitle": "Manage your organization’s geofences. You can create zones on the map, measure their area, and review existing ones.",
     "pageTitle": "Geofences",
     "panelTitle": "Geofences",
     "placeholderName": "Geofence name",
@@ -963,6 +963,10 @@
               "a": "It is an area defined on the map to record entries, exits or presence."
             },
             {
+              "q": "Can I measure areas with the app?",
+              "a": "Yes. When you create or edit a geofence, the app calculates the polygon area and can show it in units such as m², hectares, or acres, depending on the selected unit."
+            },
+            {
               "q": "Do I have to do anything as a tracker?",
               "a": "No. The system automatically records your activity when applicable."
             }
@@ -1229,7 +1233,7 @@
     "brandTagline": "Personnel control with geofences",
     "bulletCostsBody": "Consult Power BI-style panels with costs by person, activity and geofence.",
     "bulletCostsTitle": "Costs",
-    "bulletGeocercasBody": "Create and manage geofences for your fields, farms, plants or service points.",
+    "bulletGeocercasBody": "Create geofences for fields, farms, plants, or service points and measure surfaces in m², hectares, or acres.",
     "bulletGeocercasTitle": "Geofences",
     "bulletPersonalBody": "Register your personnel and assign them to activities and specific areas.",
     "bulletPersonalTitle": "Personnel",
@@ -1276,7 +1280,7 @@
     "feature1Title": "Personnel monitoring",
     "feature1Body": "See who is on route, who arrived and who left an operational area.",
     "feature2Title": "Zone control",
-    "feature2Body": "Define geofences for offices, routes, clients or sensitive areas and get immediate visual context.",
+    "feature2Body": "Define geofences for offices, routes, clients, or sensitive areas, measure their surface, and get immediate visual context.",
     "feature3Title": "Entry and exit events",
     "feature3Body": "Turn GPS positions into easy-to-review events for operations, auditing and tracking.",
     "feature4Title": "Ready for field teams",

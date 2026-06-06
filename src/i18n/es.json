@@ -617,7 +617,7 @@
     "buttonShowSelected": "Mostrar seleccionadas",
     "cardListBody": "Próximamente podrás ver aquí el listado de geocercas existentes y sus detalles. Por ahora, usa la opción de Nueva geocerca para crear y editar.",
     "cardListTitle": "Listado de geocercas",
-    "cardNewBody": "Crea una nueva geocerca en el mapa y asígnala a tu personal o actividades.",
+    "cardNewBody": "Crea una nueva geocerca en el mapa, mide su superficie y asígnala a tu personal o actividades.",
     "cardNewCta": "Ir a Nueva geocerca →",
     "cardNewTitle": "Nueva geocerca",
     "currentOrgLabel": "Organización actual:",
@@ -642,7 +642,7 @@
     "modalTitle": "Draw by coordinates",
     "noGeofences": "Aún no tienes geocercas creadas.",
     "noOrgFallback": "— (sin organización seleccionada)",
-    "pageSubtitle": "Administra las geocercas de tu organización. Desde aquí puedes crear nuevas geocercas y revisar las existentes.",
+    "pageSubtitle": "Administra las geocercas de tu organización. Puedes crear zonas en el mapa, medir su área y revisar las existentes.",
     "pageTitle": "Geocercas",
     "panelTitle": "Geocercas",
     "placeholderName": "Nombre de la geocerca",
@@ -965,6 +965,10 @@
               "a": "Es una zona definida en el mapa para registrar entradas, salidas o presencia."
             },
             {
+              "q": "¿Puedo medir áreas con la app?",
+              "a": "Sí. Al crear o editar una geocerca, la app calcula el área del polígono y permite verla en unidades como m², hectáreas o acres, según la unidad configurada."
+            },
+            {
               "q": "¿Tengo que hacer algo como tracker?",
               "a": "No. El sistema registra automáticamente tu actividad cuando corresponde."
             }
@@ -1231,7 +1235,7 @@
     "brandTagline": "Control de personal por geocercas",
     "bulletCostsBody": "Consulta paneles tipo Power BI con los costos por persona, actividad y geocerca.",
     "bulletCostsTitle": "Costos",
-    "bulletGeocercasBody": "Crea y administra geocercas para tus campos, fincas, plantas o puntos de servicio.",
+    "bulletGeocercasBody": "Crea geocercas para campos, fincas, plantas o puntos de servicio y mide superficies en m², hectáreas o acres.",
     "bulletGeocercasTitle": "Geocercas",
     "bulletPersonalBody": "Registra a tu personal y asígnalo a actividades y zonas específicas.",
     "bulletPersonalTitle": "Personal",
@@ -1278,7 +1282,7 @@
     "feature1Title": "Supervisión de personal",
     "feature1Body": "Visualiza quién está en ruta, quién llegó y quién salió de un área operativa.",
     "feature2Title": "Control por zonas",
-    "feature2Body": "Define geocercas para sedes, rutas, clientes o áreas sensibles y recibe contexto visual inmediato.",
+    "feature2Body": "Define geocercas para sedes, rutas, clientes o áreas sensibles, mide su superficie y obtiene contexto visual inmediato.",
     "feature3Title": "Eventos de entrada y salida",
     "feature3Body": "Convierte posiciones GPS en eventos fáciles de revisar para operación, auditoría y seguimiento.",
     "feature4Title": "Listo para equipos en campo",
