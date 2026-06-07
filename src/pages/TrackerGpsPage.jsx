@@ -148,6 +148,9 @@ function openNativeSetting(methodNames, fallbackMessage) {
   alert(fallbackMessage);
 }
 
+const BRIDGE_UNAVAILABLE_MESSAGE =
+  "No pudimos iniciar el seguimiento desde este navegador. Abre GeoField GPS desde la app instalada y actualízala desde Google Play.";
+
 export default function TrackerGpsPage() {
   const { t } = useTranslation();
 
@@ -157,6 +160,7 @@ export default function TrackerGpsPage() {
   });
 
   const [msg, setMsg] = useState(() => t("tracker.gps.messageStarting"));
+  const [nativeBridgeReady, setNativeBridgeReady] = useState(null);
 
   const [debugInfo, setDebugInfo] = useState({
     hasRuntimeToken: false,
@@ -175,6 +179,8 @@ export default function TrackerGpsPage() {
   const ready = useMemo(() => {
     return Boolean(runtimeSession.runtimeToken && runtimeSession.orgId);
   }, [runtimeSession]);
+
+  const trackingActive = ready && nativeBridgeReady === true;
 
   useEffect(() => {
     disposedRef.current = false;
@@ -232,12 +238,17 @@ export default function TrackerGpsPage() {
 
       const bridge = getNativeBridge();
       const bridgeStarted = callNativeBridge(bridge, runtimeSession);
+      const bridgeReady = Boolean(bridge && bridgeStarted);
 
-      setMsg(
-        runtimeSession.runtimeToken && runtimeSession.orgId
-          ? t("tracker.gps.messageActive")
-          : t("tracker.gps.messagePreparing"),
-      );
+      if (!bridge) {
+        console.warn("[TRACKER] native bridge not found");
+      } else if (!bridgeStarted) {
+        console.warn("[TRACKER] native bridge did not start tracking");
+      }
+
+      setNativeBridgeReady(bridgeReady);
+
+      setMsg(bridgeReady ? t("tracker.gps.messageActive") : BRIDGE_UNAVAILABLE_MESSAGE);
 
       setDebugInfo((prev) => ({
         ...prev,
@@ -247,7 +258,7 @@ export default function TrackerGpsPage() {
         nativeMode: true,
         bridgeFound: !!bridge,
         lastCheckAt: new Date().toISOString(),
-        lastError: bridgeStarted || bridge ? null : "native_bridge_not_found",
+        lastError: null,
       }));
 
       console.log("[TRACKER_FINAL_SESSION_SNAPSHOT]", {
@@ -281,7 +292,7 @@ export default function TrackerGpsPage() {
         console.log("[TRACKER_POLL] runtime session detected");
         syncRuntimeSession(stored);
         setRuntimeSession(stored);
-        setMsg(t("tracker.gps.messageActive"));
+        setMsg(t("tracker.gps.messagePreparing"));
         return;
       }
 
@@ -391,23 +402,23 @@ export default function TrackerGpsPage() {
   return (
     <div style={pageStyle}>
       <div style={cardStyle}>
-        <div style={iconStyle(ready)}>{ready ? "✅" : "📍"}</div>
+        <div style={iconStyle(trackingActive)}>{trackingActive ? "\u2705" : "\u{1F4CD}"}</div>
 
         <div style={titleStyle}>
-          {ready
+          {trackingActive
             ? t("tracker.gps.titleActive")
             : t("tracker.gps.titleStarting")}
         </div>
 
         <div style={subtitleStyle}>
-          {ready
+          {trackingActive
             ? t("tracker.gps.subtitleActive")
             : t("tracker.gps.subtitleStarting")}
         </div>
 
-        <div style={badgeStyle(ready)}>
+        <div style={badgeStyle(trackingActive)}>
           <span>
-            {ready
+            {trackingActive
               ? t("tracker.gps.badgeActive")
               : t("tracker.gps.badgeInitializing")}
           </span>
@@ -415,13 +426,7 @@ export default function TrackerGpsPage() {
 
         {!!msg && (
           <div style={noteStyle}>
-            {ready ? t("tracker.gps.noteUpdated") : t("tracker.gps.noteWait")}
-          </div>
-        )}
-
-        {debugInfo.lastError && (
-          <div style={{ ...noteStyle, color: "#b45309" }}>
-            {debugInfo.lastError}
+            {msg}
           </div>
         )}
 
