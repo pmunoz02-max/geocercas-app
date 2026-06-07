@@ -59,6 +59,46 @@ import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 import PayPage from "./pages/Pay.jsx";
 import RefundPolicy from "./pages/RefundPolicy.jsx";
 
+const TRACKER_BLOCKED_PATH_PREFIXES = [
+  "/dashboard",
+  "/tracker",
+  "/dashboard-costs",
+  "/geocerca",
+  "/geocercas",
+  "/geofences",
+  "/personal",
+  "/actividades",
+  "/asignaciones",
+  "/reportes",
+  "/invitar-tracker",
+  "/admins",
+  "/billing",
+  "/pricing",
+];
+
+function TrackerRoleGuard({ children }) {
+  const auth = useAuthSafe();
+  const location = useLocation();
+
+  if (!auth || auth.loading) return null;
+
+  const effectiveRole = String(auth.currentRole || auth.role || "")
+    .toLowerCase()
+    .trim();
+
+  const isTrackerOnly = effectiveRole === "tracker";
+
+  const isBlockedPath = TRACKER_BLOCKED_PATH_PREFIXES.some((prefix) => {
+    return location.pathname === prefix || location.pathname.startsWith(`${prefix}/`);
+  });
+
+  if (isTrackerOnly && isBlockedPath) {
+    return <Navigate to="/tracker-gps" replace />;
+  }
+
+  return children;
+}
+
 function RootEntry() {
   const location = useLocation();
   const auth = useAuthSafe();
@@ -165,7 +205,9 @@ function MainAppRoutes() {
       <Route
         element={
           <AuthGuard>
-            <ProtectedShell />
+            <TrackerRoleGuard>
+              <ProtectedShell />
+            </TrackerRoleGuard>
           </AuthGuard>
         }
       >

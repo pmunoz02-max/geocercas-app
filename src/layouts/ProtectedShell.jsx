@@ -20,7 +20,7 @@ function buildTabs({ role, isAppRoot, isAdmin }) {
   const isTrackerOnly = r === "tracker";
 
   if (isTrackerOnly) {
-    return [{ path: "/tracker", labelKey: "app.tabs.tracker" }];
+    return [{ path: "/tracker-gps", labelKey: "app.tabs.tracker" }];
   }
 
   const tabs = [
