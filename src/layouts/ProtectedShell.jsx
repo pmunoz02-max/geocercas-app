@@ -12,7 +12,7 @@ import TopTabs from "../components/TopTabs.jsx";
  * - La pantalla hub/listado queda en /geocercas (sin tab)
  * - Billing / Pricing visibles solo para perfiles de gestión
  * - Tracker debe quedar junto a "Invitar tracker"
- * - Pricing y Billing al extremo derecho
+ * - Recursos debe quedar al extremo derecho; Pricing y Billing quedan antes de Recursos
  */
 
 function resolveResourcesPath(value) {
@@ -41,7 +41,6 @@ function buildTabs({ role, isAppRoot, isAdmin, resourcesPath }) {
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
-    { path: resourcesPath, labelKey: "app.tabs.resources" },
     { path: "/dashboard-costs", labelKey: "app.tabs.panelCostos" },
   ];
 
@@ -59,6 +58,8 @@ function buildTabs({ role, isAppRoot, isAdmin, resourcesPath }) {
   if (isAppRoot) {
     tabs.push({ path: "/admins", labelKey: "app.tabs.admins" });
   }
+
+  tabs.push({ path: resourcesPath, labelKey: "app.tabs.resources" });
 
   return tabs;
 }
