@@ -2,6 +2,7 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { useRef } from "react";
 import { useAuth } from "@/context/auth.js";
+import { useTranslation } from "react-i18next";
 import AppHeader from "../components/AppHeader.jsx";
 import TopTabs from "../components/TopTabs.jsx";
 
@@ -14,7 +15,14 @@ import TopTabs from "../components/TopTabs.jsx";
  * - Pricing y Billing al extremo derecho
  */
 
-function buildTabs({ role, isAppRoot, isAdmin }) {
+function resolveResourcesPath(value) {
+  const lang = String(value || "es").toLowerCase().trim().slice(0, 2);
+  if (lang === "fr") return "/ressources";
+  if (lang === "es") return "/recursos";
+  return "/resources";
+}
+
+function buildTabs({ role, isAppRoot, isAdmin, resourcesPath }) {
   const r = String(role || "").toLowerCase();
 
   const isTrackerOnly = r === "tracker";
@@ -33,6 +41,7 @@ function buildTabs({ role, isAppRoot, isAdmin }) {
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
+    { path: resourcesPath, labelKey: "app.tabs.resources" },
     { path: "/dashboard-costs", labelKey: "app.tabs.panelCostos" },
   ];
 
@@ -55,6 +64,7 @@ function buildTabs({ role, isAppRoot, isAdmin }) {
 }
 
 export default function ProtectedShell() {
+  const { i18n } = useTranslation();
   const {
     loading,
     user,
@@ -87,12 +97,13 @@ export default function ProtectedShell() {
   // Determinar rol y organización efectivos
   const effectiveRole = String(currentRole || role || "").toLowerCase().trim();
   const effectiveOrgId = String(currentOrgId || currentOrg?.id || orgId || "").trim();
+  const resourcesPath = resolveResourcesPath(i18n?.resolvedLanguage || i18n?.language);
 
   const hasMissingContext = user && (!effectiveRole || !effectiveOrgId);
 
   const tabs = hasMissingContext
     ? [{ path: "/inicio", labelKey: "app.tabs.inicio" }]
-    : buildTabs({ role: effectiveRole, isAppRoot, isAdmin });
+    : buildTabs({ role: effectiveRole, isAppRoot, isAdmin, resourcesPath });
 
   return (
     <div className="min-h-screen bg-slate-50">

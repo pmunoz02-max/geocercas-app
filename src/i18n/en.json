@@ -133,7 +133,8 @@
       "pricing": "Pricing",
       "reportes": "Reports",
       "billing": "Billing",
-      "tracker": "Tracker"
+      "tracker": "Tracker",
+      "resources": "Resources"
     },
     "title": "GeoField GPS"
   },

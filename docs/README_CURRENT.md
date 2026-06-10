@@ -36,12 +36,14 @@
 - GeocercasList.jsx es legacy y no estÃ¡ activa.
 - Este cambio es solo para la web; no afecta base de datos, API, Android ni producciÃ³n.
 
-### PÃ¡gina pÃºblica de recursos (web)
+### Página pública de recursos (web)
 
-- Las rutas pÃºblicas `/resources` y `/recursos` muestran la pÃ¡gina `ResourcesPage.jsx`.
-- La carpeta `public/resources/` queda reservada para archivos estÃ¡ticos reales servidos por la web pÃºblica.
-- Si un recurso no existe todavÃ­a, la UI debe mostrar `PrÃ³ximamente` y no enlazar a archivos o videos ficticios.
-- No subir a producciÃ³n videos pesados ni placeholders externos.
+- Las rutas públicas `/resources`, `/recursos` y `/ressources` muestran la página `ResourcesPage.jsx`.
+- La carpeta `public/resources/` queda reservada para archivos estáticos reales servidos por la web pública.
+- Si un recurso no existe todavía, la UI debe mostrar `Próximamente` y no enlazar a archivos o videos ficticios.
+- No subir a producción videos pesados ni placeholders externos.
+- La página de recursos también aparece como pestaña interna para usuarios autenticados, usando `/recursos`, `/resources` o `/ressources` según idioma.
+
 
 arquitectura vigente
 servicio vÃ¡lido: ForegroundLocationService
@@ -100,4 +102,5 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - No se creÃ³ endpoint nuevo.
 - Estado: UI tracker implementada en Preview; pendiente validar en Deploy Preview y Android end-to-end.
 - No promover a Production hasta orden explÃ­cita.
+
 

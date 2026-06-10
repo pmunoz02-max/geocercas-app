@@ -97,7 +97,8 @@
       "pricing": "Tarifs",
       "reportes": "Rapports",
       "billing": "Facturation",
-      "tracker": "Tracker"
+      "tracker": "Tracker",
+      "resources": "Ressources"
     },
     "title": "GeoField GPS"
   },
