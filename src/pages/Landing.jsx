@@ -307,6 +307,9 @@ export default function Landing() {
             <a href="#precios" className="hidden text-slate-300 hover:text-white sm:inline">
               {tr("landing.pricing")}
             </a>
+            <Link to={resourcesHref} className="hidden text-slate-300 hover:text-white sm:inline">
+              {tr("landing.footerResources")}
+            </Link>
             <Link to="/privacy" className="hidden text-slate-300 hover:text-white sm:inline">
               {tr("landing.footerPrivacy")}
             </Link>
