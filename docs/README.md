@@ -64,3 +64,9 @@ El objetivo es:
 - Preview usa Paddle para billing y upgrade PRO
 - Producción sigue en Stripe legacy
 - Ver [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md) para detalles, arquitectura y troubleshooting
+
+## Página pública de recursos
+
+- Las rutas públicas `/resources` y `/recursos` apuntan a la página `ResourcesPage.jsx`.
+- Los archivos estáticos reales para esta página viven en `public/resources/`.
+- Si un PDF, PPTX o video todavía no existe, la interfaz debe mostrar `Próximamente` en lugar de usar enlaces placeholder.

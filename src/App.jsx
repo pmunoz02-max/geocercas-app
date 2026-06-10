@@ -16,6 +16,7 @@ import AuthGuard from "./components/AuthGuard.jsx";
 // Public pages
 import Landing from "./pages/Landing.jsx";
 import DemoGeocercas from "./pages/DemoGeocercas.jsx";
+import ResourcesPage from "./pages/ResourcesPage.jsx";
 import Login from "./pages/Login.tsx";
 import SignUp from "./pages/SignUp.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
@@ -177,6 +178,8 @@ function MainAppRoutes() {
       <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route path="/delete-account" element={<AccountDeletion />} />
       <Route path="/demo" element={<DemoGeocercas />} />
+      <Route path="/resources" element={<ResourcesPage />} />
+      <Route path="/recursos" element={<ResourcesPage />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/demo/mitidja" element={<Navigate to="/demos/mitidja-geofence-demo.html" replace />} />

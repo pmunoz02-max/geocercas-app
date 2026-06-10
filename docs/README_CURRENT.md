@@ -36,6 +36,13 @@
 - GeocercasList.jsx es legacy y no está activa.
 - Este cambio es solo para la web; no afecta base de datos, API, Android ni producción.
 
+### Página pública de recursos (web)
+
+- Las rutas públicas `/resources` y `/recursos` muestran la página `ResourcesPage.jsx`.
+- La carpeta `public/resources/` queda reservada para archivos estáticos reales servidos por la web pública.
+- Si un recurso no existe todavía, la UI debe mostrar `Próximamente` y no enlazar a archivos o videos ficticios.
+- No subir a producción videos pesados ni placeholders externos.
+
 arquitectura vigente
 servicio válido: ForegroundLocationService
 entry point: WebViewActivity

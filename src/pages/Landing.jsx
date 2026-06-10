@@ -38,6 +38,11 @@ const FALLBACKS = {
     en: "Terms",
     fr: "Conditions",
   },
+  "landing.footerResources": {
+    es: "Recursos",
+    en: "Resources",
+    fr: "Ressources",
+  },
   "landing.heroBadge": {
     es: "Plataforma SaaS para control GPS y geocercas",
     en: "SaaS platform for GPS control and geofences",
@@ -492,6 +497,9 @@ export default function Landing() {
           © {new Date().getFullYear()} {tr("app.brand")}. {tr("landing.footerCopyright")}
         </p>
         <div className="flex flex-wrap gap-4">
+          <Link to="/resources" className="hover:text-sky-300">
+            {tr("landing.footerResources")}
+          </Link>
           <Link to="/privacy" className="hover:text-sky-300">
             {tr("landing.footerPrivacy")}
           </Link>

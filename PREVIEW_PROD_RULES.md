@@ -30,6 +30,11 @@ const isPreviewEnv =
 - Cuentas de correo
 - Cualquier integración externa
 
+**Regla para assets públicos:**
+- No subir a producción videos pesados.
+- No publicar enlaces placeholder externos.
+- Si un recurso no existe todavía, dejar la UI en `Próximamente` y no apuntar a archivos inexistentes.
+
 ---
 
 Actualiza esta nota si cambian los dominios o reglas de despliegue.
