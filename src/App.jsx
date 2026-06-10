@@ -180,6 +180,7 @@ function MainAppRoutes() {
       <Route path="/demo" element={<DemoGeocercas />} />
       <Route path="/resources" element={<ResourcesPage />} />
       <Route path="/recursos" element={<ResourcesPage />} />
+      <Route path="/ressources" element={<ResourcesPage />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/demo/mitidja" element={<Navigate to="/demos/mitidja-geofence-demo.html" replace />} />

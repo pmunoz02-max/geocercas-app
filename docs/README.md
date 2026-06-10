@@ -67,6 +67,6 @@ El objetivo es:
 
 ## Página pública de recursos
 
-- Las rutas públicas `/resources` y `/recursos` apuntan a la página `ResourcesPage.jsx`.
+- Las rutas públicas `/resources`, `/recursos` y `/ressources` apuntan a la página `ResourcesPage.jsx`.
 - Los archivos estáticos reales para esta página viven en `public/resources/`.
 - Si un PDF, PPTX o video todavía no existe, la interfaz debe mostrar `Próximamente` en lugar de usar enlaces placeholder.

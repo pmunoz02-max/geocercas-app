@@ -229,6 +229,8 @@ export default function Landing() {
   const currentLang = String(i18n.resolvedLanguage || i18n.language || "es")
     .toLowerCase()
     .slice(0, 2);
+  const resourcesHref =
+    currentLang === "fr" ? "/ressources" : currentLang === "es" ? "/recursos" : "/resources";
 
   const tr = (key) => {
     const fallback = FALLBACKS[key]?.[currentLang] || FALLBACKS[key]?.es || key;
@@ -497,7 +499,7 @@ export default function Landing() {
           © {new Date().getFullYear()} {tr("app.brand")}. {tr("landing.footerCopyright")}
         </p>
         <div className="flex flex-wrap gap-4">
-          <Link to="/resources" className="hover:text-sky-300">
+          <Link to={resourcesHref} className="hover:text-sky-300">
             {tr("landing.footerResources")}
           </Link>
           <Link to="/privacy" className="hover:text-sky-300">
