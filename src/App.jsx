@@ -42,6 +42,7 @@ import TrackerDashboard from "./pages/TrackerDashboard.jsx";
 import InvitarTracker from "./pages/InvitarTracker.jsx";
 import InvitarAdmin from "./pages/InvitarAdmin.jsx";
 import CostosDashboardPage from "./pages/CostosDashboardPage.jsx";
+import Planificacion from "./pages/Planificacion.jsx";
 import DeleteAccountPage from "./pages/DeleteAccountPage.jsx";
 import Account from "@/pages/Account.jsx";
 
@@ -70,6 +71,7 @@ const TRACKER_BLOCKED_PATH_PREFIXES = [
   "/personal",
   "/actividades",
   "/asignaciones",
+  "/planificacion",
   "/reportes",
   "/invitar-tracker",
   "/admins",
@@ -231,6 +233,15 @@ function MainAppRoutes() {
           element={
             <RequireOrg>
               <CostosDashboardPage />
+            </RequireOrg>
+          }
+        />
+
+        <Route
+          path="/planificacion"
+          element={
+            <RequireOrg>
+              <Planificacion />
             </RequireOrg>
           }
         />
