@@ -44,6 +44,7 @@ const mockTareas = [
 ];
 
 const ganttDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const periodos = ["Semana", "Mes", "Trimestre", "Semestre", "Año", "Rango personalizado"];
 
 function getEstadoStyle(estado) {
 	if (estado === "Completada") return "bg-emerald-100 text-emerald-700";
@@ -64,11 +65,53 @@ export default function Planificacion() {
 		<div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
 			<div className="mx-auto max-w-7xl space-y-6">
 				<header className="rounded-2xl bg-gradient-to-r from-cyan-700 via-teal-700 to-emerald-700 p-6 text-white shadow-lg">
-					<h1 className="text-2xl font-bold sm:text-3xl">Planificación Semanal</h1>
+					<h1 className="text-2xl font-bold sm:text-3xl">Planificación Operativa</h1>
 					<p className="mt-2 text-sm text-cyan-50 sm:text-base">
 						Vista estática de planificación con tareas y cronograma interno.
 					</p>
 				</header>
+
+				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+					<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+						<div>
+							<p className="text-sm font-medium text-slate-700">Período</p>
+							<div className="mt-2 flex flex-wrap gap-2">
+								{periodos.map((periodo) => (
+									<button
+										key={periodo}
+										type="button"
+										className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+											periodo === "Semana"
+												? "border-cyan-600 bg-cyan-50 text-cyan-700"
+												: "border-slate-300 bg-white text-slate-700"
+										}`}
+									>
+										{periodo}
+									</button>
+								))}
+							</div>
+						</div>
+
+						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+							<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+								Desde
+								<input
+									type="date"
+									className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+									defaultValue="2026-06-01"
+								/>
+							</label>
+							<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+								Hasta
+								<input
+									type="date"
+									className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+									defaultValue="2026-06-30"
+								/>
+							</label>
+						</div>
+					</div>
+				</section>
 
 				<section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
 					<article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
