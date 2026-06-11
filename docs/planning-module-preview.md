@@ -40,3 +40,55 @@ Backfill Preview:
 - Verificación final: `asignaciones_corregibles_restantes = 0`.
 
 No ejecutar en Production sin orden explícita.
+
+## Fase 3 — Tabla `planning_items` en Preview
+Se creó la tabla `public.planning_items` en Supabase Preview para almacenar planificación operativa futura por organización, geocerca canónica, actividad y período.
+
+Relaciones principales:
+
+- `org_id` → `public.organizations.id`
+- `geofence_id` → `public.geofences.id`
+- `activity_id` → `public.activities.id`
+- `created_by` → usuario autenticado vía `auth.uid()`
+
+Campos principales:
+
+- `start_date`
+- `end_date`
+- `planned_hours`
+- `planned_cost`
+- `status`
+- `notes`
+- `created_at`
+- `updated_at`
+- `archived_at`
+
+Estados permitidos:
+
+- `draft`
+- `approved`
+- `closed`
+- `archived`
+
+Reglas RLS aplicadas:
+
+- `SELECT`: solo usuarios `owner` o `admin` de la organización.
+- `INSERT`: solo usuarios `owner` o `admin`.
+- `UPDATE`: solo usuarios `owner` o `admin`.
+- `DELETE`: bloqueado. El borrado lógico se hará usando `status = 'archived'` y `archived_at`.
+
+Decisión de seguridad:
+
+- El rol `tracker` no tiene acceso a `planning_items`.
+- Esta restricción queda protegida por RLS, no solo por frontend.
+
+Índices creados:
+
+- `planning_items_org_idx`
+- `planning_items_org_period_idx`
+- `planning_items_org_geofence_idx`
+- `planning_items_org_activity_idx`
+- `planning_items_org_status_idx`
+- `planning_items_active_period_idx`
+
+La tabla fue creada solo en Preview. No ejecutar ni promover a Production sin orden explícita.
