@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabaseClient";
+import { useAuth } from "@/context/auth.js";
 
-const mockTareas = [
+const mockTareasBase = [
 	{
 		id: "T-001",
 		proyecto: "Campus Norte",
@@ -53,13 +55,177 @@ function getEstadoStyle(estado) {
 	return "bg-slate-100 text-slate-700";
 }
 
+function toEstadoLabel(status) {
+	const s = String(status || "").toLowerCase();
+	if (s === "closed") return "Completada";
+	if (s === "approved") return "En progreso";
+	if (s === "archived") return "Archivada";
+	if (s === "draft") return "Pendiente";
+	return "Pendiente";
+}
+
+function toAvance(status) {
+	const s = String(status || "").toLowerCase();
+	if (s === "closed") return 100;
+	if (s === "approved") return 65;
+	if (s === "archived") return 0;
+	if (s === "draft") return 20;
+	return 30;
+}
+
+function toTimeline(startDate, endDate) {
+	const s = startDate ? new Date(startDate) : null;
+	const e = endDate ? new Date(endDate) : s;
+
+	if (!s || Number.isNaN(s.getTime())) {
+		return { inicio: 1, duracion: 1 };
+	}
+
+	const startWeekday = ((s.getDay() + 6) % 7) + 1;
+	let duration = 1;
+
+	if (e && !Number.isNaN(e.getTime())) {
+		const diffDays = Math.floor((e.getTime() - s.getTime()) / 86400000) + 1;
+		duration = Math.max(1, Math.min(7, diffDays));
+	}
+
+	return { inicio: startWeekday, duracion: duration };
+}
+
 export default function Planificacion() {
-	const total = mockTareas.length;
-	const completadas = mockTareas.filter((t) => t.estado === "Completada").length;
-	const enProgreso = mockTareas.filter((t) => t.estado === "En progreso").length;
-	const avancePromedio = Math.round(
-		mockTareas.reduce((acc, t) => acc + t.avance, 0) / total
-	);
+	const { currentOrg } = useAuth();
+	const orgId = currentOrg?.id || null;
+	const [tareasDb, setTareasDb] = useState([]);
+	const [geofencesDb, setGeofencesDb] = useState([]);
+	const [activitiesDb, setActivitiesDb] = useState([]);
+	const [loadingDb, setLoadingDb] = useState(false);
+	const [errorDb, setErrorDb] = useState("");
+	const [dbReady, setDbReady] = useState(false);
+
+	useEffect(() => {
+		if (!orgId) {
+			setTareasDb([]);
+			setGeofencesDb([]);
+			setActivitiesDb([]);
+			setErrorDb("");
+			setDbReady(false);
+			return;
+		}
+
+		let isActive = true;
+
+		const loadPlanningData = async () => {
+			setLoadingDb(true);
+			setErrorDb("");
+
+			try {
+				const planningQuery = supabase
+					.from("planning_items")
+					.select(
+						"id, org_id, geofence_id, activity_id, start_date, end_date, planned_hours, planned_cost, status, notes"
+					)
+					.eq("org_id", orgId)
+					.is("archived_at", null)
+					.order("start_date", { ascending: true });
+
+				const geofencesQuery = supabase
+					.from("geofences")
+					.select("id, name, active")
+					.eq("org_id", orgId)
+					.eq("active", true)
+					.order("name", { ascending: true });
+
+				const activitiesQuery = supabase
+					.from("activities")
+					.select("id, name, active, hourly_rate, currency_code")
+					.eq("org_id", orgId)
+					.eq("active", true)
+					.order("name", { ascending: true });
+
+				const [planningResult, geofencesResult, activitiesResult] = await Promise.all([
+					planningQuery,
+					geofencesQuery,
+					activitiesQuery,
+				]);
+
+				const { data: planningData, error: planningError } = planningResult;
+				const { data: geofencesData, error: geofencesError } = geofencesResult;
+				const { data: activitiesData, error: activitiesError } = activitiesResult;
+
+				if (planningError) throw planningError;
+				if (geofencesError) throw geofencesError;
+				if (activitiesError) throw activitiesError;
+
+				const geofenceNames = new Map(
+					(geofencesData || []).map((g) => [String(g.id), g.name || "Geocerca sin nombre"])
+				);
+				const activityNames = new Map(
+					(activitiesData || []).map((a) => [String(a.id), a.name || "Actividad sin nombre"])
+				);
+				const mapped = (planningData || []).map((row, index) => {
+					const timeline = toTimeline(row.start_date, row.end_date);
+					const estado = toEstadoLabel(row.status);
+					const geofenceId = row.geofence_id ? String(row.geofence_id) : "";
+					const activityId = row.activity_id ? String(row.activity_id) : "";
+					return {
+						id: row.id ? `P-${String(row.id).slice(0, 6).toUpperCase()}` : `P-${index + 1}`,
+						proyecto: geofenceId
+							? geofenceNames.get(geofenceId) || `Geocerca ${geofenceId.slice(0, 8)}`
+							: "Geocerca sin definir",
+						actividad: activityId
+							? activityNames.get(activityId) || `Actividad ${activityId.slice(0, 8)}`
+							: "Actividad sin definir",
+						responsable: "Equipo operativo",
+						estado,
+						avance: toAvance(row.status),
+						inicio: timeline.inicio,
+						duracion: timeline.duracion,
+					};
+				});
+
+				if (isActive) {
+					setTareasDb(mapped);
+					setGeofencesDb(geofencesData || []);
+					setActivitiesDb(activitiesData || []);
+					setDbReady(true);
+				}
+			} catch (err) {
+				console.error("[Planificacion] Error cargando datos de planificación:", err);
+				if (isActive) {
+					setErrorDb("No se pudo cargar planificación desde Supabase. Mostrando demo local.");
+					setTareasDb([]);
+					setGeofencesDb([]);
+					setActivitiesDb([]);
+					setDbReady(false);
+				}
+			} finally {
+				if (isActive) {
+					setLoadingDb(false);
+				}
+			}
+		};
+
+		loadPlanningData();
+
+		return () => {
+			isActive = false;
+		};
+	}, [orgId]);
+
+	const tareas = useMemo(() => {
+		if (dbReady) return tareasDb;
+		return mockTareasBase;
+	}, [dbReady, tareasDb]);
+
+	const total = tareas.length;
+	const completadas = tareas.filter((t) => t.estado === "Completada").length;
+	const enProgreso = tareas.filter((t) => t.estado === "En progreso").length;
+	const avancePromedio =
+		total > 0
+			? Math.round(tareas.reduce((acc, t) => acc + t.avance, 0) / total)
+			: 0;
+	const mostrandoDemo = !dbReady;
+	const sinDatosReales = dbReady && tareas.length === 0;
 
 	return (
 		<div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
@@ -67,9 +233,21 @@ export default function Planificacion() {
 				<header className="rounded-2xl bg-gradient-to-r from-cyan-700 via-teal-700 to-emerald-700 p-6 text-white shadow-lg">
 					<h1 className="text-2xl font-bold sm:text-3xl">Planificación Operativa</h1>
 					<p className="mt-2 text-sm text-cyan-50 sm:text-base">
-						Vista estática de planificación con tareas y cronograma interno.
+						Vista conectada en modo solo lectura con respaldo demo local.
 					</p>
 				</header>
+
+				{loadingDb ? (
+					<section className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+						Cargando planificación desde Supabase...
+					</section>
+				) : null}
+
+				{errorDb ? (
+					<section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+						{errorDb}
+					</section>
+				) : null}
 
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 					<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -135,7 +313,9 @@ export default function Planificacion() {
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 					<div className="mb-4 flex items-center justify-between">
 						<h2 className="text-lg font-semibold text-slate-900">Tabla de tareas</h2>
-						<span className="text-sm text-slate-500">Datos mock locales</span>
+						<span className="text-sm text-slate-500">
+							{mostrandoDemo ? "Datos demo locales" : "Datos reales Preview"}
+						</span>
 					</div>
 
 					<div className="overflow-x-auto">
@@ -151,34 +331,42 @@ export default function Planificacion() {
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-slate-100 bg-white">
-								{mockTareas.map((tarea) => (
-									<tr key={tarea.id}>
-										<td className="px-3 py-2 text-slate-700">{tarea.id}</td>
-										<td className="px-3 py-2 text-slate-700">{tarea.proyecto}</td>
-										<td className="px-3 py-2 text-slate-700">{tarea.actividad}</td>
-										<td className="px-3 py-2 text-slate-700">{tarea.responsable}</td>
-										<td className="px-3 py-2">
-											<span
-												className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getEstadoStyle(
-													tarea.estado
-												)}`}
-											>
-												{tarea.estado}
-											</span>
-										</td>
-										<td className="px-3 py-2">
-											<div className="flex items-center gap-2">
-												<div className="h-2 w-24 rounded-full bg-slate-200">
-													<div
-														className="h-2 rounded-full bg-cyan-600"
-														style={{ width: `${tarea.avance}%` }}
-													/>
-												</div>
-												<span className="text-xs text-slate-600">{tarea.avance}%</span>
-											</div>
+								{sinDatosReales ? (
+									<tr>
+										<td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
+											No hay planificación registrada para esta organización.
 										</td>
 									</tr>
-								))}
+								) : (
+									tareas.map((tarea) => (
+										<tr key={tarea.id}>
+											<td className="px-3 py-2 text-slate-700">{tarea.id}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.proyecto}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.actividad}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.responsable}</td>
+											<td className="px-3 py-2">
+												<span
+													className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getEstadoStyle(
+														tarea.estado
+													)}`}
+												>
+													{tarea.estado}
+												</span>
+											</td>
+											<td className="px-3 py-2">
+												<div className="flex items-center gap-2">
+													<div className="h-2 w-24 rounded-full bg-slate-200">
+														<div
+															className="h-2 rounded-full bg-cyan-600"
+															style={{ width: `${tarea.avance}%` }}
+														/>
+													</div>
+													<span className="text-xs text-slate-600">{tarea.avance}%</span>
+												</div>
+											</td>
+										</tr>
+									))
+								)}
 							</tbody>
 						</table>
 					</div>
@@ -203,7 +391,7 @@ export default function Planificacion() {
 							</div>
 
 							<div className="mt-2 space-y-2">
-								{mockTareas.map((tarea) => {
+								{tareas.map((tarea) => {
 									const inicio = Math.max(1, tarea.inicio);
 									const fin = Math.min(7, inicio + tarea.duracion - 1);
 									return (
