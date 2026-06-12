@@ -92,3 +92,25 @@ Decisión de seguridad:
 - `planning_items_active_period_idx`
 
 La tabla fue creada solo en Preview. No ejecutar ni promover a Production sin orden explícita.
+
+## Fase 4 — Conexión read-only en Preview
+
+La página `src/pages/Planificacion.jsx` fue conectada en modo solo lectura a Supabase Preview.
+
+Consulta:
+- `public.planning_items`
+- `public.geofences`
+- `public.activities`
+
+Reglas:
+- No inserta datos.
+- No actualiza datos.
+- No borra datos.
+- Usa `currentOrg` desde `useAuth()`.
+- Muestra estado vacío cuando no hay planificación registrada.
+- Si falla la consulta, muestra advertencia y mantiene respaldo visual demo local.
+
+Estado visual validado:
+- `/planificacion` muestra “Datos reales Preview”.
+- La tabla muestra empty state cuando `planning_items` no tiene registros.
+- Producción no fue tocada.
