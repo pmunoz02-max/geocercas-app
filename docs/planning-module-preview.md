@@ -545,3 +545,64 @@ Validación Preview:
 * El Gantt siguió funcionando.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
 * Los acentos se visualizaron correctamente en el navegador.
+## Fase 11C — Semáforo de desviaciones Plan vs Real
+
+Se habilitó en Preview un semáforo visual para detectar desviaciones entre la planificación operativa y la ejecución real.
+
+Fuente de datos:
+
+* Planificado: `public.planning_items`
+* Real: `public.v_costos_hybrid_preview`
+
+Criterio de cálculo:
+
+* Se calcula la desviación porcentual de horas:
+
+  * `abs(horas reales - horas planificadas) / horas planificadas * 100`
+* Se calcula la desviación porcentual de costo:
+
+  * `abs(costo real - costo planificado) / costo planificado * 100`
+* Se toma como referencia la peor desviación entre horas y costo.
+
+Semáforo implementado:
+
+* 🟢 En rango: desviación hasta 10%.
+* 🟡 Desviación moderada: desviación mayor a 10% y hasta 25%.
+* 🔴 Desviación alta: desviación mayor a 25%.
+* ⚪ Sin base: no hay base planificada suficiente para calcular desviación.
+
+Cambios visuales:
+
+* Se agregó la columna `Semáforo` en la tabla de planificación.
+* La tabla pasó a 14 columnas.
+* El estado del semáforo se muestra por cada planificación.
+* El detalle de desviación queda disponible como descripción del indicador.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* La columna `Semáforo` apareció correctamente.
+* Se visualizaron los estados:
+
+  * 🟢 En rango
+  * 🟡 Desviación moderada
+  * 🔴 Desviación alta
+  * ⚪ Sin base
+* El cambio entre activas y archivadas funcionó correctamente.
+* La tabla siguió funcionando.
+* El Gantt siguió funcionando.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
