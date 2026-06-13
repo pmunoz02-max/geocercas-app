@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 
@@ -124,19 +124,20 @@ export default function Planificacion() {
 	);
 	const [intentoGuardarVisual, setIntentoGuardarVisual] = useState(false);
 
-	useEffect(() => {
-		if (!orgId) {
-			setTareasDb([]);
-			setGeofencesDb([]);
-			setActivitiesDb([]);
-			setErrorDb("");
-			setDbReady(false);
-			return;
-		}
+	const loadPlanningData = useCallback(
+		async (isActive = () => true) => {
+			if (!orgId) {
+				if (isActive()) {
+					setTareasDb([]);
+					setGeofencesDb([]);
+					setActivitiesDb([]);
+					setErrorDb("");
+					setDbReady(false);
+					setLoadingDb(false);
+				}
+				return;
+			}
 
-		let isActive = true;
-
-		const loadPlanningData = async () => {
 			setLoadingDb(true);
 			setErrorDb("");
 
@@ -208,7 +209,7 @@ export default function Planificacion() {
 					};
 				});
 
-				if (isActive) {
+				if (isActive()) {
 					setTareasDb(mapped);
 					setGeofencesDb(geofencesData || []);
 					setActivitiesDb(activitiesData || []);
@@ -216,7 +217,7 @@ export default function Planificacion() {
 				}
 			} catch (err) {
 				console.error("[Planificacion] Error cargando datos de planificación:", err);
-				if (isActive) {
+				if (isActive()) {
 					setErrorDb("No se pudo cargar planificación desde Supabase. Mostrando demo local.");
 					setTareasDb([]);
 					setGeofencesDb([]);
@@ -224,18 +225,32 @@ export default function Planificacion() {
 					setDbReady(false);
 				}
 			} finally {
-				if (isActive) {
+				if (isActive()) {
 					setLoadingDb(false);
 				}
 			}
-		};
+		},
+		[orgId]
+	);
 
-		loadPlanningData();
+	useEffect(() => {
+		if (!orgId) {
+			setTareasDb([]);
+			setGeofencesDb([]);
+			setActivitiesDb([]);
+			setErrorDb("");
+			setDbReady(false);
+			return;
+		}
+
+		let isActive = true;
+
+		loadPlanningData(() => isActive);
 
 		return () => {
 			isActive = false;
 		};
-	}, [orgId]);
+	}, [orgId, loadPlanningData]);
 
 	const tareas = useMemo(() => {
 		if (dbReady) return tareasDb;
