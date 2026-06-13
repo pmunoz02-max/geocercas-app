@@ -110,6 +110,29 @@ function toTimeline(startDate, endDate) {
 	return { inicio: startWeekday, duracion: duration };
 }
 
+function toNumber(value, fallback = 0) {
+	const n = Number(value);
+	return Number.isFinite(n) ? n : fallback;
+}
+
+function formatMetric(value) {
+	if (value === null || value === undefined || value === "") return "-";
+	const n = Number(value);
+	return Number.isFinite(n) ? n.toFixed(2) : "-";
+}
+
+function getRealWorkDate(row) {
+	const source = row?.work_date || row?.start_time || row?.end_time;
+	if (!source) return null;
+	return parseLocalDate(String(source).slice(0, 10));
+}
+
+function isDateWithinRange(date, startDate, endDate) {
+	if (!date || !startDate || !endDate) return false;
+	const d = date.getTime();
+	return d >= startDate.getTime() && d <= endDate.getTime();
+}
+
 export default function Planificacion() {
 	const { currentOrg } = useAuth();
 	const orgId = currentOrg?.id || null;
@@ -173,19 +196,29 @@ export default function Planificacion() {
 					.eq("active", true)
 					.order("name", { ascending: true });
 
-				const [planningResult, geofencesResult, activitiesResult] = await Promise.all([
+				const realCostsQuery = supabase
+					.from("v_costos_hybrid_preview")
+					.select(
+						"org_id, geofence_id, activity_id, work_date, start_time, end_time, horas, costo_final, costo_base"
+					)
+					.eq("org_id", orgId);
+
+				const [planningResult, geofencesResult, activitiesResult, realCostsResult] = await Promise.all([
 					planningQuery,
 					geofencesQuery,
 					activitiesQuery,
+					realCostsQuery,
 				]);
 
 				const { data: planningData, error: planningError } = planningResult;
 				const { data: geofencesData, error: geofencesError } = geofencesResult;
 				const { data: activitiesData, error: activitiesError } = activitiesResult;
+				const { data: realCostsData, error: realCostsError } = realCostsResult;
 
 				if (planningError) throw planningError;
 				if (geofencesError) throw geofencesError;
 				if (activitiesError) throw activitiesError;
+				if (realCostsError) throw realCostsError;
 
 				const geofenceNames = new Map(
 					(geofencesData || []).map((g) => [String(g.id), g.name || "Geocerca sin nombre"])
@@ -198,6 +231,24 @@ export default function Planificacion() {
 					const estado = toEstadoLabel(row.status);
 					const geofenceId = row.geofence_id ? String(row.geofence_id) : "";
 					const activityId = row.activity_id ? String(row.activity_id) : "";
+					const planStart = parseLocalDate(row.start_date);
+					const planEnd = parseLocalDate(row.end_date) || planStart;
+					const matchingReals = (realCostsData || []).filter((real) => {
+						const realGeofenceId = real.geofence_id ? String(real.geofence_id) : "";
+						const realActivityId = real.activity_id ? String(real.activity_id) : "";
+						if (realGeofenceId !== geofenceId || realActivityId !== activityId) return false;
+
+						const realDate = getRealWorkDate(real);
+						return isDateWithinRange(realDate, planStart, planEnd);
+					});
+					const horasReales = matchingReals.reduce((acc, real) => acc + toNumber(real.horas), 0);
+					const costoReal = matchingReals.reduce(
+						(acc, real) => acc + toNumber(real.costo_final ?? real.costo_base),
+						0
+					);
+					const diferenciaHoras = horasReales - toNumber(row.planned_hours);
+					const diferenciaCosto = costoReal - toNumber(row.planned_cost);
+
 					return {
 						dbId: row.id || null,
 						id: row.id ? `P-${String(row.id).slice(0, 6).toUpperCase()}` : `P-${index + 1}`,
@@ -213,6 +264,10 @@ export default function Planificacion() {
 						fechaFin: row.end_date,
 						horasPlanificadas: row.planned_hours,
 						costoPlanificado: row.planned_cost,
+						horasReales,
+						costoReal,
+						diferenciaHoras,
+						diferenciaCosto,
 						notes: row.notes || "",
 						statusRaw: row.status,
 						archivedAt: row.archived_at,
@@ -837,7 +892,7 @@ export default function Planificacion() {
 							<p className="mt-1 text-sm text-slate-500">
 								{showArchived
 									? "Historial de planificaciones archivadas. Solo lectura."
-									: "Planificaciones activas visibles en tabla y Gantt."}
+									: "Planificaciones activas con comparación básica Plan vs Real."}
 							</p>
 						</div>
 
@@ -866,6 +921,10 @@ export default function Planificacion() {
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Fecha fin</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Horas planificadas</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Costo planificado</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Horas reales</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Costo real</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Dif. horas</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Dif. costo</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Estado</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Acciones</th>
 								</tr>
@@ -873,7 +932,7 @@ export default function Planificacion() {
 							<tbody className="divide-y divide-slate-100 bg-white">
 								{sinDatosReales ? (
 									<tr>
-										<td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
+										<td className="px-3 py-6 text-center text-slate-500" colSpan={13}>
 											{showArchived ? "No hay planificaciones archivadas para esta organización." : "No hay planificación registrada para esta organización."}
 										</td>
 									</tr>
@@ -885,8 +944,12 @@ export default function Planificacion() {
 											<td className="px-3 py-2 text-slate-700">{tarea.actividad}</td>
 											<td className="px-3 py-2 text-slate-700">{tarea.fechaInicio || "-"}</td>
 											<td className="px-3 py-2 text-slate-700">{tarea.fechaFin || "-"}</td>
-											<td className="px-3 py-2 text-slate-700">{tarea.horasPlanificadas ?? "-"}</td>
-											<td className="px-3 py-2 text-slate-700">{tarea.costoPlanificado ?? "-"}</td>
+											<td className="px-3 py-2 text-slate-700">{formatMetric(tarea.horasPlanificadas)}</td>
+											<td className="px-3 py-2 text-slate-700">{formatMetric(tarea.costoPlanificado)}</td>
+											<td className="px-3 py-2 text-slate-700">{formatMetric(tarea.horasReales)}</td>
+											<td className="px-3 py-2 text-slate-700">{formatMetric(tarea.costoReal)}</td>
+											<td className="px-3 py-2 text-slate-700">{formatMetric(tarea.diferenciaHoras)}</td>
+											<td className="px-3 py-2 text-slate-700">{formatMetric(tarea.diferenciaCosto)}</td>
 											<td className="px-3 py-2">
 												<span
 													className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getEstadoStyle(
