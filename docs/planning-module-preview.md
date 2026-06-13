@@ -177,3 +177,28 @@ Objetivo:
 Validar UX antes de habilitar escritura real en `public.planning_items`.
 
 Producción no fue tocada.
+
+## Fase 6 — Validación local del formulario
+
+Se agregó validación local al formulario visual de Nueva planificación.
+
+Validaciones:
+- Geocerca requerida.
+- Actividad requerida.
+- Fecha inicio requerida.
+- Fecha fin requerida.
+- Fecha fin no puede ser anterior a fecha inicio.
+- Horas planificadas deben ser mayores o iguales a 0.
+- Costo planificado debe ser mayor o igual a 0.
+- Estado debe ser uno de: draft, approved, closed, archived.
+
+Estado actual:
+- La validación ocurre solo en frontend.
+- No ejecuta insert.
+- No ejecuta update.
+- No ejecuta delete.
+- No ejecuta upsert.
+- No ejecuta rpc.
+- El botón muestra validación local, sin persistencia backend.
+
+Producción no fue tocada.
