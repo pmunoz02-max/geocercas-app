@@ -235,3 +235,70 @@ Validación Preview:
 - La tabla pasó de 2 a 3 tareas.
 - El Gantt mostró la nueva planificación.
 - Producción no fue tocada.
+
+## Fase 8 — Archivado lógico de planificación
+
+Se habilitó en Preview la acción "Archivar" en la tabla de planificación.
+
+Flujo implementado:
+
+- Cada fila de planificación muestra una acción "Archivar".
+- Al archivar, se pide confirmación al usuario.
+- No se ejecuta delete físico.
+- Se ejecuta un update lógico sobre `public.planning_items`.
+- Se actualiza `status = 'archived'`.
+- Se actualiza `archived_at = now`.
+- Después del archivado, la lista se recarga con `loadPlanningData`.
+- Como la consulta activa filtra `archived_at is null`, la fila archivada desaparece de la tabla y del Gantt.
+
+Validación Preview:
+
+- Se archivó una planificación de prueba.
+- La fila desapareció de la tabla activa.
+- El Gantt se recargó sin esa planificación.
+- La consulta SQL confirmó que el registro sigue existiendo con `status = archived` y `archived_at` no nulo.
+
+Reglas de seguridad:
+
+- No se agregó delete.
+- No se agregó upsert.
+- No se agregó rpc.
+- El archivado usa update controlado por `id` y `org_id`.
+- RLS owner/admin sigue protegiendo la escritura.
+- Producción no fue tocada.
+## Fase 9A — Vista de planificaciones archivadas
+
+Se habilitó en Preview la visualización de planificaciones archivadas en modo solo lectura.
+
+Flujo implementado:
+
+* La página `/planificacion` muestra por defecto las planificaciones activas.
+* Se agregó un botón para alternar entre:
+
+  * `Planificaciones activas`
+  * `Planificaciones archivadas`
+* En modo activas, la consulta carga registros con `archived_at is null`.
+* En modo archivadas, la consulta carga registros con `archived_at not null`.
+* La tabla cambia su título y mensaje según el modo seleccionado.
+* El Gantt se sincroniza con el modo actual.
+* En modo archivadas no se muestra el formulario de nueva planificación.
+* En modo archivadas no se muestra el botón `Archivar`.
+
+Reglas de seguridad:
+
+* No se agregó `delete`.
+* No se agregó `upsert`.
+* No se agregó `rpc`.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantiene un único `update` para archivar planificación.
+* La vista de archivadas es solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* La página carga inicialmente planificaciones activas.
+* El botón `Ver archivadas` muestra el historial archivado.
+* La planificación archivada aparece correctamente.
+* El formulario de nueva planificación se oculta en modo archivadas.
+* La acción `Archivar` no aparece en modo archivadas.
+* El botón `Ver activas` regresa correctamente a las planificaciones activas.
