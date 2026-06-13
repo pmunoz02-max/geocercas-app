@@ -126,6 +126,7 @@ export default function Planificacion() {
 	const [savingPlanning, setSavingPlanning] = useState(false);
 	const [archivingPlanningId, setArchivingPlanningId] = useState(null);
 	const [restoringPlanningId, setRestoringPlanningId] = useState(null);
+	const [editingPlanningId, setEditingPlanningId] = useState(null);
 	const [showArchived, setShowArchived] = useState(false);
 
 	const loadPlanningData = useCallback(
@@ -200,6 +201,8 @@ export default function Planificacion() {
 					return {
 						dbId: row.id || null,
 						id: row.id ? `P-${String(row.id).slice(0, 6).toUpperCase()}` : `P-${index + 1}`,
+						geofenceId,
+						activityId,
 						geocerca: geofenceId
 							? geofenceNames.get(geofenceId) || `Geocerca ${geofenceId.slice(0, 8)}`
 							: "Geocerca sin definir",
@@ -210,6 +213,7 @@ export default function Planificacion() {
 						fechaFin: row.end_date,
 						horasPlanificadas: row.planned_hours,
 						costoPlanificado: row.planned_cost,
+						notes: row.notes || "",
 						statusRaw: row.status,
 						archivedAt: row.archived_at,
 						estado,
@@ -346,6 +350,30 @@ export default function Planificacion() {
 	const handleCancelarVisual = () => {
 		setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
 		setIntentoGuardarVisual(false);
+		setEditingPlanningId(null);
+	};
+
+	const handleEditarPlanificacion = (tarea) => {
+		if (!tarea?.dbId) return;
+
+		setEditingPlanningId(tarea.dbId);
+		setIntentoGuardarVisual(false);
+		setNuevaPlanificacionVisual({
+			geofenceId: tarea.geofenceId || "",
+			activityId: tarea.activityId || "",
+			fechaInicio: tarea.fechaInicio || "",
+			fechaFin: tarea.fechaFin || "",
+			horasPlanificadas:
+				tarea.horasPlanificadas === null || tarea.horasPlanificadas === undefined
+					? ""
+					: String(tarea.horasPlanificadas),
+			costoPlanificado:
+				tarea.costoPlanificado === null || tarea.costoPlanificado === undefined
+					? ""
+					: String(tarea.costoPlanificado),
+			estado: tarea.statusRaw || "draft",
+			notas: tarea.notes || "",
+		});
 	};
 
 	useEffect(() => {
@@ -371,6 +399,11 @@ export default function Planificacion() {
 		setIntentoGuardarVisual(true);
 		if (!formularioVisualValido) {
 			window.alert("Completa los campos requeridos antes de guardar.");
+			return;
+		}
+
+		if (editingPlanningId) {
+			window.alert("La edición real se habilitará en el siguiente paso.");
 			return;
 		}
 
@@ -556,13 +589,17 @@ export default function Planificacion() {
 				{!showArchived ? (
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 					<div className="mb-4 flex items-center justify-between gap-3">
-						<h2 className="text-lg font-semibold text-slate-900">Nueva planificación</h2>
+						<h2 className="text-lg font-semibold text-slate-900">
+							{editingPlanningId ? "Editar planificación" : "Nueva planificación"}
+						</h2>
 						<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
 							Visual preview
 						</span>
 					</div>
 					<p className="mb-4 text-sm text-slate-500">
-						Formulario en Preview con validación local y guardado en `planning_items`.
+						{editingPlanningId
+							? "Editando planificación activa. El guardado real de edición se habilitará en el siguiente paso."
+							: "Formulario en Preview con validación local y guardado en `planning_items`."}
 					</p>
 					{intentoGuardarVisual && !formularioVisualValido ? (
 						<section className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -757,13 +794,19 @@ export default function Planificacion() {
 						<button
 							type="button"
 							onClick={handleGuardarVisual}
-							disabled={savingPlanning}
+							disabled={savingPlanning || Boolean(editingPlanningId)}
 							className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
 						>
-							{savingPlanning ? "Guardando..." : "Guardar planificación"}
+							{savingPlanning
+								? "Guardando..."
+								: editingPlanningId
+									? "Guardar edición próximamente"
+									: "Guardar planificación"}
 						</button>
 						<span className="text-xs text-slate-500">
-							Al guardar, se inserta en Preview y se recarga la lista.
+							{editingPlanningId
+								? "Modo edición visual. Guarda los cambios reales en la siguiente fase."
+								: "Al guardar, se inserta en Preview y se recarga la lista."}
 						</span>
 					</div>
 				</section>
@@ -840,14 +883,24 @@ export default function Planificacion() {
 											</td>
 											<td className="px-3 py-2">
 												{tarea.dbId && !showArchived ? (
-													<button
-														type="button"
-														onClick={() => handleArchivarPlanificacion(tarea)}
-														disabled={archivingPlanningId === tarea.dbId}
-														className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
-													>
-														{archivingPlanningId === tarea.dbId ? "Archivando..." : "Archivar"}
-													</button>
+													<div className="flex flex-wrap gap-2">
+														<button
+															type="button"
+															onClick={() => handleEditarPlanificacion(tarea)}
+															disabled={archivingPlanningId === tarea.dbId || editingPlanningId === tarea.dbId}
+															className="rounded-md border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
+														>
+															Editar
+														</button>
+														<button
+															type="button"
+															onClick={() => handleArchivarPlanificacion(tarea)}
+															disabled={archivingPlanningId === tarea.dbId}
+															className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+														>
+															{archivingPlanningId === tarea.dbId ? "Archivando..." : "Archivar"}
+														</button>
+													</div>
 												) : tarea.dbId && showArchived ? (
 													<button
 														type="button"
