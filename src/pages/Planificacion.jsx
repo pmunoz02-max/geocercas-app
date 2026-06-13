@@ -382,8 +382,8 @@ export default function Planificacion() {
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 					<h2 className="text-lg font-semibold text-slate-900">Vista temporal simple</h2>
 					<p className="mb-4 mt-1 text-sm text-slate-500">
-						Escala demostrativa para visualizar actividades por período. La escala real se
-						definirá al conectar datos.
+						Escala semanal de días calendario. Permite planificar de lunes a domingo,
+						incluyendo sábado y domingo.
 					</p>
 
 					<div className="overflow-x-auto">
