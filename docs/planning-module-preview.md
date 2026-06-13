@@ -666,3 +666,71 @@ Validación Preview:
 * Los KPIs, la tabla y el Gantt cambiaron correctamente con los filtros.
 * El botón `Limpiar filtros` restauró la vista completa.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+## Fase 11E — Exportar CSV de vista filtrada
+
+Se habilitó en Preview la exportación CSV de la vista filtrada del módulo de planificación.
+
+Objetivo:
+
+* Permitir que el usuario filtre la planificación por criterios gerenciales.
+* Exportar exactamente la vista visible en ese momento.
+* Usar el archivo CSV como resumen gerencial para Excel, auditoría o revisión operativa.
+
+Fuente exportada:
+
+* `tareasFiltradas`
+
+Columnas incluidas en el CSV:
+
+* ID
+* Geocerca
+* Actividad
+* Fecha inicio
+* Fecha fin
+* Horas planificadas
+* Costo planificado
+* Horas reales
+* Costo real
+* Diferencia horas
+* Diferencia costo
+* Semáforo
+* Detalle semáforo
+* Estado
+* Notas
+* Modo
+* Fecha exportación
+
+Reglas de funcionamiento:
+
+* El botón `Exportar CSV` se agregó junto a `Limpiar filtros`.
+* El botón exporta la vista filtrada actual.
+* Si no hay filas filtradas, el botón queda deshabilitado.
+* El CSV se genera en el navegador.
+* El CSV incluye BOM UTF-8 para mejorar compatibilidad con Excel.
+* No se realiza una nueva consulta a Supabase al exportar.
+* No se modifica la base de datos.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* Se aplicó un filtro por semáforo rojo.
+* Se exportó CSV correctamente.
+* El CSV abrió en Excel.
+* El CSV exportó solo la vista filtrada.
+* Se limpiaron filtros.
+* Se exportó nuevamente la vista completa actual.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
