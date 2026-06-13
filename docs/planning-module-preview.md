@@ -433,3 +433,59 @@ Validación Preview:
 * La alerta `Planificación actualizada correctamente` apareció.
 * La tabla se recargó con los cambios.
 * El Gantt reflejó las fechas actualizadas.
+## Fase 11A — Plan vs Real básico
+
+Se habilitó en Preview la primera comparación básica entre planificación operativa y ejecución real.
+
+Fuentes utilizadas:
+
+* Planificado: `public.planning_items`
+* Real: `public.v_costos_hybrid_preview`
+
+Criterio de comparación inicial:
+
+* Misma organización: `org_id`
+* Misma geocerca canónica: `geofence_id`
+* Misma actividad: `activity_id`
+* Fecha real dentro del período planificado:
+
+  * `start_date`
+  * `end_date`
+
+Campos agregados a la tabla de planificación:
+
+* Horas reales
+* Costo real
+* Diferencia de horas
+* Diferencia de costo
+
+Reglas de cálculo:
+
+* `horasReales` suma las horas reales coincidentes.
+* `costoReal` suma `costo_final` y usa `costo_base` como respaldo.
+* `diferenciaHoras = horasReales - horasPlanificadas`.
+* `diferenciaCosto = costoReal - costoPlanificado`.
+* Las planificaciones sin ejecución real muestran `0.00` en horas reales y costo real.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` es solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* La tabla mostró las nuevas columnas de Plan vs Real.
+* Las planificaciones sin ejecución real mostraron valores reales en `0.00`.
+* Las planificaciones coincidentes con `v_costos_hybrid_preview` mostraron valores reales.
+* El Gantt siguió funcionando.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
