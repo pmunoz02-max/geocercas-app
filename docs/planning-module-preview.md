@@ -383,3 +383,53 @@ Validación Preview:
 * El modo edición visual se activó correctamente.
 * Cancelar volvió al modo nueva planificación.
 * No se guardaron cambios todavía.
+## Fase 10B — Guardar edición real de planificación activa
+
+Se habilitó en Preview el guardado real de ediciones sobre planificaciones activas.
+
+Flujo implementado:
+
+* El usuario entra a `/planificacion`.
+* En una planificación activa, hace clic en `Editar`.
+* El formulario se precarga con los datos existentes.
+* El usuario puede modificar:
+
+  * Geocerca
+  * Actividad
+  * Fecha inicio
+  * Fecha fin
+  * Horas planificadas
+  * Costo planificado
+  * Estado
+  * Notas
+* Al guardar, se ejecuta un `update` controlado sobre `public.planning_items`.
+* El update se filtra por:
+
+  * `id = editingPlanningId`
+  * `org_id = orgId`
+* Se actualiza `updated_at`.
+* Después de guardar, la lista se recarga.
+* El formulario vuelve al modo `Nueva planificación`.
+* El Gantt refleja las fechas actualizadas.
+
+Reglas de seguridad:
+
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* RLS owner/admin sigue protegiendo la escritura.
+* `tracker` y `viewer` no tienen acceso.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* Se editó una planificación activa.
+* La alerta `Planificación actualizada correctamente` apareció.
+* La tabla se recargó con los cambios.
+* El Gantt reflejó las fechas actualizadas.
