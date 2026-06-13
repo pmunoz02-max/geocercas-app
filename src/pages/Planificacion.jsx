@@ -125,6 +125,7 @@ export default function Planificacion() {
 	const [intentoGuardarVisual, setIntentoGuardarVisual] = useState(false);
 	const [savingPlanning, setSavingPlanning] = useState(false);
 	const [archivingPlanningId, setArchivingPlanningId] = useState(null);
+	const [restoringPlanningId, setRestoringPlanningId] = useState(null);
 	const [showArchived, setShowArchived] = useState(false);
 
 	const loadPlanningData = useCallback(
@@ -435,6 +436,37 @@ export default function Planificacion() {
 			window.alert("No se pudo archivar la planificación.");
 		} finally {
 			setArchivingPlanningId(null);
+		}
+	};
+
+	const handleRestaurarPlanificacion = async (tarea) => {
+		if (!tarea?.dbId || !orgId) return;
+
+		const confirmado = window.confirm(
+			`Restaurar la planificación ${tarea.id}? Volverá como borrador en la lista activa.`
+		);
+		if (!confirmado) return;
+
+		setRestoringPlanningId(tarea.dbId);
+		try {
+			const { error } = await supabase
+				.from("planning_items")
+				.update({
+					status: "draft",
+					archived_at: null,
+				})
+				.eq("id", tarea.dbId)
+				.eq("org_id", orgId);
+
+			if (error) throw error;
+
+			await loadPlanningData();
+			window.alert("Planificación restaurada correctamente.");
+		} catch (err) {
+			console.error("[Planificacion] Error restaurando planificación:", err);
+			window.alert("No se pudo restaurar la planificación.");
+		} finally {
+			setRestoringPlanningId(null);
 		}
 	};
 
@@ -816,8 +848,17 @@ export default function Planificacion() {
 													>
 														{archivingPlanningId === tarea.dbId ? "Archivando..." : "Archivar"}
 													</button>
+												) : tarea.dbId && showArchived ? (
+													<button
+														type="button"
+														onClick={() => handleRestaurarPlanificacion(tarea)}
+														disabled={restoringPlanningId === tarea.dbId}
+														className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+													>
+														{restoringPlanningId === tarea.dbId ? "Restaurando..." : "Restaurar"}
+													</button>
 												) : (
-													<span className="text-xs text-slate-400">{showArchived ? "Archivada" : "-"}</span>
+													<span className="text-xs text-slate-400">-</span>
 												)}
 											</td>
 										</tr>
