@@ -302,3 +302,43 @@ Validación Preview:
 * El formulario de nueva planificación se oculta en modo archivadas.
 * La acción `Archivar` no aparece en modo archivadas.
 * El botón `Ver activas` regresa correctamente a las planificaciones activas.
+## Fase 9B — Restaurar planificación archivada
+
+Se habilitó en Preview la acción para restaurar planificaciones archivadas.
+
+Flujo implementado:
+
+* El usuario entra a `/planificacion`.
+* Selecciona `Ver archivadas`.
+* Cada planificación archivada muestra la acción `Restaurar`.
+* Al restaurar, se pide confirmación al usuario.
+* No se ejecuta delete físico.
+* No se ejecuta upsert.
+* No se ejecuta rpc.
+* Se ejecuta un update lógico sobre `public.planning_items`.
+* La restauración actualiza:
+
+  * `status = 'draft'`
+  * `archived_at = null`
+* Después de restaurar, la lista archivada se recarga.
+* La planificación desaparece de archivadas.
+* Al volver a `Ver activas`, la planificación restaurada aparece como borrador.
+
+Reglas de seguridad:
+
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen dos `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+* No existe `delete` físico desde la app.
+* RLS owner/admin sigue protegiendo la escritura.
+* `tracker` y `viewer` no tienen acceso.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* Se restauró una planificación archivada.
+* La alerta de éxito apareció correctamente.
+* La planificación desapareció de la vista archivada.
+* La planificación reapareció en la vista activa como `draft`.
