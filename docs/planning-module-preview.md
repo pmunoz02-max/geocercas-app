@@ -202,3 +202,36 @@ Estado actual:
 - El botón muestra validación local, sin persistencia backend.
 
 Producción no fue tocada.
+
+## Fase 7 — Guardado real en `planning_items`
+
+Se habilitó en Preview el guardado real de nuevas planificaciones desde `src/pages/Planificacion.jsx`.
+
+Flujo implementado:
+
+- El usuario selecciona geocerca.
+- El usuario selecciona actividad.
+- El usuario ingresa fechas.
+- El usuario ingresa horas planificadas.
+- El costo planificado se calcula automáticamente usando `activities.hourly_rate`.
+- Si la actividad no tiene tarifa, el costo puede ingresarse manualmente.
+- Se ejecuta un único `insert` en `public.planning_items`.
+- Después del guardado, la lista se recarga con `loadPlanningData`.
+- El formulario se limpia.
+- La nueva planificación aparece en tabla y Gantt.
+
+Reglas de seguridad:
+
+- No se agregó `update`.
+- No se agregó `delete`.
+- No se agregó `upsert`.
+- No se agregó `rpc`.
+- La escritura queda protegida por RLS owner/admin de `planning_items`.
+- `tracker` y `viewer` no tienen acceso.
+
+Validación Preview:
+
+- Se guardó una planificación real desde formulario.
+- La tabla pasó de 2 a 3 tareas.
+- El Gantt mostró la nueva planificación.
+- Producción no fue tocada.
