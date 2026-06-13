@@ -73,9 +73,16 @@ function toAvance(status) {
 	return 30;
 }
 
+function parseLocalDate(dateStr) {
+	if (!dateStr) return null;
+	const [year, month, day] = String(dateStr).split("-").map(Number);
+	if (!year || !month || !day) return null;
+	return new Date(year, month - 1, day);
+}
+
 function toTimeline(startDate, endDate) {
-	const s = startDate ? new Date(startDate) : null;
-	const e = endDate ? new Date(endDate) : s;
+	const s = parseLocalDate(startDate);
+	const e = endDate ? parseLocalDate(endDate) : s;
 
 	if (!s || Number.isNaN(s.getTime())) {
 		return { inicio: 1, duracion: 1 };
