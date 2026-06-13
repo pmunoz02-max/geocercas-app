@@ -138,3 +138,14 @@ Resultado:
 - La primera planificación se muestra de lunes a viernes.
 - La segunda planificación se muestra en sábado y domingo.
 - Producción no fue tocada.
+
+## Tabla read-only — Campos visibles en `/planificacion`
+
+Se dejó documentado que la vista `/planificacion` en Preview ya muestra en tabla read-only:
+
+- Fecha inicio
+- Fecha fin
+- Horas planificadas
+- Costo planificado
+- Estado
+- Vista temporal Lun-Dom
