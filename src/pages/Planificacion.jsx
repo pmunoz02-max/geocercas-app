@@ -176,13 +176,16 @@ export default function Planificacion() {
 					const activityId = row.activity_id ? String(row.activity_id) : "";
 					return {
 						id: row.id ? `P-${String(row.id).slice(0, 6).toUpperCase()}` : `P-${index + 1}`,
-						proyecto: geofenceId
+						geocerca: geofenceId
 							? geofenceNames.get(geofenceId) || `Geocerca ${geofenceId.slice(0, 8)}`
 							: "Geocerca sin definir",
 						actividad: activityId
 							? activityNames.get(activityId) || `Actividad ${activityId.slice(0, 8)}`
 							: "Actividad sin definir",
-						responsable: "Equipo operativo",
+						fechaInicio: row.start_date,
+						fechaFin: row.end_date,
+						horasPlanificadas: row.planned_hours,
+						costoPlanificado: row.planned_cost,
 						estado,
 						avance: toAvance(row.status),
 						inicio: timeline.inicio,
@@ -330,17 +333,19 @@ export default function Planificacion() {
 							<thead className="bg-slate-50">
 								<tr>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">ID</th>
-									<th className="px-3 py-2 text-left font-semibold text-slate-600">Proyecto</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Geocerca</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Actividad</th>
-									<th className="px-3 py-2 text-left font-semibold text-slate-600">Responsable</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Fecha inicio</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Fecha fin</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Horas planificadas</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Costo planificado</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Estado</th>
-									<th className="px-3 py-2 text-left font-semibold text-slate-600">Avance</th>
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-slate-100 bg-white">
 								{sinDatosReales ? (
 									<tr>
-										<td className="px-3 py-6 text-center text-slate-500" colSpan={6}>
+										<td className="px-3 py-6 text-center text-slate-500" colSpan={8}>
 											No hay planificación registrada para esta organización.
 										</td>
 									</tr>
@@ -348,9 +353,12 @@ export default function Planificacion() {
 									tareas.map((tarea) => (
 										<tr key={tarea.id}>
 											<td className="px-3 py-2 text-slate-700">{tarea.id}</td>
-											<td className="px-3 py-2 text-slate-700">{tarea.proyecto}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.geocerca || "-"}</td>
 											<td className="px-3 py-2 text-slate-700">{tarea.actividad}</td>
-											<td className="px-3 py-2 text-slate-700">{tarea.responsable}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.fechaInicio || "-"}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.fechaFin || "-"}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.horasPlanificadas ?? "-"}</td>
+											<td className="px-3 py-2 text-slate-700">{tarea.costoPlanificado ?? "-"}</td>
 											<td className="px-3 py-2">
 												<span
 													className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getEstadoStyle(
@@ -359,17 +367,6 @@ export default function Planificacion() {
 												>
 													{tarea.estado}
 												</span>
-											</td>
-											<td className="px-3 py-2">
-												<div className="flex items-center gap-2">
-													<div className="h-2 w-24 rounded-full bg-slate-200">
-														<div
-															className="h-2 rounded-full bg-cyan-600"
-															style={{ width: `${tarea.avance}%` }}
-														/>
-													</div>
-													<span className="text-xs text-slate-600">{tarea.avance}%</span>
-												</div>
 											</td>
 										</tr>
 									))
