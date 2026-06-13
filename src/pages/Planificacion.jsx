@@ -47,6 +47,7 @@ const mockTareasBase = [
 
 const ganttDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const periodos = ["Semana", "Mes", "Trimestre", "Semestre", "Año", "Rango personalizado"];
+const ESTADOS_PLANIFICACION = ["draft", "approved", "closed", "archived"];
 const NUEVA_PLANIFICACION_INICIAL = {
 	geofenceId: "",
 	activityId: "",
@@ -121,6 +122,7 @@ export default function Planificacion() {
 	const [nuevaPlanificacionVisual, setNuevaPlanificacionVisual] = useState(
 		NUEVA_PLANIFICACION_INICIAL
 	);
+	const [intentoGuardarVisual, setIntentoGuardarVisual] = useState(false);
 
 	useEffect(() => {
 		if (!orgId) {
@@ -249,6 +251,72 @@ export default function Planificacion() {
 			: 0;
 	const mostrandoDemo = !dbReady;
 	const sinDatosReales = dbReady && tareas.length === 0;
+	const erroresNuevaPlanificacion = useMemo(() => {
+		const errors = {};
+		const form = nuevaPlanificacionVisual;
+
+		if (!form.geofenceId) errors.geofenceId = "Selecciona una geocerca.";
+		if (!form.activityId) errors.activityId = "Selecciona una actividad.";
+		if (!form.fechaInicio) errors.fechaInicio = "Ingresa fecha de inicio.";
+		if (!form.fechaFin) errors.fechaFin = "Ingresa fecha de fin.";
+
+		if (form.fechaInicio && form.fechaFin) {
+			const start = parseLocalDate(form.fechaInicio);
+			const end = parseLocalDate(form.fechaFin);
+			if (!start || !end) {
+				errors.fechas = "Formato de fechas inválido.";
+			} else if (end.getTime() < start.getTime()) {
+				errors.fechas = "La fecha fin no puede ser anterior a la fecha inicio.";
+			}
+		}
+
+		if (form.horasPlanificadas === "") {
+			errors.horasPlanificadas = "Ingresa horas planificadas.";
+		} else {
+			const horas = Number(form.horasPlanificadas);
+			if (!Number.isFinite(horas) || horas < 0) {
+				errors.horasPlanificadas = "Las horas deben ser un número mayor o igual a 0.";
+			}
+		}
+
+		if (form.costoPlanificado === "") {
+			errors.costoPlanificado = "Ingresa costo planificado.";
+		} else {
+			const costo = Number(form.costoPlanificado);
+			if (!Number.isFinite(costo) || costo < 0) {
+				errors.costoPlanificado = "El costo debe ser un número mayor o igual a 0.";
+			}
+		}
+
+		if (!ESTADOS_PLANIFICACION.includes(form.estado)) {
+			errors.estado = "Estado inválido.";
+		}
+
+		return errors;
+	}, [nuevaPlanificacionVisual]);
+	const formularioVisualValido = Object.keys(erroresNuevaPlanificacion).length === 0;
+	const claseCampoBase =
+		"mt-1 rounded-lg border px-3 py-2 text-sm normal-case text-slate-700";
+	const getClaseCampo = (errorKey) =>
+		`${claseCampoBase} ${
+			intentoGuardarVisual && erroresNuevaPlanificacion[errorKey]
+				? "border-rose-400 bg-rose-50"
+				: "border-slate-300 bg-white"
+		}`;
+
+	const handleCancelarVisual = () => {
+		setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
+		setIntentoGuardarVisual(false);
+	};
+
+	const handleGuardarVisual = () => {
+		setIntentoGuardarVisual(true);
+		if (!formularioVisualValido) {
+			window.alert("Completa los campos requeridos del formulario visual.");
+			return;
+		}
+		window.alert("Validación local OK. Guardado próximamente (sin backend).");
+	};
 
 	return (
 		<div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
@@ -344,6 +412,12 @@ export default function Planificacion() {
 						Formulario visual de referencia. No guarda en Supabase y no ejecuta insert,
 						update, delete ni upsert.
 					</p>
+					{intentoGuardarVisual && !formularioVisualValido ? (
+						<section className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+							Revisa los campos marcados para continuar. Esta validación es local y no guarda
+							datos en backend.
+						</section>
+					) : null}
 
 					<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -353,7 +427,7 @@ export default function Planificacion() {
 								onChange={(e) =>
 									setNuevaPlanificacionVisual((prev) => ({ ...prev, geofenceId: e.target.value }))
 								}
-								className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("geofenceId")}
 							>
 								<option value="">Seleccionar geocerca</option>
 								{geofencesDb.map((g) => (
@@ -362,6 +436,11 @@ export default function Planificacion() {
 									</option>
 								))}
 							</select>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.geofenceId ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.geofenceId}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -371,7 +450,7 @@ export default function Planificacion() {
 								onChange={(e) =>
 									setNuevaPlanificacionVisual((prev) => ({ ...prev, activityId: e.target.value }))
 								}
-								className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("activityId")}
 							>
 								<option value="">Seleccionar actividad</option>
 								{activitiesDb.map((a) => (
@@ -380,6 +459,11 @@ export default function Planificacion() {
 									</option>
 								))}
 							</select>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.activityId ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.activityId}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -390,8 +474,13 @@ export default function Planificacion() {
 								onChange={(e) =>
 									setNuevaPlanificacionVisual((prev) => ({ ...prev, fechaInicio: e.target.value }))
 								}
-								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("fechaInicio")}
 							/>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.fechaInicio ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.fechaInicio}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -402,8 +491,18 @@ export default function Planificacion() {
 								onChange={(e) =>
 									setNuevaPlanificacionVisual((prev) => ({ ...prev, fechaFin: e.target.value }))
 								}
-								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("fechaFin")}
 							/>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.fechaFin ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.fechaFin}
+								</span>
+							) : null}
+							{intentoGuardarVisual && erroresNuevaPlanificacion.fechas ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.fechas}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -420,8 +519,13 @@ export default function Planificacion() {
 										horasPlanificadas: e.target.value,
 									}))
 								}
-								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("horasPlanificadas")}
 							/>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.horasPlanificadas ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.horasPlanificadas}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -438,8 +542,13 @@ export default function Planificacion() {
 										costoPlanificado: e.target.value,
 									}))
 								}
-								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("costoPlanificado")}
 							/>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.costoPlanificado ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.costoPlanificado}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -449,13 +558,18 @@ export default function Planificacion() {
 								onChange={(e) =>
 									setNuevaPlanificacionVisual((prev) => ({ ...prev, estado: e.target.value }))
 								}
-								className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+								className={getClaseCampo("estado")}
 							>
 								<option value="draft">Pendiente</option>
 								<option value="approved">En progreso</option>
 								<option value="closed">Completada</option>
 								<option value="archived">Archivada</option>
 							</select>
+							{intentoGuardarVisual && erroresNuevaPlanificacion.estado ? (
+								<span className="mt-1 text-xs normal-case text-rose-600">
+									{erroresNuevaPlanificacion.estado}
+								</span>
+							) : null}
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500 xl:col-span-4">
@@ -475,15 +589,15 @@ export default function Planificacion() {
 					<div className="mt-4 flex flex-wrap items-center gap-3">
 						<button
 							type="button"
-							onClick={() => setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL)}
+							onClick={handleCancelarVisual}
 							className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
 						>
 							Cancelar
 						</button>
 						<button
 							type="button"
-							disabled
-							className="cursor-not-allowed rounded-lg bg-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+							onClick={handleGuardarVisual}
+							className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
 						>
 							Guardar próximamente
 						</button>
