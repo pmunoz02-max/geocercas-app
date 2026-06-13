@@ -123,6 +123,7 @@ export default function Planificacion() {
 		NUEVA_PLANIFICACION_INICIAL
 	);
 	const [intentoGuardarVisual, setIntentoGuardarVisual] = useState(false);
+	const [savingPlanning, setSavingPlanning] = useState(false);
 
 	const loadPlanningData = useCallback(
 		async (isActive = () => true) => {
@@ -324,13 +325,45 @@ export default function Planificacion() {
 		setIntentoGuardarVisual(false);
 	};
 
-	const handleGuardarVisual = () => {
+	const handleGuardarVisual = async () => {
 		setIntentoGuardarVisual(true);
 		if (!formularioVisualValido) {
-			window.alert("Completa los campos requeridos del formulario visual.");
+			window.alert("Completa los campos requeridos antes de guardar.");
 			return;
 		}
-		window.alert("Validación local OK. Guardado próximamente (sin backend).");
+
+		if (!orgId) {
+			window.alert("No hay organización activa para guardar planificación.");
+			return;
+		}
+
+		setSavingPlanning(true);
+		try {
+			const payload = {
+				org_id: orgId,
+				geofence_id: nuevaPlanificacionVisual.geofenceId,
+				activity_id: nuevaPlanificacionVisual.activityId,
+				start_date: nuevaPlanificacionVisual.fechaInicio,
+				end_date: nuevaPlanificacionVisual.fechaFin,
+				planned_hours: Number(nuevaPlanificacionVisual.horasPlanificadas),
+				planned_cost: Number(nuevaPlanificacionVisual.costoPlanificado),
+				status: nuevaPlanificacionVisual.estado,
+				notes: nuevaPlanificacionVisual.notas?.trim() || null,
+			};
+
+			const { error } = await supabase.from("planning_items").insert(payload);
+			if (error) throw error;
+
+			await loadPlanningData();
+			setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
+			setIntentoGuardarVisual(false);
+			window.alert("Planificación guardada correctamente.");
+		} catch (err) {
+			console.error("[Planificacion] Error guardando planificación:", err);
+			window.alert("No se pudo guardar la planificación.");
+		} finally {
+			setSavingPlanning(false);
+		}
 	};
 
 	return (
@@ -424,13 +457,11 @@ export default function Planificacion() {
 						</span>
 					</div>
 					<p className="mb-4 text-sm text-slate-500">
-						Formulario visual de referencia. No guarda en Supabase y no ejecuta insert,
-						update, delete ni upsert.
+						Formulario en Preview con validación local y guardado en `planning_items`.
 					</p>
 					{intentoGuardarVisual && !formularioVisualValido ? (
 						<section className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-							Revisa los campos marcados para continuar. Esta validación es local y no guarda
-							datos en backend.
+							Revisa los campos marcados para continuar.
 						</section>
 					) : null}
 
@@ -605,6 +636,7 @@ export default function Planificacion() {
 						<button
 							type="button"
 							onClick={handleCancelarVisual}
+							disabled={savingPlanning}
 							className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
 						>
 							Cancelar
@@ -612,12 +644,13 @@ export default function Planificacion() {
 						<button
 							type="button"
 							onClick={handleGuardarVisual}
-							className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+							disabled={savingPlanning}
+							className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
 						>
-							Guardar próximamente
+							{savingPlanning ? "Guardando..." : "Guardar planificación"}
 						</button>
 						<span className="text-xs text-slate-500">
-							Solo visual para validación de UX. Sin persistencia en backend.
+							Al guardar, se inserta en Preview y se recarga la lista.
 						</span>
 					</div>
 				</section>
