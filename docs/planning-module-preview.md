@@ -734,3 +734,59 @@ Validación Preview:
 * Se limpiaron filtros.
 * Se exportó nuevamente la vista completa actual.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+## Fase 11F — Resumen ejecutivo visual por semáforo
+
+Se habilitó en Preview un resumen ejecutivo visual para analizar rápidamente la distribución de planificaciones según su semáforo Plan vs Real.
+
+Objetivo:
+
+* Mostrar una lectura gerencial inmediata del estado operativo.
+* Identificar cuántas planificaciones están en rango.
+* Identificar cuántas tienen desviación moderada.
+* Identificar cuántas tienen desviación alta.
+* Identificar cuántas no tienen base suficiente para cálculo.
+
+Tarjetas agregadas:
+
+* En rango
+* Desviación moderada
+* Desviación alta
+* Sin base
+
+Fuente de cálculo:
+
+* `tareasFiltradas`
+
+Reglas de funcionamiento:
+
+* El resumen se calcula sobre la vista filtrada actual.
+* Respeta filtros por semáforo, geocerca, actividad, estado y rango de fechas.
+* Respeta el modo actual: activas o archivadas.
+* Al limpiar filtros, el resumen vuelve a calcularse sobre toda la vista actual.
+* No realiza nuevas consultas a Supabase.
+* No modifica la base de datos.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* El bloque `Resumen ejecutivo por semáforo` apareció correctamente.
+* Las tarjetas `En rango`, `Desviación moderada`, `Desviación alta` y `Sin base` se mostraron correctamente.
+* Las tarjetas cambiaron al aplicar filtros.
+* El botón `Limpiar filtros` restauró el resumen completo.
+* La exportación CSV siguió funcionando.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+* Los acentos se visualizaron correctamente en el navegador.
