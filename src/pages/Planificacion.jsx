@@ -125,6 +125,7 @@ export default function Planificacion() {
 	const [intentoGuardarVisual, setIntentoGuardarVisual] = useState(false);
 	const [savingPlanning, setSavingPlanning] = useState(false);
 	const [archivingPlanningId, setArchivingPlanningId] = useState(null);
+	const [showArchived, setShowArchived] = useState(false);
 
 	const loadPlanningData = useCallback(
 		async (isActive = () => true) => {
@@ -144,14 +145,17 @@ export default function Planificacion() {
 			setErrorDb("");
 
 			try {
-				const planningQuery = supabase
+				let planningQuery = supabase
 					.from("planning_items")
 					.select(
-						"id, org_id, geofence_id, activity_id, start_date, end_date, planned_hours, planned_cost, status, notes"
+						"id, org_id, geofence_id, activity_id, start_date, end_date, planned_hours, planned_cost, status, notes, archived_at"
 					)
 					.eq("org_id", orgId)
-					.is("archived_at", null)
 					.order("start_date", { ascending: true });
+
+				planningQuery = showArchived
+					? planningQuery.not("archived_at", "is", null)
+					: planningQuery.is("archived_at", null);
 
 				const geofencesQuery = supabase
 					.from("geofences")
@@ -206,6 +210,7 @@ export default function Planificacion() {
 						horasPlanificadas: row.planned_hours,
 						costoPlanificado: row.planned_cost,
 						statusRaw: row.status,
+						archivedAt: row.archived_at,
 						estado,
 						avance: toAvance(row.status),
 						inicio: timeline.inicio,
@@ -234,7 +239,7 @@ export default function Planificacion() {
 				}
 			}
 		},
-		[orgId]
+		[orgId, showArchived]
 	);
 
 	useEffect(() => {
@@ -516,6 +521,7 @@ export default function Planificacion() {
 					</article>
 				</section>
 
+				{!showArchived ? (
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 					<div className="mb-4 flex items-center justify-between gap-3">
 						<h2 className="text-lg font-semibold text-slate-900">Nueva planificación</h2>
@@ -730,12 +736,33 @@ export default function Planificacion() {
 					</div>
 				</section>
 
+				) : null}
+
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-					<div className="mb-4 flex items-center justify-between">
-						<h2 className="text-lg font-semibold text-slate-900">Tabla de tareas</h2>
-						<span className="text-sm text-slate-500">
-							{mostrandoDemo ? "Datos demo locales" : "Datos reales Preview"}
-						</span>
+					<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+						<div>
+							<h2 className="text-lg font-semibold text-slate-900">
+								{showArchived ? "Planificaciones archivadas" : "Planificaciones activas"}
+							</h2>
+							<p className="mt-1 text-sm text-slate-500">
+								{showArchived
+									? "Historial de planificaciones archivadas. Solo lectura."
+									: "Planificaciones activas visibles en tabla y Gantt."}
+							</p>
+						</div>
+
+						<div className="flex flex-wrap items-center gap-3">
+							<span className="text-sm text-slate-500">
+								{mostrandoDemo ? "Datos demo locales" : "Datos reales Preview"}
+							</span>
+							<button
+								type="button"
+								onClick={() => setShowArchived((prev) => !prev)}
+								className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+							>
+								{showArchived ? "Ver activas" : "Ver archivadas"}
+							</button>
+						</div>
 					</div>
 
 					<div className="overflow-x-auto">
@@ -757,7 +784,7 @@ export default function Planificacion() {
 								{sinDatosReales ? (
 									<tr>
 										<td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
-											No hay planificación registrada para esta organización.
+											{showArchived ? "No hay planificaciones archivadas para esta organización." : "No hay planificación registrada para esta organización."}
 										</td>
 									</tr>
 								) : (
@@ -780,7 +807,7 @@ export default function Planificacion() {
 												</span>
 											</td>
 											<td className="px-3 py-2">
-												{tarea.dbId ? (
+												{tarea.dbId && !showArchived ? (
 													<button
 														type="button"
 														onClick={() => handleArchivarPlanificacion(tarea)}
@@ -790,7 +817,7 @@ export default function Planificacion() {
 														{archivingPlanningId === tarea.dbId ? "Archivando..." : "Archivar"}
 													</button>
 												) : (
-													<span className="text-xs text-slate-400">-</span>
+													<span className="text-xs text-slate-400">{showArchived ? "Archivada" : "-"}</span>
 												)}
 											</td>
 										</tr>
@@ -804,8 +831,9 @@ export default function Planificacion() {
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
 					<h2 className="text-lg font-semibold text-slate-900">Vista temporal simple</h2>
 					<p className="mb-4 mt-1 text-sm text-slate-500">
-						Escala semanal de días calendario. Permite planificar de lunes a domingo,
-						incluyendo sábado y domingo.
+						{showArchived
+							? "Escala semanal de días calendario para planificaciones archivadas."
+							: "Escala semanal de días calendario. Permite planificar de lunes a domingo, incluyendo sábado y domingo."}
 					</p>
 
 					<div className="overflow-x-auto">
