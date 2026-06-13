@@ -17,6 +17,9 @@ const mockTareasBase = [
     costoReal: 0,
     diferenciaHoras: -24,
     diferenciaCosto: 0,
+    desviacionHorasPct: getDeviationPercent(0, 24),
+    desviacionCostoPct: getDeviationPercent(0, 0),
+    semaforoPlanVsReal: getTrafficLightFromDeviation(getDeviationPercent(0, 24), getDeviationPercent(0, 0)),
     inicio: 1,
     duracion: 3,
   },
@@ -34,6 +37,9 @@ const mockTareasBase = [
     costoReal: 0,
     diferenciaHoras: -16,
     diferenciaCosto: 0,
+    desviacionHorasPct: getDeviationPercent(0, 16),
+    desviacionCostoPct: getDeviationPercent(0, 0),
+    semaforoPlanVsReal: getTrafficLightFromDeviation(getDeviationPercent(0, 16), getDeviationPercent(0, 0)),
     inicio: 3,
     duracion: 2,
   },
@@ -126,6 +132,65 @@ function isDateWithinRange(date, startDate, endDate) {
   if (!date || !startDate || !endDate) return false;
   const d = date.getTime();
   return d >= startDate.getTime() && d <= endDate.getTime();
+}
+
+function getDeviationPercent(actual, planned) {
+  const plannedNumber = toNumber(planned, 0);
+  const actualNumber = toNumber(actual, 0);
+
+  if (plannedNumber <= 0) return null;
+
+  return (Math.abs(actualNumber - plannedNumber) / plannedNumber) * 100;
+}
+
+function getTrafficLightFromDeviation(hoursDeviation, costDeviation) {
+  const values = [hoursDeviation, costDeviation].filter((value) => Number.isFinite(value));
+
+  if (values.length === 0) {
+    return {
+      level: "none",
+      label: "Sin base",
+      description: "No hay base planificada suficiente para calcular desviación.",
+    };
+  }
+
+  const worstDeviation = Math.max(...values);
+
+  if (worstDeviation <= 10) {
+    return {
+      level: "green",
+      label: "En rango",
+      description: `Desviación máxima ${worstDeviation.toFixed(2)}%.`,
+    };
+  }
+
+  if (worstDeviation <= 25) {
+    return {
+      level: "yellow",
+      label: "Desviación moderada",
+      description: `Desviación máxima ${worstDeviation.toFixed(2)}%.`,
+    };
+  }
+
+  return {
+    level: "red",
+    label: "Desviación alta",
+    description: `Desviación máxima ${worstDeviation.toFixed(2)}%.`,
+  };
+}
+
+function getTrafficLightStyle(level) {
+  if (level === "green") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (level === "yellow") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (level === "red") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-slate-200 bg-slate-50 text-slate-600";
+}
+
+function getTrafficLightIcon(level) {
+  if (level === "green") return "🟢";
+  if (level === "yellow") return "🟡";
+  if (level === "red") return "🔴";
+  return "⚪";
 }
 
 export default function Planificacion() {
@@ -240,6 +305,9 @@ export default function Planificacion() {
           );
           const diferenciaHoras = horasReales - toNumber(row.planned_hours);
           const diferenciaCosto = costoReal - toNumber(row.planned_cost);
+          const desviacionHorasPct = getDeviationPercent(horasReales, row.planned_hours);
+          const desviacionCostoPct = getDeviationPercent(costoReal, row.planned_cost);
+          const semaforoPlanVsReal = getTrafficLightFromDeviation(desviacionHorasPct, desviacionCostoPct);
 
           return {
             dbId: row.id || null,
@@ -260,6 +328,9 @@ export default function Planificacion() {
             costoReal,
             diferenciaHoras,
             diferenciaCosto,
+            desviacionHorasPct,
+            desviacionCostoPct,
+            semaforoPlanVsReal,
             notes: row.notes || "",
             statusRaw: row.status,
             archivedAt: row.archived_at,
@@ -931,6 +1002,7 @@ export default function Planificacion() {
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Costo real</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Dif. horas</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Dif. costo</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Semáforo</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Estado</th>
                   <th className="px-3 py-2 text-left font-semibold text-slate-600">Acciones</th>
                 </tr>
@@ -938,7 +1010,7 @@ export default function Planificacion() {
               <tbody className="divide-y divide-slate-100 bg-white">
                 {sinDatosReales ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-slate-500" colSpan={13}>
+                    <td className="px-3 py-6 text-center text-slate-500" colSpan={14}>
                       {showArchived
                         ? "No hay planificaciones archivadas para esta organización."
                         : "No hay planificación registrada para esta organización."}
@@ -958,6 +1030,20 @@ export default function Planificacion() {
                       <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.costoReal)}</td>
                       <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.diferenciaHoras)}</td>
                       <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.diferenciaCosto)}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${getTrafficLightStyle(
+                            tarea.semaforoPlanVsReal?.level
+                          )}`}
+                          title={tarea.semaforoPlanVsReal?.description || "Sin base"}
+                        >
+                          <span aria-hidden="true">{getTrafficLightIcon(tarea.semaforoPlanVsReal?.level)}</span>
+                          {tarea.semaforoPlanVsReal?.label || "Sin base"}
+                        </span>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {tarea.semaforoPlanVsReal?.description || "No hay base planificada suficiente."}
+                        </p>
+                      </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getEstadoStyle(tarea.estado)}`}>
                           {tarea.estado}
