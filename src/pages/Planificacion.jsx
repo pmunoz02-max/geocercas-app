@@ -47,6 +47,16 @@ const mockTareasBase = [
 
 const ganttDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const periodos = ["Semana", "Mes", "Trimestre", "Semestre", "Año", "Rango personalizado"];
+const NUEVA_PLANIFICACION_INICIAL = {
+	geofenceId: "",
+	activityId: "",
+	fechaInicio: "",
+	fechaFin: "",
+	horasPlanificadas: "",
+	costoPlanificado: "",
+	estado: "draft",
+	notas: "",
+};
 
 function getEstadoStyle(estado) {
 	if (estado === "Completada") return "bg-emerald-100 text-emerald-700";
@@ -108,6 +118,9 @@ export default function Planificacion() {
 	const [loadingDb, setLoadingDb] = useState(false);
 	const [errorDb, setErrorDb] = useState("");
 	const [dbReady, setDbReady] = useState(false);
+	const [nuevaPlanificacionVisual, setNuevaPlanificacionVisual] = useState(
+		NUEVA_PLANIFICACION_INICIAL
+	);
 
 	useEffect(() => {
 		if (!orgId) {
@@ -318,6 +331,166 @@ export default function Planificacion() {
 						<p className="text-sm text-slate-500">Avance promedio</p>
 						<p className="mt-1 text-2xl font-semibold text-slate-900">{avancePromedio}%</p>
 					</article>
+				</section>
+
+				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+					<div className="mb-4 flex items-center justify-between gap-3">
+						<h2 className="text-lg font-semibold text-slate-900">Nueva planificación</h2>
+						<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
+							Visual preview
+						</span>
+					</div>
+					<p className="mb-4 text-sm text-slate-500">
+						Formulario visual de referencia. No guarda en Supabase y no ejecuta insert,
+						update, delete ni upsert.
+					</p>
+
+					<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Geocerca
+							<select
+								value={nuevaPlanificacionVisual.geofenceId}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({ ...prev, geofenceId: e.target.value }))
+								}
+								className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+							>
+								<option value="">Seleccionar geocerca</option>
+								{geofencesDb.map((g) => (
+									<option key={g.id} value={g.id}>
+										{g.name || "Geocerca sin nombre"}
+									</option>
+								))}
+							</select>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Actividad
+							<select
+								value={nuevaPlanificacionVisual.activityId}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({ ...prev, activityId: e.target.value }))
+								}
+								className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+							>
+								<option value="">Seleccionar actividad</option>
+								{activitiesDb.map((a) => (
+									<option key={a.id} value={a.id}>
+										{a.name || "Actividad sin nombre"}
+									</option>
+								))}
+							</select>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Fecha inicio
+							<input
+								type="date"
+								value={nuevaPlanificacionVisual.fechaInicio}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({ ...prev, fechaInicio: e.target.value }))
+								}
+								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+							/>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Fecha fin
+							<input
+								type="date"
+								value={nuevaPlanificacionVisual.fechaFin}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({ ...prev, fechaFin: e.target.value }))
+								}
+								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+							/>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Horas planificadas
+							<input
+								type="number"
+								min="0"
+								step="0.5"
+								placeholder="0"
+								value={nuevaPlanificacionVisual.horasPlanificadas}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({
+										...prev,
+										horasPlanificadas: e.target.value,
+									}))
+								}
+								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+							/>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Costo planificado
+							<input
+								type="number"
+								min="0"
+								step="0.01"
+								placeholder="0.00"
+								value={nuevaPlanificacionVisual.costoPlanificado}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({
+										...prev,
+										costoPlanificado: e.target.value,
+									}))
+								}
+								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+							/>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+							Estado
+							<select
+								value={nuevaPlanificacionVisual.estado}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({ ...prev, estado: e.target.value }))
+								}
+								className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+							>
+								<option value="draft">Pendiente</option>
+								<option value="approved">En progreso</option>
+								<option value="closed">Completada</option>
+								<option value="archived">Archivada</option>
+							</select>
+						</label>
+
+						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500 xl:col-span-4">
+							Notas
+							<textarea
+								rows={3}
+								placeholder="Notas operativas (solo visual)"
+								value={nuevaPlanificacionVisual.notas}
+								onChange={(e) =>
+									setNuevaPlanificacionVisual((prev) => ({ ...prev, notas: e.target.value }))
+								}
+								className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+							/>
+						</label>
+					</div>
+
+					<div className="mt-4 flex flex-wrap items-center gap-3">
+						<button
+							type="button"
+							onClick={() => setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL)}
+							className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+						>
+							Cancelar
+						</button>
+						<button
+							type="button"
+							disabled
+							className="cursor-not-allowed rounded-lg bg-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+						>
+							Guardar próximamente
+						</button>
+						<span className="text-xs text-slate-500">
+							Solo visual para validación de UX. Sin persistencia en backend.
+						</span>
+					</div>
 				</section>
 
 				<section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
