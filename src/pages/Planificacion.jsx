@@ -5,9 +5,12 @@ import { useAuth } from "@/context/auth.js";
 const mockTareasBase = [
   {
     id: "T-001",
+    geofenceId: "mock-campus-norte",
+    activityId: "mock-levantamiento",
     geocerca: "Campus Norte",
     actividad: "Levantamiento inicial",
     estado: "En progreso",
+    statusRaw: "approved",
     avance: 65,
     fechaInicio: "2026-06-01",
     fechaFin: "2026-06-03",
@@ -25,9 +28,12 @@ const mockTareasBase = [
   },
   {
     id: "T-002",
+    geofenceId: "mock-campus-norte",
+    activityId: "mock-marcacion",
     geocerca: "Campus Norte",
     actividad: "Marcación de perímetro",
     estado: "Pendiente",
+    statusRaw: "draft",
     avance: 20,
     fechaInicio: "2026-06-03",
     fechaFin: "2026-06-04",
@@ -57,6 +63,15 @@ const NUEVA_PLANIFICACION_INICIAL = {
   costoPlanificado: "",
   estado: "draft",
   notas: "",
+};
+
+const FILTROS_PLANIFICACION_INICIAL = {
+  semaforo: "all",
+  geofenceId: "all",
+  activityId: "all",
+  estado: "all",
+  fechaDesde: "",
+  fechaHasta: "",
 };
 
 function getEstadoStyle(estado) {
@@ -209,6 +224,7 @@ export default function Planificacion() {
   const [restoringPlanningId, setRestoringPlanningId] = useState(null);
   const [editingPlanningId, setEditingPlanningId] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [filtrosPlanificacion, setFiltrosPlanificacion] = useState(FILTROS_PLANIFICACION_INICIAL);
 
   const loadPlanningData = useCallback(
     async (isActive = () => true) => {
@@ -393,15 +409,62 @@ export default function Planificacion() {
     [activitiesDb, nuevaPlanificacionVisual.activityId]
   );
 
-  const total = tareas.length;
-  const completadas = tareas.filter((t) => t.estado === "Completada").length;
-  const enProgreso = tareas.filter((t) => t.estado === "En progreso").length;
-  const avancePromedio = total > 0 ? Math.round(tareas.reduce((acc, t) => acc + t.avance, 0) / total) : 0;
+  const tareasFiltradas = useMemo(() => {
+    const filtroDesde = parseLocalDate(filtrosPlanificacion.fechaDesde);
+    const filtroHasta = parseLocalDate(filtrosPlanificacion.fechaHasta);
+
+    return tareas.filter((tarea) => {
+      if (filtrosPlanificacion.semaforo !== "all") {
+        const level = tarea.semaforoPlanVsReal?.level || "none";
+        if (level !== filtrosPlanificacion.semaforo) return false;
+      }
+
+      if (filtrosPlanificacion.geofenceId !== "all" && tarea.geofenceId !== filtrosPlanificacion.geofenceId) {
+        return false;
+      }
+
+      if (filtrosPlanificacion.activityId !== "all" && tarea.activityId !== filtrosPlanificacion.activityId) {
+        return false;
+      }
+
+      if (filtrosPlanificacion.estado !== "all" && tarea.statusRaw !== filtrosPlanificacion.estado) {
+        return false;
+      }
+
+      if (filtroDesde || filtroHasta) {
+        const tareaInicio = parseLocalDate(tarea.fechaInicio);
+        const tareaFin = parseLocalDate(tarea.fechaFin) || tareaInicio;
+
+        if (!tareaInicio || !tareaFin) return false;
+        if (filtroDesde && tareaFin.getTime() < filtroDesde.getTime()) return false;
+        if (filtroHasta && tareaInicio.getTime() > filtroHasta.getTime()) return false;
+      }
+
+      return true;
+    });
+  }, [filtrosPlanificacion, tareas]);
+
+  const hayFiltrosPlanificacion = useMemo(
+    () =>
+      filtrosPlanificacion.semaforo !== "all" ||
+      filtrosPlanificacion.geofenceId !== "all" ||
+      filtrosPlanificacion.activityId !== "all" ||
+      filtrosPlanificacion.estado !== "all" ||
+      filtrosPlanificacion.fechaDesde !== "" ||
+      filtrosPlanificacion.fechaHasta !== "",
+    [filtrosPlanificacion]
+  );
+
+  const total = tareasFiltradas.length;
+  const completadas = tareasFiltradas.filter((t) => t.estado === "Completada").length;
+  const enProgreso = tareasFiltradas.filter((t) => t.estado === "En progreso").length;
+  const avancePromedio =
+    total > 0 ? Math.round(tareasFiltradas.reduce((acc, t) => acc + t.avance, 0) / total) : 0;
   const planVsRealKpis = useMemo(() => {
-    const totalHorasPlanificadas = tareas.reduce((acc, tarea) => acc + toNumber(tarea.horasPlanificadas), 0);
-    const totalHorasReales = tareas.reduce((acc, tarea) => acc + toNumber(tarea.horasReales), 0);
-    const totalCostoPlanificado = tareas.reduce((acc, tarea) => acc + toNumber(tarea.costoPlanificado), 0);
-    const totalCostoReal = tareas.reduce((acc, tarea) => acc + toNumber(tarea.costoReal), 0);
+    const totalHorasPlanificadas = tareasFiltradas.reduce((acc, tarea) => acc + toNumber(tarea.horasPlanificadas), 0);
+    const totalHorasReales = tareasFiltradas.reduce((acc, tarea) => acc + toNumber(tarea.horasReales), 0);
+    const totalCostoPlanificado = tareasFiltradas.reduce((acc, tarea) => acc + toNumber(tarea.costoPlanificado), 0);
+    const totalCostoReal = tareasFiltradas.reduce((acc, tarea) => acc + toNumber(tarea.costoReal), 0);
     const diferenciaHoras = totalHorasReales - totalHorasPlanificadas;
     const diferenciaCosto = totalCostoReal - totalCostoPlanificado;
     const cumplimientoHoras = totalHorasPlanificadas > 0 ? (totalHorasReales / totalHorasPlanificadas) * 100 : null;
@@ -415,10 +478,10 @@ export default function Planificacion() {
       diferenciaCosto,
       cumplimientoHoras,
     };
-  }, [tareas]);
+  }, [tareasFiltradas]);
 
   const mostrandoDemo = !dbReady;
-  const sinDatosReales = dbReady && tareas.length === 0;
+  const sinDatosReales = tareasFiltradas.length === 0;
   const rawTarifaActividad = actividadSeleccionada?.hourly_rate;
   const tarifaActividad = Number(rawTarifaActividad);
   const tieneTarifaAutomatica =
@@ -480,6 +543,10 @@ export default function Planificacion() {
     `${claseCampoBase} ${
       intentoGuardarVisual && erroresNuevaPlanificacion[errorKey] ? "border-rose-400 bg-rose-50" : "border-slate-300 bg-white"
     }`;
+
+  const limpiarFiltrosPlanificacion = () => {
+    setFiltrosPlanificacion(FILTROS_PLANIFICACION_INICIAL);
+  };
 
   const handleCancelarVisual = () => {
     setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
@@ -702,6 +769,113 @@ export default function Planificacion() {
               </label>
             </div>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Filtros gerenciales Plan vs Real</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Filtra tabla, Gantt y KPIs por semáforo, geocerca, actividad, estado o rango de fechas.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={limpiarFiltrosPlanificacion}
+              disabled={!hayFiltrosPlanificacion}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Limpiar filtros
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              Semáforo
+              <select
+                value={filtrosPlanificacion.semaforo}
+                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, semaforo: e.target.value }))}
+                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+              >
+                <option value="all">Todos</option>
+                <option value="green">En rango</option>
+                <option value="yellow">Desviación moderada</option>
+                <option value="red">Desviación alta</option>
+                <option value="none">Sin base</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              Geocerca
+              <select
+                value={filtrosPlanificacion.geofenceId}
+                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, geofenceId: e.target.value }))}
+                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+              >
+                <option value="all">Todas</option>
+                {geofencesDb.map((g) => (
+                  <option key={g.id} value={String(g.id)}>
+                    {g.name || "Geocerca sin nombre"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              Actividad
+              <select
+                value={filtrosPlanificacion.activityId}
+                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, activityId: e.target.value }))}
+                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+              >
+                <option value="all">Todas</option>
+                {activitiesDb.map((a) => (
+                  <option key={a.id} value={String(a.id)}>
+                    {a.name || "Actividad sin nombre"}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              Estado
+              <select
+                value={filtrosPlanificacion.estado}
+                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, estado: e.target.value }))}
+                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+              >
+                <option value="all">Todos</option>
+                <option value="draft">Pendiente</option>
+                <option value="approved">En progreso</option>
+                <option value="closed">Completada</option>
+                <option value="archived">Archivada</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              Fecha desde
+              <input
+                type="date"
+                value={filtrosPlanificacion.fechaDesde}
+                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, fechaDesde: e.target.value }))}
+                className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+              />
+            </label>
+
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              Fecha hasta
+              <input
+                type="date"
+                value={filtrosPlanificacion.fechaHasta}
+                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, fechaHasta: e.target.value }))}
+                className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+              />
+            </label>
+          </div>
+
+          <p className="mt-3 text-xs text-slate-500">
+            Mostrando {tareasFiltradas.length} de {tareas.length} planificaciones del modo actual.
+          </p>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1011,13 +1185,15 @@ export default function Planificacion() {
                 {sinDatosReales ? (
                   <tr>
                     <td className="px-3 py-6 text-center text-slate-500" colSpan={14}>
-                      {showArchived
-                        ? "No hay planificaciones archivadas para esta organización."
-                        : "No hay planificación registrada para esta organización."}
+                      {hayFiltrosPlanificacion
+                        ? "No hay planificaciones que coincidan con los filtros seleccionados."
+                        : showArchived
+                          ? "No hay planificaciones archivadas para esta organización."
+                          : "No hay planificación registrada para esta organización."}
                     </td>
                   </tr>
                 ) : (
-                  tareas.map((tarea) => (
+                  tareasFiltradas.map((tarea) => (
                     <tr key={tarea.id}>
                       <td className="px-3 py-2 text-slate-700">{tarea.id}</td>
                       <td className="px-3 py-2 text-slate-700">{tarea.geocerca || "-"}</td>
@@ -1110,7 +1286,7 @@ export default function Planificacion() {
               </div>
 
               <div className="mt-2 space-y-2">
-                {tareas.map((tarea) => {
+                {tareasFiltradas.map((tarea) => {
                   const inicio = Math.max(1, tarea.inicio);
                   const fin = Math.min(7, inicio + tarea.duracion - 1);
                   return (
