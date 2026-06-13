@@ -606,3 +606,63 @@ Validación Preview:
 * La tabla siguió funcionando.
 * El Gantt siguió funcionando.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+## Fase 11D — Filtros gerenciales Plan vs Real
+
+Se habilitó en Preview un bloque de filtros gerenciales para analizar la planificación operativa y la ejecución real.
+
+Filtros agregados:
+
+* Semáforo
+* Geocerca
+* Actividad
+* Estado
+* Fecha desde
+* Fecha hasta
+
+Los filtros afectan:
+
+* KPIs generales
+* KPIs Plan vs Real
+* Tabla de planificación
+* Gantt semanal
+
+Reglas de funcionamiento:
+
+* La carga original desde Supabase se mantiene sin cambios.
+* Se crea una lista derivada `tareasFiltradas`.
+* Los KPIs se calculan sobre `tareasFiltradas`.
+* La tabla muestra `tareasFiltradas`.
+* El Gantt muestra `tareasFiltradas`.
+* El botón `Limpiar filtros` restaura la vista completa del modo actual.
+
+Regla de rango de fechas:
+
+* Si existe `fechaDesde`, una planificación se muestra si su fecha fin es mayor o igual a `fechaDesde`.
+* Si existe `fechaHasta`, una planificación se muestra si su fecha inicio es menor o igual a `fechaHasta`.
+* Esto permite mostrar planificaciones que se cruzan con el rango seleccionado.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* Se filtró por semáforo rojo.
+* Se filtró por geocerca.
+* Se filtró por actividad.
+* Se filtró por estado.
+* Se filtró por fecha desde y fecha hasta.
+* Los KPIs, la tabla y el Gantt cambiaron correctamente con los filtros.
+* El botón `Limpiar filtros` restauró la vista completa.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
