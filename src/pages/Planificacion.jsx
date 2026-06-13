@@ -257,6 +257,10 @@ export default function Planificacion() {
 		if (dbReady) return tareasDb;
 		return mockTareasBase;
 	}, [dbReady, tareasDb]);
+	const actividadSeleccionada = useMemo(
+		() => activitiesDb.find((activity) => String(activity.id) === nuevaPlanificacionVisual.activityId) || null,
+		[activitiesDb, nuevaPlanificacionVisual.activityId]
+	);
 
 	const total = tareas.length;
 	const completadas = tareas.filter((t) => t.estado === "Completada").length;
@@ -267,6 +271,16 @@ export default function Planificacion() {
 			: 0;
 	const mostrandoDemo = !dbReady;
 	const sinDatosReales = dbReady && tareas.length === 0;
+	const rawTarifaActividad = actividadSeleccionada?.hourly_rate;
+	const tarifaActividad = Number(rawTarifaActividad);
+	const tieneTarifaAutomatica =
+		nuevaPlanificacionVisual.activityId !== "" &&
+		rawTarifaActividad !== null &&
+		rawTarifaActividad !== undefined &&
+		rawTarifaActividad !== "" &&
+		Number.isFinite(tarifaActividad) &&
+		tarifaActividad >= 0;
+	const monedaActividad = actividadSeleccionada?.currency_code || null;
 	const erroresNuevaPlanificacion = useMemo(() => {
 		const errors = {};
 		const form = nuevaPlanificacionVisual;
@@ -324,6 +338,25 @@ export default function Planificacion() {
 		setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
 		setIntentoGuardarVisual(false);
 	};
+
+	useEffect(() => {
+		const horas = Number(nuevaPlanificacionVisual.horasPlanificadas);
+
+		if (!tieneTarifaAutomatica || nuevaPlanificacionVisual.horasPlanificadas === "") {
+			return;
+		}
+
+		if (!Number.isFinite(horas) || horas < 0) {
+			return;
+		}
+
+		const costoCalculado = (horas * tarifaActividad).toFixed(2);
+		setNuevaPlanificacionVisual((prev) =>
+			prev.costoPlanificado === costoCalculado
+				? prev
+				: { ...prev, costoPlanificado: costoCalculado }
+		);
+	}, [nuevaPlanificacionVisual.horasPlanificadas, tarifaActividad, tieneTarifaAutomatica]);
 
 	const handleGuardarVisual = async () => {
 		setIntentoGuardarVisual(true);
@@ -588,6 +621,7 @@ export default function Planificacion() {
 										costoPlanificado: e.target.value,
 									}))
 								}
+								readOnly={tieneTarifaAutomatica}
 								className={getClaseCampo("costoPlanificado")}
 							/>
 							{intentoGuardarVisual && erroresNuevaPlanificacion.costoPlanificado ? (
@@ -595,6 +629,13 @@ export default function Planificacion() {
 									{erroresNuevaPlanificacion.costoPlanificado}
 								</span>
 							) : null}
+							<span className="mt-1 text-xs normal-case text-slate-500">
+								{tieneTarifaAutomatica
+									? `Se calcula automáticamente según tarifa de actividad y horas${
+										monedaActividad ? ` (${monedaActividad})` : ""
+									  }.`
+									: `Sin tarifa por hora${monedaActividad ? ` (${monedaActividad})` : ""}. Ingresa el costo manualmente.`}
+							</span>
 						</label>
 
 						<label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
