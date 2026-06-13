@@ -790,3 +790,59 @@ Validación Preview:
 * La exportación CSV siguió funcionando.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
 * Los acentos se visualizaron correctamente en el navegador.
+## Fase 11G — Totales en tabla de planificación
+
+Se agregó en Preview una fila de totales al final de la tabla de planificación.
+
+Objetivo:
+
+* Mostrar el total de la vista actual directamente dentro de la tabla.
+* Facilitar revisión gerencial sin depender solo de los KPIs superiores.
+* Mantener consistencia entre filtros, tabla, KPIs, Gantt y exportación.
+
+Totales agregados:
+
+* Horas planificadas
+* Costo planificado
+* Horas reales
+* Costo real
+* Diferencia de horas
+* Diferencia de costo
+
+Fuente de cálculo:
+
+* `tareasFiltradas`
+
+Reglas de funcionamiento:
+
+* Los totales se calculan sobre la vista filtrada actual.
+* Respetan filtros por semáforo, geocerca, actividad, estado y rango de fechas.
+* Respetan el modo actual: activas o archivadas.
+* Al limpiar filtros, los totales vuelven a calcularse sobre toda la vista actual.
+* Si no hay filas visibles, no se muestra la fila de totales.
+* No realiza nuevas consultas a Supabase.
+* No modifica la base de datos.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* La tabla mostró la fila `Total vista actual`.
+* Los totales de horas y costos se visualizaron correctamente.
+* Los totales cambiaron al aplicar filtros.
+* Los totales volvieron al valor completo al limpiar filtros.
+* El cambio entre activas y archivadas funcionó correctamente.
+* Crear, editar, archivar, restaurar y exportar CSV siguieron funcionando correctamente.
