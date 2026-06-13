@@ -125,3 +125,16 @@ Esto permite probar módulos de gestión como Planificación con una organizaci�
 
 No se modificó RLS.
 No se permitió acceso a `viewer` ni `tracker`.
+
+## Validación Preview — Días calendario
+
+Se validó que el módulo Planificación usa días calendario completos de lunes a domingo.
+
+Prueba realizada:
+- B1 / Poda del 2026-06-15 al 2026-06-19.
+- B1 / Poda del 2026-06-20 al 2026-06-21.
+
+Resultado:
+- La primera planificación se muestra de lunes a viernes.
+- La segunda planificación se muestra en sábado y domingo.
+- Producción no fue tocada.
