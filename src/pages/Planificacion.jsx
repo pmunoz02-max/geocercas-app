@@ -124,6 +124,7 @@ export default function Planificacion() {
 	);
 	const [intentoGuardarVisual, setIntentoGuardarVisual] = useState(false);
 	const [savingPlanning, setSavingPlanning] = useState(false);
+	const [archivingPlanningId, setArchivingPlanningId] = useState(null);
 
 	const loadPlanningData = useCallback(
 		async (isActive = () => true) => {
@@ -192,6 +193,7 @@ export default function Planificacion() {
 					const geofenceId = row.geofence_id ? String(row.geofence_id) : "";
 					const activityId = row.activity_id ? String(row.activity_id) : "";
 					return {
+						dbId: row.id || null,
 						id: row.id ? `P-${String(row.id).slice(0, 6).toUpperCase()}` : `P-${index + 1}`,
 						geocerca: geofenceId
 							? geofenceNames.get(geofenceId) || `Geocerca ${geofenceId.slice(0, 8)}`
@@ -203,6 +205,7 @@ export default function Planificacion() {
 						fechaFin: row.end_date,
 						horasPlanificadas: row.planned_hours,
 						costoPlanificado: row.planned_cost,
+						statusRaw: row.status,
 						estado,
 						avance: toAvance(row.status),
 						inicio: timeline.inicio,
@@ -396,6 +399,37 @@ export default function Planificacion() {
 			window.alert("No se pudo guardar la planificación.");
 		} finally {
 			setSavingPlanning(false);
+		}
+	};
+
+	const handleArchivarPlanificacion = async (tarea) => {
+		if (!tarea?.dbId || !orgId) return;
+
+		const confirmado = window.confirm(
+			`Archivar la planificación ${tarea.id}? Esta acción la ocultará de la lista activa.`
+		);
+		if (!confirmado) return;
+
+		setArchivingPlanningId(tarea.dbId);
+		try {
+			const { error } = await supabase
+				.from("planning_items")
+				.update({
+					status: "archived",
+					archived_at: new Date().toISOString(),
+				})
+				.eq("id", tarea.dbId)
+				.eq("org_id", orgId);
+
+			if (error) throw error;
+
+			await loadPlanningData();
+			window.alert("Planificación archivada correctamente.");
+		} catch (err) {
+			console.error("[Planificacion] Error archivando planificación:", err);
+			window.alert("No se pudo archivar la planificación.");
+		} finally {
+			setArchivingPlanningId(null);
 		}
 	};
 
@@ -716,12 +750,13 @@ export default function Planificacion() {
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Horas planificadas</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Costo planificado</th>
 									<th className="px-3 py-2 text-left font-semibold text-slate-600">Estado</th>
+									<th className="px-3 py-2 text-left font-semibold text-slate-600">Acciones</th>
 								</tr>
 							</thead>
 							<tbody className="divide-y divide-slate-100 bg-white">
 								{sinDatosReales ? (
 									<tr>
-										<td className="px-3 py-6 text-center text-slate-500" colSpan={8}>
+										<td className="px-3 py-6 text-center text-slate-500" colSpan={9}>
 											No hay planificación registrada para esta organización.
 										</td>
 									</tr>
@@ -743,6 +778,20 @@ export default function Planificacion() {
 												>
 													{tarea.estado}
 												</span>
+											</td>
+											<td className="px-3 py-2">
+												{tarea.dbId ? (
+													<button
+														type="button"
+														onClick={() => handleArchivarPlanificacion(tarea)}
+														disabled={archivingPlanningId === tarea.dbId}
+														className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+													>
+														{archivingPlanningId === tarea.dbId ? "Archivando..." : "Archivar"}
+													</button>
+												) : (
+													<span className="text-xs text-slate-400">-</span>
+												)}
 											</td>
 										</tr>
 									))
