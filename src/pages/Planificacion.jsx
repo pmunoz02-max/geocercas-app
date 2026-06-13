@@ -500,6 +500,18 @@ export default function Planificacion() {
     };
   }, [tareasFiltradas]);
 
+  const totalesTablaPlanificacion = useMemo(
+    () => ({
+      horasPlanificadas: planVsRealKpis.totalHorasPlanificadas,
+      costoPlanificado: planVsRealKpis.totalCostoPlanificado,
+      horasReales: planVsRealKpis.totalHorasReales,
+      costoReal: planVsRealKpis.totalCostoReal,
+      diferenciaHoras: planVsRealKpis.diferenciaHoras,
+      diferenciaCosto: planVsRealKpis.diferenciaCosto,
+    }),
+    [planVsRealKpis]
+  );
+
   const resumenSemaforoKpis = useMemo(() => {
     const totalSemaforo = tareasFiltradas.length;
     const base = {
@@ -1439,6 +1451,24 @@ export default function Planificacion() {
                   ))
                 )}
               </tbody>
+              {!sinDatosReales ? (
+                <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-700">
+                  <tr>
+                    <td className="px-3 py-3 text-slate-900" colSpan={5}>
+                      Total vista actual
+                    </td>
+                    <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.horasPlanificadas)}</td>
+                    <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.costoPlanificado)}</td>
+                    <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.horasReales)}</td>
+                    <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.costoReal)}</td>
+                    <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.diferenciaHoras)}</td>
+                    <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.diferenciaCosto)}</td>
+                    <td className="px-3 py-3 text-xs font-medium text-slate-500">Vista filtrada</td>
+                    <td className="px-3 py-3 text-xs font-medium text-slate-500">-</td>
+                    <td className="px-3 py-3 text-xs font-medium text-slate-500">-</td>
+                  </tr>
+                </tfoot>
+              ) : null}
             </table>
           </div>
         </section>
