@@ -149,3 +149,31 @@ Se dejó documentado que la vista `/planificacion` en Preview ya muestra en tabl
 - Costo planificado
 - Estado
 - Vista temporal Lun-Dom
+
+## Fase 5 — Formulario visual Nueva planificación
+
+Se agregó en Preview un formulario visual para crear planificación operativa.
+
+Campos visibles:
+- Geocerca
+- Actividad
+- Fecha inicio
+- Fecha fin
+- Horas planificadas
+- Costo planificado
+- Estado
+- Notas
+
+Estado actual:
+- El formulario es solo visual.
+- No ejecuta `insert`.
+- No ejecuta `update`.
+- No ejecuta `delete`.
+- No ejecuta `upsert`.
+- No ejecuta `rpc`.
+- El botón de guardado aparece como “Guardar próximamente”.
+
+Objetivo:
+Validar UX antes de habilitar escritura real en `public.planning_items`.
+
+Producción no fue tocada.
