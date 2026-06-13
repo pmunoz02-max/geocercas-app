@@ -846,3 +846,73 @@ Validación Preview:
 * Los totales volvieron al valor completo al limpiar filtros.
 * El cambio entre activas y archivadas funcionó correctamente.
 * Crear, editar, archivar, restaurar y exportar CSV siguieron funcionando correctamente.
+## Fase 12A — Pulido comercial visual/textos
+
+Se aplicó en Preview un pulido comercial del módulo de planificación operativa.
+
+Objetivo:
+
+* Mejorar la presentación del módulo para demostraciones comerciales.
+* Comunicar mejor el valor gerencial del módulo.
+* Mostrar el módulo como una herramienta de control operativo, no solo como una tabla de planificación.
+
+Cambios visuales y de texto:
+
+* Se mejoró el encabezado principal.
+* Se agregó el concepto `Control gerencial operativo`.
+* Se agregaron badges comerciales:
+
+  * Preview seguro
+  * Plan vs Real
+  * CSV ejecutivo
+* Se mejoró el texto descriptivo del módulo.
+* Se ajustaron textos de filtros para explicar que afectan KPIs, tabla, Gantt y exportación.
+* El botón de exportación pasó a mostrarse como `Exportar CSV ejecutivo`.
+* Los KPIs generales recibieron etiquetas más orientadas a cliente:
+
+  * Planificaciones visibles
+  * Cerradas
+  * En ejecución
+  * Avance operativo
+* La tabla mantiene el indicador `Datos reales Preview`.
+* La fila de totales se presenta como `Total vista filtrada`.
+* La vista temporal se presenta como `Gantt operativo semanal`.
+
+Reglas de funcionamiento:
+
+* No se modificó la lógica de carga de datos.
+* No se modificó la lógica de creación.
+* No se modificó la lógica de edición.
+* No se modificó la lógica de archivado.
+* No se modificó la lógica de restauración.
+* No se modificó la exportación CSV.
+* No se modificaron los filtros.
+* No se modificó el cálculo de KPIs.
+* No se modificó el cálculo del semáforo.
+* No se modificó el Gantt.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* El encabezado comercial se visualizó correctamente.
+* Los badges `Preview seguro`, `Plan vs Real` y `CSV ejecutivo` se visualizaron correctamente.
+* El botón `Exportar CSV ejecutivo` funcionó correctamente.
+* La tabla mostró `Datos reales Preview` y `Total vista filtrada`.
+* El Gantt se visualizó como `Gantt operativo semanal`.
+* Filtros, KPIs, resumen semáforo y CSV siguieron funcionando.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+* Los acentos se visualizaron correctamente en el navegador.
