@@ -489,3 +489,59 @@ Validación Preview:
 * Las planificaciones coincidentes con `v_costos_hybrid_preview` mostraron valores reales.
 * El Gantt siguió funcionando.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+## Fase 11B — KPIs Plan vs Real
+
+Se habilitó en Preview un bloque de KPIs generales para comparar planificación operativa contra ejecución real.
+
+Los KPIs se calculan a partir de las filas visibles en el módulo de planificación.
+
+KPIs agregados:
+
+* Horas planificadas
+* Horas reales
+* Diferencia de horas
+* Porcentaje de cumplimiento de horas
+* Costo planificado
+* Costo real
+* Diferencia de costo
+* Modo actual: activas o archivadas
+
+Fuente de datos:
+
+* Planificado: `public.planning_items`
+* Real: `public.v_costos_hybrid_preview`
+
+Reglas de cálculo:
+
+* `totalHorasPlanificadas`: suma de horas planificadas.
+* `totalHorasReales`: suma de horas reales coincidentes.
+* `diferenciaHoras = totalHorasReales - totalHorasPlanificadas`.
+* `totalCostoPlanificado`: suma de costo planificado.
+* `totalCostoReal`: suma de costo real.
+* `diferenciaCosto = totalCostoReal - totalCostoPlanificado`.
+* `cumplimientoHoras = totalHorasReales / totalHorasPlanificadas * 100`.
+* Si no hay horas planificadas, el cumplimiento se muestra como `-`.
+
+Reglas de seguridad:
+
+* No se agregó nueva escritura.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen tres `update` controlados:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+  * Editar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* La consulta a `v_costos_hybrid_preview` sigue siendo solo lectura.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* Los KPIs se mostraron correctamente en `/planificacion`.
+* El KPI `Modo actual` cambió correctamente entre activas y archivadas.
+* La tabla siguió funcionando.
+* El Gantt siguió funcionando.
+* Crear, editar, archivar y restaurar siguieron funcionando correctamente.
+* Los acentos se visualizaron correctamente en el navegador.
