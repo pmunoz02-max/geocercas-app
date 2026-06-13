@@ -500,6 +500,41 @@ export default function Planificacion() {
     };
   }, [tareasFiltradas]);
 
+  const resumenSemaforoKpis = useMemo(() => {
+    const totalSemaforo = tareasFiltradas.length;
+    const base = {
+      green: 0,
+      yellow: 0,
+      red: 0,
+      none: 0,
+    };
+
+    tareasFiltradas.forEach((tarea) => {
+      const level = tarea.semaforoPlanVsReal?.level || "none";
+
+      if (base[level] === undefined) {
+        base.none += 1;
+        return;
+      }
+
+      base[level] += 1;
+    });
+
+    const pct = (value) => (totalSemaforo > 0 ? (value / totalSemaforo) * 100 : 0);
+
+    return {
+      totalSemaforo,
+      green: base.green,
+      yellow: base.yellow,
+      red: base.red,
+      none: base.none,
+      greenPct: pct(base.green),
+      yellowPct: pct(base.yellow),
+      redPct: pct(base.red),
+      nonePct: pct(base.none),
+    };
+  }, [tareasFiltradas]);
+
   const mostrandoDemo = !dbReady;
   const sinDatosReales = tareasFiltradas.length === 0;
   const rawTarifaActividad = actividadSeleccionada?.hourly_rate;
@@ -1023,6 +1058,69 @@ export default function Planificacion() {
             <p className="text-sm text-slate-500">Modo actual</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{showArchived ? "Archivadas" : "Activas"}</p>
           </article>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <div className="mb-4 flex flex-col gap-1">
+            <h2 className="text-lg font-semibold text-slate-900">Resumen ejecutivo por semáforo</h2>
+            <p className="text-sm text-slate-500">
+              Distribución de la vista filtrada actual según desviaciones Plan vs Real.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("green")}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">En rango</p>
+                <span className="text-xl" aria-hidden="true">
+                  {getTrafficLightIcon("green")}
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.green}</p>
+              <p className="mt-1 text-xs">
+                {formatMetric(resumenSemaforoKpis.greenPct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+              </p>
+            </article>
+
+            <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("yellow")}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">Desviación moderada</p>
+                <span className="text-xl" aria-hidden="true">
+                  {getTrafficLightIcon("yellow")}
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.yellow}</p>
+              <p className="mt-1 text-xs">
+                {formatMetric(resumenSemaforoKpis.yellowPct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+              </p>
+            </article>
+
+            <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("red")}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">Desviación alta</p>
+                <span className="text-xl" aria-hidden="true">
+                  {getTrafficLightIcon("red")}
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.red}</p>
+              <p className="mt-1 text-xs">
+                {formatMetric(resumenSemaforoKpis.redPct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+              </p>
+            </article>
+
+            <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("none")}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-medium">Sin base</p>
+                <span className="text-xl" aria-hidden="true">
+                  {getTrafficLightIcon("none")}
+                </span>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.none}</p>
+              <p className="mt-1 text-xs">
+                {formatMetric(resumenSemaforoKpis.nonePct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+              </p>
+            </article>
+          </div>
         </section>
 
         {!showArchived ? (
