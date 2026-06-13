@@ -402,11 +402,6 @@ export default function Planificacion() {
 			return;
 		}
 
-		if (editingPlanningId) {
-			window.alert("La edición real se habilitará en el siguiente paso.");
-			return;
-		}
-
 		if (!orgId) {
 			window.alert("No hay organización activa para guardar planificación.");
 			return;
@@ -425,6 +420,26 @@ export default function Planificacion() {
 				status: nuevaPlanificacionVisual.estado,
 				notes: nuevaPlanificacionVisual.notas?.trim() || null,
 			};
+
+			if (editingPlanningId) {
+				const { error } = await supabase
+					.from("planning_items")
+					.update({
+						...payload,
+						updated_at: new Date().toISOString(),
+					})
+					.eq("id", editingPlanningId)
+					.eq("org_id", orgId);
+
+				if (error) throw error;
+
+				await loadPlanningData();
+				setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
+				setIntentoGuardarVisual(false);
+				setEditingPlanningId(null);
+				window.alert("Planificación actualizada correctamente.");
+				return;
+			}
 
 			const { error } = await supabase.from("planning_items").insert(payload);
 			if (error) throw error;
@@ -593,12 +608,12 @@ export default function Planificacion() {
 							{editingPlanningId ? "Editar planificación" : "Nueva planificación"}
 						</h2>
 						<span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">
-							Visual preview
+							Preview
 						</span>
 					</div>
 					<p className="mb-4 text-sm text-slate-500">
 						{editingPlanningId
-							? "Editando planificación activa. El guardado real de edición se habilitará en el siguiente paso."
+							? "Editando planificación activa. Al guardar, se actualiza el registro en Preview."
 							: "Formulario en Preview con validación local y guardado en `planning_items`."}
 					</p>
 					{intentoGuardarVisual && !formularioVisualValido ? (
@@ -794,18 +809,18 @@ export default function Planificacion() {
 						<button
 							type="button"
 							onClick={handleGuardarVisual}
-							disabled={savingPlanning || Boolean(editingPlanningId)}
+							disabled={savingPlanning}
 							className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
 						>
 							{savingPlanning
 								? "Guardando..."
 								: editingPlanningId
-									? "Guardar edición próximamente"
+									? "Guardar edición"
 									: "Guardar planificación"}
 						</button>
 						<span className="text-xs text-slate-500">
 							{editingPlanningId
-								? "Modo edición visual. Guarda los cambios reales en la siguiente fase."
+								? "Al guardar, se actualiza la planificación activa en Preview."
 								: "Al guardar, se inserta en Preview y se recarga la lista."}
 						</span>
 					</div>
@@ -892,6 +907,7 @@ export default function Planificacion() {
 														>
 															Editar
 														</button>
+
 														<button
 															type="button"
 															onClick={() => handleArchivarPlanificacion(tarea)}
