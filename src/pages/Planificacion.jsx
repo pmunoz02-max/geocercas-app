@@ -208,6 +208,26 @@ function getTrafficLightIcon(level) {
   return "⚪";
 }
 
+function escapeCsvValue(value) {
+  if (value === null || value === undefined) return "";
+  const text = String(value).replaceAll('"', '""');
+  return `"${text}"`;
+}
+
+function downloadCsv(filename, rows) {
+  const csvContent = rows.map((row) => row.map(escapeCsvValue).join(",")).join("\n");
+  const blob = new Blob([`\uFEFF${csvContent}`], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 export default function Planificacion() {
   const { currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
@@ -548,6 +568,55 @@ export default function Planificacion() {
     setFiltrosPlanificacion(FILTROS_PLANIFICACION_INICIAL);
   };
 
+  const handleExportarCsvPlanificacion = () => {
+    const exportedAt = new Date().toISOString();
+    const modo = showArchived ? "Archivadas" : "Activas";
+
+    const rows = [
+      [
+        "ID",
+        "Geocerca",
+        "Actividad",
+        "Fecha inicio",
+        "Fecha fin",
+        "Horas planificadas",
+        "Costo planificado",
+        "Horas reales",
+        "Costo real",
+        "Diferencia horas",
+        "Diferencia costo",
+        "Semáforo",
+        "Detalle semáforo",
+        "Estado",
+        "Notas",
+        "Modo",
+        "Fecha exportación",
+      ],
+      ...tareasFiltradas.map((tarea) => [
+        tarea.id,
+        tarea.geocerca || "",
+        tarea.actividad || "",
+        tarea.fechaInicio || "",
+        tarea.fechaFin || "",
+        formatMetric(tarea.horasPlanificadas),
+        formatMetric(tarea.costoPlanificado),
+        formatMetric(tarea.horasReales),
+        formatMetric(tarea.costoReal),
+        formatMetric(tarea.diferenciaHoras),
+        formatMetric(tarea.diferenciaCosto),
+        tarea.semaforoPlanVsReal?.label || "Sin base",
+        tarea.semaforoPlanVsReal?.description || "",
+        tarea.estado || "",
+        tarea.notes || "",
+        modo,
+        exportedAt,
+      ]),
+    ];
+
+    const safeMode = showArchived ? "archivadas" : "activas";
+    downloadCsv(`planificacion_${safeMode}_${exportedAt.slice(0, 10)}.csv`, rows);
+  };
+
   const handleCancelarVisual = () => {
     setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
     setIntentoGuardarVisual(false);
@@ -779,14 +848,24 @@ export default function Planificacion() {
                 Filtra tabla, Gantt y KPIs por semáforo, geocerca, actividad, estado o rango de fechas.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={limpiarFiltrosPlanificacion}
-              disabled={!hayFiltrosPlanificacion}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Limpiar filtros
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleExportarCsvPlanificacion}
+                disabled={tareasFiltradas.length === 0}
+                className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                Exportar CSV
+              </button>
+              <button
+                type="button"
+                onClick={limpiarFiltrosPlanificacion}
+                disabled={!hayFiltrosPlanificacion}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Limpiar filtros
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
