@@ -342,3 +342,44 @@ Validación Preview:
 * La alerta de éxito apareció correctamente.
 * La planificación desapareció de la vista archivada.
 * La planificación reapareció en la vista activa como `draft`.
+## Fase 10A — UI de edición de planificación activa
+
+Se habilitó en Preview la interfaz visual para editar planificaciones activas.
+
+Flujo implementado:
+
+* En la tabla de planificaciones activas se agregó la acción `Editar`.
+* Al hacer clic en `Editar`, el formulario cambia de `Nueva planificación` a `Editar planificación`.
+* El formulario se precarga con:
+
+  * Geocerca
+  * Actividad
+  * Fecha inicio
+  * Fecha fin
+  * Horas planificadas
+  * Costo planificado
+  * Estado
+  * Notas
+* El botón cambia a `Guardar edición próximamente`.
+* La edición real todavía no guarda cambios en backend.
+* Al hacer clic en `Cancelar`, el formulario vuelve a modo `Nueva planificación`.
+
+Reglas de seguridad:
+
+* No se agregó ningún update nuevo para edición.
+* Se mantiene un único `insert` para crear planificación.
+* Se mantienen dos `update` existentes:
+
+  * Archivar planificación.
+  * Restaurar planificación.
+* No se agregó delete.
+* No se agregó upsert.
+* No se agregó rpc.
+* Producción no fue tocada.
+
+Validación Preview:
+
+* El formulario se prellenó correctamente desde una planificación activa.
+* El modo edición visual se activó correctamente.
+* Cancelar volvió al modo nueva planificación.
+* No se guardaron cambios todavía.
