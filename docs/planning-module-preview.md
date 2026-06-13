@@ -114,3 +114,14 @@ Estado visual validado:
 - `/planificacion` muestra “Datos reales Preview”.
 - La tabla muestra empty state cuando `planning_items` no tiene registros.
 - Producción no fue tocada.
+
+## Fix Preview — Organización activa y Planificación
+
+Durante la validación de Planificación se detectó que el servidor podía devolver una organización activa antigua con rol `viewer/tracker`, pisando una organización válida elegida por el usuario.
+
+Se ajustó `AuthContext` para que `preferredOrgId` válido desde `localStorage` tenga prioridad sobre `serverOrgId`, siempre que la organización no sea tracker.
+
+Esto permite probar módulos de gestión como Planificación con una organización `owner/admin` válida sin relajar RLS.
+
+No se modificó RLS.
+No se permitió acceso a `viewer` ni `tracker`.

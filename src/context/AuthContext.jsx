@@ -204,7 +204,7 @@ function pickBestOrgId({ serverOrgId, preferredOrgId, orgs, allowPreferred = tru
   const firstNonTracker = organizations.find((o) => isNonTrackerRole(o?.role));
   const firstAny = organizations[0] || null;
 
-  const pickedId = validServerOrgId || validPreferredOrgId || firstNonTracker?.id || firstAny?.id || null;
+  const pickedId = validPreferredOrgId || validServerOrgId || firstNonTracker?.id || firstAny?.id || null;
 
   return {
     pickedId,
