@@ -1591,10 +1591,19 @@
     },
     "fallbacks": {
       "unnamedGeofence": "Géofence sans nom",
-      "unnamedActivity": "Activité sans nom"
+      "unnamedActivity": "Activité sans nom",
+      "undefinedGeofence": "Géofence non définie",
+      "undefinedActivity": "Activité non définie",
+      "geofencePrefix": "Géofence",
+      "activityPrefix": "Activité"
     },
     "loading": {
       "fromSupabase": "Chargement de la planification depuis Supabase..."
+    },
+    "demo": {
+      "campusNorth": "Campus Nord",
+      "initialSurvey": "Relevé initial",
+      "perimeterMarking": "Marquage du périmètre"
     }
   },
   "personal": {

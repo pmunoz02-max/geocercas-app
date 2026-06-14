@@ -1630,10 +1630,19 @@
     },
     "fallbacks": {
       "unnamedGeofence": "Geocerca sin nombre",
-      "unnamedActivity": "Actividad sin nombre"
+      "unnamedActivity": "Actividad sin nombre",
+      "undefinedGeofence": "Geocerca sin definir",
+      "undefinedActivity": "Actividad sin definir",
+      "geofencePrefix": "Geocerca",
+      "activityPrefix": "Actividad"
     },
     "loading": {
       "fromSupabase": "Cargando planificación desde Supabase..."
+    },
+    "demo": {
+      "campusNorth": "Campus Norte",
+      "initialSurvey": "Levantamiento inicial",
+      "perimeterMarking": "Marcación de perímetro"
     }
   },
   "personal": {

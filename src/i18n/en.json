@@ -1628,10 +1628,19 @@
     },
     "fallbacks": {
       "unnamedGeofence": "Unnamed geofence",
-      "unnamedActivity": "Unnamed activity"
+      "unnamedActivity": "Unnamed activity",
+      "undefinedGeofence": "Undefined geofence",
+      "undefinedActivity": "Undefined activity",
+      "geofencePrefix": "Geofence",
+      "activityPrefix": "Activity"
     },
     "loading": {
       "fromSupabase": "Loading planning from Supabase..."
+    },
+    "demo": {
+      "campusNorth": "North Campus",
+      "initialSurvey": "Initial survey",
+      "perimeterMarking": "Perimeter marking"
     }
   },
   "personal": {

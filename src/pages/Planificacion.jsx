@@ -488,36 +488,20 @@ function getTrafficLightFromDeviation(hoursDeviation, costDeviation) {
   const values = [hoursDeviation, costDeviation].filter((value) => Number.isFinite(value));
 
   if (values.length === 0) {
-    return {
-      level: "none",
-      label: "Sin base",
-      description: "No hay base planificada suficiente para calcular desviación.",
-    };
+    return { level: "none" };
   }
 
   const worstDeviation = Math.max(...values);
 
   if (worstDeviation <= 10) {
-    return {
-      level: "green",
-      label: "En rango",
-      description: `Desviación máxima ${worstDeviation.toFixed(2)}%.`,
-    };
+    return { level: "green" };
   }
 
   if (worstDeviation <= 25) {
-    return {
-      level: "yellow",
-      label: "Desviación moderada",
-      description: `Desviación máxima ${worstDeviation.toFixed(2)}%.`,
-    };
+    return { level: "yellow" };
   }
 
-  return {
-    level: "red",
-    label: "Desviación alta",
-    description: `Desviación máxima ${worstDeviation.toFixed(2)}%.`,
-  };
+  return { level: "red" };
 }
 
 function getTrafficLightStyle(level) {
@@ -641,10 +625,16 @@ export default function Planificacion() {
         if (realCostsError) throw realCostsError;
 
         const geofenceNames = new Map(
-          (geofencesData || []).map((g) => [String(g.id), g.name || "Geocerca sin nombre"])
+          (geofencesData || []).map((g) => [
+            String(g.id),
+            g.name || t("planning.fallbacks.unnamedGeofence", { defaultValue: "Geocerca sin nombre" }),
+          ])
         );
         const activityNames = new Map(
-          (activitiesData || []).map((a) => [String(a.id), a.name || "Actividad sin nombre"])
+          (activitiesData || []).map((a) => [
+            String(a.id),
+            a.name || t("planning.fallbacks.unnamedActivity", { defaultValue: "Actividad sin nombre" }),
+          ])
         );
 
         const mapped = (planningData || []).map((row, index) => {
@@ -679,11 +669,11 @@ export default function Planificacion() {
             geofenceId,
             activityId,
             geocerca: geofenceId
-              ? geofenceNames.get(geofenceId) || `Geocerca ${geofenceId.slice(0, 8)}`
-              : "Geocerca sin definir",
+              ? geofenceNames.get(geofenceId) || `${t("planning.fallbacks.geofencePrefix", { defaultValue: "Geocerca" })} ${geofenceId.slice(0, 8)}`
+              : t("planning.fallbacks.undefinedGeofence", { defaultValue: "Geocerca sin definir" }),
             actividad: activityId
-              ? activityNames.get(activityId) || `Actividad ${activityId.slice(0, 8)}`
-              : "Actividad sin definir",
+              ? activityNames.get(activityId) || `${t("planning.fallbacks.activityPrefix", { defaultValue: "Actividad" })} ${activityId.slice(0, 8)}`
+              : t("planning.fallbacks.undefinedActivity", { defaultValue: "Actividad sin definir" }),
             fechaInicio: row.start_date,
             fechaFin: row.end_date,
             horasPlanificadas: row.planned_hours,
@@ -747,10 +737,23 @@ export default function Planificacion() {
     };
   }, [orgId, loadPlanningData]);
 
+  const mockTareas = useMemo(
+    () =>
+      mockTareasBase.map((tarea) => ({
+        ...tarea,
+        geocerca: t("planning.demo.campusNorth", { defaultValue: "Campus Norte" }),
+        actividad:
+          tarea.activityId === "mock-levantamiento"
+            ? t("planning.demo.initialSurvey", { defaultValue: "Levantamiento inicial" })
+            : t("planning.demo.perimeterMarking", { defaultValue: "Marcación de perímetro" }),
+      })),
+    [t]
+  );
+
   const tareas = useMemo(() => {
     if (dbReady) return tareasDb;
-    return mockTareasBase;
-  }, [dbReady, tareasDb]);
+    return mockTareas;
+  }, [dbReady, tareasDb, mockTareas]);
 
   const actividadSeleccionada = useMemo(
     () => activitiesDb.find((activity) => String(activity.id) === nuevaPlanificacionVisual.activityId) || null,
@@ -1573,7 +1576,7 @@ export default function Planificacion() {
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Geocerca
+                {t("planning.filters.geofence", { defaultValue: "Geocerca" })}
                 <select
                   value={nuevaPlanificacionVisual.geofenceId}
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, geofenceId: e.target.value }))}
@@ -1582,7 +1585,7 @@ export default function Planificacion() {
                   <option value="">{t("planning.form.selectGeofence", { defaultValue: "Seleccionar geocerca" })}</option>
                   {geofencesDb.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.name || "Geocerca sin nombre"}
+                      {g.name || t("planning.fallbacks.unnamedGeofence", { defaultValue: "Geocerca sin nombre" })}
                     </option>
                   ))}
                 </select>
@@ -1592,7 +1595,7 @@ export default function Planificacion() {
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Actividad
+                {t("planning.filters.activity", { defaultValue: "Actividad" })}
                 <select
                   value={nuevaPlanificacionVisual.activityId}
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, activityId: e.target.value }))}
@@ -1601,7 +1604,7 @@ export default function Planificacion() {
                   <option value="">{t("planning.form.selectActivity", { defaultValue: "Seleccionar actividad" })}</option>
                   {activitiesDb.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name || "Actividad sin nombre"}
+                      {a.name || t("planning.fallbacks.unnamedActivity", { defaultValue: "Actividad sin nombre" })}
                     </option>
                   ))}
                 </select>
