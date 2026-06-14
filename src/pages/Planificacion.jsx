@@ -52,7 +52,9 @@ const mockTareasBase = [
 ];
 
 const ganttDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
-const periodos = ["Semana", "Mes", "Trimestre", "Semestre", "Año", "Rango personalizado"];
+const PERIODO_RANGO_PERSONALIZADO = "Rango personalizado";
+const PERIODO_ANALISIS_INICIAL = PERIODO_RANGO_PERSONALIZADO;
+const periodos = ["Semana", "Mes", "Trimestre", "Semestre", "Año", PERIODO_RANGO_PERSONALIZADO];
 const ESTADOS_PLANIFICACION = ["draft", "approved", "closed", "archived"];
 const NUEVA_PLANIFICACION_INICIAL = {
   geofenceId: "",
@@ -105,6 +107,55 @@ function parseLocalDate(dateStr) {
   const [year, month, day] = String(dateStr).slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return null;
   return new Date(year, month - 1, day);
+}
+
+function formatDateInput(date) {
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function getPeriodoAnalisisRange(periodo, baseDate = new Date()) {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
+  let start = null;
+  let end = null;
+
+  if (periodo === "Semana") {
+    const mondayOffset = (baseDate.getDay() + 6) % 7;
+    start = new Date(year, month, baseDate.getDate() - mondayOffset);
+    end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+  }
+
+  if (periodo === "Mes") {
+    start = new Date(year, month, 1);
+    end = new Date(year, month + 1, 0);
+  }
+
+  if (periodo === "Trimestre") {
+    const quarterStartMonth = Math.floor(month / 3) * 3;
+    start = new Date(year, quarterStartMonth, 1);
+    end = new Date(year, quarterStartMonth + 3, 0);
+  }
+
+  if (periodo === "Semestre") {
+    const semesterStartMonth = month < 6 ? 0 : 6;
+    start = new Date(year, semesterStartMonth, 1);
+    end = new Date(year, semesterStartMonth + 6, 0);
+  }
+
+  if (periodo === "Año") {
+    start = new Date(year, 0, 1);
+    end = new Date(year, 11, 31);
+  }
+
+  return {
+    fechaDesde: formatDateInput(start),
+    fechaHasta: formatDateInput(end),
+  };
 }
 
 function toTimeline(startDate, endDate) {
@@ -245,6 +296,7 @@ export default function Planificacion() {
   const [editingPlanningId, setEditingPlanningId] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [filtrosPlanificacion, setFiltrosPlanificacion] = useState(FILTROS_PLANIFICACION_INICIAL);
+  const [periodoAnalisis, setPeriodoAnalisis] = useState(PERIODO_ANALISIS_INICIAL);
 
   const loadPlanningData = useCallback(
     async (isActive = () => true) => {
@@ -612,7 +664,28 @@ export default function Planificacion() {
     }`;
 
   const limpiarFiltrosPlanificacion = () => {
+    setPeriodoAnalisis(PERIODO_ANALISIS_INICIAL);
     setFiltrosPlanificacion(FILTROS_PLANIFICACION_INICIAL);
+  };
+
+  const handleCambiarFechaFiltro = (campo, value) => {
+    setPeriodoAnalisis(PERIODO_RANGO_PERSONALIZADO);
+    setFiltrosPlanificacion((prev) => ({ ...prev, [campo]: value }));
+  };
+
+  const handleSeleccionarPeriodoAnalisis = (periodo) => {
+    setPeriodoAnalisis(periodo);
+
+    if (periodo === PERIODO_RANGO_PERSONALIZADO) {
+      return;
+    }
+
+    const rango = getPeriodoAnalisisRange(periodo);
+    setFiltrosPlanificacion((prev) => ({
+      ...prev,
+      fechaDesde: rango.fechaDesde,
+      fechaHasta: rango.fechaHasta,
+    }));
   };
 
   const handleExportarCsvPlanificacion = () => {
@@ -870,17 +943,25 @@ export default function Planificacion() {
             <div>
               <p className="text-sm font-semibold text-slate-800">Período de análisis</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {periodos.map((periodo) => (
-                  <button
-                    key={periodo}
-                    type="button"
-                    className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                      periodo === "Semana" ? "border-cyan-600 bg-cyan-50 text-cyan-700" : "border-slate-300 bg-white text-slate-700"
-                    }`}
-                  >
-                    {periodo}
-                  </button>
-                ))}
+                {periodos.map((periodo) => {
+                  const activo = periodoAnalisis === periodo;
+
+                  return (
+                    <button
+                      key={periodo}
+                      type="button"
+                      aria-pressed={activo}
+                      onClick={() => handleSeleccionarPeriodoAnalisis(periodo)}
+                      className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                        activo
+                          ? "border-cyan-600 bg-cyan-50 text-cyan-700"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
+                      }`}
+                    >
+                      {periodo}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -889,16 +970,18 @@ export default function Planificacion() {
                 Desde
                 <input
                   type="date"
+                  value={filtrosPlanificacion.fechaDesde}
+                  onChange={(e) => handleCambiarFechaFiltro("fechaDesde", e.target.value)}
                   className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
-                  defaultValue="2026-06-01"
                 />
               </label>
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
                 Hasta
                 <input
                   type="date"
+                  value={filtrosPlanificacion.fechaHasta}
+                  onChange={(e) => handleCambiarFechaFiltro("fechaHasta", e.target.value)}
                   className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
-                  defaultValue="2026-06-30"
                 />
               </label>
             </div>
@@ -1001,7 +1084,7 @@ export default function Planificacion() {
               <input
                 type="date"
                 value={filtrosPlanificacion.fechaDesde}
-                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, fechaDesde: e.target.value }))}
+                onChange={(e) => handleCambiarFechaFiltro("fechaDesde", e.target.value)}
                 className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
               />
             </label>
@@ -1011,7 +1094,7 @@ export default function Planificacion() {
               <input
                 type="date"
                 value={filtrosPlanificacion.fechaHasta}
-                onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, fechaHasta: e.target.value }))}
+                onChange={(e) => handleCambiarFechaFiltro("fechaHasta", e.target.value)}
                 className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
               />
             </label>
