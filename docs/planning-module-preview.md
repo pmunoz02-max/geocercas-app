@@ -993,3 +993,94 @@ Se validó que:
 * No se tocó Producción.
 * No se hizo push a `main`.
 * Trabajo realizado solo en branch `preview`.
+## Fase 12B — Switch language global + i18n del módulo Planificación
+
+### Objetivo
+
+Se implementó la internacionalización principal del módulo `/planificacion` usando el sistema global de i18n ya existente en la app.
+
+La solución aplicada mantiene un solo `LanguageSwitcher` global para la aplicación y evita crear un selector de idioma aislado dentro del módulo Planificación.
+
+### Archivos actualizados
+
+Se actualizaron:
+
+* `src/pages/Planificacion.jsx`
+* `src/i18n/es.json`
+* `src/i18n/en.json`
+* `src/i18n/fr.json`
+
+No se modificaron:
+
+* `src/layouts/ProtectedShell.jsx`
+* `src/components/LanguageSwitcher.tsx`
+* `src/components/Header.jsx`
+* `src/components/MainNav.jsx`
+* `src/i18n/i18n.js`
+
+### Cambios implementados
+
+* Se conectó `Planificacion.jsx` a `useTranslation`.
+* Se migraron textos principales del módulo a llaves `planning.*`.
+* Se agregaron traducciones en español, inglés y francés.
+* Se mantuvieron `defaultValue` en las llamadas principales para evitar pantalla rota si falta alguna llave.
+* Se internacionalizaron textos principales de:
+
+  * Encabezado comercial.
+  * Badges.
+  * Período de análisis.
+  * Filtros gerenciales.
+  * KPIs.
+  * Resumen ejecutivo por semáforo.
+  * Formulario de nueva planificación / edición.
+  * Tabla.
+  * Totales.
+  * Gantt dinámico.
+  * Botones principales.
+  * Alertas y confirmaciones principales.
+  * Encabezados del CSV ejecutivo.
+
+### Validación técnica
+
+Validación local ejecutada correctamente:
+
+```text
+npm run build: OK
+git diff --check: OK
+.delete(): 0
+.upsert(): 0
+.rpc(): 0
+.insert(): 1
+.update(): 3
+planning.* presente
+```
+
+### Validación Preview
+
+Se validó en deployment Preview que:
+
+* `/planificacion` carga correctamente en español.
+* Al cambiar a English, los textos principales del módulo cambian correctamente.
+* Al cambiar a Français, los textos principales del módulo cambian correctamente.
+* Al volver a Español, el módulo sigue funcionando correctamente.
+* Los filtros siguen funcionando.
+* Los KPIs siguen funcionando.
+* La tabla y los totales siguen funcionando.
+* El Gantt dinámico sigue funcionando.
+* La exportación CSV sigue funcionando.
+* Crear planificación sigue funcionando.
+* Editar planificación sigue funcionando.
+* Archivar planificación sigue funcionando.
+* Restaurar planificación sigue funcionando.
+
+### Restricciones respetadas
+
+* No se tocó base de datos.
+* No se ejecutó SQL.
+* No se modificó `planning_items`.
+* No se modificó `v_costos_hybrid_preview`.
+* No se cambió la lógica operativa validada de crear, editar, archivar, restaurar, filtros, KPIs, semáforo, CSV, totales ni Gantt.
+* No se creó un switch de idioma aislado dentro de Planificación.
+* No se tocó Producción.
+* No se hizo push a `main`.
+* Trabajo realizado solo en branch `preview`.
