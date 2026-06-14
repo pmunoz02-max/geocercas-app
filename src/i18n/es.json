@@ -128,7 +128,8 @@
       "reportes": "Reportes",
       "billing": "Billing",
       "tracker": "Tracker",
-      "resources": "Recursos"
+      "resources": "Recursos",
+      "benchmarking": "Benchmarking"
     },
     "title": "GeoField GPS"
   },
@@ -2600,6 +2601,130 @@
     },
     "actions": {
       "links": "Vínculos"
+    }
+  },
+  "benchmarking": {
+    "header": {
+      "badge": "Mejora continua",
+      "title": "Benchmarking",
+      "subtitle": "Compara eficiencia operativa entre asignaciones, geocercas, personas o actividades usando horas/m² y $/m²."
+    },
+    "actions": {
+      "refresh": "Actualizar",
+      "exportCsv": "Exportar CSV",
+      "resetFilters": "Limpiar filtros"
+    },
+    "alerts": {
+      "plannedOnlyTitle": "Datos planificados.",
+      "plannedOnlyBody": "La vista actual no tiene horas de tracking vinculadas a asignaciones. Benchmarking usa horas planificadas y lo indica como fuente PLANIFICADA."
+    },
+    "filters": {
+      "all": "Todos",
+      "geofence": "Geocerca",
+      "person": "Persona / trabajador",
+      "activity": "Actividad",
+      "dateFrom": "Desde",
+      "dateTo": "Hasta",
+      "period": "Periodo agrupado",
+      "compareBy": "Comparar por",
+      "indicator": "Indicador",
+      "chartType": "Tipo de gráfico"
+    },
+    "periods": {
+      "day": "Día",
+      "week": "Semana",
+      "month": "Mes",
+      "quarter": "Trimestre",
+      "semester": "Semestre",
+      "year": "Año"
+    },
+    "compareBy": {
+      "assignment": "Asignaciones",
+      "geofence": "Geocercas",
+      "person": "Personas",
+      "activity": "Actividades"
+    },
+    "indicators": {
+      "horas_m2": "Horas/m²",
+      "costo_m2": "$/m²"
+    },
+    "chartTypes": {
+      "bars": "Barras",
+      "lines": "Líneas"
+    },
+    "kpis": {
+      "best": "Mejor eficiencia",
+      "worst": "Peor eficiencia",
+      "average": "Promedio general",
+      "totalDifference": "Diferencia acumulada total",
+      "totalDifferenceHint": "Suma de diferencias contra promedio",
+      "optimizableCost": "Costo potencialmente optimizable",
+      "optimizableCostHint": "Exceso vs promedio",
+      "optimizableHours": "Horas potencialmente optimizables",
+      "optimizableHoursHint": "Exceso vs promedio"
+    },
+    "chart": {
+      "title": "Visualización",
+      "subtitle": "Barras comparan grupos; líneas muestran evolución temporal promedio."
+    },
+    "table": {
+      "title": "Tabla comparativa",
+      "subtitle": "Las alertas muestran desviación contra el promedio visible; no toman decisiones automáticas.",
+      "rows": "{{count}} filas",
+      "signal": "Semáforo",
+      "geofence": "Geocerca",
+      "person": "Persona",
+      "activity": "Actividad",
+      "period": "Periodo",
+      "areaM2": "Área m²",
+      "areaReadable": "Área legible",
+      "observedHours": "Horas observadas",
+      "plannedHours": "Horas planificadas",
+      "costBase": "Costo base",
+      "costFinal": "Costo final auditado",
+      "hoursM2": "Horas/m²",
+      "costM2": "$/m²",
+      "diffAverage": "Diferencia contra promedio",
+      "cumulativeDiff": "Diferencia acumulada",
+      "evidence": "Fuente",
+      "opportunity": "Oportunidad de mejora"
+    },
+    "traffic": {
+      "green": "Verde",
+      "yellow": "Amarillo",
+      "red": "Rojo",
+      "gray": "Sin datos"
+    },
+    "opportunities": {
+      "green": "Mantener estándar y usar como referencia",
+      "yellow": "Revisar desviación moderada",
+      "red": "Priorizar análisis operativo",
+      "gray": "Completar datos antes de comparar"
+    },
+    "evidence": {
+      "TRACKING": "Tracking",
+      "PLANIFICADA": "Planificada",
+      "MIXTA": "Mixta"
+    },
+    "fallbacks": {
+      "geofence": "Geocerca sin nombre",
+      "person": "Persona sin nombre",
+      "activity": "Actividad sin nombre"
+    },
+    "labels": {
+      "multiple": "Varias"
+    },
+    "empty": {
+      "chart": "No hay suficientes datos para graficar.",
+      "table": "No hay datos de benchmarking con los filtros actuales."
+    },
+    "errors": {
+      "load": "No se pudo cargar benchmarking."
+    },
+    "loading": "Cargando benchmarking...",
+    "csv": {
+      "title": "Benchmarking operativo",
+      "exportedAt": "Fecha de exportación"
     }
   }
 }

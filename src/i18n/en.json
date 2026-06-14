@@ -135,7 +135,8 @@
       "reportes": "Reports",
       "billing": "Billing",
       "tracker": "Tracker",
-      "resources": "Resources"
+      "resources": "Resources",
+      "benchmarking": "Benchmarking"
     },
     "title": "GeoField GPS"
   },
@@ -2605,5 +2606,129 @@
     "USD": "US dollar",
     "CAD": "Canadian dollar",
     "BRL": "Brazilian real"
+  },
+  "benchmarking": {
+    "header": {
+      "badge": "Continuous improvement",
+      "title": "Benchmarking",
+      "subtitle": "Compare operational efficiency across assignments, geofences, people, or activities using hours/m² and $/m²."
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "exportCsv": "Export CSV",
+      "resetFilters": "Clear filters"
+    },
+    "alerts": {
+      "plannedOnlyTitle": "Planned data.",
+      "plannedOnlyBody": "The current view has no tracking hours linked to assignments. Benchmarking uses planned hours and labels the source as PLANNED."
+    },
+    "filters": {
+      "all": "All",
+      "geofence": "Geofence",
+      "person": "Person / worker",
+      "activity": "Activity",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "period": "Grouped period",
+      "compareBy": "Compare by",
+      "indicator": "Indicator",
+      "chartType": "Chart type"
+    },
+    "periods": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "quarter": "Quarter",
+      "semester": "Semester",
+      "year": "Year"
+    },
+    "compareBy": {
+      "assignment": "Assignments",
+      "geofence": "Geofences",
+      "person": "People",
+      "activity": "Activities"
+    },
+    "indicators": {
+      "horas_m2": "Hours/m²",
+      "costo_m2": "$/m²"
+    },
+    "chartTypes": {
+      "bars": "Bars",
+      "lines": "Lines"
+    },
+    "kpis": {
+      "best": "Best efficiency",
+      "worst": "Worst efficiency",
+      "average": "Overall average",
+      "totalDifference": "Total accumulated difference",
+      "totalDifferenceHint": "Sum of differences vs average",
+      "optimizableCost": "Potentially optimizable cost",
+      "optimizableCostHint": "Excess vs average",
+      "optimizableHours": "Potentially optimizable hours",
+      "optimizableHoursHint": "Excess vs average"
+    },
+    "chart": {
+      "title": "Visualization",
+      "subtitle": "Bars compare groups; lines show average time evolution."
+    },
+    "table": {
+      "title": "Comparative table",
+      "subtitle": "Alerts show deviation from the visible average; they do not make automatic decisions.",
+      "rows": "{{count}} rows",
+      "signal": "Signal",
+      "geofence": "Geofence",
+      "person": "Person",
+      "activity": "Activity",
+      "period": "Period",
+      "areaM2": "Area m²",
+      "areaReadable": "Readable area",
+      "observedHours": "Observed hours",
+      "plannedHours": "Planned hours",
+      "costBase": "Base cost",
+      "costFinal": "Audited final cost",
+      "hoursM2": "Hours/m²",
+      "costM2": "$/m²",
+      "diffAverage": "Difference vs average",
+      "cumulativeDiff": "Accumulated difference",
+      "evidence": "Source",
+      "opportunity": "Improvement opportunity"
+    },
+    "traffic": {
+      "green": "Green",
+      "yellow": "Yellow",
+      "red": "Red",
+      "gray": "No data"
+    },
+    "opportunities": {
+      "green": "Maintain standard and use as reference",
+      "yellow": "Review moderate deviation",
+      "red": "Prioritize operational analysis",
+      "gray": "Complete data before comparing"
+    },
+    "evidence": {
+      "TRACKING": "Tracking",
+      "PLANIFICADA": "Planned",
+      "MIXTA": "Mixed"
+    },
+    "fallbacks": {
+      "geofence": "Unnamed geofence",
+      "person": "Unnamed person",
+      "activity": "Unnamed activity"
+    },
+    "labels": {
+      "multiple": "Multiple"
+    },
+    "empty": {
+      "chart": "Not enough data to chart.",
+      "table": "No benchmarking data with the current filters."
+    },
+    "errors": {
+      "load": "Could not load benchmarking."
+    },
+    "loading": "Loading benchmarking...",
+    "csv": {
+      "title": "Operational benchmarking",
+      "exportedAt": "Export date"
+    }
   }
 }
