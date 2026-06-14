@@ -253,3 +253,112 @@ Mapa de esquema de base de datos para `geocercas-app` (Supabase/PostgreSQL).
 - Coexisten objetos duplicados o de transicion: `geocercas` vs `geofences`, `attendances` vs `asistencias`, `tenant_id` vs `org_id`.
 - Algunas referencias de codigo apuntan a objetos que pueden no estar en el dump principal (`resolve_org_for_tracker_dashboard`, `bootstrap_user_context`, `org_entitlements`).
 - Recomendacion: mantener este mapa alineado con nuevas migraciones en `supabase/migrations/` y promover un set canonico unico por dominio.
+## Planificación operativa
+
+### `planning_items`
+
+Tabla usada por el módulo `/planificacion` para registrar planificación operativa por organización, geocerca y actividad.
+
+Columnas principales:
+
+* `id uuid primary key`
+* `org_id uuid not null`
+* `geofence_id uuid not null`
+* `activity_id uuid not null`
+* `start_date date not null`
+* `end_date date not null`
+* `planned_hours numeric not null default 0`
+* `planned_cost numeric not null default 0`
+* `status text not null default 'draft'`
+* `notes text`
+* `created_by uuid not null default auth.uid()`
+* `created_at timestamptz not null default now()`
+* `updated_at timestamptz not null default now()`
+* `archived_at timestamptz`
+
+Estados válidos:
+
+* `draft`
+* `approved`
+* `closed`
+* `archived`
+
+Restricciones:
+
+* `end_date >= start_date`
+* `planned_hours >= 0`
+* `planned_cost >= 0`
+* `status` limitado a los estados válidos
+* `org_id` referencia `organizations(id)`
+* `geofence_id` referencia `geofences(id)`
+* `activity_id` referencia `activities(id)`
+
+Índices:
+
+* `planning_items_org_idx`
+* `planning_items_org_period_idx`
+* `planning_items_active_period_idx`
+* `planning_items_org_geofence_idx`
+* `planning_items_org_activity_idx`
+* `planning_items_org_status_idx`
+
+Seguridad:
+
+* RLS activo.
+* `SELECT`, `INSERT` y `UPDATE` permitidos solo a `owner/admin` de la organización.
+* `DELETE` bloqueado.
+* Archivo lógico mediante `archived_at` y `status = 'archived'`.
+
+### Vistas relacionadas
+
+#### `v_costos_detalle`
+
+Vista base de costos operativos. Depende de:
+
+* `asignaciones`
+* `personal`
+* `geofences`
+* `activities`
+
+Calcula:
+
+* asignación
+* organización
+* persona
+* geocerca
+* actividad
+* inicio/fin
+* horas
+* costo base
+
+#### `v_tracking_coverage_preview`
+
+Vista de cobertura de tracking. Depende de:
+
+* `tracker_positions`
+
+Calcula cobertura diaria por organización, usuario, persona y fecha:
+
+* puntos capturados
+* horas observadas
+* minutos sin cobertura
+* número de huecos
+* porcentaje de cobertura
+* nivel de confianza
+
+#### `v_costos_hybrid_preview`
+
+Vista híbrida para Planificación y reportes de costo auditado. Depende de:
+
+* `v_costos_detalle`
+* `asignaciones`
+* `v_tracking_coverage_preview`
+
+Calcula:
+
+* `costo_base`
+* `factor_cobertura`
+* `costo_final`
+* `estado_auditoria`
+
+Esta vista es la fuente preferida para comparar planificación, costo operativo y evidencia de tracking.

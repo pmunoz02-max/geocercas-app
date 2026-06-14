@@ -1171,3 +1171,120 @@ Se validó en Vercel Preview que el módulo `/planificacion` sigue funcionando c
 * No se tocó Producción.
 * No se hizo push a `main`.
 * Trabajo realizado solo en branch `preview`.
+## PROD-PLAN-DB — Habilitación de Planificación en Producción
+
+Fecha: 2026-06-14
+Estado: completado y validado en Producción
+Dominio validado: `https://app.tugeocercas.com/planificacion`
+
+### Contexto
+
+El módulo `/planificacion` fue desarrollado, probado e internacionalizado inicialmente en Preview. Al promoverlo por primera vez a Producción, la página cayó a modo demo local porque Supabase Producción no tenía todavía todos los objetos de base de datos requeridos por el módulo.
+
+Producción fue revertida temporalmente al deployment estable anterior. Luego se realizó una auditoría read-only sobre Supabase Producción y Supabase Preview para comparar objetos, columnas, dependencias, vistas y policies antes de aplicar cualquier migración.
+
+### Objetos existentes originalmente en Producción
+
+Antes de la migración, Producción tenía las tablas base operativas:
+
+* `organizations`
+* `memberships`
+* `org_members`
+* `app_user_roles`
+* `asignaciones`
+* `activities`
+* `geofences`
+* `personal`
+* `tracker_positions`
+
+También se confirmó que:
+
+* `activities` tenía 5 registros y todos tenían `org_id`.
+* `geofences` tenía 19 registros y todos tenían `org_id`.
+* `personal` tenía 32 registros.
+* `tracker_positions` tenía 76.707 registros.
+
+### Objetos faltantes en Producción
+
+Faltaban los objetos requeridos por Planificación:
+
+* `planning_items`
+* `v_costos_detalle`
+* `v_tracking_coverage_preview`
+* `v_costos_hybrid_preview`
+
+### Objetos migrados a Producción
+
+Se creó en Supabase Producción:
+
+* Tabla `planning_items`
+* Índices operativos de `planning_items`
+* RLS en `planning_items`
+* Policies de `planning_items`
+* Vista `v_costos_detalle`
+* Vista `v_tracking_coverage_preview`
+* Vista `v_costos_hybrid_preview`
+* Grants de lectura para vistas y permisos controlados para `planning_items`
+
+### Seguridad aplicada
+
+`planning_items` quedó con RLS activo.
+
+Policies:
+
+* `planning_items_select_owner_admin`: permite lectura solo a usuarios `owner` o `admin` de la organización.
+* `planning_items_insert_owner_admin`: permite inserción solo a `owner` o `admin`, validando además que `geofence_id` y `activity_id` pertenezcan al mismo `org_id`.
+* `planning_items_update_owner_admin`: permite actualización solo a `owner` o `admin`, validando consistencia de organización.
+* `planning_items_delete_none`: bloquea eliminación física.
+
+La eliminación operativa del módulo debe seguir siendo lógica mediante `archived_at` y `status = 'archived'`.
+
+### Vistas de costos y cobertura
+
+`v_costos_detalle` calcula horas y costo base desde `asignaciones`, `personal`, `geofences` y `activities`.
+
+`v_tracking_coverage_preview` calcula cobertura diaria desde `tracker_positions`, incluyendo:
+
+* `points_count`
+* `horas_observadas`
+* `minutos_sin_cobertura`
+* `numero_huecos`
+* `porcentaje_cobertura`
+* `nivel_confianza`
+
+`v_costos_hybrid_preview` combina costo planificado/operativo con evidencia de tracking para calcular:
+
+* `costo_base`
+* `factor_cobertura`
+* `costo_final`
+* `estado_auditoria`
+
+### Validación final de Producción
+
+Después de la migración se confirmó:
+
+* `planning_items`: existe como `BASE TABLE`.
+* `v_costos_detalle`: existe como `VIEW`.
+* `v_tracking_coverage_preview`: existe como `VIEW`.
+* `v_costos_hybrid_preview`: existe como `VIEW`.
+* RLS activo en `planning_items`.
+* Policies de `SELECT`, `INSERT`, `UPDATE` y `DELETE` presentes.
+* `planning_items_rows = 0`, esperado porque aún no había planificación creada en Producción.
+* `v_costos_hybrid_preview = 23 rows`, confirmando que la vista lee datos reales.
+* `/planificacion` carga correctamente en Producción desde `https://app.tugeocercas.com/planificacion`.
+
+### Nota operativa importante
+
+Para validar Producción se debe usar siempre el dominio real:
+
+`https://app.tugeocercas.com`
+
+No usar URLs terminadas en `.vercel.app` para validar Producción, porque la lógica de `supabaseClient` clasifica esos dominios como Preview y espera el proyecto Supabase Preview.
+
+### Estado final
+
+Planificación queda habilitada en Producción con base de datos preparada, RLS activo, vistas de costos/auditoría disponibles y frontend validado.
+
+No se hizo push a `main`.
+No se mezcló Preview con Producción.
+No se insertaron datos demo en Producción.
