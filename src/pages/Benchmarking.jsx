@@ -177,6 +177,33 @@ function formatNumber(value, locale, maximumFractionDigits = 2) {
   }).format(n);
 }
 
+function formatRateNumber(value, locale, preferredMaximumFractionDigits = 9) {
+  const n = toNullableNumber(value);
+  if (n === null) return "—";
+  if (n === 0) return "0";
+
+  const abs = Math.abs(n);
+  let maximumFractionDigits = preferredMaximumFractionDigits;
+
+  if (abs < 0.000000001) {
+    maximumFractionDigits = Math.max(maximumFractionDigits, 12);
+  } else if (abs < 0.000001) {
+    maximumFractionDigits = Math.max(maximumFractionDigits, 9);
+  } else if (abs < 0.001) {
+    maximumFractionDigits = Math.max(maximumFractionDigits, 6);
+  }
+
+  return new Intl.NumberFormat(locale || "es", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(n);
+}
+
+function multiplyNullable(value, factor) {
+  const n = toNullableNumber(value);
+  return n === null ? null : n * factor;
+}
+
 function formatCurrency(value, locale, currency = "USD") {
   const n = toNullableNumber(value);
   if (n === null) return "—";
@@ -188,15 +215,19 @@ function formatCurrency(value, locale, currency = "USD") {
   }).format(n);
 }
 
-function formatCostPerM2(value, locale) {
+function formatCurrencyRate(value, locale) {
   const n = toNullableNumber(value);
   if (n === null) return "—";
-  return `$${formatNumber(n, locale, 6)}`;
+  return `${formatRateNumber(n, locale, 9)} US$`;
+}
+
+function formatCostPerM2(value, locale) {
+  return formatCurrencyRate(value, locale);
 }
 
 function formatIndicator(value, indicator, locale) {
-  if (indicator === "costo_m2") return formatCostPerM2(value, locale);
-  return formatNumber(value, locale, 6);
+  if (indicator === "costo_m2") return formatCurrencyRate(value, locale);
+  return formatRateNumber(value, locale, 9);
 }
 
 function getStatusTone(row) {
@@ -395,6 +426,32 @@ function KpiCard({ label, value, hint }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
       {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function EfficiencyMetricCell({ value, kind, locale, bt }) {
+  const n = toNullableNumber(value);
+
+  if (n === null) {
+    return <span>—</span>;
+  }
+
+  const mainValue = kind === "cost" ? formatCurrencyRate(n, locale) : formatRateNumber(n, locale, 9);
+  const perHa = multiplyNullable(n, 10000);
+  const perKm2 = multiplyNullable(n, 1000000);
+
+  return (
+    <div className="space-y-1">
+      <div className="font-medium text-slate-900">{mainValue}</div>
+      <div className="text-xs leading-5 text-slate-500">
+        <div>
+          {kind === "cost" ? bt("table.costHa", "$/ha") : bt("table.hoursHa", "Horas/ha")}: {kind === "cost" ? formatCurrencyRate(perHa, locale) : formatRateNumber(perHa, locale, 6)}
+        </div>
+        <div>
+          {kind === "cost" ? bt("table.costKm2", "$/km²") : bt("table.hoursKm2", "Horas/km²")}: {kind === "cost" ? formatCurrencyRate(perKm2, locale) : formatRateNumber(perKm2, locale, 4)}
+        </div>
+      </div>
     </div>
   );
 }
@@ -630,6 +687,10 @@ export default function Benchmarking() {
         bt("table.costFinal", "Costo final auditado"),
         bt("table.hoursM2", "Horas/m²"),
         bt("table.costM2", "$/m²"),
+        bt("table.hoursHa", "Horas/ha"),
+        bt("table.costHa", "$/ha"),
+        bt("table.hoursKm2", "Horas/km²"),
+        bt("table.costKm2", "$/km²"),
         bt("table.diffAverage", "Diferencia contra promedio"),
         bt("table.cumulativeDiff", "Diferencia acumulada del periodo"),
         bt("table.evidence", "Fuente de horas"),
@@ -648,6 +709,10 @@ export default function Benchmarking() {
         row.costFinal,
         row.horasM2,
         row.costoM2,
+        multiplyNullable(row.horasM2, 10000),
+        multiplyNullable(row.costoM2, 10000),
+        multiplyNullable(row.horasM2, 1000000),
+        multiplyNullable(row.costoM2, 1000000),
         row.difference,
         row.cumulativeDifference,
         row.evidenceSource,
@@ -819,7 +884,7 @@ export default function Benchmarking() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1300px] w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-[1500px] w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">{bt("table.signal", "Semáforo")}</th>
@@ -864,8 +929,12 @@ export default function Benchmarking() {
                     <td className="px-4 py-3 text-right text-slate-700">{formatNumber(row.observedHours, locale, 2)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.costBase, locale)}</td>
                     <td className="px-4 py-3 text-right font-medium text-slate-900">{formatCurrency(row.costFinal, locale)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatNumber(row.horasM2, locale, 6)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatCostPerM2(row.costoM2, locale)}</td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      <EfficiencyMetricCell value={row.horasM2} kind="hours" locale={locale} bt={bt} />
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-700">
+                      <EfficiencyMetricCell value={row.costoM2} kind="cost" locale={locale} bt={bt} />
+                    </td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatIndicator(row.difference, filters.indicator, locale)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">
                       {filters.indicator === "costo_m2" ? formatCurrency(row.cumulativeDifference, locale) : formatNumber(row.cumulativeDifference, locale, 2)}
