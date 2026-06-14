@@ -860,12 +860,43 @@
         "items": [
           "Steps",
           "Best practices",
+          "Operational modules",
           "Expected result",
           "Recommendation"
         ]
       },
       "viewFaq": "View FAQ",
-      "viewResult": "View result"
+      "viewResult": "View result",
+      "moduleCards": {
+        "title": "Operational modules",
+        "subtitle": "Use these cards to open planning and efficiency analysis modules quickly.",
+        "items": [
+          {
+            "badge": "PLANNING",
+            "title": "Planning",
+            "body": "Organize work by geofence, person, activity and period. Review status, progress, dates and planned costs to coordinate field operations.",
+            "highlights": [
+              "Create and review assignments by period.",
+              "Coordinate activities before work execution.",
+              "Use real data from the active organization."
+            ],
+            "cta": "Open Planning",
+            "path": "/planificacion"
+          },
+          {
+            "badge": "BENCHMARKING",
+            "title": "Benchmarking",
+            "body": "Compare efficiency across geofences, people, activities or assignments using hours/m², $/m² and auxiliary metrics per ha or km².",
+            "highlights": [
+              "Identify best and worst efficiency cases.",
+              "Review traffic-light alerts and improvement opportunities.",
+              "Export results to CSV for external analysis."
+            ],
+            "cta": "Open Benchmarking",
+            "path": "/benchmarking"
+          }
+        ]
+      }
     },
     "support": {
       "breadcrumb": "Help Center / Support",

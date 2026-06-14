@@ -8,17 +8,23 @@ export default function InstructionsPage() {
 
   const tocRaw = t("help.instructions.toc.items", { returnObjects: true });
   const stepsRaw = t("help.instructions.steps.items", { returnObjects: true });
+  const moduleCardsRaw = t("help.instructions.moduleCards.items", { returnObjects: true });
 
   const toc = useMemo(() => (Array.isArray(tocRaw) ? tocRaw : []), [tocRaw]);
 
   const steps = useMemo(() => (Array.isArray(stepsRaw) ? stepsRaw : []), [stepsRaw]);
+
+  const moduleCards = useMemo(
+    () => (Array.isArray(moduleCardsRaw) ? moduleCardsRaw : []),
+    [moduleCardsRaw]
+  );
 
   const resultBullets = useMemo(() => {
     const arr = t("help.instructions.resultBullets", { returnObjects: true });
     return Array.isArray(arr) ? arr : [];
   }, [t]);
 
-  const tocLinks = ["#pasos", "#tips", "#resultado", "#recomendacion"];
+  const tocLinks = ["#pasos", "#tips", "#modulos", "#resultado", "#recomendacion"];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -194,6 +200,55 @@ export default function InstructionsPage() {
                     {t("help.instructions.bestPractice4Body")}
                   </p>
                 </div>
+              </div>
+            </div>
+
+            <div
+              id="modulos"
+              className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+            >
+              <h2 className="text-xl font-extrabold text-slate-900">
+                {t("help.instructions.moduleCards.title")}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {t("help.instructions.moduleCards.subtitle")}
+              </p>
+
+              <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+                {moduleCards.map((card, idx) => (
+                  <div
+                    key={`${idx}-${card?.title || "module"}`}
+                    className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  >
+                    <div className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-600">
+                      {card?.badge || t("help.common.quickGuideBadge")}
+                    </div>
+                    <div className="mt-3 text-base font-extrabold text-slate-900">
+                      {card?.title || ""}
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {card?.body || ""}
+                    </p>
+
+                    {Array.isArray(card?.highlights) && card.highlights.length > 0 ? (
+                      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                        {card.highlights.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    {card?.path ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate(card.path)}
+                        className="mt-4 w-fit rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+                      >
+                        {card?.cta || t("help.common.goHome")}
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             </div>
 

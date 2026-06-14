@@ -823,12 +823,43 @@
         "items": [
           "Étapes",
           "Bonnes pratiques",
+          "Modules opérationnels",
           "Résultat attendu",
           "Recommandation"
         ]
       },
       "viewFaq": "Voir la FAQ",
-      "viewResult": "Voir le résultat"
+      "viewResult": "Voir le résultat",
+      "moduleCards": {
+        "title": "Modules opérationnels",
+        "subtitle": "Utilisez ces cartes pour accéder rapidement aux modules de planification et d’analyse de l’efficacité.",
+        "items": [
+          {
+            "badge": "PLANIFICATION",
+            "title": "Planification",
+            "body": "Organisez les tâches par géofence, personne, activité et période. Consultez l’état, l’avancement, les dates et les coûts planifiés pour coordonner les opérations.",
+            "highlights": [
+              "Créer et revoir les affectations par période.",
+              "Coordonner les activités avant l’exécution du travail.",
+              "Utiliser les données réelles de l’organisation active."
+            ],
+            "cta": "Ouvrir Planification",
+            "path": "/planificacion"
+          },
+          {
+            "badge": "BENCHMARKING",
+            "title": "Benchmarking",
+            "body": "Comparez l’efficacité entre géofences, personnes, activités ou affectations avec heures/m², $/m² et des métriques auxiliaires par ha ou km².",
+            "highlights": [
+              "Identifier les meilleures et les moins bonnes efficacités.",
+              "Consulter les alertes et opportunités d’amélioration.",
+              "Exporter les résultats en CSV pour une analyse externe."
+            ],
+            "cta": "Ouvrir Benchmarking",
+            "path": "/benchmarking"
+          }
+        ]
+      }
     },
     "support": {
       "breadcrumb": "Centre d’aide / Support",

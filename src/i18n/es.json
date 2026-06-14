@@ -862,12 +862,43 @@
         "items": [
           "Pasos",
           "Buenas prácticas",
+          "Módulos operativos",
           "Resultado esperado",
           "Recomendación"
         ]
       },
       "viewFaq": "Ver FAQ",
-      "viewResult": "Ver resultado"
+      "viewResult": "Ver resultado",
+      "moduleCards": {
+        "title": "Módulos operativos",
+        "subtitle": "Usa estas tarjetas para entrar rápido a los módulos de planificación y análisis de eficiencia.",
+        "items": [
+          {
+            "badge": "PLANIFICACIÓN",
+            "title": "Planificación",
+            "body": "Organiza tareas por geocerca, persona, actividad y periodo. Permite revisar estado, avance, fechas y costos planificados para coordinar el trabajo operativo.",
+            "highlights": [
+              "Crear y revisar asignaciones por periodo.",
+              "Coordinar actividades antes de ejecutar el trabajo.",
+              "Usar datos reales de la organización activa."
+            ],
+            "cta": "Abrir Planificación",
+            "path": "/planificacion"
+          },
+          {
+            "badge": "BENCHMARKING",
+            "title": "Benchmarking",
+            "body": "Compara eficiencia entre geocercas, personas, actividades o asignaciones usando horas/m², $/m² y métricas auxiliares por ha o km².",
+            "highlights": [
+              "Identificar mejores y peores eficiencias.",
+              "Revisar semáforos y oportunidades de mejora.",
+              "Exportar resultados a CSV para análisis externo."
+            ],
+            "cta": "Abrir Benchmarking",
+            "path": "/benchmarking"
+          }
+        ]
+      }
     },
     "support": {
       "breadcrumb": "Centro de Ayuda / Soporte",
