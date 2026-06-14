@@ -1084,3 +1084,90 @@ Se validó en deployment Preview que:
 * No se tocó Producción.
 * No se hizo push a `main`.
 * Trabajo realizado solo en branch `preview`.
+## Fase 12C-FIX — Pulido final de fallbacks i18n en Planificación
+
+### Objetivo
+
+Se realizó un pulido final de internacionalización del módulo `/planificacion`, enfocado en eliminar fallbacks visibles hardcodeados que podían aparecer en modo demo, en registros sin nombre de geocerca/actividad o en casos de datos incompletos.
+
+### Archivos actualizados
+
+Se actualizaron:
+
+* `src/pages/Planificacion.jsx`
+* `src/i18n/es.json`
+* `src/i18n/en.json`
+* `src/i18n/fr.json`
+
+### Cambios implementados
+
+* Se mantuvo `useTranslation` en `Planificacion.jsx`.
+
+* Se mantuvo el helper `planningT`.
+
+* Se conservaron las llaves `planning.*`.
+
+* Se agregaron/ampliaron fallbacks i18n para:
+
+  * Geocerca sin nombre.
+  * Actividad sin nombre.
+  * Geocerca sin definir.
+  * Actividad sin definir.
+  * Prefijos de geocerca/actividad cuando solo existe ID parcial.
+  * Datos demo del módulo Planificación.
+
+* Los textos demo visibles ahora usan `planning.demo.*`.
+
+* Los fallbacks visibles ahora usan `planning.fallbacks.*`.
+
+* Las etiquetas visibles del formulario para geocerca y actividad usan i18n.
+
+* El semáforo mantiene lógica interna estable y muestra etiquetas traducibles desde `planning.traffic.*`.
+
+### Validación técnica
+
+Validación local ejecutada correctamente:
+
+```text
+npm run build: OK
+git diff --check: OK
+.delete(): 0
+.upsert(): 0
+.rpc(): 0
+.insert(): 1
+.update(): 3
+useTranslation: presente
+function planningT: presente
+planning.*: presente
+fallbacks/demo i18n: presentes
+```
+
+### Validación Preview
+
+Se validó en Vercel Preview que el módulo `/planificacion` sigue funcionando correctamente después del pulido:
+
+* Español OK.
+* English OK.
+* Français OK.
+* Fallbacks de geocerca/actividad OK.
+* Datos demo OK si aparecen.
+* Crear planificación OK.
+* Editar planificación OK.
+* Archivar planificación OK.
+* Restaurar planificación OK.
+* Filtros OK.
+* KPIs OK.
+* Tabla y totales OK.
+* Gantt dinámico OK.
+* Exportación CSV OK.
+
+### Restricciones respetadas
+
+* No se tocó base de datos.
+* No se ejecutó SQL.
+* No se modificó `planning_items`.
+* No se modificó `v_costos_hybrid_preview`.
+* No se cambió la lógica operativa validada.
+* No se tocó Producción.
+* No se hizo push a `main`.
+* Trabajo realizado solo en branch `preview`.
