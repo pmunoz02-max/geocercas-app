@@ -916,3 +916,80 @@ Validación Preview:
 * Filtros, KPIs, resumen semáforo y CSV siguieron funcionando.
 * Crear, editar, archivar y restaurar siguieron funcionando correctamente.
 * Los acentos se visualizaron correctamente en el navegador.
+## Fase 12A-FIX.2 — Período de análisis activo + Gantt dinámico
+
+### Objetivo
+
+Se corrigió el bloque **Período de análisis** del módulo `/planificacion`, que anteriormente funcionaba solo como elemento visual.
+
+Los botones:
+
+* Semana
+* Mes
+* Trimestre
+* Semestre
+* Año
+* Rango personalizado
+
+ahora son interactivos y actualizan la vista filtrada del módulo.
+
+### Cambios implementados
+
+* Se agregó estado real para el período de análisis seleccionado.
+* Cada botón actualiza el rango `fechaDesde` / `fechaHasta` de los filtros gerenciales.
+* La selección de período afecta de forma unificada a:
+
+  * KPIs Plan vs Real.
+  * Resumen ejecutivo por semáforo.
+  * Tabla de planificaciones.
+  * Total de vista filtrada.
+  * Exportación CSV ejecutiva.
+  * Gantt operativo.
+* El Gantt dejó de ser una vista fija semanal.
+* El Gantt ahora cambia su escala según el período seleccionado:
+
+  * Semana: columnas por días.
+  * Mes: columnas por semanas.
+  * Trimestre: columnas por meses.
+  * Semestre: columnas por meses.
+  * Año: columnas por meses.
+  * Rango personalizado: escala adaptativa.
+* Si el usuario edita manualmente las fechas Desde/Hasta, el período pasa a **Rango personalizado**.
+* Al limpiar filtros, también se reinicia el período de análisis.
+
+### Validación técnica
+
+Validación local ejecutada correctamente:
+
+```text
+npm run build: OK
+git diff --check: OK
+.delete(): 0
+.upsert(): 0
+.rpc(): 0
+.insert(): 1
+.update(): 3
+```
+
+### Validación funcional
+
+Se validó que:
+
+* Los botones de período son clickeables.
+* Al seleccionar Trimestre, el Gantt cambia de escala semanal a escala mensual.
+* KPIs, tabla, totales, CSV y Gantt usan la misma vista filtrada.
+* Crear planificación sigue funcionando.
+* Editar planificación sigue funcionando.
+* Archivar planificación sigue funcionando.
+* Restaurar planificación sigue funcionando.
+
+### Restricciones respetadas
+
+* No se tocó base de datos.
+* No se ejecutó SQL.
+* No se modificó `planning_items`.
+* No se modificó `v_costos_hybrid_preview`.
+* No se cambió la lógica operativa validada de crear, editar, archivar o restaurar.
+* No se tocó Producción.
+* No se hizo push a `main`.
+* Trabajo realizado solo en branch `preview`.
