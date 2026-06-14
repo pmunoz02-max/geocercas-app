@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 
@@ -229,6 +230,53 @@ function formatShortDate(date) {
 
 const monthLabels = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
+function planningT(tr, key, defaultValue, values = {}) {
+  return tr(`planning.${key}`, { defaultValue, ...values });
+}
+
+function getMonthLabel(monthIndex, tr) {
+  const keys = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  return planningT(tr, `calendar.monthsShort.${keys[monthIndex]}`, monthLabels[monthIndex] || "", {});
+}
+
+function getWeekdayLabel(dayIndex, tr) {
+  const labels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+  const keys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+  return planningT(tr, `calendar.weekdaysShort.${keys[dayIndex]}`, labels[dayIndex] || "", {});
+}
+
+function getPeriodoLabel(periodo, tr) {
+  if (periodo === "Semana") return planningT(tr, "periods.week", "Semana");
+  if (periodo === "Mes") return planningT(tr, "periods.month", "Mes");
+  if (periodo === "Trimestre") return planningT(tr, "periods.quarter", "Trimestre");
+  if (periodo === "Semestre") return planningT(tr, "periods.semester", "Semestre");
+  if (periodo === "Año") return planningT(tr, "periods.year", "Año");
+  return planningT(tr, "periods.custom", "Rango personalizado");
+}
+
+function getStatusDisplayLabel(status, tr, fallback = "Pendiente") {
+  const s = String(status || "").toLowerCase();
+  if (s === "closed") return planningT(tr, "status.closed", "Completada");
+  if (s === "approved") return planningT(tr, "status.approved", "En progreso");
+  if (s === "archived") return planningT(tr, "status.archived", "Archivada");
+  if (s === "draft") return planningT(tr, "status.draft", "Pendiente");
+  return fallback;
+}
+
+function getTrafficLightDisplayLabel(level, tr) {
+  if (level === "green") return planningT(tr, "traffic.green", "En rango");
+  if (level === "yellow") return planningT(tr, "traffic.yellow", "Desviación moderada");
+  if (level === "red") return planningT(tr, "traffic.red", "Desviación alta");
+  return planningT(tr, "traffic.none", "Sin base");
+}
+
+function getTrafficLightDisplayDescription(level, tr) {
+  if (level === "green") return planningT(tr, "trafficDescriptions.green", "Desviación hasta 10%.");
+  if (level === "yellow") return planningT(tr, "trafficDescriptions.yellow", "Desviación mayor a 10% y hasta 25%.");
+  if (level === "red") return planningT(tr, "trafficDescriptions.red", "Desviación mayor a 25%.");
+  return planningT(tr, "trafficDescriptions.none", "No hay base planificada suficiente.");
+}
+
 function getGanttScale(periodo, start, end) {
   const totalDays = getDaysDiffInclusive(start, end);
 
@@ -247,53 +295,59 @@ function getGanttColumnWidth(scale) {
   return 104;
 }
 
-function getGanttTitle(periodo, scale) {
-  if (periodo === "Semana") return "Gantt operativo semanal";
-  if (periodo === "Mes") return "Gantt operativo mensual";
-  if (periodo === "Trimestre") return "Gantt operativo trimestral";
-  if (periodo === "Semestre") return "Gantt operativo semestral";
-  if (periodo === "Año") return "Gantt operativo anual";
-  if (scale === "day") return "Gantt operativo personalizado por día";
-  if (scale === "week") return "Gantt operativo personalizado por semana";
+function getGanttTitle(periodo, scale, tr) {
+  if (periodo === "Semana") return planningT(tr, "gantt.titles.week", "Gantt operativo semanal");
+  if (periodo === "Mes") return planningT(tr, "gantt.titles.month", "Gantt operativo mensual");
+  if (periodo === "Trimestre") return planningT(tr, "gantt.titles.quarter", "Gantt operativo trimestral");
+  if (periodo === "Semestre") return planningT(tr, "gantt.titles.semester", "Gantt operativo semestral");
+  if (periodo === "Año") return planningT(tr, "gantt.titles.year", "Gantt operativo anual");
+  if (scale === "day") return planningT(tr, "gantt.titles.customDay", "Gantt operativo personalizado por día");
+  if (scale === "week") return planningT(tr, "gantt.titles.customWeek", "Gantt operativo personalizado por semana");
 
-  return "Gantt operativo personalizado por mes";
+  return planningT(tr, "gantt.titles.customMonth", "Gantt operativo personalizado por mes");
 }
 
-function getGanttSubtitle(periodo, scale, start, end, showArchived) {
-  const mode = showArchived ? "planificaciones archivadas" : "planificaciones activas";
-  const rangeLabel = start && end ? ` Del ${formatShortDate(start)} al ${formatShortDate(end)}.` : "";
+function getGanttSubtitle(periodo, scale, start, end, showArchived, tr) {
+  const mode = showArchived
+    ? planningT(tr, "gantt.modes.archived", "planificaciones archivadas")
+    : planningT(tr, "gantt.modes.active", "planificaciones activas");
+  const rangeLabel = start && end
+    ? planningT(tr, "gantt.rangeLabel", " Del {{from}} al {{to}}.", {
+        from: formatShortDate(start),
+        to: formatShortDate(end),
+      })
+    : "";
 
   if (scale === "day") {
-    return `Vista por días calendario para revisar ${mode}.${rangeLabel}`;
+    return planningT(tr, "gantt.subtitles.day", "Vista por días calendario para revisar {{mode}}.{{rangeLabel}}", { mode, rangeLabel });
   }
 
   if (scale === "week") {
-    return `Vista por semanas operativas para revisar ${mode}.${rangeLabel}`;
+    return planningT(tr, "gantt.subtitles.week", "Vista por semanas operativas para revisar {{mode}}.{{rangeLabel}}", { mode, rangeLabel });
   }
 
   if (periodo === "Trimestre") {
-    return `Vista trimestral agrupada por meses para revisar ${mode}.${rangeLabel}`;
+    return planningT(tr, "gantt.subtitles.quarter", "Vista trimestral agrupada por meses para revisar {{mode}}.{{rangeLabel}}", { mode, rangeLabel });
   }
 
   if (periodo === "Semestre") {
-    return `Vista semestral agrupada por meses para revisar ${mode}.${rangeLabel}`;
+    return planningT(tr, "gantt.subtitles.semester", "Vista semestral agrupada por meses para revisar {{mode}}.{{rangeLabel}}", { mode, rangeLabel });
   }
 
   if (periodo === "Año") {
-    return `Vista anual agrupada por meses para revisar ${mode}.${rangeLabel}`;
+    return planningT(tr, "gantt.subtitles.year", "Vista anual agrupada por meses para revisar {{mode}}.{{rangeLabel}}", { mode, rangeLabel });
   }
 
-  return `Vista agrupada por meses para revisar ${mode}.${rangeLabel}`;
+  return planningT(tr, "gantt.subtitles.month", "Vista agrupada por meses para revisar {{mode}}.{{rangeLabel}}", { mode, rangeLabel });
 }
 
-function buildGanttColumns(scale, start, end) {
+function buildGanttColumns(scale, start, end, tr) {
   const columns = [];
 
   if (!start || !end) return columns;
 
   if (scale === "day") {
     let cursor = start;
-    const weekdayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
     while (cursor.getTime() <= end.getTime()) {
       const bucketStart = cursor;
@@ -301,7 +355,7 @@ function buildGanttColumns(scale, start, end) {
 
       columns.push({
         id: `day-${formatDateInput(bucketStart)}`,
-        label: weekdayLabels[bucketStart.getDay()],
+        label: getWeekdayLabel(bucketStart.getDay(), tr),
         sublabel: formatShortDate(bucketStart),
         start: bucketStart,
         end: bucketEnd,
@@ -321,7 +375,7 @@ function buildGanttColumns(scale, start, end) {
 
       columns.push({
         id: `week-${formatDateInput(bucketStart)}`,
-        label: `Sem ${weekNumber}`,
+        label: planningT(tr, "calendar.weekLabel", "Sem {{number}}", { number: weekNumber }),
         sublabel: `${formatShortDate(bucketStart)}-${formatShortDate(bucketEnd)}`,
         start: bucketStart,
         end: bucketEnd,
@@ -343,7 +397,7 @@ function buildGanttColumns(scale, start, end) {
 
       columns.push({
         id: `month-${cursor.getFullYear()}-${cursor.getMonth() + 1}`,
-        label: monthLabels[cursor.getMonth()],
+        label: getMonthLabel(cursor.getMonth(), tr),
         sublabel: String(cursor.getFullYear()),
         start: bucketStart,
         end: bucketEnd,
@@ -356,7 +410,7 @@ function buildGanttColumns(scale, start, end) {
   return columns;
 }
 
-function buildGanttConfig(periodo, filtros, tareas, showArchived) {
+function buildGanttConfig(periodo, filtros, tareas, showArchived, tr) {
   const filterRange = normalizeDateRange(parseLocalDate(filtros.fechaDesde), parseLocalDate(filtros.fechaHasta));
   const taskRange = getTaskDateRange(tareas);
   const fallbackRange = getPeriodoAnalisisRange("Semana");
@@ -366,15 +420,15 @@ function buildGanttConfig(periodo, filtros, tareas, showArchived) {
   const end = filterRange.end || taskRange.end || fallbackEnd || start;
   const safeRange = normalizeDateRange(start, end);
   const scale = getGanttScale(periodo, safeRange.start, safeRange.end);
-  const columns = buildGanttColumns(scale, safeRange.start, safeRange.end);
+  const columns = buildGanttColumns(scale, safeRange.start, safeRange.end, tr);
   const columnWidth = getGanttColumnWidth(scale);
 
   return {
     columns,
     columnWidth,
     minWidth: 220 + Math.max(columns.length, 1) * columnWidth,
-    title: getGanttTitle(periodo, scale),
-    subtitle: getGanttSubtitle(periodo, scale, safeRange.start, safeRange.end, showArchived),
+    title: getGanttTitle(periodo, scale, tr),
+    subtitle: getGanttSubtitle(periodo, scale, safeRange.start, safeRange.end, showArchived, tr),
   };
 }
 
@@ -501,6 +555,7 @@ function downloadCsv(filename, rows) {
 }
 
 export default function Planificacion() {
+  const { t } = useTranslation();
   const { currentOrg } = useAuth();
   const orgId = currentOrg?.id || null;
   const [tareasDb, setTareasDb] = useState([]);
@@ -659,7 +714,7 @@ export default function Planificacion() {
       } catch (err) {
         console.error("[Planificacion] Error cargando datos de planificación:", err);
         if (isActive()) {
-          setErrorDb("No se pudo cargar planificación desde Supabase. Mostrando demo local.");
+          setErrorDb(t("planning.errors.loadDb", { defaultValue: "No se pudo cargar planificación desde Supabase. Mostrando demo local." }));
           setTareasDb([]);
           setGeofencesDb([]);
           setActivitiesDb([]);
@@ -671,7 +726,7 @@ export default function Planificacion() {
         }
       }
     },
-    [orgId, showArchived]
+    [orgId, showArchived, t]
   );
 
   useEffect(() => {
@@ -738,8 +793,8 @@ export default function Planificacion() {
   }, [filtrosPlanificacion, tareas]);
 
   const ganttConfig = useMemo(
-    () => buildGanttConfig(periodoAnalisis, filtrosPlanificacion, tareasFiltradas, showArchived),
-    [periodoAnalisis, filtrosPlanificacion, tareasFiltradas, showArchived]
+    () => buildGanttConfig(periodoAnalisis, filtrosPlanificacion, tareasFiltradas, showArchived, t),
+    [periodoAnalisis, filtrosPlanificacion, tareasFiltradas, showArchived, t]
   );
 
   const hayFiltrosPlanificacion = useMemo(
@@ -842,45 +897,45 @@ export default function Planificacion() {
     const errors = {};
     const form = nuevaPlanificacionVisual;
 
-    if (!form.geofenceId) errors.geofenceId = "Selecciona una geocerca.";
-    if (!form.activityId) errors.activityId = "Selecciona una actividad.";
-    if (!form.fechaInicio) errors.fechaInicio = "Ingresa fecha de inicio.";
-    if (!form.fechaFin) errors.fechaFin = "Ingresa fecha de fin.";
+    if (!form.geofenceId) errors.geofenceId = t("planning.validation.selectGeofence", { defaultValue: "Selecciona una geocerca." });
+    if (!form.activityId) errors.activityId = t("planning.validation.selectActivity", { defaultValue: "Selecciona una actividad." });
+    if (!form.fechaInicio) errors.fechaInicio = t("planning.validation.startDate", { defaultValue: "Ingresa fecha de inicio." });
+    if (!form.fechaFin) errors.fechaFin = t("planning.validation.endDate", { defaultValue: "Ingresa fecha de fin." });
 
     if (form.fechaInicio && form.fechaFin) {
       const start = parseLocalDate(form.fechaInicio);
       const end = parseLocalDate(form.fechaFin);
       if (!start || !end) {
-        errors.fechas = "Formato de fechas inválido.";
+        errors.fechas = t("planning.validation.invalidDates", { defaultValue: "Formato de fechas inválido." });
       } else if (end.getTime() < start.getTime()) {
-        errors.fechas = "La fecha fin no puede ser anterior a la fecha inicio.";
+        errors.fechas = t("planning.validation.endBeforeStart", { defaultValue: "La fecha fin no puede ser anterior a la fecha inicio." });
       }
     }
 
     if (form.horasPlanificadas === "") {
-      errors.horasPlanificadas = "Ingresa horas planificadas.";
+      errors.horasPlanificadas = t("planning.validation.plannedHours", { defaultValue: "Ingresa horas planificadas." });
     } else {
       const horas = Number(form.horasPlanificadas);
       if (!Number.isFinite(horas) || horas < 0) {
-        errors.horasPlanificadas = "Las horas deben ser un número mayor o igual a 0.";
+        errors.horasPlanificadas = t("planning.validation.plannedHoursPositive", { defaultValue: "Las horas deben ser un número mayor o igual a 0." });
       }
     }
 
     if (form.costoPlanificado === "") {
-      errors.costoPlanificado = "Ingresa costo planificado.";
+      errors.costoPlanificado = t("planning.validation.plannedCost", { defaultValue: "Ingresa costo planificado." });
     } else {
       const costo = Number(form.costoPlanificado);
       if (!Number.isFinite(costo) || costo < 0) {
-        errors.costoPlanificado = "El costo debe ser un número mayor o igual a 0.";
+        errors.costoPlanificado = t("planning.validation.plannedCostPositive", { defaultValue: "El costo debe ser un número mayor o igual a 0." });
       }
     }
 
     if (!ESTADOS_PLANIFICACION.includes(form.estado)) {
-      errors.estado = "Estado inválido.";
+      errors.estado = t("planning.validation.invalidStatus", { defaultValue: "Estado inválido." });
     }
 
     return errors;
-  }, [nuevaPlanificacionVisual]);
+  }, [nuevaPlanificacionVisual, t]);
 
   const formularioVisualValido = Object.keys(erroresNuevaPlanificacion).length === 0;
   const claseCampoBase = "mt-1 rounded-lg border px-3 py-2 text-sm normal-case text-slate-700";
@@ -916,27 +971,29 @@ export default function Planificacion() {
 
   const handleExportarCsvPlanificacion = () => {
     const exportedAt = new Date().toISOString();
-    const modo = showArchived ? "Archivadas" : "Activas";
+    const modo = showArchived
+      ? t("planning.modes.archived", { defaultValue: "Archivadas" })
+      : t("planning.modes.active", { defaultValue: "Activas" });
 
     const rows = [
       [
-        "ID",
-        "Geocerca",
-        "Actividad",
-        "Fecha inicio",
-        "Fecha fin",
-        "Horas planificadas",
-        "Costo planificado",
-        "Horas reales",
-        "Costo real",
-        "Diferencia horas",
-        "Diferencia costo",
-        "Semáforo",
-        "Detalle semáforo",
-        "Estado",
-        "Notas",
-        "Modo",
-        "Fecha exportación",
+        t("planning.csv.id", { defaultValue: "ID" }),
+        t("planning.csv.geofence", { defaultValue: "Geocerca" }),
+        t("planning.csv.activity", { defaultValue: "Actividad" }),
+        t("planning.csv.startDate", { defaultValue: "Fecha inicio" }),
+        t("planning.csv.endDate", { defaultValue: "Fecha fin" }),
+        t("planning.csv.plannedHours", { defaultValue: "Horas planificadas" }),
+        t("planning.csv.plannedCost", { defaultValue: "Costo planificado" }),
+        t("planning.csv.realHours", { defaultValue: "Horas reales" }),
+        t("planning.csv.realCost", { defaultValue: "Costo real" }),
+        t("planning.csv.hoursDifference", { defaultValue: "Diferencia horas" }),
+        t("planning.csv.costDifference", { defaultValue: "Diferencia costo" }),
+        t("planning.csv.trafficLight", { defaultValue: "Semáforo" }),
+        t("planning.csv.trafficDetail", { defaultValue: "Detalle semáforo" }),
+        t("planning.csv.status", { defaultValue: "Estado" }),
+        t("planning.csv.notes", { defaultValue: "Notas" }),
+        t("planning.csv.mode", { defaultValue: "Modo" }),
+        t("planning.csv.exportDate", { defaultValue: "Fecha exportación" }),
       ],
       ...tareasFiltradas.map((tarea) => [
         tarea.id,
@@ -950,9 +1007,9 @@ export default function Planificacion() {
         formatMetric(tarea.costoReal),
         formatMetric(tarea.diferenciaHoras),
         formatMetric(tarea.diferenciaCosto),
-        tarea.semaforoPlanVsReal?.label || "Sin base",
-        tarea.semaforoPlanVsReal?.description || "",
-        tarea.estado || "",
+        getTrafficLightDisplayLabel(tarea.semaforoPlanVsReal?.level, t),
+        getTrafficLightDisplayDescription(tarea.semaforoPlanVsReal?.level, t),
+        getStatusDisplayLabel(tarea.statusRaw, t, tarea.estado || ""),
         tarea.notes || "",
         modo,
         exportedAt,
@@ -1008,12 +1065,12 @@ export default function Planificacion() {
   const handleGuardarVisual = async () => {
     setIntentoGuardarVisual(true);
     if (!formularioVisualValido) {
-      window.alert("Completa los campos requeridos antes de guardar.");
+      window.alert(t("planning.alerts.completeRequired", { defaultValue: "Completa los campos requeridos antes de guardar." }));
       return;
     }
 
     if (!orgId) {
-      window.alert("No hay organización activa para guardar planificación.");
+      window.alert(t("planning.alerts.noActiveOrg", { defaultValue: "No hay organización activa para guardar planificación." }));
       return;
     }
 
@@ -1047,7 +1104,7 @@ export default function Planificacion() {
         setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
         setIntentoGuardarVisual(false);
         setEditingPlanningId(null);
-        window.alert("Planificación actualizada correctamente.");
+        window.alert(t("planning.alerts.updated", { defaultValue: "Planificación actualizada correctamente." }));
         return;
       }
 
@@ -1057,10 +1114,10 @@ export default function Planificacion() {
       await loadPlanningData();
       setNuevaPlanificacionVisual(NUEVA_PLANIFICACION_INICIAL);
       setIntentoGuardarVisual(false);
-      window.alert("Planificación guardada correctamente.");
+      window.alert(t("planning.alerts.saved", { defaultValue: "Planificación guardada correctamente." }));
     } catch (err) {
       console.error("[Planificacion] Error guardando planificación:", err);
-      window.alert("No se pudo guardar la planificación.");
+      window.alert(t("planning.alerts.saveError", { defaultValue: "No se pudo guardar la planificación." }));
     } finally {
       setSavingPlanning(false);
     }
@@ -1069,7 +1126,12 @@ export default function Planificacion() {
   const handleArchivarPlanificacion = async (tarea) => {
     if (!tarea?.dbId || !orgId) return;
 
-    const confirmado = window.confirm(`Archivar la planificación ${tarea.id}? Esta acción la ocultará de la lista activa.`);
+    const confirmado = window.confirm(
+      t("planning.confirm.archive", {
+        defaultValue: "Archivar la planificación {{id}}? Esta acción la ocultará de la lista activa.",
+        id: tarea.id,
+      })
+    );
     if (!confirmado) return;
 
     setArchivingPlanningId(tarea.dbId);
@@ -1086,10 +1148,10 @@ export default function Planificacion() {
       if (error) throw error;
 
       await loadPlanningData();
-      window.alert("Planificación archivada correctamente.");
+      window.alert(t("planning.alerts.archived", { defaultValue: "Planificación archivada correctamente." }));
     } catch (err) {
       console.error("[Planificacion] Error archivando planificación:", err);
-      window.alert("No se pudo archivar la planificación.");
+      window.alert(t("planning.alerts.archiveError", { defaultValue: "No se pudo archivar la planificación." }));
     } finally {
       setArchivingPlanningId(null);
     }
@@ -1098,7 +1160,12 @@ export default function Planificacion() {
   const handleRestaurarPlanificacion = async (tarea) => {
     if (!tarea?.dbId || !orgId) return;
 
-    const confirmado = window.confirm(`Restaurar la planificación ${tarea.id}? Volverá como borrador en la lista activa.`);
+    const confirmado = window.confirm(
+      t("planning.confirm.restore", {
+        defaultValue: "Restaurar la planificación {{id}}? Volverá como borrador en la lista activa.",
+        id: tarea.id,
+      })
+    );
     if (!confirmado) return;
 
     setRestoringPlanningId(tarea.dbId);
@@ -1115,10 +1182,10 @@ export default function Planificacion() {
       if (error) throw error;
 
       await loadPlanningData();
-      window.alert("Planificación restaurada correctamente.");
+      window.alert(t("planning.alerts.restored", { defaultValue: "Planificación restaurada correctamente." }));
     } catch (err) {
       console.error("[Planificacion] Error restaurando planificación:", err);
-      window.alert("No se pudo restaurar la planificación.");
+      window.alert(t("planning.alerts.restoreError", { defaultValue: "No se pudo restaurar la planificación." }));
     } finally {
       setRestoringPlanningId(null);
     }
@@ -1131,22 +1198,27 @@ export default function Planificacion() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-100">
-                Control gerencial operativo
+                {t("planning.header.badge", { defaultValue: "Control gerencial operativo" })}
               </p>
-              <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Planificación Operativa</h1>
+              <h1 className="mt-2 text-2xl font-bold sm:text-3xl">
+                {t("planning.header.title", { defaultValue: "Planificación Operativa" })}
+              </h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-cyan-50 sm:text-base">
-                Planifica trabajos por geocerca, compara ejecución real contra presupuesto operativo y detecta desviaciones con semáforos, filtros y exportación gerencial.
+                {t("planning.header.subtitle", {
+                  defaultValue:
+                    "Planifica trabajos por geocerca, compara ejecución real contra presupuesto operativo y detecta desviaciones con semáforos, filtros y exportación gerencial.",
+                })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/30">
-                Preview seguro
+                {t("planning.badges.preview", { defaultValue: "Preview seguro" })}
               </span>
               <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/30">
-                Plan vs Real
+                {t("planning.badges.planVsReal", { defaultValue: "Plan vs Real" })}
               </span>
               <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/30">
-                CSV ejecutivo
+                {t("planning.badges.csv", { defaultValue: "CSV ejecutivo" })}
               </span>
             </div>
           </div>
@@ -1154,7 +1226,7 @@ export default function Planificacion() {
 
         {loadingDb ? (
           <section className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
-            Cargando planificación desde Supabase...
+            {t("planning.loading.fromSupabase", { defaultValue: "Cargando planificación desde Supabase..." })}
           </section>
         ) : null}
 
@@ -1167,7 +1239,9 @@ export default function Planificacion() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800">Período de análisis</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {t("planning.periodSelector.title", { defaultValue: "Período de análisis" })}
+              </p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {periodos.map((periodo) => {
                   const activo = periodoAnalisis === periodo;
@@ -1184,7 +1258,7 @@ export default function Planificacion() {
                           : "border-slate-300 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
                       }`}
                     >
-                      {periodo}
+                      {getPeriodoLabel(periodo, t)}
                     </button>
                   );
                 })}
@@ -1193,7 +1267,7 @@ export default function Planificacion() {
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Desde
+                {t("planning.periodSelector.from", { defaultValue: "Desde" })}
                 <input
                   type="date"
                   value={filtrosPlanificacion.fechaDesde}
@@ -1202,7 +1276,7 @@ export default function Planificacion() {
                 />
               </label>
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Hasta
+                {t("planning.periodSelector.to", { defaultValue: "Hasta" })}
                 <input
                   type="date"
                   value={filtrosPlanificacion.fechaHasta}
@@ -1217,9 +1291,14 @@ export default function Planificacion() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Filtros gerenciales Plan vs Real</h2>
+              <h2 className="text-lg font-semibold text-slate-900">
+                {t("planning.filters.title", { defaultValue: "Filtros gerenciales Plan vs Real" })}
+              </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Enfoca la revisión por desviaciones, geocerca, actividad, estado o período. La vista filtrada alimenta KPIs, tabla, Gantt y CSV.
+                {t("planning.filters.subtitle", {
+                  defaultValue:
+                    "Enfoca la revisión por desviaciones, geocerca, actividad, estado o período. La vista filtrada alimenta KPIs, tabla, Gantt y CSV.",
+                })}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1229,7 +1308,7 @@ export default function Planificacion() {
                 disabled={tareasFiltradas.length === 0}
                 className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                Exportar CSV ejecutivo
+                {t("planning.actions.exportCsv", { defaultValue: "Exportar CSV ejecutivo" })}
               </button>
               <button
                 type="button"
@@ -1237,76 +1316,76 @@ export default function Planificacion() {
                 disabled={!hayFiltrosPlanificacion}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Limpiar filtros
+                {t("planning.actions.clearFilters", { defaultValue: "Limpiar filtros" })}
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-              Semáforo
+              {t("planning.filters.trafficLight", { defaultValue: "Semáforo" })}
               <select
                 value={filtrosPlanificacion.semaforo}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, semaforo: e.target.value }))}
                 className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
               >
-                <option value="all">Todos</option>
-                <option value="green">En rango</option>
-                <option value="yellow">Desviación moderada</option>
-                <option value="red">Desviación alta</option>
-                <option value="none">Sin base</option>
+                <option value="all">{t("planning.filters.all", { defaultValue: "Todos" })}</option>
+                <option value="green">{t("planning.traffic.green", { defaultValue: "En rango" })}</option>
+                <option value="yellow">{t("planning.traffic.yellow", { defaultValue: "Desviación moderada" })}</option>
+                <option value="red">{t("planning.traffic.red", { defaultValue: "Desviación alta" })}</option>
+                <option value="none">{t("planning.traffic.none", { defaultValue: "Sin base" })}</option>
               </select>
             </label>
 
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-              Geocerca
+              {t("planning.filters.geofence", { defaultValue: "Geocerca" })}
               <select
                 value={filtrosPlanificacion.geofenceId}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, geofenceId: e.target.value }))}
                 className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
               >
-                <option value="all">Todas</option>
+                <option value="all">{t("planning.filters.allFeminine", { defaultValue: "Todas" })}</option>
                 {geofencesDb.map((g) => (
                   <option key={g.id} value={String(g.id)}>
-                    {g.name || "Geocerca sin nombre"}
+                    {g.name || t("planning.fallbacks.unnamedGeofence", { defaultValue: "Geocerca sin nombre" })}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-              Actividad
+              {t("planning.filters.activity", { defaultValue: "Actividad" })}
               <select
                 value={filtrosPlanificacion.activityId}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, activityId: e.target.value }))}
                 className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
               >
-                <option value="all">Todas</option>
+                <option value="all">{t("planning.filters.allFeminine", { defaultValue: "Todas" })}</option>
                 {activitiesDb.map((a) => (
                   <option key={a.id} value={String(a.id)}>
-                    {a.name || "Actividad sin nombre"}
+                    {a.name || t("planning.fallbacks.unnamedActivity", { defaultValue: "Actividad sin nombre" })}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-              Estado
+              {t("planning.filters.status", { defaultValue: "Estado" })}
               <select
                 value={filtrosPlanificacion.estado}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, estado: e.target.value }))}
                 className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
               >
-                <option value="all">Todos</option>
-                <option value="draft">Pendiente</option>
-                <option value="approved">En progreso</option>
-                <option value="closed">Completada</option>
-                <option value="archived">Archivada</option>
+                <option value="all">{t("planning.filters.all", { defaultValue: "Todos" })}</option>
+                <option value="draft">{t("planning.status.draft", { defaultValue: "Pendiente" })}</option>
+                <option value="approved">{t("planning.status.approved", { defaultValue: "En progreso" })}</option>
+                <option value="closed">{t("planning.status.closed", { defaultValue: "Completada" })}</option>
+                <option value="archived">{t("planning.status.archived", { defaultValue: "Archivada" })}</option>
               </select>
             </label>
 
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-              Fecha desde
+              {t("planning.filters.dateFrom", { defaultValue: "Fecha desde" })}
               <input
                 type="date"
                 value={filtrosPlanificacion.fechaDesde}
@@ -1316,7 +1395,7 @@ export default function Planificacion() {
             </label>
 
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-              Fecha hasta
+              {t("planning.filters.dateTo", { defaultValue: "Fecha hasta" })}
               <input
                 type="date"
                 value={filtrosPlanificacion.fechaHasta}
@@ -1327,136 +1406,145 @@ export default function Planificacion() {
           </div>
 
           <p className="mt-3 text-xs text-slate-500">
-            Mostrando {tareasFiltradas.length} de {tareas.length} planificaciones de la vista actual. Los KPIs, la tabla, el Gantt y la exportación usan este mismo filtro.
+            {t("planning.filters.showing", {
+              defaultValue:
+                "Mostrando {{filtered}} de {{total}} planificaciones de la vista actual. Los KPIs, la tabla, el Gantt y la exportación usan este mismo filtro.",
+              filtered: tareasFiltradas.length,
+              total: tareas.length,
+            })}
           </p>
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Planificaciones visibles</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.visible", { defaultValue: "Planificaciones visibles" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{total}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Cerradas</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.closed", { defaultValue: "Cerradas" })}</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-600">{completadas}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">En ejecución</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.inProgress", { defaultValue: "En ejecución" })}</p>
             <p className="mt-1 text-2xl font-semibold text-sky-600">{enProgreso}</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Avance operativo</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.operationalProgress", { defaultValue: "Avance operativo" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{avancePromedio}%</p>
           </article>
         </section>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Horas planificadas</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.plannedHours", { defaultValue: "Horas planificadas" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {formatMetric(planVsRealKpis.totalHorasPlanificadas)}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Horas reales</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.realHours", { defaultValue: "Horas reales" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {formatMetric(planVsRealKpis.totalHorasReales)}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Dif. horas</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.hoursDifference", { defaultValue: "Dif. horas" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {formatMetric(planVsRealKpis.diferenciaHoras)}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">% cumplimiento horas</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.hoursCompliance", { defaultValue: "% cumplimiento horas" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {planVsRealKpis.cumplimientoHoras === null ? "-" : `${formatMetric(planVsRealKpis.cumplimientoHoras)}%`}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Costo planificado</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.plannedCost", { defaultValue: "Costo planificado" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {formatMetric(planVsRealKpis.totalCostoPlanificado)}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Costo real</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.realCost", { defaultValue: "Costo real" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {formatMetric(planVsRealKpis.totalCostoReal)}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Dif. costo</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.costDifference", { defaultValue: "Dif. costo" })}</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
               {formatMetric(planVsRealKpis.diferenciaCosto)}
             </p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">Vista actual</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{showArchived ? "Archivadas" : "Activas"}</p>
+            <p className="text-sm text-slate-500">{t("planning.kpis.currentView", { defaultValue: "Vista actual" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{showArchived ? t("planning.modes.archived", { defaultValue: "Archivadas" }) : t("planning.modes.active", { defaultValue: "Activas" })}</p>
           </article>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="mb-4 flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-900">Resumen ejecutivo por semáforo</h2>
+            <h2 className="text-lg font-semibold text-slate-900">
+              {t("planning.summary.title", { defaultValue: "Resumen ejecutivo por semáforo" })}
+            </h2>
             <p className="text-sm text-slate-500">
-              Lectura rápida del riesgo operativo según la peor desviación entre horas y costo.
+              {t("planning.summary.subtitle", {
+                defaultValue: "Lectura rápida del riesgo operativo según la peor desviación entre horas y costo.",
+              })}
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("green")}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">En rango</p>
+                <p className="text-sm font-medium">{t("planning.traffic.green", { defaultValue: "En rango" })}</p>
                 <span className="text-xl" aria-hidden="true">
                   {getTrafficLightIcon("green")}
                 </span>
               </div>
               <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.green}</p>
               <p className="mt-1 text-xs">
-                {formatMetric(resumenSemaforoKpis.greenPct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+                {t("planning.summary.percentOfTotal", { defaultValue: "{{percent}}% de {{total}} planificaciones", percent: formatMetric(resumenSemaforoKpis.greenPct), total: resumenSemaforoKpis.totalSemaforo })}
               </p>
             </article>
 
             <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("yellow")}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">Desviación moderada</p>
+                <p className="text-sm font-medium">{t("planning.traffic.yellow", { defaultValue: "Desviación moderada" })}</p>
                 <span className="text-xl" aria-hidden="true">
                   {getTrafficLightIcon("yellow")}
                 </span>
               </div>
               <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.yellow}</p>
               <p className="mt-1 text-xs">
-                {formatMetric(resumenSemaforoKpis.yellowPct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+                {t("planning.summary.percentOfTotal", { defaultValue: "{{percent}}% de {{total}} planificaciones", percent: formatMetric(resumenSemaforoKpis.yellowPct), total: resumenSemaforoKpis.totalSemaforo })}
               </p>
             </article>
 
             <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("red")}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">Desviación alta</p>
+                <p className="text-sm font-medium">{t("planning.traffic.red", { defaultValue: "Desviación alta" })}</p>
                 <span className="text-xl" aria-hidden="true">
                   {getTrafficLightIcon("red")}
                 </span>
               </div>
               <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.red}</p>
               <p className="mt-1 text-xs">
-                {formatMetric(resumenSemaforoKpis.redPct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+                {t("planning.summary.percentOfTotal", { defaultValue: "{{percent}}% de {{total}} planificaciones", percent: formatMetric(resumenSemaforoKpis.redPct), total: resumenSemaforoKpis.totalSemaforo })}
               </p>
             </article>
 
             <article className={`rounded-xl border p-4 shadow-sm ${getTrafficLightStyle("none")}`}>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">Sin base</p>
+                <p className="text-sm font-medium">{t("planning.traffic.none", { defaultValue: "Sin base" })}</p>
                 <span className="text-xl" aria-hidden="true">
                   {getTrafficLightIcon("none")}
                 </span>
               </div>
               <p className="mt-2 text-2xl font-semibold">{resumenSemaforoKpis.none}</p>
               <p className="mt-1 text-xs">
-                {formatMetric(resumenSemaforoKpis.nonePct)}% de {resumenSemaforoKpis.totalSemaforo} planificaciones
+                {t("planning.summary.percentOfTotal", { defaultValue: "{{percent}}% de {{total}} planificaciones", percent: formatMetric(resumenSemaforoKpis.nonePct), total: resumenSemaforoKpis.totalSemaforo })}
               </p>
             </article>
           </div>
@@ -1466,18 +1554,20 @@ export default function Planificacion() {
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-slate-900">
-                {editingPlanningId ? "Editar planificación operativa" : "Nueva planificación operativa"}
+                {editingPlanningId
+                  ? t("planning.form.editTitle", { defaultValue: "Editar planificación operativa" })
+                  : t("planning.form.newTitle", { defaultValue: "Nueva planificación operativa" })}
               </h2>
-              <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">Preview</span>
+              <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">{t("planning.badges.previewShort", { defaultValue: "Preview" })}</span>
             </div>
             <p className="mb-4 text-sm text-slate-500">
               {editingPlanningId
-                ? "Actualiza una planificación activa sin duplicar registros. El cambio queda limitado a Preview."
-                : "Registra una planificación operativa para comparar luego contra la ejecución real."}
+                ? t("planning.form.editSubtitle", { defaultValue: "Actualiza una planificación activa sin duplicar registros. El cambio queda limitado a Preview." })
+                : t("planning.form.newSubtitle", { defaultValue: "Registra una planificación operativa para comparar luego contra la ejecución real." })}
             </p>
             {intentoGuardarVisual && !formularioVisualValido ? (
               <section className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                Revisa los campos marcados para continuar.
+                {t("planning.validation.reviewFields", { defaultValue: "Revisa los campos marcados para continuar." })}
               </section>
             ) : null}
 
@@ -1489,7 +1579,7 @@ export default function Planificacion() {
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, geofenceId: e.target.value }))}
                   className={getClaseCampo("geofenceId")}
                 >
-                  <option value="">Seleccionar geocerca</option>
+                  <option value="">{t("planning.form.selectGeofence", { defaultValue: "Seleccionar geocerca" })}</option>
                   {geofencesDb.map((g) => (
                     <option key={g.id} value={g.id}>
                       {g.name || "Geocerca sin nombre"}
@@ -1508,7 +1598,7 @@ export default function Planificacion() {
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, activityId: e.target.value }))}
                   className={getClaseCampo("activityId")}
                 >
-                  <option value="">Seleccionar actividad</option>
+                  <option value="">{t("planning.form.selectActivity", { defaultValue: "Seleccionar actividad" })}</option>
                   {activitiesDb.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name || "Actividad sin nombre"}
@@ -1521,7 +1611,7 @@ export default function Planificacion() {
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Fecha inicio
+                {t("planning.form.startDate", { defaultValue: "Fecha inicio" })}
                 <input
                   type="date"
                   value={nuevaPlanificacionVisual.fechaInicio}
@@ -1534,7 +1624,7 @@ export default function Planificacion() {
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Fecha fin
+                {t("planning.form.endDate", { defaultValue: "Fecha fin" })}
                 <input
                   type="date"
                   value={nuevaPlanificacionVisual.fechaFin}
@@ -1550,7 +1640,7 @@ export default function Planificacion() {
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Horas planificadas
+                {t("planning.form.plannedHours", { defaultValue: "Horas planificadas" })}
                 <input
                   type="number"
                   min="0"
@@ -1571,7 +1661,7 @@ export default function Planificacion() {
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Costo planificado
+                {t("planning.form.plannedCost", { defaultValue: "Costo planificado" })}
                 <input
                   type="number"
                   min="0"
@@ -1592,22 +1682,28 @@ export default function Planificacion() {
                 ) : null}
                 <span className="mt-1 text-xs normal-case text-slate-500">
                   {tieneTarifaAutomatica
-                    ? `Se calcula automáticamente según tarifa de actividad y horas${monedaActividad ? ` (${monedaActividad})` : ""}.`
-                    : `Sin tarifa por hora${monedaActividad ? ` (${monedaActividad})` : ""}. Ingresa el costo manualmente.`}
+                    ? t("planning.form.autoCostHint", {
+                        defaultValue: "Se calcula automáticamente según tarifa de actividad y horas{{currency}}.",
+                        currency: monedaActividad ? ` (${monedaActividad})` : "",
+                      })
+                    : t("planning.form.manualCostHint", {
+                        defaultValue: "Sin tarifa por hora{{currency}}. Ingresa el costo manualmente.",
+                        currency: monedaActividad ? ` (${monedaActividad})` : "",
+                      })}
                 </span>
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
-                Estado
+                {t("planning.form.status", { defaultValue: "Estado" })}
                 <select
                   value={nuevaPlanificacionVisual.estado}
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, estado: e.target.value }))}
                   className={getClaseCampo("estado")}
                 >
-                  <option value="draft">Pendiente</option>
-                  <option value="approved">En progreso</option>
-                  <option value="closed">Completada</option>
-                  <option value="archived">Archivada</option>
+                  <option value="draft">{t("planning.status.draft", { defaultValue: "Pendiente" })}</option>
+                  <option value="approved">{t("planning.status.approved", { defaultValue: "En progreso" })}</option>
+                  <option value="closed">{t("planning.status.closed", { defaultValue: "Completada" })}</option>
+                  <option value="archived">{t("planning.status.archived", { defaultValue: "Archivada" })}</option>
                 </select>
                 {intentoGuardarVisual && erroresNuevaPlanificacion.estado ? (
                   <span className="mt-1 text-xs normal-case text-rose-600">{erroresNuevaPlanificacion.estado}</span>
@@ -1615,10 +1711,10 @@ export default function Planificacion() {
               </label>
 
               <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500 xl:col-span-4">
-                Notas
+                {t("planning.form.notes", { defaultValue: "Notas" })}
                 <textarea
                   rows={3}
-                  placeholder="Notas operativas"
+                  placeholder={t("planning.form.notesPlaceholder", { defaultValue: "Notas operativas" })}
                   value={nuevaPlanificacionVisual.notas}
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, notas: e.target.value }))}
                   className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
@@ -1633,7 +1729,7 @@ export default function Planificacion() {
                 disabled={savingPlanning}
                 className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                Cancelar
+                {t("planning.actions.cancel", { defaultValue: "Cancelar" })}
               </button>
               <button
                 type="button"
@@ -1641,12 +1737,16 @@ export default function Planificacion() {
                 disabled={savingPlanning}
                 className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
               >
-                {savingPlanning ? "Guardando..." : editingPlanningId ? "Guardar edición" : "Guardar planificación"}
+                {savingPlanning
+                  ? t("planning.actions.saving", { defaultValue: "Guardando..." })
+                  : editingPlanningId
+                    ? t("planning.actions.saveEdit", { defaultValue: "Guardar edición" })
+                    : t("planning.actions.savePlanning", { defaultValue: "Guardar planificación" })}
               </button>
               <span className="text-xs text-slate-500">
                 {editingPlanningId
-                  ? "Al guardar, se actualiza la planificación activa en Preview."
-                  : "Al guardar, se inserta en Preview y se recarga la lista."}
+                  ? t("planning.form.editSaveHint", { defaultValue: "Al guardar, se actualiza la planificación activa en Preview." })
+                  : t("planning.form.newSaveHint", { defaultValue: "Al guardar, se inserta en Preview y se recarga la lista." })}
               </span>
             </div>
           </section>
@@ -1656,25 +1756,31 @@ export default function Planificacion() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                {showArchived ? "Planificaciones archivadas" : "Planificaciones activas"}
+                {showArchived
+                  ? t("planning.table.archivedTitle", { defaultValue: "Planificaciones archivadas" })
+                  : t("planning.table.activeTitle", { defaultValue: "Planificaciones activas" })}
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 {showArchived
-                  ? "Historial operativo archivado. Útil para auditoría y revisión posterior."
-                  : "Vista activa con presupuesto, ejecución real, desviaciones, semáforo y totales."}
+                  ? t("planning.table.archivedSubtitle", { defaultValue: "Historial operativo archivado. Útil para auditoría y revisión posterior." })
+                  : t("planning.table.activeSubtitle", { defaultValue: "Vista activa con presupuesto, ejecución real, desviaciones, semáforo y totales." })}
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                {mostrandoDemo ? "Datos demo locales" : "Datos reales Preview"}
+                {mostrandoDemo
+                  ? t("planning.badges.localDemo", { defaultValue: "Datos demo locales" })
+                  : t("planning.badges.realPreview", { defaultValue: "Datos reales Preview" })}
               </span>
               <button
                 type="button"
                 onClick={() => setShowArchived((prev) => !prev)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                {showArchived ? "Ver activas" : "Ver archivadas"}
+                {showArchived
+                  ? t("planning.actions.viewActive", { defaultValue: "Ver activas" })
+                  : t("planning.actions.viewArchived", { defaultValue: "Ver archivadas" })}
               </button>
             </div>
           </div>
@@ -1683,20 +1789,20 @@ export default function Planificacion() {
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">ID</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Geocerca</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Actividad</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Fecha inicio</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Fecha fin</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Horas planificadas</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Costo planificado</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Horas reales</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Costo real</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Dif. horas</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Dif. costo</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Semáforo</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Estado</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">Acciones</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.id", { defaultValue: "ID" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.geofence", { defaultValue: "Geocerca" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.activity", { defaultValue: "Actividad" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.startDate", { defaultValue: "Fecha inicio" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.endDate", { defaultValue: "Fecha fin" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.plannedHours", { defaultValue: "Horas planificadas" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.plannedCost", { defaultValue: "Costo planificado" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.realHours", { defaultValue: "Horas reales" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.realCost", { defaultValue: "Costo real" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.hoursDiff", { defaultValue: "Dif. horas" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.costDiff", { defaultValue: "Dif. costo" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.trafficLight", { defaultValue: "Semáforo" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.status", { defaultValue: "Estado" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.actions", { defaultValue: "Acciones" })}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
@@ -1704,10 +1810,10 @@ export default function Planificacion() {
                   <tr>
                     <td className="px-3 py-6 text-center text-slate-500" colSpan={14}>
                       {hayFiltrosPlanificacion
-                        ? "No hay planificaciones que coincidan con los filtros seleccionados."
+                        ? t("planning.empty.noFilterResults", { defaultValue: "No hay planificaciones que coincidan con los filtros seleccionados." })
                         : showArchived
-                          ? "No hay planificaciones archivadas para esta organización."
-                          : "No hay planificación registrada para esta organización."}
+                          ? t("planning.empty.noArchived", { defaultValue: "No hay planificaciones archivadas para esta organización." })
+                          : t("planning.empty.noActive", { defaultValue: "No hay planificación registrada para esta organización." })}
                     </td>
                   </tr>
                 ) : (
@@ -1729,18 +1835,18 @@ export default function Planificacion() {
                           className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${getTrafficLightStyle(
                             tarea.semaforoPlanVsReal?.level
                           )}`}
-                          title={tarea.semaforoPlanVsReal?.description || "Sin base"}
+                          title={getTrafficLightDisplayDescription(tarea.semaforoPlanVsReal?.level, t)}
                         >
                           <span aria-hidden="true">{getTrafficLightIcon(tarea.semaforoPlanVsReal?.level)}</span>
-                          {tarea.semaforoPlanVsReal?.label || "Sin base"}
+                          {getTrafficLightDisplayLabel(tarea.semaforoPlanVsReal?.level, t)}
                         </span>
                         <p className="mt-1 text-[11px] text-slate-500">
-                          {tarea.semaforoPlanVsReal?.description || "No hay base planificada suficiente."}
+                          {getTrafficLightDisplayDescription(tarea.semaforoPlanVsReal?.level, t)}
                         </p>
                       </td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${getEstadoStyle(tarea.estado)}`}>
-                          {tarea.estado}
+                          {getStatusDisplayLabel(tarea.statusRaw, t, tarea.estado)}
                         </span>
                       </td>
                       <td className="px-3 py-2">
@@ -1752,7 +1858,7 @@ export default function Planificacion() {
                               disabled={archivingPlanningId === tarea.dbId || editingPlanningId === tarea.dbId}
                               className="rounded-md border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              Editar
+                              {t("planning.actions.edit", { defaultValue: "Editar" })}
                             </button>
                             <button
                               type="button"
@@ -1760,7 +1866,9 @@ export default function Planificacion() {
                               disabled={archivingPlanningId === tarea.dbId}
                               className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
                             >
-                              {archivingPlanningId === tarea.dbId ? "Archivando..." : "Archivar"}
+                              {archivingPlanningId === tarea.dbId
+                                ? t("planning.actions.archiving", { defaultValue: "Archivando..." })
+                                : t("planning.actions.archive", { defaultValue: "Archivar" })}
                             </button>
                           </div>
                         ) : tarea.dbId && showArchived ? (
@@ -1770,7 +1878,9 @@ export default function Planificacion() {
                             disabled={restoringPlanningId === tarea.dbId}
                             className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            {restoringPlanningId === tarea.dbId ? "Restaurando..." : "Restaurar"}
+                            {restoringPlanningId === tarea.dbId
+                              ? t("planning.actions.restoring", { defaultValue: "Restaurando..." })
+                              : t("planning.actions.restore", { defaultValue: "Restaurar" })}
                           </button>
                         ) : (
                           <span className="text-xs text-slate-400">-</span>
@@ -1784,7 +1894,7 @@ export default function Planificacion() {
                 <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-700">
                   <tr>
                     <td className="px-3 py-3 text-slate-900" colSpan={5}>
-                      Total vista filtrada
+                      {t("planning.table.totalFilteredView", { defaultValue: "Total vista filtrada" })}
                     </td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.horasPlanificadas)}</td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.costoPlanificado)}</td>
@@ -1792,7 +1902,7 @@ export default function Planificacion() {
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.costoReal)}</td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.diferenciaHoras)}</td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.diferenciaCosto)}</td>
-                    <td className="px-3 py-3 text-xs font-medium text-slate-500">Vista filtrada</td>
+                    <td className="px-3 py-3 text-xs font-medium text-slate-500">{t("planning.table.filteredView", { defaultValue: "Vista filtrada" })}</td>
                     <td className="px-3 py-3 text-xs font-medium text-slate-500">-</td>
                     <td className="px-3 py-3 text-xs font-medium text-slate-500">-</td>
                   </tr>
@@ -1812,7 +1922,7 @@ export default function Planificacion() {
                 className="grid gap-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
                 style={{ gridTemplateColumns: `220px repeat(${ganttConfig.columns.length}, minmax(${ganttConfig.columnWidth}px, 1fr))` }}
               >
-                <div>Tarea</div>
+                <div>{t("planning.gantt.task", { defaultValue: "Tarea" })}</div>
                 {ganttConfig.columns.map((column) => (
                   <div key={column.id} className="text-center">
                     <div>{column.label}</div>

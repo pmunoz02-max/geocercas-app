@@ -1379,6 +1379,261 @@
       "create": "Create"
     }
   },
+  "planning": {
+    "header": {
+      "badge": "Operational management control",
+      "title": "Operational Planning",
+      "subtitle": "Plan work by geofence, compare actual execution against the operating budget, and detect deviations with traffic lights, filters, and management export."
+    },
+    "badges": {
+      "preview": "Safe Preview",
+      "previewShort": "Preview",
+      "planVsReal": "Plan vs Actual",
+      "csv": "Executive CSV",
+      "localDemo": "Local demo data",
+      "realPreview": "Real Preview data"
+    },
+    "periods": {
+      "week": "Week",
+      "month": "Month",
+      "quarter": "Quarter",
+      "semester": "Semester",
+      "year": "Year",
+      "custom": "Custom range"
+    },
+    "periodSelector": {
+      "title": "Analysis period",
+      "from": "From",
+      "to": "To"
+    },
+    "filters": {
+      "title": "Management filters Plan vs Actual",
+      "subtitle": "Focus the review by deviations, geofence, activity, status, or period. The filtered view feeds KPIs, table, Gantt, and CSV.",
+      "trafficLight": "Traffic light",
+      "geofence": "Geofence",
+      "activity": "Activity",
+      "status": "Status",
+      "dateFrom": "Date from",
+      "dateTo": "Date to",
+      "all": "All",
+      "allFeminine": "All",
+      "showing": "Showing {{filtered}} of {{total}} planning records in the current view. KPIs, table, Gantt, and export use this same filter."
+    },
+    "actions": {
+      "exportCsv": "Export executive CSV",
+      "clearFilters": "Clear filters",
+      "cancel": "Cancel",
+      "saving": "Saving...",
+      "saveEdit": "Save edit",
+      "savePlanning": "Save planning",
+      "viewActive": "View active",
+      "viewArchived": "View archived",
+      "edit": "Edit",
+      "archive": "Archive",
+      "archiving": "Archiving...",
+      "restore": "Restore",
+      "restoring": "Restoring..."
+    },
+    "kpis": {
+      "visible": "Visible planning records",
+      "closed": "Closed",
+      "inProgress": "In execution",
+      "operationalProgress": "Operational progress",
+      "plannedHours": "Planned hours",
+      "realHours": "Actual hours",
+      "hoursDifference": "Hours diff.",
+      "hoursCompliance": "% hours compliance",
+      "plannedCost": "Planned cost",
+      "realCost": "Actual cost",
+      "costDifference": "Cost diff.",
+      "currentView": "Current view"
+    },
+    "summary": {
+      "title": "Executive summary by traffic light",
+      "subtitle": "Quick reading of operational risk based on the worst deviation between hours and cost.",
+      "percentOfTotal": "{{percent}}% of {{total}} planning records"
+    },
+    "traffic": {
+      "green": "In range",
+      "yellow": "Moderate deviation",
+      "red": "High deviation",
+      "none": "No baseline"
+    },
+    "trafficDescriptions": {
+      "green": "Deviation up to 10%.",
+      "yellow": "Deviation above 10% and up to 25%.",
+      "red": "Deviation above 25%.",
+      "none": "There is not enough planned baseline."
+    },
+    "form": {
+      "newTitle": "New operational planning",
+      "editTitle": "Edit operational planning",
+      "newSubtitle": "Register operational planning to compare later against actual execution.",
+      "editSubtitle": "Update an active planning record without duplicating records. The change remains limited to Preview.",
+      "selectGeofence": "Select geofence",
+      "selectActivity": "Select activity",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "plannedHours": "Planned hours",
+      "plannedCost": "Planned cost",
+      "status": "Status",
+      "notes": "Notes",
+      "notesPlaceholder": "Operational notes",
+      "autoCostHint": "Calculated automatically using activity rate and hours{{currency}}.",
+      "manualCostHint": "No hourly rate{{currency}}. Enter the cost manually.",
+      "editSaveHint": "Saving updates the active planning record in Preview.",
+      "newSaveHint": "Saving inserts into Preview and reloads the list."
+    },
+    "status": {
+      "draft": "Pending",
+      "approved": "In progress",
+      "closed": "Completed",
+      "archived": "Archived"
+    },
+    "table": {
+      "activeTitle": "Active planning records",
+      "archivedTitle": "Archived planning records",
+      "activeSubtitle": "Active view with budget, actual execution, deviations, traffic light, and totals.",
+      "archivedSubtitle": "Archived operating history. Useful for audit and later review.",
+      "totalFilteredView": "Total filtered view",
+      "filteredView": "Filtered view",
+      "columns": {
+        "id": "ID",
+        "geofence": "Geofence",
+        "activity": "Activity",
+        "startDate": "Start date",
+        "endDate": "End date",
+        "plannedHours": "Planned hours",
+        "plannedCost": "Planned cost",
+        "realHours": "Actual hours",
+        "realCost": "Actual cost",
+        "hoursDiff": "Hours diff.",
+        "costDiff": "Cost diff.",
+        "trafficLight": "Traffic light",
+        "status": "Status",
+        "actions": "Actions"
+      }
+    },
+    "empty": {
+      "noFilterResults": "No planning records match the selected filters.",
+      "noArchived": "There are no archived planning records for this organization.",
+      "noActive": "There is no planning registered for this organization."
+    },
+    "gantt": {
+      "task": "Task",
+      "titles": {
+        "week": "Weekly operational Gantt",
+        "month": "Monthly operational Gantt",
+        "quarter": "Quarterly operational Gantt",
+        "semester": "Semester operational Gantt",
+        "year": "Annual operational Gantt",
+        "customDay": "Custom operational Gantt by day",
+        "customWeek": "Custom operational Gantt by week",
+        "customMonth": "Custom operational Gantt by month"
+      },
+      "modes": {
+        "active": "active planning records",
+        "archived": "archived planning records"
+      },
+      "rangeLabel": " From {{from}} to {{to}}.",
+      "subtitles": {
+        "day": "Calendar-day view to review {{mode}}.{{rangeLabel}}",
+        "week": "Operational-week view to review {{mode}}.{{rangeLabel}}",
+        "quarter": "Quarterly view grouped by months to review {{mode}}.{{rangeLabel}}",
+        "semester": "Semester view grouped by months to review {{mode}}.{{rangeLabel}}",
+        "year": "Annual view grouped by months to review {{mode}}.{{rangeLabel}}",
+        "month": "Month-grouped view to review {{mode}}.{{rangeLabel}}"
+      }
+    },
+    "calendar": {
+      "weekLabel": "Wk {{number}}",
+      "weekdaysShort": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
+      },
+      "monthsShort": {
+        "jan": "Jan",
+        "feb": "Feb",
+        "mar": "Mar",
+        "apr": "Apr",
+        "may": "May",
+        "jun": "Jun",
+        "jul": "Jul",
+        "aug": "Aug",
+        "sep": "Sep",
+        "oct": "Oct",
+        "nov": "Nov",
+        "dec": "Dec"
+      }
+    },
+    "modes": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "csv": {
+      "id": "ID",
+      "geofence": "Geofence",
+      "activity": "Activity",
+      "startDate": "Start date",
+      "endDate": "End date",
+      "plannedHours": "Planned hours",
+      "plannedCost": "Planned cost",
+      "realHours": "Actual hours",
+      "realCost": "Actual cost",
+      "hoursDifference": "Hours difference",
+      "costDifference": "Cost difference",
+      "trafficLight": "Traffic light",
+      "trafficDetail": "Traffic light detail",
+      "status": "Status",
+      "notes": "Notes",
+      "mode": "Mode",
+      "exportDate": "Export date"
+    },
+    "validation": {
+      "selectGeofence": "Select a geofence.",
+      "selectActivity": "Select an activity.",
+      "startDate": "Enter a start date.",
+      "endDate": "Enter an end date.",
+      "invalidDates": "Invalid date format.",
+      "endBeforeStart": "The end date cannot be earlier than the start date.",
+      "plannedHours": "Enter planned hours.",
+      "plannedHoursPositive": "Hours must be a number greater than or equal to 0.",
+      "plannedCost": "Enter planned cost.",
+      "plannedCostPositive": "Cost must be a number greater than or equal to 0.",
+      "invalidStatus": "Invalid status.",
+      "reviewFields": "Review the marked fields to continue."
+    },
+    "alerts": {
+      "completeRequired": "Complete the required fields before saving.",
+      "noActiveOrg": "There is no active organization to save planning.",
+      "saved": "Planning saved successfully.",
+      "updated": "Planning updated successfully.",
+      "saveError": "Could not save the planning record.",
+      "archived": "Planning archived successfully.",
+      "archiveError": "Could not archive the planning record.",
+      "restored": "Planning restored successfully.",
+      "restoreError": "Could not restore the planning record."
+    },
+    "confirm": {
+      "archive": "Archive planning {{id}}? This action will hide it from the active list.",
+      "restore": "Restore planning {{id}}? It will return as a draft in the active list."
+    },
+    "errors": {
+      "loadDb": "Could not load planning from Supabase. Showing local demo."
+    },
+    "fallbacks": {
+      "unnamedGeofence": "Unnamed geofence",
+      "unnamedActivity": "Unnamed activity"
+    },
+    "loading": {
+      "fromSupabase": "Loading planning from Supabase..."
+    }
+  },
   "personal": {
     "bannerCreated": "Personnel created successfully.",
     "bannerDeletedOk": "Record deleted successfully.",

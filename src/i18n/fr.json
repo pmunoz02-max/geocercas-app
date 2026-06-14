@@ -1342,6 +1342,261 @@
       "create": "Créer"
     }
   },
+  "planning": {
+    "header": {
+      "badge": "Contrôle opérationnel de gestion",
+      "title": "Planification opérationnelle",
+      "subtitle": "Planifiez les travaux par géofence, comparez l’exécution réelle au budget opérationnel et détectez les écarts avec des feux, des filtres et une exportation de gestion."
+    },
+    "badges": {
+      "preview": "Preview sécurisé",
+      "previewShort": "Preview",
+      "planVsReal": "Plan vs Réel",
+      "csv": "CSV exécutif",
+      "localDemo": "Données démo locales",
+      "realPreview": "Données réelles Preview"
+    },
+    "periods": {
+      "week": "Semaine",
+      "month": "Mois",
+      "quarter": "Trimestre",
+      "semester": "Semestre",
+      "year": "Année",
+      "custom": "Plage personnalisée"
+    },
+    "periodSelector": {
+      "title": "Période d’analyse",
+      "from": "De",
+      "to": "À"
+    },
+    "filters": {
+      "title": "Filtres de gestion Plan vs Réel",
+      "subtitle": "Concentrez l’analyse par écarts, géofence, activité, statut ou période. La vue filtrée alimente les KPI, le tableau, le Gantt et le CSV.",
+      "trafficLight": "Feu",
+      "geofence": "Géofence",
+      "activity": "Activité",
+      "status": "Statut",
+      "dateFrom": "Date de début",
+      "dateTo": "Date de fin",
+      "all": "Tous",
+      "allFeminine": "Toutes",
+      "showing": "Affichage de {{filtered}} sur {{total}} planifications dans la vue actuelle. Les KPI, le tableau, le Gantt et l’export utilisent ce même filtre."
+    },
+    "actions": {
+      "exportCsv": "Exporter CSV exécutif",
+      "clearFilters": "Effacer les filtres",
+      "cancel": "Annuler",
+      "saving": "Enregistrement...",
+      "saveEdit": "Enregistrer la modification",
+      "savePlanning": "Enregistrer la planification",
+      "viewActive": "Voir actives",
+      "viewArchived": "Voir archivées",
+      "edit": "Modifier",
+      "archive": "Archiver",
+      "archiving": "Archivage...",
+      "restore": "Restaurer",
+      "restoring": "Restauration..."
+    },
+    "kpis": {
+      "visible": "Planifications visibles",
+      "closed": "Clôturées",
+      "inProgress": "En exécution",
+      "operationalProgress": "Avancement opérationnel",
+      "plannedHours": "Heures planifiées",
+      "realHours": "Heures réelles",
+      "hoursDifference": "Écart heures",
+      "hoursCompliance": "% conformité heures",
+      "plannedCost": "Coût planifié",
+      "realCost": "Coût réel",
+      "costDifference": "Écart coût",
+      "currentView": "Vue actuelle"
+    },
+    "summary": {
+      "title": "Résumé exécutif par feu",
+      "subtitle": "Lecture rapide du risque opérationnel selon le pire écart entre les heures et le coût.",
+      "percentOfTotal": "{{percent}}% de {{total}} planifications"
+    },
+    "traffic": {
+      "green": "Dans la plage",
+      "yellow": "Écart modéré",
+      "red": "Écart élevé",
+      "none": "Sans base"
+    },
+    "trafficDescriptions": {
+      "green": "Écart jusqu’à 10%.",
+      "yellow": "Écart supérieur à 10% et jusqu’à 25%.",
+      "red": "Écart supérieur à 25%.",
+      "none": "Base planifiée insuffisante."
+    },
+    "form": {
+      "newTitle": "Nouvelle planification opérationnelle",
+      "editTitle": "Modifier la planification opérationnelle",
+      "newSubtitle": "Enregistrez une planification opérationnelle pour la comparer ensuite à l’exécution réelle.",
+      "editSubtitle": "Mettez à jour une planification active sans dupliquer les enregistrements. Le changement reste limité à Preview.",
+      "selectGeofence": "Sélectionner une géofence",
+      "selectActivity": "Sélectionner une activité",
+      "startDate": "Date de début",
+      "endDate": "Date de fin",
+      "plannedHours": "Heures planifiées",
+      "plannedCost": "Coût planifié",
+      "status": "Statut",
+      "notes": "Notes",
+      "notesPlaceholder": "Notes opérationnelles",
+      "autoCostHint": "Calculé automatiquement selon le tarif de l’activité et les heures{{currency}}.",
+      "manualCostHint": "Aucun tarif horaire{{currency}}. Saisissez le coût manuellement.",
+      "editSaveHint": "L’enregistrement met à jour la planification active dans Preview.",
+      "newSaveHint": "L’enregistrement insère dans Preview et recharge la liste."
+    },
+    "status": {
+      "draft": "En attente",
+      "approved": "En cours",
+      "closed": "Terminée",
+      "archived": "Archivée"
+    },
+    "table": {
+      "activeTitle": "Planifications actives",
+      "archivedTitle": "Planifications archivées",
+      "activeSubtitle": "Vue active avec budget, exécution réelle, écarts, feu et totaux.",
+      "archivedSubtitle": "Historique opérationnel archivé. Utile pour l’audit et la révision ultérieure.",
+      "totalFilteredView": "Total vue filtrée",
+      "filteredView": "Vue filtrée",
+      "columns": {
+        "id": "ID",
+        "geofence": "Géofence",
+        "activity": "Activité",
+        "startDate": "Date début",
+        "endDate": "Date fin",
+        "plannedHours": "Heures planifiées",
+        "plannedCost": "Coût planifié",
+        "realHours": "Heures réelles",
+        "realCost": "Coût réel",
+        "hoursDiff": "Écart heures",
+        "costDiff": "Écart coût",
+        "trafficLight": "Feu",
+        "status": "Statut",
+        "actions": "Actions"
+      }
+    },
+    "empty": {
+      "noFilterResults": "Aucune planification ne correspond aux filtres sélectionnés.",
+      "noArchived": "Aucune planification archivée pour cette organisation.",
+      "noActive": "Aucune planification enregistrée pour cette organisation."
+    },
+    "gantt": {
+      "task": "Tâche",
+      "titles": {
+        "week": "Gantt opérationnel hebdomadaire",
+        "month": "Gantt opérationnel mensuel",
+        "quarter": "Gantt opérationnel trimestriel",
+        "semester": "Gantt opérationnel semestriel",
+        "year": "Gantt opérationnel annuel",
+        "customDay": "Gantt opérationnel personnalisé par jour",
+        "customWeek": "Gantt opérationnel personnalisé par semaine",
+        "customMonth": "Gantt opérationnel personnalisé par mois"
+      },
+      "modes": {
+        "active": "planifications actives",
+        "archived": "planifications archivées"
+      },
+      "rangeLabel": " Du {{from}} au {{to}}.",
+      "subtitles": {
+        "day": "Vue par jours calendaires pour réviser {{mode}}.{{rangeLabel}}",
+        "week": "Vue par semaines opérationnelles pour réviser {{mode}}.{{rangeLabel}}",
+        "quarter": "Vue trimestrielle groupée par mois pour réviser {{mode}}.{{rangeLabel}}",
+        "semester": "Vue semestrielle groupée par mois pour réviser {{mode}}.{{rangeLabel}}",
+        "year": "Vue annuelle groupée par mois pour réviser {{mode}}.{{rangeLabel}}",
+        "month": "Vue groupée par mois pour réviser {{mode}}.{{rangeLabel}}"
+      }
+    },
+    "calendar": {
+      "weekLabel": "Sem {{number}}",
+      "weekdaysShort": {
+        "sun": "Dim",
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mer",
+        "thu": "Jeu",
+        "fri": "Ven",
+        "sat": "Sam"
+      },
+      "monthsShort": {
+        "jan": "Jan",
+        "feb": "Fév",
+        "mar": "Mar",
+        "apr": "Avr",
+        "may": "Mai",
+        "jun": "Juin",
+        "jul": "Juil",
+        "aug": "Aoû",
+        "sep": "Sep",
+        "oct": "Oct",
+        "nov": "Nov",
+        "dec": "Déc"
+      }
+    },
+    "modes": {
+      "active": "Actives",
+      "archived": "Archivées"
+    },
+    "csv": {
+      "id": "ID",
+      "geofence": "Géofence",
+      "activity": "Activité",
+      "startDate": "Date début",
+      "endDate": "Date fin",
+      "plannedHours": "Heures planifiées",
+      "plannedCost": "Coût planifié",
+      "realHours": "Heures réelles",
+      "realCost": "Coût réel",
+      "hoursDifference": "Différence heures",
+      "costDifference": "Différence coût",
+      "trafficLight": "Feu",
+      "trafficDetail": "Détail du feu",
+      "status": "Statut",
+      "notes": "Notes",
+      "mode": "Mode",
+      "exportDate": "Date d’export"
+    },
+    "validation": {
+      "selectGeofence": "Sélectionnez une géofence.",
+      "selectActivity": "Sélectionnez une activité.",
+      "startDate": "Saisissez une date de début.",
+      "endDate": "Saisissez une date de fin.",
+      "invalidDates": "Format de dates invalide.",
+      "endBeforeStart": "La date de fin ne peut pas être antérieure à la date de début.",
+      "plannedHours": "Saisissez les heures planifiées.",
+      "plannedHoursPositive": "Les heures doivent être un nombre supérieur ou égal à 0.",
+      "plannedCost": "Saisissez le coût planifié.",
+      "plannedCostPositive": "Le coût doit être un nombre supérieur ou égal à 0.",
+      "invalidStatus": "Statut invalide.",
+      "reviewFields": "Vérifiez les champs marqués pour continuer."
+    },
+    "alerts": {
+      "completeRequired": "Complétez les champs requis avant d’enregistrer.",
+      "noActiveOrg": "Aucune organisation active pour enregistrer la planification.",
+      "saved": "Planification enregistrée correctement.",
+      "updated": "Planification mise à jour correctement.",
+      "saveError": "Impossible d’enregistrer la planification.",
+      "archived": "Planification archivée correctement.",
+      "archiveError": "Impossible d’archiver la planification.",
+      "restored": "Planification restaurée correctement.",
+      "restoreError": "Impossible de restaurer la planification."
+    },
+    "confirm": {
+      "archive": "Archiver la planification {{id}} ? Cette action la masquera de la liste active.",
+      "restore": "Restaurer la planification {{id}} ? Elle reviendra comme brouillon dans la liste active."
+    },
+    "errors": {
+      "loadDb": "Impossible de charger la planification depuis Supabase. Affichage de la démo locale."
+    },
+    "fallbacks": {
+      "unnamedGeofence": "Géofence sans nom",
+      "unnamedActivity": "Activité sans nom"
+    },
+    "loading": {
+      "fromSupabase": "Chargement de la planification depuis Supabase..."
+    }
+  },
   "personal": {
     "bannerCreated": "Personal creado exitosamente.",
     "bannerDeletedOk": "Registro eliminado correctamente.",

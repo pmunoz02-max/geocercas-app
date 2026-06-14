@@ -1381,6 +1381,261 @@
       "create": "Crear"
     }
   },
+  "planning": {
+    "header": {
+      "badge": "Control gerencial operativo",
+      "title": "Planificación Operativa",
+      "subtitle": "Planifica trabajos por geocerca, compara ejecución real contra presupuesto operativo y detecta desviaciones con semáforos, filtros y exportación gerencial."
+    },
+    "badges": {
+      "preview": "Preview seguro",
+      "previewShort": "Preview",
+      "planVsReal": "Plan vs Real",
+      "csv": "CSV ejecutivo",
+      "localDemo": "Datos demo locales",
+      "realPreview": "Datos reales Preview"
+    },
+    "periods": {
+      "week": "Semana",
+      "month": "Mes",
+      "quarter": "Trimestre",
+      "semester": "Semestre",
+      "year": "Año",
+      "custom": "Rango personalizado"
+    },
+    "periodSelector": {
+      "title": "Período de análisis",
+      "from": "Desde",
+      "to": "Hasta"
+    },
+    "filters": {
+      "title": "Filtros gerenciales Plan vs Real",
+      "subtitle": "Enfoca la revisión por desviaciones, geocerca, actividad, estado o período. La vista filtrada alimenta KPIs, tabla, Gantt y CSV.",
+      "trafficLight": "Semáforo",
+      "geofence": "Geocerca",
+      "activity": "Actividad",
+      "status": "Estado",
+      "dateFrom": "Fecha desde",
+      "dateTo": "Fecha hasta",
+      "all": "Todos",
+      "allFeminine": "Todas",
+      "showing": "Mostrando {{filtered}} de {{total}} planificaciones de la vista actual. Los KPIs, la tabla, el Gantt y la exportación usan este mismo filtro."
+    },
+    "actions": {
+      "exportCsv": "Exportar CSV ejecutivo",
+      "clearFilters": "Limpiar filtros",
+      "cancel": "Cancelar",
+      "saving": "Guardando...",
+      "saveEdit": "Guardar edición",
+      "savePlanning": "Guardar planificación",
+      "viewActive": "Ver activas",
+      "viewArchived": "Ver archivadas",
+      "edit": "Editar",
+      "archive": "Archivar",
+      "archiving": "Archivando...",
+      "restore": "Restaurar",
+      "restoring": "Restaurando..."
+    },
+    "kpis": {
+      "visible": "Planificaciones visibles",
+      "closed": "Cerradas",
+      "inProgress": "En ejecución",
+      "operationalProgress": "Avance operativo",
+      "plannedHours": "Horas planificadas",
+      "realHours": "Horas reales",
+      "hoursDifference": "Dif. horas",
+      "hoursCompliance": "% cumplimiento horas",
+      "plannedCost": "Costo planificado",
+      "realCost": "Costo real",
+      "costDifference": "Dif. costo",
+      "currentView": "Vista actual"
+    },
+    "summary": {
+      "title": "Resumen ejecutivo por semáforo",
+      "subtitle": "Lectura rápida del riesgo operativo según la peor desviación entre horas y costo.",
+      "percentOfTotal": "{{percent}}% de {{total}} planificaciones"
+    },
+    "traffic": {
+      "green": "En rango",
+      "yellow": "Desviación moderada",
+      "red": "Desviación alta",
+      "none": "Sin base"
+    },
+    "trafficDescriptions": {
+      "green": "Desviación hasta 10%.",
+      "yellow": "Desviación mayor a 10% y hasta 25%.",
+      "red": "Desviación mayor a 25%.",
+      "none": "No hay base planificada suficiente."
+    },
+    "form": {
+      "newTitle": "Nueva planificación operativa",
+      "editTitle": "Editar planificación operativa",
+      "newSubtitle": "Registra una planificación operativa para comparar luego contra la ejecución real.",
+      "editSubtitle": "Actualiza una planificación activa sin duplicar registros. El cambio queda limitado a Preview.",
+      "selectGeofence": "Seleccionar geocerca",
+      "selectActivity": "Seleccionar actividad",
+      "startDate": "Fecha inicio",
+      "endDate": "Fecha fin",
+      "plannedHours": "Horas planificadas",
+      "plannedCost": "Costo planificado",
+      "status": "Estado",
+      "notes": "Notas",
+      "notesPlaceholder": "Notas operativas",
+      "autoCostHint": "Se calcula automáticamente según tarifa de actividad y horas{{currency}}.",
+      "manualCostHint": "Sin tarifa por hora{{currency}}. Ingresa el costo manualmente.",
+      "editSaveHint": "Al guardar, se actualiza la planificación activa en Preview.",
+      "newSaveHint": "Al guardar, se inserta en Preview y se recarga la lista."
+    },
+    "status": {
+      "draft": "Pendiente",
+      "approved": "En progreso",
+      "closed": "Completada",
+      "archived": "Archivada"
+    },
+    "table": {
+      "activeTitle": "Planificaciones activas",
+      "archivedTitle": "Planificaciones archivadas",
+      "activeSubtitle": "Vista activa con presupuesto, ejecución real, desviaciones, semáforo y totales.",
+      "archivedSubtitle": "Historial operativo archivado. Útil para auditoría y revisión posterior.",
+      "totalFilteredView": "Total vista filtrada",
+      "filteredView": "Vista filtrada",
+      "columns": {
+        "id": "ID",
+        "geofence": "Geocerca",
+        "activity": "Actividad",
+        "startDate": "Fecha inicio",
+        "endDate": "Fecha fin",
+        "plannedHours": "Horas planificadas",
+        "plannedCost": "Costo planificado",
+        "realHours": "Horas reales",
+        "realCost": "Costo real",
+        "hoursDiff": "Dif. horas",
+        "costDiff": "Dif. costo",
+        "trafficLight": "Semáforo",
+        "status": "Estado",
+        "actions": "Acciones"
+      }
+    },
+    "empty": {
+      "noFilterResults": "No hay planificaciones que coincidan con los filtros seleccionados.",
+      "noArchived": "No hay planificaciones archivadas para esta organización.",
+      "noActive": "No hay planificación registrada para esta organización."
+    },
+    "gantt": {
+      "task": "Tarea",
+      "titles": {
+        "week": "Gantt operativo semanal",
+        "month": "Gantt operativo mensual",
+        "quarter": "Gantt operativo trimestral",
+        "semester": "Gantt operativo semestral",
+        "year": "Gantt operativo anual",
+        "customDay": "Gantt operativo personalizado por día",
+        "customWeek": "Gantt operativo personalizado por semana",
+        "customMonth": "Gantt operativo personalizado por mes"
+      },
+      "modes": {
+        "active": "planificaciones activas",
+        "archived": "planificaciones archivadas"
+      },
+      "rangeLabel": " Del {{from}} al {{to}}.",
+      "subtitles": {
+        "day": "Vista por días calendario para revisar {{mode}}.{{rangeLabel}}",
+        "week": "Vista por semanas operativas para revisar {{mode}}.{{rangeLabel}}",
+        "quarter": "Vista trimestral agrupada por meses para revisar {{mode}}.{{rangeLabel}}",
+        "semester": "Vista semestral agrupada por meses para revisar {{mode}}.{{rangeLabel}}",
+        "year": "Vista anual agrupada por meses para revisar {{mode}}.{{rangeLabel}}",
+        "month": "Vista agrupada por meses para revisar {{mode}}.{{rangeLabel}}"
+      }
+    },
+    "calendar": {
+      "weekLabel": "Sem {{number}}",
+      "weekdaysShort": {
+        "sun": "Dom",
+        "mon": "Lun",
+        "tue": "Mar",
+        "wed": "Mié",
+        "thu": "Jue",
+        "fri": "Vie",
+        "sat": "Sáb"
+      },
+      "monthsShort": {
+        "jan": "Ene",
+        "feb": "Feb",
+        "mar": "Mar",
+        "apr": "Abr",
+        "may": "May",
+        "jun": "Jun",
+        "jul": "Jul",
+        "aug": "Ago",
+        "sep": "Sep",
+        "oct": "Oct",
+        "nov": "Nov",
+        "dec": "Dic"
+      }
+    },
+    "modes": {
+      "active": "Activas",
+      "archived": "Archivadas"
+    },
+    "csv": {
+      "id": "ID",
+      "geofence": "Geocerca",
+      "activity": "Actividad",
+      "startDate": "Fecha inicio",
+      "endDate": "Fecha fin",
+      "plannedHours": "Horas planificadas",
+      "plannedCost": "Costo planificado",
+      "realHours": "Horas reales",
+      "realCost": "Costo real",
+      "hoursDifference": "Diferencia horas",
+      "costDifference": "Diferencia costo",
+      "trafficLight": "Semáforo",
+      "trafficDetail": "Detalle semáforo",
+      "status": "Estado",
+      "notes": "Notas",
+      "mode": "Modo",
+      "exportDate": "Fecha exportación"
+    },
+    "validation": {
+      "selectGeofence": "Selecciona una geocerca.",
+      "selectActivity": "Selecciona una actividad.",
+      "startDate": "Ingresa fecha de inicio.",
+      "endDate": "Ingresa fecha de fin.",
+      "invalidDates": "Formato de fechas inválido.",
+      "endBeforeStart": "La fecha fin no puede ser anterior a la fecha inicio.",
+      "plannedHours": "Ingresa horas planificadas.",
+      "plannedHoursPositive": "Las horas deben ser un número mayor o igual a 0.",
+      "plannedCost": "Ingresa costo planificado.",
+      "plannedCostPositive": "El costo debe ser un número mayor o igual a 0.",
+      "invalidStatus": "Estado inválido.",
+      "reviewFields": "Revisa los campos marcados para continuar."
+    },
+    "alerts": {
+      "completeRequired": "Completa los campos requeridos antes de guardar.",
+      "noActiveOrg": "No hay organización activa para guardar planificación.",
+      "saved": "Planificación guardada correctamente.",
+      "updated": "Planificación actualizada correctamente.",
+      "saveError": "No se pudo guardar la planificación.",
+      "archived": "Planificación archivada correctamente.",
+      "archiveError": "No se pudo archivar la planificación.",
+      "restored": "Planificación restaurada correctamente.",
+      "restoreError": "No se pudo restaurar la planificación."
+    },
+    "confirm": {
+      "archive": "Archivar la planificación {{id}}? Esta acción la ocultará de la lista activa.",
+      "restore": "Restaurar la planificación {{id}}? Volverá como borrador en la lista activa."
+    },
+    "errors": {
+      "loadDb": "No se pudo cargar planificación desde Supabase. Mostrando demo local."
+    },
+    "fallbacks": {
+      "unnamedGeofence": "Geocerca sin nombre",
+      "unnamedActivity": "Actividad sin nombre"
+    },
+    "loading": {
+      "fromSupabase": "Cargando planificación desde Supabase..."
+    }
+  },
   "personal": {
     "bannerCreated": "Personal creado exitosamente.",
     "bannerDeletedOk": "Registro eliminado correctamente.",
