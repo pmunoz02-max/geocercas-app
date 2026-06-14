@@ -410,3 +410,50 @@ Reglas mantenidas:
 - No mezclar Preview con Producción.
 - No Promote sin orden explícita.
 - Documentación con commit `[allow-docs]`.
+
+---
+
+# Caso documentado — Normalización visual global REPORTES
+
+La normalización visual global siguió el protocolo oficial:
+
+1. Se tomó **REPORTES** como patrón visual base.
+2. Se trabajó en branch `preview`.
+3. Se aplicaron cambios visuales por fases pequeñas.
+4. Se validó cada fase con `npm run build` y Deploy Preview.
+5. Se promovió a Producción únicamente con orden explícita.
+6. No se tocó `main`.
+7. No se subieron datos demo.
+8. No se modificó base de datos, RLS, billing, tracking ni geofencing.
+9. Se actualizó `/docs` después del rollout.
+
+Páginas alineadas:
+
+- Inicio
+- Dashboard / Home
+- Reportes
+- Planificación
+- Benchmarking
+- Centro de Ayuda / Guía Rápida
+- Actividades
+- Asignaciones
+- Personal
+- Costos
+- Costos Dashboard
+- Tracker
+- Tracker Dashboard
+- Billing
+- Pricing
+- Invitar Tracker
+
+Referencia oficial:
+
+```txt
+docs/UI_STYLE_GUIDE.md
+```
+
+Regla operativa para futuros cambios visuales:
+
+```txt
+Cambio visual pequeño → build → deploy Preview → validación visual → documentación → Promote solo con orden explícita
+```

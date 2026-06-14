@@ -1,12 +1,8 @@
-# Skill: UI / UX Hardening
-
-## Objetivo
+Skill: UI / UX Hardening
+Objetivo
 Mantener una interfaz clara, consistente y segura sin tocar lógica crítica.
-
 ---
-
-## Regla crítica
-
+Regla crítica
 ```txt
 Cambios visuales NO deben cambiar lógica de negocio, auth, tracking, billing ni reportes.
 Principios
@@ -122,3 +118,44 @@ Push:
 git add docs/skills/ui-ux.md
 git commit -m "docs: add ui ux skill [allow-docs]"
 git push origin preview
+
+## Estándar visual vigente — REPORTES
+
+La referencia visual oficial para páginas internas es `Reports.jsx` / **REPORTES**.
+
+Ver también:
+
+```txt
+docs/UI_STYLE_GUIDE.md
+```
+Reglas para hardening visual
+Cambios visuales no deben tocar lógica de negocio, auth, tracking, billing, geofencing, SQL ni RLS.
+Mantener header tipo REPORTES: gradiente emerald/teal, título, subtítulo y acciones claras.
+Usar tarjetas y contenedores blancos con borde emerald suave, `rounded-3xl` y sombra ligera.
+Usar botones primarios emerald y secundarios blancos con borde emerald.
+Tablas con encabezado emerald claro, números alineados a la derecha y scroll horizontal si hay muchas columnas.
+Filtros en paneles consistentes, con focus emerald y labels claros.
+No mostrar datos técnicos: `org_id`, `user_id`, tokens, raw JSON, logs o marcadores de debug.
+Mantener i18n ES/EN/FR cuando la pantalla lo use.
+Validar mobile de forma básica antes de cerrar.
+Páginas ya normalizadas
+Inicio
+Dashboard / Home
+Reportes
+Planificación
+Benchmarking
+Centro de Ayuda / Guía Rápida
+Actividades
+Asignaciones
+Personal
+Costos
+Costos Dashboard
+Tracker
+Tracker Dashboard
+Billing
+Pricing
+Invitar Tracker
+Prompt corto para Copilot
+```txt
+Solo alinea esta página al estilo REPORTES. No cambies lógica, hooks, queries, auth, billing, tracking ni RLS. Mantén i18n y estados loading/error/empty.
+```

@@ -436,3 +436,26 @@ Fuente oficial para Benchmarking:
 ```sql
 public.v_benchmarking_efficiency_preview
 ```
+
+---
+
+# Regla adicional — Estándar visual REPORTES
+
+La apariencia oficial de las páginas internas debe seguir el patrón visual de **REPORTES**, documentado en:
+
+```txt
+docs/UI_STYLE_GUIDE.md
+```
+
+Reglas obligatorias para IA y Copilot:
+
+- No crear páginas internas con estilos aislados si existe el patrón REPORTES.
+- Usar header con gradiente emerald/teal, contenedores blancos, bordes suaves, `rounded-3xl`, sombras ligeras y botones emerald.
+- Mantener consistencia entre filtros, KPIs, tablas, gráficos y estados vacíos.
+- No mezclar cambios visuales con cambios de lógica de negocio, auth, billing, tracking, geofencing, SQL o RLS.
+- No hardcodear textos nuevos en páginas que usan i18n.
+- No mostrar datos técnicos en la UI final (`org_id`, `user_id`, tokens, raw JSON, logs).
+- Toda página nueva debe tener estados loading, error y empty cuando aplique.
+- Si se modifica la arquitectura visual global, actualizar `docs/UI_STYLE_GUIDE.md` y `docs/skills/ui-ux.md`.
+
+Estado actual: Inicio, Dashboard/Home, Reportes, Planificación, Benchmarking, Centro de Ayuda, Actividades, Asignaciones, Personal, Costos, Tracker, Billing, Pricing e Invitar Tracker fueron alineadas al patrón REPORTES y promovidas a Producción tras validación Preview.
