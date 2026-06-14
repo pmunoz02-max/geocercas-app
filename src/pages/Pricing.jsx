@@ -20,11 +20,11 @@ function formatLimit(value, fallback, unlimitedLabel) {
 
 function PlanBadge({ children, tone = "slate" }) {
   const tones = {
-    slate: "border-slate-200 bg-slate-100 text-slate-700",
-    blue: "border-blue-200 bg-blue-100 text-blue-700",
+    slate: "border-emerald-100 bg-emerald-50 text-emerald-800",
+    blue: "border-emerald-200 bg-emerald-100 text-emerald-700",
     emerald: "border-emerald-200 bg-emerald-100 text-emerald-700",
     amber: "border-amber-200 bg-amber-100 text-amber-700",
-    violet: "border-violet-200 bg-violet-100 text-violet-700",
+    violet: "border-emerald-200 bg-emerald-100 text-emerald-700",
   };
 
   return (
@@ -53,22 +53,22 @@ function PlanCard({
     <div
       className={`relative rounded-2xl border p-6 shadow-sm ${
         highlight
-          ? "border-slate-900 bg-slate-900 text-white"
-          : "border-slate-200 bg-white text-slate-900"
+          ? "border-emerald-950 bg-emerald-950 text-white"
+          : "border-emerald-100 bg-white text-emerald-950"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2
             className={`text-xl font-semibold ${
-              highlight ? "text-white" : "text-slate-900"
+              highlight ? "text-white" : "text-emerald-950"
             }`}
           >
             {title}
           </h2>
           <p
             className={`mt-1 text-sm ${
-              highlight ? "text-slate-300" : "text-slate-600"
+              highlight ? "text-emerald-300" : "text-emerald-700"
             }`}
           >
             {subtitle}
@@ -85,14 +85,14 @@ function PlanCard({
       <div className="mt-6">
         <div
           className={`text-3xl font-bold ${
-            highlight ? "text-white" : "text-slate-900"
+            highlight ? "text-white" : "text-emerald-950"
           }`}
         >
           {price}
         </div>
         <p
           className={`mt-2 text-sm ${
-            highlight ? "text-slate-300" : "text-slate-600"
+            highlight ? "text-emerald-300" : "text-emerald-700"
           }`}
         >
           {description}
@@ -104,10 +104,10 @@ function PlanCard({
           <div
             key={item}
             className={`flex items-start gap-3 text-sm ${
-              highlight ? "text-slate-200" : "text-slate-700"
+              highlight ? "text-emerald-100" : "text-emerald-800"
             }`}
           >
-            <span className={`mt-0.5 ${highlight ? "text-white" : "text-slate-900"}`}>
+            <span className={`mt-0.5 ${highlight ? "text-white" : "text-emerald-950"}`}>
               •
             </span>
             <span>{item}</span>
@@ -124,7 +124,7 @@ function ContactSalesButton({ label }) {
   return (
     <a
       href="mailto:ventas@tugeocercas.com?subject=App%20Geocercas%20-%20Plan%20Enterprise"
-      className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+      className="inline-flex w-full items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
     >
       {label}
     </a>
@@ -143,7 +143,7 @@ function FreePlanAction({ currentPlanCode, currentPlanLabel, billingLabel }) {
   return (
     <Link
       to="/billing"
-      className="inline-flex w-full items-center justify-center px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold transition"
+      className="inline-flex w-full items-center justify-center px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition"
     >
       {billingLabel}
     </Link>
@@ -162,7 +162,7 @@ function ProPlanAction({
     return (
       <Link
         to="/billing"
-        className="inline-flex w-full items-center justify-center px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold transition"
+        className="inline-flex w-full items-center justify-center px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition"
       >
         {billingLabel}
       </Link>
@@ -188,7 +188,7 @@ function ProPlanAction({
         <div className="mt-3 sm:mt-0 sm:shrink-0">
           <Link
             to="/billing"
-            className="inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+            className="inline-flex items-center justify-center rounded-xl bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
           >
             {billingLabel}
           </Link>
@@ -206,7 +206,7 @@ function ProPlanAction({
       <div className="mt-3 sm:mt-0 sm:shrink-0">
         <Link
           to="/billing"
-          className="inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+          className="inline-flex items-center justify-center rounded-xl bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
         >
           {billingLabel}
         </Link>
@@ -227,7 +227,7 @@ function EnterprisePlanAction({
     return (
       <Link
         to="/billing"
-        className="inline-flex w-full items-center justify-center px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold transition"
+        className="inline-flex w-full items-center justify-center px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition"
       >
         {billingLabel}
       </Link>
@@ -243,7 +243,7 @@ function EnterprisePlanAction({
         <div className="mt-3 sm:mt-0 sm:shrink-0">
           <Link
             to="/billing"
-            className="inline-flex items-center justify-center rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
+            className="inline-flex items-center justify-center rounded-xl bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
           >
             {billingLabel}
           </Link>
@@ -568,11 +568,31 @@ export default function Pricing() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8 px-6 py-10">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {tt("heroEyebrow", i18n.language === "fr" ? "Plans" : i18n.language === "en" ? "Plans" : "Planes")}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {tt("title", i18n.language === "fr" ? "Plans et tarifs" : i18n.language === "en" ? "Plans and pricing" : "Planes y precios")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {tt("heroSubtitle", i18n.language === "fr" ? "Comparez les capacités disponibles pour chaque organisation." : i18n.language === "en" ? "Compare available capabilities for each organization." : "Compara las capacidades disponibles para cada organización.")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold text-slate-900">
+            <h1 className="text-3xl font-semibold text-emerald-950">
               {tt(
                 "title",
                 i18n.language === "fr"
@@ -582,7 +602,7 @@ export default function Pricing() {
                     : "Plans and pricing"
               )}
             </h1>
-            <p className="mt-2 max-w-3xl text-slate-600">
+            <p className="mt-2 max-w-3xl text-emerald-700">
               {tt(
                 "page.previewNotice.prefix",
                 i18n.language === "fr"
@@ -597,7 +617,7 @@ export default function Pricing() {
           <div className="flex flex-wrap gap-3">
             <Link
               to="/billing"
-              className="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold transition"
+              className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition"
             >
               {tt(
                 "actions.goToBilling",
@@ -612,8 +632,8 @@ export default function Pricing() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-5">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-emerald-600">
               {tt(
                 "summary.detectedPlan",
                 i18n.language === "fr"
@@ -623,13 +643,13 @@ export default function Pricing() {
                     : "Detected plan"
               )}
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-emerald-950">
               {detectedPlanLabel}
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-emerald-600">
               {tt(
                 "summary.status",
                 i18n.language === "fr"
@@ -639,13 +659,13 @@ export default function Pricing() {
                     : "Status"
               )}
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-emerald-950">
               {billingStatusLabel}
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-emerald-600">
               {tt(
                 "summary.trialUntil",
                 i18n.language === "fr"
@@ -655,11 +675,11 @@ export default function Pricing() {
                     : "Trial until"
               )}
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">{trialUntil}</div>
+            <div className="mt-1 text-lg font-semibold text-emerald-950">{trialUntil}</div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-emerald-600">
               {tt(
                 "summary.maxGeofences",
                 i18n.language === "fr"
@@ -669,15 +689,15 @@ export default function Pricing() {
                     : "Max geofences"
               )}
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-emerald-950">
               {entitlementsLoading
                 ? loadingLabel
                 : formatLimit(maxGeocercas, notAvailableLabel, unlimitedLabel)}
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs uppercase tracking-wide text-slate-500">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+            <div className="text-xs uppercase tracking-wide text-emerald-600">
               {tt(
                 "summary.maxTrackers",
                 i18n.language === "fr"
@@ -687,7 +707,7 @@ export default function Pricing() {
                     : "Max trackers"
               )}
             </div>
-            <div className="mt-1 text-lg font-semibold text-slate-900">
+            <div className="mt-1 text-lg font-semibold text-emerald-950">
               {entitlementsLoading
                 ? loadingLabel
                 : formatLimit(maxTrackers, notAvailableLabel, unlimitedLabel)}
@@ -881,8 +901,8 @@ export default function Pricing() {
         />
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">
+      <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
+        <h2 className="text-lg font-semibold text-emerald-950">
           {tt(
             "notes.title",
             i18n.language === "fr"
@@ -892,7 +912,7 @@ export default function Pricing() {
                 : "Notes for this phase"
           )}
         </h2>
-        <div className="mt-3 space-y-2 text-sm text-slate-600">
+        <div className="mt-3 space-y-2 text-sm text-emerald-700">
           <p>
             {tt(
               "notes.backendAuthority",

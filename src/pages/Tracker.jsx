@@ -323,7 +323,27 @@ export default function Tracker() {
     : "bg-red-100 text-red-800";
 
   return (
-    <div className="max-w-xl mx-auto p-4">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {tr("tracker.heroEyebrow", "App operativa")}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {tr("tracker.title", "Tracker")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {tr("tracker.description", "Automatic tracking. Positions are sent to the server when there is signal. The backend only stores points that fall inside your assigned geofences.")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       <h1 className="text-xl font-semibold mb-3">
         {tr("tracker.title", "Tracker")}
       </h1>
@@ -335,7 +355,7 @@ export default function Tracker() {
         </p>
       )}
 
-      <div className="border rounded-lg p-4 bg-white shadow-sm">
+      <div className="border rounded-xl p-4 bg-white shadow-sm">
         <div className="flex justify-between items-center mb-3">
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium ${onlineBadgeClass}`}

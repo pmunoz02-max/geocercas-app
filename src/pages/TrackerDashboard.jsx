@@ -480,11 +480,11 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
         className={[
           "w-full",
           "bg-white text-gray-900",
-          "border border-gray-300 rounded-md",
+          "border border-emerald-200 rounded-xl",
           "px-3 py-2 text-sm",
           "flex items-center justify-between gap-2",
-          "hover:bg-gray-50",
-          "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+          "hover:bg-emerald-50",
+          "focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500",
           disabled ? "opacity-60 cursor-not-allowed" : "",
         ].join(" ")}
         onClick={() => !disabled && setOpen((v) => !v)}
@@ -492,48 +492,48 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
       >
         <span className="truncate">{label}</span>
         <span className="text-gray-500 text-xs">
-          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 border border-gray-200">
+          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 border border-emerald-100">
             {countText}
           </span>
         </span>
       </button>
 
       {open && !disabled && (
-        <div className="absolute left-0 mt-2 w-[360px] max-w-[92vw] bg-white border border-gray-200 rounded-lg shadow-xl p-3 z-[9999]">
+        <div className="absolute left-0 mt-2 w-[360px] max-w-[92vw] bg-white border border-emerald-100 rounded-xl shadow-xl p-3 z-[9999]">
           <div className="flex items-center gap-2 mb-2">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={tOr("trackerDashboard.multiGeofence.searchPlaceholder", "Search geofence…")}
-              className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full bg-white text-gray-900 border border-emerald-200 rounded-xl px-3 py-2 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
 
           <div className="flex items-center gap-2 mb-3">
             <button
               type="button"
-              className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="border border-emerald-200 bg-white text-gray-900 rounded-xl px-2.5 py-1.5 text-sm hover:bg-emerald-50
+                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               onClick={setAll}
             >
               {tOr("trackerDashboard.multiGeofence.showAll", "Show all")}
             </button>
             <button
               type="button"
-              className="border border-gray-300 bg-white text-gray-900 rounded-md px-2.5 py-1.5 text-sm hover:bg-gray-50
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="border border-emerald-200 bg-white text-gray-900 rounded-xl px-2.5 py-1.5 text-sm hover:bg-emerald-50
+                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               onClick={setNone}
             >
               {tOr("trackerDashboard.multiGeofence.hideAll", "Hide all")}
             </button>
           </div>
 
-          <div className="max-h-[280px] overflow-auto border border-gray-200 rounded-lg">
+          <div className="max-h-[280px] overflow-auto border border-emerald-100 rounded-xl">
             {filtered.map((g) => (
               <label
                 key={g.id}
-                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-emerald-50 cursor-pointer border-b border-gray-100 last:border-b-0"
               >
                 <input type="checkbox" className="h-4 w-4" checked={isChecked(g.id)} onChange={() => toggle(g.id)} />
                 <span className="truncate text-gray-900">{g.name || g.id}</span>
@@ -549,8 +549,8 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
           <div className="flex justify-end mt-3">
             <button
               type="button"
-              className="border border-gray-300 bg-white text-gray-900 rounded-md px-3 py-2 text-sm hover:bg-gray-50
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="border border-emerald-200 bg-white text-gray-900 rounded-xl px-3 py-2 text-sm hover:bg-emerald-50
+                         focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
               onClick={() => setOpen(false)}
             >
               {tOr("trackerDashboard.multiGeofence.close", "Close")}
@@ -2459,7 +2459,7 @@ export default function TrackerDashboard() {
 
   // Badge component kept for non-diagnostic use
   const Badge = ({ children }) => (
-    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 border border-gray-200">{children}</span>
+    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-gray-700 border border-emerald-100">{children}</span>
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
@@ -2467,7 +2467,7 @@ export default function TrackerDashboard() {
 
   if (entitlementsLoading) {
     return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
         <div className="px-3 md:px-6 py-6 max-w-3xl">
           <h1 className="text-2xl font-semibold text-gray-900">
             {tOr("trackerDashboard.title", "Tracker Dashboard")}
@@ -2482,7 +2482,7 @@ export default function TrackerDashboard() {
 
   if (entitlementsError) {
     return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
         <div className="px-3 md:px-6 py-6 max-w-3xl">
           <h1 className="text-2xl font-semibold text-gray-900">
             {tOr("trackerDashboard.title", "Tracker Dashboard")}
@@ -2500,7 +2500,7 @@ export default function TrackerDashboard() {
 
   if (trackerBlockedByPlan) {
     return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
         <div className="px-3 md:px-6 py-6 max-w-3xl space-y-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">
@@ -2529,7 +2529,7 @@ export default function TrackerDashboard() {
           </div>
 
           {orgId ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-emerald-100 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
                 {tOr("trackerDashboard.states.upgradeOrgPrompt", "Upgrade this organization to enable Tracker Dashboard.")}
               </div>
@@ -2545,7 +2545,27 @@ export default function TrackerDashboard() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-gray-50">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {tOr("trackerDashboard.heroEyebrow", "Monitoreo")}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {tOr("trackerDashboard.title", "Tracker Dashboard")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {tOr("trackerDashboard.heroSubtitle", "Visualiza posiciones, filtros, geocercas y evidencia operacional en tiempo real.")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       <div className="px-3 md:px-6 py-4">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-4">
           <div>
@@ -2553,7 +2573,7 @@ export default function TrackerDashboard() {
               {tOr("trackerDashboard.title", "Tracker Dashboard")}
             </h1>
             {orgResolveError && (
-              <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              <div className="mt-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
                 {tOr("trackerDashboard.messages.orgResolveError", "Error resolving org")} {" "}
                 <span className="font-mono">{orgResolveError}</span>
               </div>
@@ -2564,8 +2584,8 @@ export default function TrackerDashboard() {
             <button
               type="button"
               onClick={() => refreshSession()}
-              className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
-                         border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-xl bg-white text-gray-900 px-4 py-2 text-sm font-medium
+                         border border-emerald-200 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
             >
               {tOr("trackerDashboard.actions.refreshSessionOrg", "Refresh session org")}
             </button>
@@ -2577,8 +2597,8 @@ export default function TrackerDashboard() {
                 if (isHistoryRequested) fetchPositions(resolvedOrgId, { showSpinner: true });
                 else fetchDashboardData(resolvedOrgId, { showSpinner: true });
               }}
-              className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white px-4 py-2 text-sm font-medium
-                         hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-xl bg-emerald-600 text-white px-4 py-2 text-sm font-medium
+                         hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
               disabled={loading || !resolvedOrgId}
             >
               {loading
@@ -2589,8 +2609,8 @@ export default function TrackerDashboard() {
             <button
               type="button"
               onClick={() => setFitSignal((x) => x + 1)}
-              className="inline-flex items-center justify-center rounded-md bg-white text-gray-900 px-4 py-2 text-sm font-medium
-                         border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-xl bg-white text-gray-900 px-4 py-2 text-sm font-medium
+                         border border-emerald-200 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-60"
               disabled={layerItems.length === 0}
             >
               {tOr("trackerDashboard.actions.centerGeofence", "Center geofence")}
@@ -2599,7 +2619,7 @@ export default function TrackerDashboard() {
         </div>
 
         {errorMsg && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm">
             {errorMsg}
           </div>
         )}
@@ -2608,7 +2628,7 @@ export default function TrackerDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <aside className="lg:col-span-4 xl:col-span-3">
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
+            <div className="bg-white border border-emerald-100 rounded-xl shadow-sm p-4 space-y-4">
               <div>
                 <h2 className="text-base font-semibold text-gray-900">
                   {tOr("trackerDashboard.sections.filters", "Filters")}
@@ -2621,8 +2641,8 @@ export default function TrackerDashboard() {
                     {tOr("trackerDashboard.labels.window", "Window")}
                   </span>
                   <select
-                    className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full bg-white text-gray-900 border border-emerald-200 rounded-xl px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     value={timeWindowId}
                     onChange={(e) => {
                       setTimeWindowId(e.target.value);
@@ -2645,16 +2665,16 @@ export default function TrackerDashboard() {
                   </span>
                   <input
                     type="text"
-                    className="mb-2 w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="mb-2 w-full bg-white text-gray-900 border border-emerald-200 rounded-xl px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     value={trackerSearch}
                     onChange={(e) => setTrackerSearch(e.target.value)}
                     placeholder={t("common.search")}
                     disabled={!orgId}
                   />
                   <select
-                    className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full bg-white text-gray-900 border border-emerald-200 rounded-xl px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     value={selectedTrackerId}
                     onChange={(e) => setSelectedTrackerId(e.target.value)}
                     disabled={!orgId}
@@ -2673,8 +2693,8 @@ export default function TrackerDashboard() {
                     {tOr("trackerDashboard.labels.status", "Status")}
                   </span>
                   <select
-                    className="w-full bg-white text-gray-900 border border-gray-300 rounded-md px-3 py-2 text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full bg-white text-gray-900 border border-emerald-200 rounded-xl px-3 py-2 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
                     disabled={!orgId || selectedTrackerId !== "all"}
@@ -2710,8 +2730,8 @@ export default function TrackerDashboard() {
           </aside>
 
           <section className="lg:col-span-8 xl:col-span-9">
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+            <div className="bg-white border border-emerald-100 rounded-xl shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-emerald-100 flex items-center justify-between">
                 <div className="text-sm font-semibold text-gray-900">
                   {tOr("trackerDashboard.sections.map", "Map")}
                 </div>
@@ -2726,7 +2746,7 @@ export default function TrackerDashboard() {
                 </div>
               </div>
 
-              <div className="px-4 py-2 border-b border-gray-200 flex flex-wrap items-center gap-2">
+              <div className="px-4 py-2 border-b border-emerald-100 flex flex-wrap items-center gap-2">
                 <Badge>{tOr("trackerDashboard.labels.total", "Total")}: {trackerStatusSummary.total}</Badge>
                 <Badge>{tOr("trackerDashboard.status.online", "Online")}: {trackerStatusSummary.online}</Badge>
                 <Badge>{tOr("trackerDashboard.status.stale", "Stale")}: {trackerStatusSummary.stale}</Badge>
@@ -2734,7 +2754,7 @@ export default function TrackerDashboard() {
               </div>
 
               <div style={{ height: 560, minHeight: 440 }} className="relative">
-                <div className="pointer-events-none absolute top-3 left-16 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                <div className="pointer-events-none absolute top-3 left-16 z-[1000] rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 shadow-sm">
                   <div className="text-[11px] font-semibold text-gray-900 mb-1">{t("map.coordinates")}</div>
                   <div className="space-y-0.5 text-xs text-gray-700">
                     <div>{t("map.lat")}: {cursorCoords?.lat == null ? "—" : Number(cursorCoords.lat).toFixed(6)}</div>
@@ -2746,21 +2766,21 @@ export default function TrackerDashboard() {
                   </div>
                 </div>
 
-                <div className="absolute top-3 right-3 z-[1000] rounded-lg border border-gray-200 bg-white/95 px-3 py-2 shadow-sm">
+                <div className="absolute top-3 right-3 z-[1000] rounded-xl border border-emerald-100 bg-white/95 px-3 py-2 shadow-sm">
                   <div className="text-[11px] font-semibold text-gray-900 mb-2">
                     {t("map.legend")}
                   </div>
                   <div className="space-y-1.5 text-xs text-gray-700">
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600" />
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-emerald-600 bg-emerald-600" />
                       <span>{t("status.online")}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-600 bg-blue-600 opacity-70" />
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-emerald-600 bg-emerald-600 opacity-70" />
                       <span>{t("status.stale")}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-gray-500 opacity-60" />
+                      <span className="inline-block h-3 w-3 rounded-full border-2 border-gray-500 bg-emerald-500 opacity-60" />
                       <span>{t("status.offline")}</span>
                     </div>
                   </div>
@@ -2830,7 +2850,7 @@ export default function TrackerDashboard() {
                 </MapContainer>
               </div>
 
-              <div className="border-t border-gray-200">
+              <div className="border-t border-emerald-100">
                 <div className="px-4 py-3">
                   <div className="text-sm font-semibold text-gray-900">
                     {t("tracker.title")}
@@ -2838,7 +2858,7 @@ export default function TrackerDashboard() {
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-y border-gray-200">
+                    <thead className="bg-emerald-50 border-y border-emerald-100">
                       <tr>
                         <th className="px-4 py-2 text-left font-medium text-gray-700">{t("table.name")}</th>
                         <th className="px-4 py-2 text-left font-medium text-gray-700">{t("table.status")}</th>
@@ -2859,7 +2879,7 @@ export default function TrackerDashboard() {
                         const lng = hasCoords ? Number(rawLng) : null;
                         const ts = getPositionTs(latestRow || t);
                         return (
-                          <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-gray-50">
+                          <tr key={String(t?.user_id ?? t?.tracker_key ?? t?.key ?? "unknown")} className="border-b border-gray-100 hover:bg-emerald-50">
                             <td className="px-4 py-2 text-gray-900">{getFriendlyTrackerName(t)}</td>
                             <td className="px-4 py-2 text-gray-700">{getStatusLabel(live?.status)}</td>
                             <td className="px-4 py-2 text-gray-700">

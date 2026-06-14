@@ -77,9 +77,9 @@ export default function ActividadesPage() {
   }, [activeOrgId]);
 
   const inputClass =
-    "border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
+    "rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 shadow-sm shadow-emerald-900/5 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500";
   const selectClass =
-    "border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500";
+    "rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 shadow-sm shadow-emerald-900/5 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500";
 
   async function loadActividades() {
     if (!activeOrgId) {
@@ -279,8 +279,8 @@ export default function ActividadesPage() {
 
   if (!ready) {
     return (
-      <div className="p-4 max-w-5xl mx-auto">
-        <div className="border rounded-lg px-4 py-3 text-sm text-gray-700 bg-white">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+        <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm shadow-emerald-950/5">
           {t("common.actions.loading", {
             defaultValue: "Cargando...",
           })}
@@ -292,7 +292,7 @@ export default function ActividadesPage() {
   if (!activeOrgId) {
     return (
       <div className="p-4 max-w-3xl mx-auto">
-        <div className="border rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="border rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
           {t("actividades.errorMissingTenant", {
             defaultValue: "No hay una organización activa.",
           })}
@@ -302,7 +302,27 @@ export default function ActividadesPage() {
   }
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("actividades.heroEyebrow", { defaultValue: "Catálogo operativo" })}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {t("actividades.title", { defaultValue: "Actividades" })}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {t("actividades.subtitle", { defaultValue: "Catálogo de actividades con costo por hora." })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       <div className="flex items-start justify-between gap-4 mb-4">
         <div>
           <h1 className="text-2xl font-semibold">
@@ -317,13 +337,13 @@ export default function ActividadesPage() {
       </div>
 
       {errorMsg && (
-        <div className="mb-4 border rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mb-4 border rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
           {errorMsg}
         </div>
       )}
 
       {canEdit && (
-        <form onSubmit={handleSubmit} className="border rounded-xl p-4 mb-6 bg-white shadow-sm">
+        <form onSubmit={handleSubmit} className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-950/5 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-sm font-medium text-gray-800">
@@ -393,7 +413,7 @@ export default function ActividadesPage() {
 
           <div className="mt-4 flex items-center gap-2">
             <button
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium"
               type="submit"
             >
               {formMode === "create"
@@ -405,7 +425,7 @@ export default function ActividadesPage() {
               <button
                 type="button"
                 onClick={resetForm}
-                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-sm font-medium"
+                className="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-sm font-medium"
               >
                 {t("actividades.buttonCancel", { defaultValue: "Cancelar" })}
               </button>
@@ -415,7 +435,7 @@ export default function ActividadesPage() {
       )}
 
       {loading ? (
-        <div className="border rounded-lg px-4 py-3 text-sm text-gray-700 bg-white">
+        <div className="rounded-2xl border border-emerald-100 bg-white px-4 py-3 text-sm text-gray-700 shadow-sm shadow-emerald-950/5">
           {t("actividades.loading", { defaultValue: "Cargando actividades..." })}
         </div>
       ) : (
@@ -436,7 +456,7 @@ export default function ActividadesPage() {
                 className={[
                   "border rounded-xl p-4 bg-white shadow-sm",
                   "flex flex-col md:flex-row md:items-center md:justify-between gap-3",
-                  isActive ? "border-gray-200" : "border-gray-200 opacity-80",
+                  isActive ? "border-emerald-100" : "border-emerald-100 opacity-80",
                 ].join(" ")}
               >
                 <div className="min-w-0">
@@ -450,7 +470,7 @@ export default function ActividadesPage() {
                         "text-xs font-semibold px-2 py-1 rounded-full border",
                         isActive
                           ? "bg-green-50 text-green-800 border-green-200"
-                          : "bg-gray-100 text-gray-700 border-gray-200",
+                          : "bg-emerald-50 text-gray-700 border-emerald-100",
                       ].join(" ")}
                       title={
                         isActive
@@ -489,7 +509,7 @@ export default function ActividadesPage() {
                   <div className="flex gap-2 md:justify-end flex-wrap">
                     <button
                       onClick={() => startEdit(a)}
-                      className="text-sm px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-medium"
+                      className="text-sm px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium"
                       type="button"
                     >
                       {t("actividades.actionEdit", { defaultValue: "Editar" })}
@@ -497,7 +517,7 @@ export default function ActividadesPage() {
 
                     <button
                       onClick={() => handleToggle(a)}
-                      className="text-sm px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                      className="text-sm px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                       type="button"
                     >
                       {a.active
@@ -507,7 +527,7 @@ export default function ActividadesPage() {
 
                     <button
                       onClick={() => handleDelete(a)}
-                      className="text-sm px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium"
+                      className="text-sm px-3 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium"
                       type="button"
                     >
                       {t("actividades.actionDelete", { defaultValue: "Eliminar" })}

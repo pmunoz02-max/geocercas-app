@@ -634,7 +634,27 @@ const CostosDashboardPage = () => {
   };
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("dashboardCostos.heroEyebrow", { defaultValue: "Costos" })}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {t("dashboardCostos.title")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {t("dashboardCostos.subtitle")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       <div className="flex flex-col md:flex-row justify-between items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold">{t("dashboardCostos.title")}</h1>
@@ -650,7 +670,7 @@ const CostosDashboardPage = () => {
         <div className="flex flex-wrap gap-2">
           <button
             onClick={fetchReport}
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700"
+            className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm hover:bg-emerald-700"
             disabled={loading}
           >
             {loading
@@ -660,14 +680,14 @@ const CostosDashboardPage = () => {
 
           <button
             onClick={handleExportDataCSV}
-            className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
+            className="px-3 py-2 rounded-xl border text-xs md:text-sm hover:bg-emerald-50"
           >
             {t("dashboardCostos.actions.exportData")}
           </button>
 
           <button
             onClick={handleExportChartPNG}
-            className="px-3 py-2 rounded-lg border text-xs md:text-sm hover:bg-gray-50"
+            className="px-3 py-2 rounded-xl border text-xs md:text-sm hover:bg-emerald-50"
           >
             {t("dashboardCostos.actions.exportGraphic")}
           </button>
@@ -676,7 +696,7 @@ const CostosDashboardPage = () => {
 
       {error && (
         <div
-          className={`rounded-lg border px-3 py-2 text-sm ${
+          className={`rounded-xl border px-3 py-2 text-sm ${
             missingView
               ? "border-amber-300 bg-amber-50 text-amber-900"
               : "border-red-300 bg-red-50 text-red-700"
@@ -687,28 +707,28 @@ const CostosDashboardPage = () => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl p-3 shadow border-l-4 border-emerald-500">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 border-l-4 border-emerald-500">
           <p className="text-xs text-gray-500 uppercase">
             {t("dashboardCostos.kpis.totalHours")}
           </p>
           <p className="text-xl font-bold">{formatNumber(totalGlobal.totalHours)}</p>
         </div>
 
-        <div className="bg-white rounded-xl p-3 shadow border-l-4 border-indigo-500">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 border-l-4 border-emerald-500">
           <p className="text-xs text-gray-500 uppercase">
             {t("dashboardCostos.kpis.totalCost")}
           </p>
           <p className="text-xl font-bold">{formatNumber(totalGlobal.totalCost)}</p>
         </div>
 
-        <div className="bg-white rounded-xl p-3 shadow border-l-4 border-amber-500">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 border-l-4 border-amber-500">
           <p className="text-xs text-gray-500 uppercase">
             {t("dashboardCostos.kpis.registrations")}
           </p>
           <p className="text-xl font-bold">{rows.length}</p>
         </div>
 
-        <div className="bg-white rounded-xl p-3 shadow border-l-4 border-pink-500">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 border-l-4 border-emerald-500">
           <p className="text-xs text-gray-500 uppercase">
             {t("dashboardCostos.kpis.avgRate")}
           </p>
@@ -717,7 +737,7 @@ const CostosDashboardPage = () => {
       </div>
 
       {resumenMoneda.length > 0 && (
-        <div className="bg-white rounded-xl p-3 shadow">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5">
           <h2 className="text-xs font-semibold text-gray-700 mb-2">
             {t("dashboardCostos.currenciesSummaryTitle")}
           </h2>
@@ -742,7 +762,7 @@ const CostosDashboardPage = () => {
         </div>
       )}
 
-      <div className="bg-white shadow rounded-xl p-4 space-y-3">
+      <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-950/5 space-y-3">
         <h2 className="text-sm font-semibold text-gray-700">
           {t("dashboardCostos.filtersTitle")}
         </h2>
@@ -756,7 +776,7 @@ const CostosDashboardPage = () => {
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5 w-full"
             />
           </div>
 
@@ -768,7 +788,7 @@ const CostosDashboardPage = () => {
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5 w-full"
             />
           </div>
 
@@ -779,7 +799,7 @@ const CostosDashboardPage = () => {
             <select
               value={selectedPersonaId}
               onChange={(e) => setSelectedPersonaId(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5 w-full"
             >
               <option value="">{t("dashboardCostos.filtersAll")}</option>
               {personas.map((p) => (
@@ -797,7 +817,7 @@ const CostosDashboardPage = () => {
             <select
               value={selectedActividadId}
               onChange={(e) => setSelectedActividadId(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5 w-full"
             >
               <option value="">{t("dashboardCostos.filtersAll")}</option>
               {actividades.map((a) => (
@@ -815,7 +835,7 @@ const CostosDashboardPage = () => {
             <select
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
-              className="border rounded-lg px-2 py-1 text-sm w-full"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5 w-full"
             >
               <option value="">{t("dashboardCostos.filtersAll")}</option>
               {geocercas.map((g) => (
@@ -829,7 +849,7 @@ const CostosDashboardPage = () => {
 
         <div className="flex justify-end gap-2">
           <button
-            className="px-3 py-1 border rounded-lg text-xs md:text-sm hover:bg-gray-50"
+            className="px-3 py-1 border rounded-xl text-xs md:text-sm hover:bg-emerald-50"
             onClick={() => {
               setFromDate("");
               setToDate("");
@@ -844,7 +864,7 @@ const CostosDashboardPage = () => {
           </button>
 
           <button
-            className="px-4 py-1.5 rounded-lg bg-emerald-600 text-white text-xs md:text-sm hover:bg-emerald-700"
+            className="px-4 py-1.5 rounded-xl bg-emerald-600 text-white text-xs md:text-sm hover:bg-emerald-700"
             onClick={fetchReport}
           >
             {t("dashboardCostos.filtersApply")}
@@ -866,7 +886,7 @@ const CostosDashboardPage = () => {
               <select
                 value={selectedDimension}
                 onChange={(e) => setSelectedDimension(e.target.value)}
-                className="border rounded-lg px-2 py-1 ml-1"
+                className="border rounded-xl px-2 py-1 ml-1"
               >
                 {Object.values(DIMENSIONS).map((d) => (
                   <option key={d.id} value={d.id}>
@@ -883,7 +903,7 @@ const CostosDashboardPage = () => {
               <select
                 value={selectedMetric}
                 onChange={(e) => setSelectedMetric(e.target.value)}
-                className="border rounded-lg px-2 py-1 ml-1"
+                className="border rounded-xl px-2 py-1 ml-1"
               >
                 {Object.values(METRICS).map((m) => (
                   <option key={m.id} value={m.id}>
@@ -900,7 +920,7 @@ const CostosDashboardPage = () => {
               <select
                 value={selectedChartType}
                 onChange={(e) => setSelectedChartType(e.target.value)}
-                className="border rounded-lg px-2 py-1 ml-1"
+                className="border rounded-xl px-2 py-1 ml-1"
               >
                 {Object.values(CHART_TYPES).map((ct) => (
                   <option key={ct.id} value={ct.id}>
@@ -929,7 +949,7 @@ const CostosDashboardPage = () => {
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs">
-            <thead className="bg-gray-50">
+            <thead className="bg-emerald-50">
               <tr>
                 <th className="px-2 py-1 text-left">
                   {t("dashboardCostos.colCategoria")}

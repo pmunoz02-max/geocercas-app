@@ -364,7 +364,27 @@ const CostosPage = () => {
   }
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("reportes.heroEyebrow", { defaultValue: "Costos" })}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {t("reportes.title")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {t("reportes.headerSubtitle")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{t("reportes.title")}</h1>
@@ -377,7 +397,7 @@ const CostosPage = () => {
         )}
       </div>
 
-      <div className="bg-white rounded-xl shadow p-4 space-y-3">
+      <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-950/5 space-y-3">
         <h2 className="text-sm font-semibold text-gray-700 mb-1">
           {t("reportes.filtersTitle")}
         </h2>
@@ -388,7 +408,7 @@ const CostosPage = () => {
             </label>
             <input
               type="date"
-              className="border rounded-lg px-2 py-1 text-sm"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
             />
@@ -400,7 +420,7 @@ const CostosPage = () => {
             </label>
             <input
               type="date"
-              className="border rounded-lg px-2 py-1 text-sm"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
             />
@@ -411,7 +431,7 @@ const CostosPage = () => {
               {t("reportes.filtersPerson")}
             </label>
             <select
-              className="border rounded-lg px-2 py-1 text-sm"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5"
               value={selectedPersonaId}
               onChange={(e) => setSelectedPersonaId(e.target.value)}
               disabled={loadingFilters}
@@ -430,7 +450,7 @@ const CostosPage = () => {
               {t("reportes.filtersActivity")}
             </label>
             <select
-              className="border rounded-lg px-2 py-1 text-sm"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5"
               value={selectedActividadId}
               onChange={(e) => setSelectedActividadId(e.target.value)}
               disabled={loadingFilters}
@@ -449,7 +469,7 @@ const CostosPage = () => {
               {t("reportes.filtersGeofence")}
             </label>
             <select
-              className="border rounded-lg px-2 py-1 text-sm"
+              className="rounded-xl border border-emerald-100 bg-white px-3 py-2 text-sm shadow-sm shadow-emerald-900/5"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
               disabled={loadingFilters}
@@ -467,7 +487,7 @@ const CostosPage = () => {
         <div className="flex justify-end gap-2 pt-2">
           <button
             type="button"
-            className="px-3 py-1 text-xs rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+            className="px-3 py-1 text-xs rounded-xl border border-emerald-200 text-gray-700 hover:bg-emerald-50"
             onClick={() => {
               setFromDate("");
               setToDate("");
@@ -483,7 +503,7 @@ const CostosPage = () => {
 
           <button
             type="button"
-            className="px-4 py-1.5 text-xs rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+            className="px-4 py-1.5 text-xs rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
             onClick={fetchReport}
             disabled={loading || loadingFilters}
           >
@@ -535,7 +555,7 @@ const CostosPage = () => {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-4">
+      <div className="rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-950/5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700">
             {t("reportes.tableTitle")}
@@ -547,7 +567,7 @@ const CostosPage = () => {
             <button
               type="button"
               onClick={handleExportCSV}
-              className="px-3 py-1 text-xs rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+              className="px-3 py-1 text-xs rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
             >
               {t("reportes.tableExportButton")}
             </button>
@@ -556,7 +576,7 @@ const CostosPage = () => {
 
         <div className="overflow-x-auto">
           <table className="min-w-full text-xs table-auto">
-            <thead className="bg-gray-50">
+            <thead className="bg-emerald-50">
               <tr>
                 <th className="px-2 py-1 text-left font-semibold text-gray-600">
                   {t("reportes.colPersona")}
@@ -630,7 +650,7 @@ const CostosPage = () => {
         {/* Si alguna vez quieres usar resumen por moneda:
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           {resumenMoneda.map((r) => (
-            <div key={r.currency} className="bg-gray-50 rounded-lg p-2 text-xs">
+            <div key={r.currency} className="bg-emerald-50 rounded-xl p-2 text-xs">
               <div className="font-semibold">{r.currency}</div>
               <div>
                 {t("reportes.summaryCurrencyHours")}:{" "}

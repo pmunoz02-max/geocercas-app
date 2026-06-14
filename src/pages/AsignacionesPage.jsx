@@ -461,20 +461,40 @@ export default function AsignacionesPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-4">
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("asignaciones.heroEyebrow", { defaultValue: "Operación" })}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {t("asignaciones.title", { defaultValue: "Asignaciones" })}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {t("asignaciones.heroSubtitle", { defaultValue: "Relaciona personas, geocercas, actividades y horarios para coordinar el trabajo." })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="mb-6 rounded-3xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-950/5">
         <h2 className="mb-4 text-2xl font-semibold text-gray-900">
           {editingId ? t("asignaciones.form.editTitle") : t("asignaciones.form.newTitle")}
         </h2>
 
         {error ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
           </div>
         ) : null}
 
         {success ? (
-          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
             {success}
           </div>
         ) : null}
@@ -485,7 +505,7 @@ export default function AsignacionesPage() {
               {t("asignaciones.fields.person")}
             </label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
               value={selectedPersonId}
               onChange={(e) => setSelectedPersonId(e.target.value)}
             >
@@ -507,7 +527,7 @@ export default function AsignacionesPage() {
               {t("asignaciones.fields.geofence")}
             </label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
               value={selectedGeocercaId}
               onChange={(e) => setSelectedGeocercaId(e.target.value)}
             >
@@ -525,7 +545,7 @@ export default function AsignacionesPage() {
               {t("asignaciones.fields.activity")}
             </label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
               value={selectedActivityId}
               onChange={(e) => setSelectedActivityId(e.target.value)}
             >
@@ -550,7 +570,7 @@ export default function AsignacionesPage() {
               </label>
               <input
                 type="datetime-local"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
                 value={startTime}
                 onChange={(e) => {
                   const nextStart = e.target.value;
@@ -575,7 +595,7 @@ export default function AsignacionesPage() {
               <input
                 type="datetime-local"
                 min={startTime || undefined}
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
                 value={endTime}
                 onChange={(e) => {
                   const nextEnd = e.target.value;
@@ -602,7 +622,7 @@ export default function AsignacionesPage() {
                 {t("asignaciones.fields.status")}
               </label>
               <select
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
@@ -618,7 +638,7 @@ export default function AsignacionesPage() {
               <input
                 type="number"
                 min="1"
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900"
+                className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
                 value={freqMin}
                 onChange={(e) => setFreqMin(e.target.value)}
               />
@@ -626,7 +646,7 @@ export default function AsignacionesPage() {
           </div>
 
           {error ? (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           ) : null}
@@ -634,7 +654,7 @@ export default function AsignacionesPage() {
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              className="inline-flex items-center rounded-xl bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
             >
               {saving
                 ? editingId
@@ -649,7 +669,7 @@ export default function AsignacionesPage() {
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+                className="inline-flex items-center rounded-xl border border-emerald-200 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-emerald-50"
               >
                 {t("asignaciones.actions.cancel")}
               </button>

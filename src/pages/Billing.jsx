@@ -79,8 +79,8 @@ function getUsageSeverity(state, isOverLimit) {
 function usageCardTone(severity) {
   if (severity === "critical") return "border-rose-300 bg-rose-50";
   if (severity === "warning") return "border-amber-300 bg-amber-50";
-  if (severity === "ok") return "border-slate-200 bg-slate-50";
-  return "border-slate-200 bg-slate-50";
+  if (severity === "ok") return "border-emerald-100 bg-emerald-50";
+  return "border-emerald-100 bg-emerald-50";
 }
 
 function formatTrialCountdown(value, locale, labels) {
@@ -323,11 +323,11 @@ export default function Billing() {
   if (!authenticated || !user) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-slate-900">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
+          <h1 className="text-xl font-semibold text-emerald-950">
             {tr("billing.title", "Billing")}
           </h1>
-          <p className="mt-2 text-slate-600">
+          <p className="mt-2 text-emerald-700">
             {tr("billing.authRequired", "Sign in to manage your plan.")}
           </p>
         </div>
@@ -354,11 +354,31 @@ export default function Billing() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-6 py-10">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {tr("billing.heroEyebrow", "Plan y pagos")}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {tr("billing.title", "Billing")}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {tr("billing.heroSubtitle", "Revisa el estado del plan, capacidad y opciones de actualización de tu organización.")}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
+            <h1 className="text-2xl font-semibold text-emerald-950">
               {tr("billing.title", "Billing")}
             </h1>
           </div>
@@ -366,7 +386,7 @@ export default function Billing() {
           <div className="flex flex-wrap gap-3">
             <Link
               to={pricingHref}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+              className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
             >
               {tr("billing.actions.viewPlans", "View plans")}
             </Link>
@@ -379,15 +399,15 @@ export default function Billing() {
 
           return showUpgradeCta ? (
             <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
-              <div className="text-xl font-bold text-slate-900">
+              <div className="text-xl font-bold text-emerald-950">
                 {tr("billing.upgrade.productTitle", "Geocercas PRO")}
               </div>
-              <div className="mt-1 text-sm text-slate-700">
+              <div className="mt-1 text-sm text-emerald-800">
                 {formatPlanPrice("pro", i18n.language)}
               </div>
-              <div className="mt-2 text-xs text-slate-700">
+              <div className="mt-2 text-xs text-emerald-800">
                 <b>{tr("billing.upgrade.orgIdLabel", "Org ID")}:</b>{" "}
-                <span className="font-mono break-all text-slate-900">
+                <span className="font-mono break-all text-emerald-950">
                   {orgId || tr("billing.upgrade.notResolved", "(not resolved)")}
                 </span>
               </div>
@@ -395,14 +415,14 @@ export default function Billing() {
                 <UpgradeToProButton
                   orgId={currentOrgId}
                   plan="pro"
-                  className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
+                  className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-emerald-900 hover:bg-emerald-800"
                 />
               </div>
             </div>
           ) : null;
         })()}
 
-        <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-slate-700 md:grid-cols-2">
+        <div className="mt-4 grid grid-cols-1 gap-3 text-sm text-emerald-800 md:grid-cols-2">
           <div>
             <b>{tr("billing.labels.email", "Email")}:</b> {user.email}
           </div>
@@ -416,8 +436,8 @@ export default function Billing() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">
+      <div className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
+        <h2 className="text-lg font-semibold text-emerald-950">
           {tr("billing.planState.title", "Plan status")}
         </h2>
 
@@ -440,7 +460,7 @@ export default function Billing() {
                   "billing.messages.cancellationScheduledBody",
                   "You will retain access to PRO features until the end of your current billing period:"
                 )}
-                <span className="ml-1 font-semibold text-slate-900">
+                <span className="ml-1 font-semibold text-emerald-950">
                   {formatDate(billing?.current_period_end, dateLocale)}
                 </span>
               </div>
@@ -463,7 +483,7 @@ export default function Billing() {
         !billingError &&
         !billingFallback &&
         effectivePlanStatus === "trialing" ? (
-          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
             <div className="font-semibold">
               {tr("billing.messages.trialActive", "Trial active")}
             </div>
@@ -475,7 +495,7 @@ export default function Billing() {
         ) : null}
 
         {billingLoading ? (
-          <p className="mt-3 text-sm text-slate-600">
+          <p className="mt-3 text-sm text-emerald-700">
             {tr("billing.states.loadingPlanStatus", "Loading plan status...")}
           </p>
         ) : billingFallback ? (
@@ -492,62 +512,62 @@ export default function Billing() {
         ) : (
           <>
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">
                   {tr("billing.cards.currentPlan", "Current plan")}
                 </div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">
+                <div className="mt-1 text-lg font-semibold text-emerald-950">
                   {labelPlan(effectivePlanCode, tr)}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">
                   {tr("billing.cards.status", "Status")}
                 </div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">
+                <div className="mt-1 text-lg font-semibold text-emerald-950">
                   {labelStatus(effectivePlanStatus, tr)}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">
                   {tr("billing.cards.trialUntil", "Trial until")}
                 </div>
-                <div className="mt-1 text-base font-medium text-slate-900">
+                <div className="mt-1 text-base font-medium text-emerald-950">
                   {formatDate(billing?.trial_end, dateLocale)}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">
                   {tr("billing.cards.currentPeriodUntil", "Current period until")}
                 </div>
-                <div className="mt-1 text-base font-medium text-slate-900">
+                <div className="mt-1 text-base font-medium text-emerald-950">
                   {formatDate(billing?.current_period_end, dateLocale)}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">
                   {tr("billing.cards.trackerLimit", "Tracker limit")}
                 </div>
-                <div className="mt-1 text-base font-medium text-slate-900">
+                <div className="mt-1 text-base font-medium text-emerald-950">
                   {formatLimit(billing?.max_trackers, unlimitedLabel)}
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-emerald-600">
                   {tr("billing.cards.geofenceLimit", "Geofence limit")}
                 </div>
-                <div className="mt-1 text-base font-medium text-slate-900">
+                <div className="mt-1 text-base font-medium text-emerald-950">
                   {formatLimit(billing?.max_geocercas, unlimitedLabel)}
                 </div>
               </div>
 
               <div className={`rounded-xl border p-4 ${usageCardTone(trackerUsageSeverity)}`}>
-                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500">
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-emerald-600">
                   <span>{tr("billing.cards.trackerUsage", "Tracker usage")}</span>
                   <span>
                     {trackerUsageState.hasData
@@ -568,16 +588,16 @@ export default function Billing() {
                   </div>
                 ) : null}
 
-                <div className="mt-2 text-base font-medium text-slate-900">
+                <div className="mt-2 text-base font-medium text-emerald-950">
                   {trackerUsageState.hasData
                     ? formatUsage(billing?.trackers_used, billing?.max_trackers, unlimitedLabel)
                     : noDataLabel}
                 </div>
 
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
                   <div
                     className={`h-full rounded-full ${
-                      trackerUsageState.hasData ? "bg-emerald-600" : "bg-slate-300"
+                      trackerUsageState.hasData ? "bg-emerald-600" : "bg-emerald-300"
                     }`}
                     style={{
                       width: trackerUsageState.hasData ? `${trackerUsageState.pct}%` : "100%",
@@ -587,7 +607,7 @@ export default function Billing() {
               </div>
 
               <div className={`rounded-xl border p-4 ${usageCardTone(geofenceUsageSeverity)}`}>
-                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500">
+                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-emerald-600">
                   <span>{tr("billing.cards.geofenceUsage", "Geofence usage")}</span>
                   <span>
                     {geofenceUsageState.hasData
@@ -608,16 +628,16 @@ export default function Billing() {
                   </div>
                 ) : null}
 
-                <div className="mt-2 text-base font-medium text-slate-900">
+                <div className="mt-2 text-base font-medium text-emerald-950">
                   {geofenceUsageState.hasData
                     ? formatUsage(billing?.geocercas_used, billing?.max_geocercas, unlimitedLabel)
                     : noDataLabel}
                 </div>
 
-                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
                   <div
                     className={`h-full rounded-full ${
-                      geofenceUsageState.hasData ? "bg-indigo-600" : "bg-slate-300"
+                      geofenceUsageState.hasData ? "bg-emerald-600" : "bg-emerald-300"
                     }`}
                     style={{
                       width: geofenceUsageState.hasData ? `${geofenceUsageState.pct}%` : "100%",
@@ -631,20 +651,20 @@ export default function Billing() {
         )}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
         {ctaVariant === "over_limit" ? (
           <>
             <div className="text-sm font-semibold text-rose-800">
               {tr("billing.cta.overLimitTitle", "Action required: upgrade your plan")}
             </div>
-            <p className="mt-1 text-sm text-slate-700">
+            <p className="mt-1 text-sm text-emerald-800">
               {billing?.over_limit_reason ||
                 tr("billing.cta.overLimitBody", "Your organization exceeded the current plan limits.")}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 to={pricingHref}
-                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
               >
                 {tr("billing.actions.viewPlans", "View plans")}
               </Link>
@@ -654,10 +674,10 @@ export default function Billing() {
 
         {ctaVariant === "trialing" ? (
           <>
-            <div className="text-sm font-semibold text-blue-900">
+            <div className="text-sm font-semibold text-emerald-900">
               {tr("billing.cta.trialingTitle", "Convert your trial before it expires")}
             </div>
-            <p className="mt-1 text-sm text-slate-700">
+            <p className="mt-1 text-sm text-emerald-800">
               {trialCountdown ||
                 tr(
                   "billing.cta.trialingBody",
@@ -667,7 +687,7 @@ export default function Billing() {
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 to={pricingHref}
-                className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800"
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-800"
               >
                 {tr("billing.actions.viewPlans", "View plans")}
               </Link>
@@ -677,10 +697,10 @@ export default function Billing() {
 
         {ctaVariant === "free" ? (
           <>
-            <div className="text-sm font-semibold text-slate-900">
+            <div className="text-sm font-semibold text-emerald-950">
               {tr("billing.compareBeforeUpgrade.title", "Do you want to compare before upgrading?")}
             </div>
-            <p className="mt-1 text-sm text-slate-600">
+            <p className="mt-1 text-sm text-emerald-700">
               {tr(
                 "billing.compareBeforeUpgrade.description",
                 "Review the plans page to compare Free, Pro, and Enterprise."
@@ -689,7 +709,7 @@ export default function Billing() {
             <div className="mt-4">
               <Link
                 to={pricingHref}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
               >
                 {tr("billing.actions.viewPlans", "View plans")}
               </Link>
@@ -716,9 +736,9 @@ export default function Billing() {
         ) : null}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="text-sm text-slate-600">
-          <Link to={homeHref} className="font-medium text-slate-900 underline">
+      <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+        <div className="text-sm text-emerald-700">
+          <Link to={homeHref} className="font-medium text-emerald-950 underline">
             {tr("billing.backHome", "Go home")}
           </Link>
         </div>

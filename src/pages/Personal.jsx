@@ -13,11 +13,11 @@ function Modal({ open, title, children, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl text-slate-900">
+      <div className="relative w-full max-w-lg mx-4 rounded-2xl bg-white shadow-xl text-emerald-950">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <h3 className="text-lg font-semibold">{title}</h3>
           <button
-            className="rounded-md px-2 py-1 text-gray-600 hover:bg-gray-100"
+            className="rounded-xl px-2 py-1 text-gray-600 hover:bg-emerald-50"
             onClick={onClose}
             type="button"
           >
@@ -279,29 +279,29 @@ export default function Personal() {
           {planLimitModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
               <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-                <h3 className="text-lg font-semibold text-slate-900">
+                <h3 className="text-lg font-semibold text-emerald-950">
                   Has alcanzado el límite de tu plan
                 </h3>
 
-                <p className="mt-2 text-sm text-slate-600">
+                <p className="mt-2 text-sm text-emerald-700">
                   Para seguir agregando o activando personal, necesitas ampliar tu plan.
                 </p>
 
-                <div className="mt-4 rounded-xl border bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <div className="mt-4 rounded-xl border bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                   Uso actual: {planLimitDetails?.current_active ?? 0} / {planLimitDetails?.limit ?? "-"}
                 </div>
 
                 <div className="mt-6 flex items-center justify-end gap-3">
                   <button
                     onClick={closePlanLimitModal}
-                    className="rounded-lg border px-4 py-2 text-sm font-medium text-slate-700"
+                    className="rounded-xl border px-4 py-2 text-sm font-medium text-emerald-800"
                   >
                     Cerrar
                   </button>
 
                   <button
                     onClick={goToUpgrade}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
                   >
                     {t("personal.upgradeNow", { defaultValue: "Upgrade now" })}
                   </button>
@@ -386,19 +386,39 @@ export default function Personal() {
     );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("personal.heroEyebrow", { defaultValue: "Equipo" })}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {t("personal.title", { defaultValue: "Personnel" })}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {t("personal.heroSubtitle", { defaultValue: "Administra personas, estado operativo y capacidad del plan." })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
       <div className="flex items-center justify-end gap-3 mb-4">
         {plan?.max_members != null && (
-          <div className="text-sm bg-gray-100 px-3 py-2 rounded-lg border">
+          <div className="text-sm bg-emerald-50 px-3 py-2 rounded-xl border">
             {plan?.active_count ?? 0} de {plan?.max_members} usados
           </div>
         )}
         <button
           onClick={goToUpgrade}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold ${
             limitReached
               ? "bg-red-600 text-white"
-              : "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-emerald-600 text-white hover:bg-emerald-700"
           }`}
         >
           {t("personal.upgrade", { defaultValue: "Upgrade 🚀" })}
@@ -406,10 +426,10 @@ export default function Personal() {
         <button
           onClick={() => setOpenNew(true)}
           disabled={limitReached}
-          className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold ${
             limitReached
               ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-              : "bg-slate-900 text-white"
+              : "bg-emerald-950 text-white"
           }`}
         >
           {t("personal.buttonNew", { defaultValue: "+ New" })}
@@ -417,10 +437,10 @@ export default function Personal() {
       </div>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold mb-1 text-white">
+          <h1 className="text-2xl font-semibold mb-1 text-gray-900">
             {t("personal.title", { defaultValue: "Personnel" })}
           </h1>
-          <div className="text-sm text-gray-300">
+          <div className="text-sm text-gray-600">
             {t("personal.roleLabel", { defaultValue: "Role:" })}:{" "}
             <span className="font-semibold">{role.toUpperCase()}</span> · Org:{" "}
             <span className="font-mono">{activeOrgId}</span>
@@ -438,7 +458,7 @@ export default function Personal() {
           onChange={(e) => setQ(e.target.value)}
         />
 
-        <label className="inline-flex items-center gap-2 text-sm text-gray-200">
+        <label className="inline-flex items-center gap-2 text-sm text-gray-700">
           <input
             type="checkbox"
             checked={onlyActive}
@@ -459,9 +479,9 @@ export default function Personal() {
         </button>
       </div>
 
-      {msg && <div className="mt-4 text-sm text-yellow-200">{msg}</div>}
+      {msg && <div className="mt-4 text-sm text-amber-700">{msg}</div>}
 
-      <div className="mt-4 rounded-2xl border bg-white text-slate-900 overflow-hidden">
+      <div className="mt-4 rounded-3xl border border-emerald-100 bg-white text-emerald-950 overflow-hidden shadow-lg shadow-emerald-950/5">
         {busy && filtered.length === 0 ? (
           <div className="p-4 text-gray-600">
             {t("personal.loading", { defaultValue: "Loading…" })}
@@ -479,7 +499,7 @@ export default function Personal() {
           )
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
+            <thead className="bg-emerald-50 text-gray-600">
               <tr>
                 <th className="p-3">{t("personal.tableName", { defaultValue: "Name" })}</th>
                 <th className="p-3">{t("personal.tableLastName", { defaultValue: "Last name" })}</th>
@@ -500,7 +520,7 @@ export default function Personal() {
                   <td className="p-3 flex gap-2">
                     <button
                       onClick={() => onToggle(r)}
-                      className="px-2 py-1 rounded bg-blue-100 text-blue-800 hover:bg-blue-200"
+                      className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
                       type="button"
                     >
                       {r?.vigente ? "Deactivate" : "Activate"}
@@ -571,7 +591,7 @@ export default function Personal() {
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-slate-900 text-white px-4 py-2"
+              className="rounded-xl bg-emerald-950 text-white px-4 py-2"
               disabled={saving}
             >
               {saving
@@ -584,16 +604,16 @@ export default function Personal() {
           {planLimitModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
               <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-                <h3 className="text-lg font-semibold text-slate-900">
+                <h3 className="text-lg font-semibold text-emerald-950">
                   Has alcanzado el límite de tu plan
                 </h3>
 
-                <p className="mt-2 text-sm text-slate-600">
+                <p className="mt-2 text-sm text-emerald-700">
                   Para seguir agregando o activando personal, necesitas ampliar tu plan.
                 </p>
 
                 {(planLimitDetails?.current_active != null || planLimitDetails?.limit != null) && (
-                  <div className="mt-4 rounded-xl border bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <div className="mt-4 rounded-xl border bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                     Uso actual: {planLimitDetails?.current_active ?? 0}
                     {" / "}
                     {planLimitDetails?.limit ?? "-"}
@@ -603,14 +623,14 @@ export default function Personal() {
                 <div className="mt-6 flex items-center justify-end gap-3">
                   <button
                     onClick={closePlanLimitModal}
-                    className="rounded-lg border px-4 py-2 text-sm font-medium text-slate-700"
+                    className="rounded-xl border px-4 py-2 text-sm font-medium text-emerald-800"
                   >
                     Cerrar
                   </button>
 
                   <button
                     onClick={goToUpgrade}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
                   >
                     {t("personal.upgradeNow", { defaultValue: "Upgrade now" })}
                   </button>

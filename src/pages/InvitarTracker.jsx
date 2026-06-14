@@ -585,12 +585,12 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
   // =========================
   if (auth?.loading || entitlementsLoading || !entitlements) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+        <div className="w-full max-w-2xl rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
           <h1 className="text-xl font-semibold text-gray-900">
             {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
           </h1>
-          <p className="mt-3 text-sm text-slate-600">
+          <p className="mt-3 text-sm text-emerald-700">
             {t("inviteTracker.org.syncing", {
               defaultValue: "Sincronizando organización y plan...",
             })}
@@ -665,8 +665,8 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
     }
 
     return (
-      <div className="min-h-[70vh] flex items-center justify-center p-6">
-        <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm space-y-4">
+      <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+        <div className="w-full max-w-2xl rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5 space-y-4">
           <div className="flex items-center justify-between gap-3">
             <h1 className="text-xl font-semibold text-gray-900">
               {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
@@ -674,7 +674,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
             <button
               type="button"
               onClick={() => navigate("/tracker")}
-              className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
+              className="rounded-xl border px-3 py-2 text-sm hover:bg-emerald-50 text-emerald-900"
             >
               {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
             </button>
@@ -688,7 +688,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
           </div>
 
           {orgId ? (
-            <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="rounded-xl border border-emerald-100 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
                 {t("inviteTracker.plan.upgradePrompt", {
                   defaultValue: "Actualiza esta organización para habilitar invitaciones de trackers.",
@@ -706,8 +706,28 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
   // JSX
   // =========================
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-6">
-      <div className="w-full max-w-2xl rounded-2xl border bg-white p-6 shadow-sm">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("inviteTracker.heroEyebrow", { defaultValue: "Invitaciones" })}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
+                {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
+                {t("inviteTracker.heroSubtitle", { defaultValue: "Invita a un trabajador con rol tracker a la organización correcta." })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="w-full max-w-2xl rounded-3xl border border-emerald-100 bg-white p-6 shadow-lg shadow-emerald-950/5">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-gray-900">
             {t("inviteTracker.title", { defaultValue: "Invitar tracker" })}
@@ -716,7 +736,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
           <button
             type="button"
             onClick={() => navigate("/tracker")}
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-slate-50 text-slate-800"
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-emerald-50 text-emerald-900"
           >
             {t("inviteTracker.backToTracker", { defaultValue: "Volver a Tracker" })}
           </button>
@@ -763,7 +783,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
-                className="rounded-lg border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                className="rounded-xl border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
                 onClick={copyTrackerOnboardingInstructions}
               >
                 {t("inviteTracker.identity.copyWhatsapp", {
@@ -773,7 +793,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
 
               <button
                 type="button"
-                className="rounded-lg border border-blue-400 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-xl border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={() => onSendInvite()}
                 disabled={busy}
               >
@@ -799,27 +819,27 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
           </div>
         ) : null}
 
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="mt-4 rounded-3xl border border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-teal-50 p-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-sm font-semibold text-slate-900">
+              <div className="text-sm font-semibold text-emerald-950">
                 {t("inviteTracker.usage.title", { defaultValue: "Uso de trackers" })}
               </div>
-              <div className="mt-1 text-sm text-slate-700">
+              <div className="mt-1 text-sm text-emerald-800">
                 {t("inviteTracker.usage.current", {
                   defaultValue: "Usados: {{used}} / {{max}}",
                   used: trackerCount,
                   max: safeMaxTrackers,
                 })}
               </div>
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-xs text-emerald-600">
                 {t("inviteTracker.usage.plan", {
                   defaultValue: "Plan: {{plan}} · Estado: {{status}}",
                   plan: normalizePlanLabel(planCode),
                   status: String(normalizedPlanStatus || "-").toUpperCase(),
                 })}
               </div>
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="mt-1 text-xs text-emerald-600">
                 {t("inviteTracker.usage.label", {
                   defaultValue: "Uso calculado: {{value}}",
                   value: trackersUsageLabel,
@@ -829,7 +849,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
 
             <div className="text-sm">
               {loadingTrackerCount ? (
-                <span className="text-slate-500">
+                <span className="text-emerald-600">
                   {t("inviteTracker.usage.loading", { defaultValue: "Calculando uso…" })}
                 </span>
               ) : trackerLimitReached ? (
@@ -844,9 +864,9 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
             </div>
           </div>
 
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-emerald-100">
             <div
-              className="h-full rounded-full bg-slate-900 transition-all"
+              className="h-full rounded-full bg-emerald-950 transition-all"
               style={{
                 width:
                   safeMaxTrackers > 0
@@ -857,8 +877,8 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
           </div>
 
           {trackerLimitReached ? (
-            <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-              <div className="text-sm text-slate-700 mb-3">
+            <div className="mt-4 rounded-xl border border-emerald-100 bg-white p-4">
+              <div className="text-sm text-emerald-800 mb-3">
                 {t("inviteTracker.usage.upgradeLimit", {
                   defaultValue: "Tu plan actual llegó al límite. Actualiza para agregar más trackers.",
                 })}
@@ -871,10 +891,10 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
         <form onSubmit={onSendInvite} className="mt-6 space-y-4">
           {inviteLink && inviteMeta ? (
             <div className="mt-4 flex flex-col gap-2">
-              <div className="text-xs text-slate-700 break-all">
+              <div className="text-xs text-emerald-800 break-all">
                 <b>Enlace de invitación:</b> <span>{inviteLink}</span>
               </div>
-              <div className="text-xs text-slate-700 break-all">
+              <div className="text-xs text-emerald-800 break-all">
                 <b>invite_id:</b> <span>{inviteMeta.invite_id}</span>
                 <br />
                 <b>created_at:</b> <span>{inviteMeta.created_at}</span>
@@ -882,7 +902,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
               <div className="flex gap-2">
                 <button
                   type="button"
-                  className="rounded bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-700"
+                  className="rounded bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-700"
                   onClick={() => {
                     if (inviteMeta?.invite_url) {
                       navigator.clipboard.writeText(inviteMeta.invite_url);
@@ -928,13 +948,13 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-xs text-slate-600">
+            <p className="mt-2 text-xs text-emerald-700">
               {t("inviteTracker.onlyActiveAssignmentsNote", {
                 defaultValue: "Solo aparecen personas con asignaciones vigentes (activas y dentro del período de tiempo).",
               })}
             </p>
             {selectedOption ? (
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-emerald-600">
                 {t("inviteTracker.selectedPerson", {
                   defaultValue: "Seleccionado: {{label}}",
                   label: selectedOption.label,
@@ -943,13 +963,13 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
             ) : null}
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-900">
+                <div className="text-sm font-semibold text-emerald-950">
                   Codigo de emparejamiento Preview
                 </div>
-                <p className="mt-1 text-xs text-slate-600">
+                <p className="mt-1 text-xs text-emerald-700">
                   Genera un codigo para que el tracker lo ingrese despues de iniciar sesion con Magic Link.
                 </p>
               </div>
@@ -958,14 +978,14 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
                 type="button"
                 onClick={createPairingCodeForSelectedPerson}
                 disabled={pairingLoading || !selectedPerson?.id}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-emerald-950 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {pairingLoading ? "Generando..." : "Generar codigo"}
               </button>
             </div>
 
             {pairingError ? (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                 {pairingError}
               </div>
             ) : null}
@@ -977,20 +997,20 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
                 </div>
 
                 <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <code className="rounded-lg bg-slate-100 px-3 py-2 text-lg font-bold tracking-widest text-slate-900">
+                  <code className="rounded-xl bg-emerald-50 px-3 py-2 text-lg font-bold tracking-widest text-emerald-950">
                     {pairingCode}
                   </code>
 
                   <button
                     type="button"
-                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                    className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
                     onClick={() => navigator.clipboard.writeText(pairingCode)}
                   >
                     Copiar codigo
                   </button>
                 </div>
 
-                <div className="mt-3 text-xs text-slate-600">
+                <div className="mt-3 text-xs text-emerald-700">
                   {pairingCodeId ? (
                     <div>
                       <b>pairing_code_id:</b> <span className="break-all">{pairingCodeId}</span>
@@ -1025,7 +1045,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
             />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 mb-4">
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 mb-4">
             {t("inviteTracker.usage.trackers", {
               defaultValue: "Trackers usados: {{used}} / {{max}}",
               used: trackerCount,
@@ -1055,8 +1075,8 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
               !selectedAssignment?.id ||
               inviteBlockedByPlan ||
               trackerLimitReached
-                ? "bg-slate-300 text-slate-600 cursor-not-allowed"
-                : "bg-black text-white hover:bg-slate-900",
+                ? "bg-emerald-300 text-emerald-700 cursor-not-allowed"
+                : "bg-black text-white hover:bg-emerald-950",
             ].join(" ")}
           >
             {busy
