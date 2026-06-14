@@ -414,3 +414,25 @@ README.md
 o
 
 CONTRIBUTING.md
+
+---
+
+# Regla adicional — Módulos analíticos y Benchmarking
+
+Para módulos analíticos como `/benchmarking`, la IA debe mantener la lógica crítica en backend o vistas SQL documentadas.
+
+Reglas obligatorias:
+
+- No calcular área canónica de geocercas en React.
+- Usar `area_m2` proveniente de PostGIS/backend.
+- No consultar tablas de tracking bruto desde dashboards normales si existe una vista analítica documentada.
+- No presentar datos planificados como si fueran tracking auditado.
+- Mostrar claramente `fuente_horas` cuando las horas sean `PLANIFICADA`.
+- No crear decisiones automáticas a partir del benchmarking; solo evidencia de gestión.
+- Actualizar `/docs` cuando se agreguen nuevas vistas, rutas, navegación o exportaciones.
+
+Fuente oficial para Benchmarking:
+
+```sql
+public.v_benchmarking_efficiency_preview
+```

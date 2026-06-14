@@ -1,18 +1,43 @@
-# Benchmarking module — Preview
+# Benchmarking module — Preview and Production
 
-## Scope
+## Status
 
-The `/benchmarking` page compares operational efficiency across assignments, geofences, people, and activities.
+The `/benchmarking` module was implemented, validated in Preview, and promoted to Production on 2026-06-14 after Supabase Production was prepared with the required read-only view.
 
-This module is management-only and must remain behind the protected layout and organization context. Tracker-only users must not access it.
+Production route:
 
-## Branch and deployment rules
+```text
+/benchmarking
+```
 
-- Work only in branch `preview`.
-- Do not push to `main`.
-- Do not promote to Production unless explicitly ordered.
-- Do not mix Preview and Production data.
-- Do not upload demo data to Production.
+Navigation placement:
+
+```text
+Planificación / Planning / Planification → Benchmarking
+```
+
+The module is part of the protected application layout and is intended for management users. Tracker-only users must not access it.
+
+## Operational rules preserved during rollout
+
+- Work was performed on branch `preview`.
+- No push to `main` was required for the rollout.
+- Production was touched only after explicit order to promote.
+- Production database received only the required read-only view.
+- No demo data was inserted into Production.
+- Promote to Production was done from the validated Preview deployment.
+
+## Purpose
+
+Benchmarking compares operational efficiency across:
+
+- Assignments
+- Geofences
+- People / workers
+- Activities
+- Time periods
+
+The module is decision-support only. It must not automatically approve, reject, penalize, assign, or modify operational work. It only displays evidence for management review.
 
 ## Data source
 
@@ -22,24 +47,60 @@ The frontend reads from:
 public.v_benchmarking_efficiency_preview
 ```
 
-The view is based on `public.v_costos_hybrid_preview` plus canonical geofence area from PostGIS.
+The view is based on:
 
-Current limitation in Preview: `tracker_positions.asignacion_id` exists but is not populated, so Benchmarking must clearly label the current evidence as `PLANIFICADA` when `horas_observadas` is unavailable.
+```text
+public.v_costos_hybrid_preview
++ public.geofences.geom / PostGIS area
+```
 
-## Metrics
+The view is created with `security_invoker = true` and keeps `org_id` in the row set so Supabase/RLS and frontend organization context remain aligned.
 
-Base metrics:
+## Current evidence limitation
 
-- `horas_m2 = horas_benchmark / area_m2`
-- `costo_m2 = costo_final / area_m2`
+`tracker_positions.asignacion_id` exists, but the current Production data has no assignment-linked tracking rows. Therefore, Benchmarking currently uses planned assignment hours when direct assignment tracking evidence is unavailable.
 
-`area_m2` remains the canonical base unit. The UI also displays readable area units:
+The UI must clearly show:
 
-- m² for small areas
-- ha for medium/agricultural areas
-- km² for large logistics/transport areas
+```text
+Fuente de horas: PLANIFICADA
+```
 
-This avoids assuming that large geofence areas are invalid, because the app supports agriculture, logistics, transport, and other operational sectors.
+and must not imply that the current values are fully audited by GPS at assignment level.
+
+Future tracker/mobile changes should populate `tracker_positions.asignacion_id`. When that happens, create a more precise tracking-by-assignment layer such as:
+
+```sql
+public.v_tracking_assignment_coverage_preview
+```
+
+Then update `v_benchmarking_efficiency_preview` to prioritize assignment-linked tracking evidence.
+
+## Canonical units
+
+Canonical backend unit:
+
+```text
+area_m2
+```
+
+Base efficiency indicators:
+
+```text
+horas_m2 = horas_benchmark / area_m2
+costo_m2 = costo_final / area_m2
+```
+
+The UI also shows derived readable indicators:
+
+```text
+horas_ha  = horas_m2 * 10000
+costo_ha  = costo_m2 * 10000
+horas_km2 = horas_m2 * 1000000
+costo_km2 = costo_m2 * 1000000
+```
+
+Large `area_m2` values are not automatically considered errors because the app supports agriculture, logistics, transport, industrial yards, urban zones, and other operational sectors.
 
 ## Filters
 
@@ -66,16 +127,65 @@ The module displays:
 - Traffic-light evidence: green, yellow, red, gray
 - Improvement opportunity text
 
-## Decision support rule
+## CSV export
 
-Benchmarking does not make automatic decisions. It only shows operational evidence for management review.
+The CSV export must include:
 
-## Future improvement
+- Applied filters
+- Export timestamp
+- Base columns visible in the table
+- `horas_m2`
+- `costo_m2`
+- `horas_ha`
+- `costo_ha`
+- `horas_km2`
+- `costo_km2`
 
-When `tracker_positions.asignacion_id` is populated by the mobile tracker flow, create a more precise tracking-by-assignment layer, for example:
+Exports must remain scoped to the active organization and must not include cross-organization data.
 
-```sql
-public.v_tracking_assignment_coverage_preview
+## Production validation
+
+Before Promote, Supabase Production was validated with:
+
+```text
+v_benchmarking_efficiency_preview rows: 23
+rows_with_area: 23
+rows_with_horas_m2: 23
+rows_with_costo_m2: 23
+rows_with_tracking_hours: 0
+rows_with_planned_hours: 23
 ```
 
-Then update `v_benchmarking_efficiency_preview` to prioritize assignment-linked tracking evidence.
+After Promote, Production UI validation confirmed:
+
+- `/benchmarking` loads in Production.
+- The module appears next to Planificación.
+- Filters work.
+- Bars and line charts work.
+- Indicator switch between `horas/m²` and `$/m²` works.
+- Small decimal indicators do not display as false zeroes.
+- CSV export works and includes auxiliary metrics.
+
+## Files touched in frontend rollout
+
+Main file:
+
+```text
+src/pages/Benchmarking.jsx
+```
+
+Related routing/navigation/i18n files were updated during rollout:
+
+```text
+src/App.jsx
+src/layouts/ProtectedShell.jsx
+src/i18n/es.json
+src/i18n/en.json
+src/i18n/fr.json
+```
+
+## Permanent architecture rule
+
+Do not calculate canonical geofence area in React. Area must come from backend/PostGIS and be exposed through a view or RPC.
+
+Do not query `tracker_positions` directly from the Benchmarking page for normal rendering. Use `v_benchmarking_efficiency_preview` or a documented successor view.

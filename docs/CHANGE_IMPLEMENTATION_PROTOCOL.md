@@ -382,3 +382,31 @@ Todo cambio debe seguir este principio:
 cambio pequeño → prueba en preview → validación → documentación → posible promoción a producción
 
 La estabilidad del sistema siempre tiene prioridad sobre la velocidad de implementación.
+
+---
+
+# Caso documentado — Rollout Benchmarking
+
+El módulo `/benchmarking` siguió el protocolo oficial:
+
+1. Se leyó `/docs` antes de implementar.
+2. Se auditó estructura de base con SQL read-only.
+3. Se confirmó que `v_costos_hybrid_preview` y `geofences.geom` tenían las columnas necesarias.
+4. Se confirmó que `tracker_positions.asignacion_id` existía pero no estaba poblado.
+5. Se creó primero la vista `v_benchmarking_efficiency_preview` en Preview.
+6. Se validó Preview sin tocar Producción.
+7. Se implementó frontend en branch `preview`.
+8. Se corrigieron formatos visuales de indicadores pequeños.
+9. Se validaron filtros, gráficos y CSV en Preview.
+10. Con orden explícita, se creó la vista en Supabase Producción.
+11. Se validó Supabase Producción.
+12. Se hizo Promote to Production desde deployment Preview validado.
+13. Se documentó el cambio en `/docs`.
+
+Reglas mantenidas:
+
+- No push a `main`.
+- No datos demo en Producción.
+- No mezclar Preview con Producción.
+- No Promote sin orden explícita.
+- Documentación con commit `[allow-docs]`.

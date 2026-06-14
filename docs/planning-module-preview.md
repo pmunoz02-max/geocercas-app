@@ -1288,3 +1288,35 @@ Planificación queda habilitada en Producción con base de datos preparada, RLS 
 No se hizo push a `main`.
 No se mezcló Preview con Producción.
 No se insertaron datos demo en Producción.
+
+## Relación con Benchmarking
+
+El módulo `/benchmarking` es complementario a `/planificacion`.
+
+Relación funcional:
+
+- `/planificacion` organiza y visualiza planificación operativa.
+- `/benchmarking` compara eficiencia entre asignaciones, geocercas, personas y actividades usando costos, horas y área.
+
+Fuente compartida:
+
+```sql
+public.v_costos_hybrid_preview
+```
+
+Vista específica de Benchmarking:
+
+```sql
+public.v_benchmarking_efficiency_preview
+```
+
+Regla:
+
+Planificación y Benchmarking deben seguir usando fuentes backend documentadas. No duplicar cálculos críticos de costo, cobertura o área en frontend.
+
+Estado Producción 2026-06-14:
+
+- `/planificacion`: Producción OK.
+- `/benchmarking`: Producción OK.
+- `v_benchmarking_efficiency_preview`: creada y validada en Supabase Producción.
+- No se insertaron datos demo en Producción.

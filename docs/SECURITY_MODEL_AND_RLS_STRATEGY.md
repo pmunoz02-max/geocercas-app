@@ -346,3 +346,26 @@ anomaly detection for tracking data
 encryption of sensitive location data
 
 These enhancements further strengthen the platform security model.
+
+17.1 Benchmarking export and analytics
+
+The `/benchmarking` module is a protected management analytics page.
+
+Security rules:
+
+- It must be rendered only inside the protected layout.
+- Tracker-only users must not access the page.
+- Queries must remain scoped to the active organization.
+- CSV exports must include only rows visible to the active organization.
+- CSV exports must not include cross-organization rows.
+- Frontend filters are not a security boundary; RLS and `org_id` scoping remain required.
+
+Database source:
+
+```sql
+public.v_benchmarking_efficiency_preview
+```
+
+The view was created with `security_invoker = true` so access follows the permissions and RLS behavior of the invoking user and underlying objects.
+
+The module displays operational evidence only. It must not automatically change assignments, rates, roles, costs, memberships, or planning records.

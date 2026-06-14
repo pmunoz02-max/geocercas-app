@@ -585,3 +585,112 @@ Si hay duda sobre qué tabla consultar:
 
 no improvisar.
 Primero validar contra docs/DB_SCHEMA_MAP.md y la arquitectura documentada.
+
+---
+
+# Patrón oficial — Benchmarking operativo
+
+## Objetivo
+
+Mostrar eficiencia operativa por asignación, geocerca, persona, actividad y período.
+
+## Fuente correcta
+
+Consultar:
+
+```sql
+public.v_benchmarking_efficiency_preview
+```
+
+No consultar directamente desde la pantalla:
+
+```text
+tracker_positions
+geofences.geom
+v_costos_hybrid_preview + joins manuales en React
+```
+
+## Filtros obligatorios
+
+Toda consulta debe estar acotada por organización activa:
+
+```text
+org_id = activeOrgId
+```
+
+Cuando aplique, usar también:
+
+```text
+work_date >= fromDate
+work_date <= toDate
+geofence_id
+personal_id
+activity_id
+```
+
+## Selección de columnas
+
+Seleccionar columnas explícitas. No usar `select('*')` por defecto en nuevas implementaciones.
+
+Columnas mínimas típicas para la pantalla:
+
+```text
+asignacion_id,
+org_id,
+personal_id,
+geofence_id,
+activity_id,
+work_date,
+period_day,
+period_week,
+period_month,
+period_quarter,
+period_semester,
+period_year,
+personal_nombre,
+geofence_nombre,
+activity_nombre,
+area_m2,
+horas_planificadas,
+horas_observadas,
+horas_benchmark,
+fuente_horas,
+costo_base,
+costo_final,
+horas_m2,
+costo_m2,
+benchmarking_status
+```
+
+## Reglas de cálculo
+
+El frontend puede calcular agregados visibles derivados del dataset filtrado, por ejemplo:
+
+- promedio visible
+- diferencia contra promedio visible
+- diferencia acumulada visible
+- semáforo visual
+- oportunidad de mejora textual
+- equivalentes `horas/ha`, `$/ha`, `horas/km²`, `$/km²`
+
+El frontend no debe calcular:
+
+- área canónica de geocerca
+- costo final auditado
+- factor de cobertura oficial
+- estado de auditoría oficial
+
+## Export CSV
+
+El CSV debe exportar únicamente filas visibles para la organización activa y filtros aplicados.
+
+Debe incluir:
+
+- fecha de exportación
+- filtros aplicados
+- métricas base por m²
+- métricas auxiliares por ha y km²
+
+## Razón del patrón
+
+Benchmarking es un dashboard analítico. Para mantener consistencia y seguridad, las reglas de área, costo y evidencia se centralizan en una vista SQL documentada y compatible con RLS.

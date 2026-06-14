@@ -362,3 +362,75 @@ Calcula:
 * `estado_auditoria`
 
 Esta vista es la fuente preferida para comparar planificación, costo operativo y evidencia de tracking.
+
+#### `v_benchmarking_efficiency_preview`
+
+Vista analítica para el módulo `/benchmarking`.
+
+Estado:
+
+* Disponible en Preview.
+* Disponible en Producción desde 2026-06-14.
+
+Depende de:
+
+* `v_costos_hybrid_preview`
+* `geofences`
+* PostGIS `st_area(g.geom::geography)`
+
+Propósito:
+
+* Comparar eficiencia operativa entre asignaciones, geocercas, personas y actividades.
+* Exponer métricas por unidad de área para gestión operativa.
+* Mantener la lógica de área y costo en backend, no en frontend.
+
+Columnas principales:
+
+* `asignacion_id`
+* `org_id`
+* `personal_id`
+* `geofence_id`
+* `activity_id`
+* `start_time`
+* `end_time`
+* `work_date`
+* `period_day`
+* `period_week`
+* `period_month`
+* `period_quarter`
+* `period_semester`
+* `period_year`
+* `personal_nombre`
+* `geofence_nombre`
+* `activity_nombre`
+* `area_m2`
+* `horas_planificadas`
+* `horas_observadas`
+* `horas_benchmark`
+* `fuente_horas`
+* `hourly_rate`
+* `costo_base`
+* `costo_final`
+* `horas_m2`
+* `costo_m2`
+* `points_count`
+* `minutos_sin_cobertura`
+* `numero_huecos`
+* `porcentaje_cobertura`
+* `nivel_confianza`
+* `factor_cobertura`
+* `estado_auditoria`
+* `benchmarking_status`
+
+Métricas canónicas:
+
+* `horas_m2 = horas_benchmark / area_m2`
+* `costo_m2 = costo_final / area_m2`
+
+Notas:
+
+* `area_m2` es la unidad canónica de área.
+* La UI puede mostrar equivalentes en ha y km², pero esos valores son derivados visuales.
+* La vista usa `security_invoker = true` para respetar el modelo RLS de las tablas/vistas base.
+* Actualmente `tracker_positions.asignacion_id` no está poblado en Producción; por eso `fuente_horas` puede ser `PLANIFICADA`.
+* Cuando el tracking móvil vincule posiciones a asignaciones, crear una vista intermedia `v_tracking_assignment_coverage_preview` y actualizar esta vista.

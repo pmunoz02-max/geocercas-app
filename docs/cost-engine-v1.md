@@ -105,3 +105,54 @@ Se habilitaron en Supabase Producción las vistas necesarias para que el módulo
 ### Validación en Producción
 
 Después de la migración, `v_costos_hybrid_preview` devolvió 23 filas en Producción, confirmando que la vista queda conectada con datos reales.
+
+## Benchmarking efficiency view — Production
+
+El módulo `/benchmarking` reutiliza la capa de costos híbridos para comparar eficiencia operativa por área.
+
+Vista usada:
+
+```sql
+public.v_benchmarking_efficiency_preview
+```
+
+Base de cálculo:
+
+```text
+v_costos_hybrid_preview + geofences.geom/PostGIS area
+```
+
+Indicadores canónicos:
+
+```text
+horas_m2 = horas_benchmark / area_m2
+costo_m2 = costo_final / area_m2
+```
+
+Indicadores auxiliares calculables en UI/CSV:
+
+```text
+horas_ha  = horas_m2 * 10000
+costo_ha  = costo_m2 * 10000
+horas_km2 = horas_m2 * 1000000
+costo_km2 = costo_m2 * 1000000
+```
+
+Reglas:
+
+- `costo_final` sigue viniendo de la capa SQL de costos híbridos.
+- `area_m2` debe venir de PostGIS/backend.
+- El frontend no debe recalcular área canónica.
+- La página puede calcular diferencias contra promedio visible y oportunidades de mejora como agregados de presentación.
+- Benchmarking no escribe costos ni modifica asignaciones.
+
+Validación Producción 2026-06-14:
+
+```text
+v_benchmarking_efficiency_preview rows: 23
+rows_with_area: 23
+rows_with_horas_m2: 23
+rows_with_costo_m2: 23
+rows_with_tracking_hours: 0
+rows_with_planned_hours: 23
+```

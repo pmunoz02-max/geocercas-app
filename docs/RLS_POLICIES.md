@@ -70,3 +70,31 @@ Cross-org:
 2. Toda escritura de memberships pasa por path seguro (safeUpsertMembership o RPC segura).
 3. Se distingue explicitamente comportamiento same-org vs cross-org.
 4. `activeOrgId` viene de sesion canónica y no de estado local ad-hoc.
+
+## 10. Vistas analíticas y Benchmarking
+
+El módulo `/benchmarking` usa la vista:
+
+```sql
+public.v_benchmarking_efficiency_preview
+```
+
+Reglas de seguridad:
+
+- La vista debe mantenerse como lectura analítica.
+- La vista debe incluir `org_id`.
+- La UI debe filtrar por la organización activa.
+- La seguridad real depende de RLS en las tablas/vistas base y del contexto autenticado.
+- La vista fue creada con `security_invoker = true` para respetar el modelo de permisos del usuario invocador.
+- El rol `tracker` no debe tener acceso operativo a la página Benchmarking.
+
+Export CSV:
+
+- Debe exportar únicamente datos visibles para la organización activa.
+- No debe incluir filas de otras organizaciones.
+- No debe apoyarse solamente en filtros visuales para seguridad.
+
+Estado actual:
+
+- Producción contiene `v_benchmarking_efficiency_preview`.
+- `tracker_positions.asignacion_id` aún no está poblado; la evidencia se etiqueta como `PLANIFICADA` cuando no hay tracking directo por asignación.
