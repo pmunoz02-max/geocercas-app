@@ -430,30 +430,13 @@ function KpiCard({ label, value, hint }) {
   );
 }
 
-function EfficiencyMetricCell({ value, kind, locale, bt }) {
-  const n = toNullableNumber(value);
+function formatPlainRateCell(value, locale, maximumFractionDigits = 9) {
+  return formatRateNumber(value, locale, maximumFractionDigits);
+}
 
-  if (n === null) {
-    return <span>—</span>;
-  }
-
-  const mainValue = kind === "cost" ? formatCurrencyRate(n, locale) : formatRateNumber(n, locale, 9);
-  const perHa = multiplyNullable(n, 10000);
-  const perKm2 = multiplyNullable(n, 1000000);
-
-  return (
-    <div className="space-y-1">
-      <div className="font-medium text-slate-900">{mainValue}</div>
-      <div className="text-xs leading-5 text-slate-500">
-        <div>
-          {kind === "cost" ? bt("table.costHa", "$/ha") : bt("table.hoursHa", "Horas/ha")}: {kind === "cost" ? formatCurrencyRate(perHa, locale) : formatRateNumber(perHa, locale, 6)}
-        </div>
-        <div>
-          {kind === "cost" ? bt("table.costKm2", "$/km²") : bt("table.hoursKm2", "Horas/km²")}: {kind === "cost" ? formatCurrencyRate(perKm2, locale) : formatRateNumber(perKm2, locale, 4)}
-        </div>
-      </div>
-    </div>
-  );
+function formatCurrencyRateCell(value, locale, compact = false) {
+  if (compact) return formatCurrency(value, locale);
+  return formatCurrencyRate(value, locale);
 }
 
 function BarsChart({ rows, indicator, locale, emptyLabel }) {
@@ -884,7 +867,7 @@ export default function Benchmarking() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1500px] w-full divide-y divide-slate-200 text-sm">
+          <table className="min-w-[1900px] w-full divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">{bt("table.signal", "Semáforo")}</th>
@@ -899,6 +882,10 @@ export default function Benchmarking() {
                 <th className="px-4 py-3 text-right">{bt("table.costFinal", "Costo final auditado")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.hoursM2", "Horas/m²")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.costM2", "$/m²")}</th>
+                <th className="px-4 py-3 text-right">{bt("table.hoursHa", "Horas/ha")}</th>
+                <th className="px-4 py-3 text-right">{bt("table.costHa", "$/ha")}</th>
+                <th className="px-4 py-3 text-right">{bt("table.hoursKm2", "Horas/km²")}</th>
+                <th className="px-4 py-3 text-right">{bt("table.costKm2", "$/km²")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.diffAverage", "Diferencia contra promedio")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.cumulativeDiff", "Diferencia acumulada")}</th>
                 <th className="px-4 py-3">{bt("table.evidence", "Fuente")}</th>
@@ -908,7 +895,7 @@ export default function Benchmarking() {
             <tbody className="divide-y divide-slate-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="16" className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan="20" className="px-4 py-10 text-center text-slate-500">
                     {bt("loading", "Cargando benchmarking...")}
                   </td>
                 </tr>
@@ -929,12 +916,12 @@ export default function Benchmarking() {
                     <td className="px-4 py-3 text-right text-slate-700">{formatNumber(row.observedHours, locale, 2)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.costBase, locale)}</td>
                     <td className="px-4 py-3 text-right font-medium text-slate-900">{formatCurrency(row.costFinal, locale)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">
-                      <EfficiencyMetricCell value={row.horasM2} kind="hours" locale={locale} bt={bt} />
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-700">
-                      <EfficiencyMetricCell value={row.costoM2} kind="cost" locale={locale} bt={bt} />
-                    </td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatPlainRateCell(row.horasM2, locale, 9)}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatCurrencyRateCell(row.costoM2, locale)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatPlainRateCell(multiplyNullable(row.horasM2, 10000), locale, 6)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatCurrencyRateCell(multiplyNullable(row.costoM2, 10000), locale, true)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatPlainRateCell(multiplyNullable(row.horasM2, 1000000), locale, 4)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatCurrencyRateCell(multiplyNullable(row.costoM2, 1000000), locale, true)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">{formatIndicator(row.difference, filters.indicator, locale)}</td>
                     <td className="px-4 py-3 text-right text-slate-700">
                       {filters.indicator === "costo_m2" ? formatCurrency(row.cumulativeDifference, locale) : formatNumber(row.cumulativeDifference, locale, 2)}
@@ -945,7 +932,7 @@ export default function Benchmarking() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="16" className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan="20" className="px-4 py-10 text-center text-slate-500">
                     {bt("empty.table", "No hay datos de benchmarking con los filtros actuales.")}
                   </td>
                 </tr>
