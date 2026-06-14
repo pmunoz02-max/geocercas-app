@@ -2663,7 +2663,9 @@
       "period": "Grouped period",
       "compareBy": "Compare by",
       "indicator": "Indicator",
-      "chartType": "Chart type"
+      "chartType": "Chart type",
+      "title": "Filters",
+      "subtitle": "Adjust the view to compare operational efficiency."
     },
     "periods": {
       "day": "Day",

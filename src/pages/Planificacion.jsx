@@ -80,8 +80,8 @@ function getEstadoStyle(estado) {
   if (estado === "Completada") return "bg-emerald-100 text-emerald-700";
   if (estado === "En progreso") return "bg-sky-100 text-sky-700";
   if (estado === "En riesgo") return "bg-amber-100 text-amber-800";
-  if (estado === "Archivada") return "bg-slate-200 text-slate-700";
-  return "bg-slate-100 text-slate-700";
+  if (estado === "Archivada") return "bg-slate-200 text-gray-700";
+  return "bg-emerald-50 text-gray-700";
 }
 
 function toEstadoLabel(status) {
@@ -508,7 +508,7 @@ function getTrafficLightStyle(level) {
   if (level === "green") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (level === "yellow") return "border-amber-200 bg-amber-50 text-amber-800";
   if (level === "red") return "border-rose-200 bg-rose-50 text-rose-700";
-  return "border-slate-200 bg-slate-50 text-slate-600";
+  return "border-emerald-100 bg-emerald-50/80 text-gray-600";
 }
 
 function getTrafficLightIcon(level) {
@@ -941,10 +941,10 @@ export default function Planificacion() {
   }, [nuevaPlanificacionVisual, t]);
 
   const formularioVisualValido = Object.keys(erroresNuevaPlanificacion).length === 0;
-  const claseCampoBase = "mt-1 rounded-lg border px-3 py-2 text-sm normal-case text-slate-700";
+  const claseCampoBase = "mt-1 rounded-lg border px-3 py-2 text-sm normal-case text-gray-700";
   const getClaseCampo = (errorKey) =>
     `${claseCampoBase} ${
-      intentoGuardarVisual && erroresNuevaPlanificacion[errorKey] ? "border-rose-400 bg-rose-50" : "border-slate-300 bg-white"
+      intentoGuardarVisual && erroresNuevaPlanificacion[errorKey] ? "border-rose-400 bg-rose-50" : "border-emerald-100 bg-white"
     }`;
 
   const limpiarFiltrosPlanificacion = () => {
@@ -1195,54 +1195,59 @@ export default function Planificacion() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="rounded-2xl bg-gradient-to-r from-cyan-700 via-teal-700 to-emerald-700 p-6 text-white shadow-lg">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {t("planning.header.badge", { defaultValue: "Control gerencial operativo" })}
+            </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-100">
-                {t("planning.header.badge", { defaultValue: "Control gerencial operativo" })}
-              </p>
-              <h1 className="mt-2 text-2xl font-bold sm:text-3xl">
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
                 {t("planning.header.title", { defaultValue: "Planificación Operativa" })}
               </h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-cyan-50 sm:text-base">
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-50/90">
                 {t("planning.header.subtitle", {
                   defaultValue:
                     "Planifica trabajos por geocerca, compara ejecución real contra presupuesto operativo y detecta desviaciones con semáforos, filtros y exportación gerencial.",
                 })}
               </p>
             </div>
+          </div>
+          <div className="w-full rounded-3xl border border-white/15 bg-white/10 p-2 shadow-lg shadow-emerald-950/10 backdrop-blur-sm lg:w-auto">
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/30">
+              <span className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-emerald-900 shadow-sm">
                 {t("planning.badges.preview", { defaultValue: "Preview seguro" })}
               </span>
-              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/30">
+              <span className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-emerald-900 shadow-sm">
                 {t("planning.badges.planVsReal", { defaultValue: "Plan vs Real" })}
               </span>
-              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold text-white ring-1 ring-white/30">
+              <span className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-emerald-900 shadow-sm">
                 {t("planning.badges.csv", { defaultValue: "CSV ejecutivo" })}
               </span>
             </div>
           </div>
-        </header>
+        </div>
+      </section>
 
         {loadingDb ? (
-          <section className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-800">
+          <section className="rounded-2xl border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm font-medium text-emerald-800 shadow-sm shadow-emerald-900/5">
             {t("planning.loading.fromSupabase", { defaultValue: "Cargando planificación desde Supabase..." })}
           </section>
         ) : null}
 
         {errorDb ? (
-          <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <section className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm font-medium text-amber-800 shadow-sm shadow-amber-900/5">
             {errorDb}
           </section>
         ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 sm:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="text-sm font-semibold text-gray-800">
                 {t("planning.periodSelector.title", { defaultValue: "Período de análisis" })}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1257,8 +1262,8 @@ export default function Planificacion() {
                       onClick={() => handleSeleccionarPeriodoAnalisis(periodo)}
                       className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                         activo
-                          ? "border-cyan-600 bg-cyan-50 text-cyan-700"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                          : "border-emerald-100 bg-white text-gray-700 hover:border-emerald-200 hover:bg-emerald-50"
                       }`}
                     >
                       {getPeriodoLabel(periodo, t)}
@@ -1269,35 +1274,35 @@ export default function Planificacion() {
             </div>
 
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.periodSelector.from", { defaultValue: "Desde" })}
                 <input
                   type="date"
                   value={filtrosPlanificacion.fechaDesde}
                   onChange={(e) => handleCambiarFechaFiltro("fechaDesde", e.target.value)}
-                  className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                  className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </label>
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.periodSelector.to", { defaultValue: "Hasta" })}
                 <input
                   type="date"
                   value={filtrosPlanificacion.fechaHasta}
                   onChange={(e) => handleCambiarFechaFiltro("fechaHasta", e.target.value)}
-                  className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                  className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </label>
             </div>
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 sm:p-6">
           <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {t("planning.filters.title", { defaultValue: "Filtros gerenciales Plan vs Real" })}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-gray-600">
                 {t("planning.filters.subtitle", {
                   defaultValue:
                     "Enfoca la revisión por desviaciones, geocerca, actividad, estado o período. La vista filtrada alimenta KPIs, tabla, Gantt y CSV.",
@@ -1309,7 +1314,7 @@ export default function Planificacion() {
                 type="button"
                 onClick={handleExportarCsvPlanificacion}
                 disabled={tareasFiltradas.length === 0}
-                className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-md disabled:cursor-not-allowed disabled:bg-emerald-300"
               >
                 {t("planning.actions.exportCsv", { defaultValue: "Exportar CSV ejecutivo" })}
               </button>
@@ -1317,7 +1322,7 @@ export default function Planificacion() {
                 type="button"
                 onClick={limpiarFiltrosPlanificacion}
                 disabled={!hayFiltrosPlanificacion}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl border border-emerald-100 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 shadow-sm shadow-emerald-900/5 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {t("planning.actions.clearFilters", { defaultValue: "Limpiar filtros" })}
               </button>
@@ -1325,12 +1330,12 @@ export default function Planificacion() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
               {t("planning.filters.trafficLight", { defaultValue: "Semáforo" })}
               <select
                 value={filtrosPlanificacion.semaforo}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, semaforo: e.target.value }))}
-                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+                className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm normal-case text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="all">{t("planning.filters.all", { defaultValue: "Todos" })}</option>
                 <option value="green">{t("planning.traffic.green", { defaultValue: "En rango" })}</option>
@@ -1340,12 +1345,12 @@ export default function Planificacion() {
               </select>
             </label>
 
-            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
               {t("planning.filters.geofence", { defaultValue: "Geocerca" })}
               <select
                 value={filtrosPlanificacion.geofenceId}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, geofenceId: e.target.value }))}
-                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+                className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm normal-case text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="all">{t("planning.filters.allFeminine", { defaultValue: "Todas" })}</option>
                 {geofencesDb.map((g) => (
@@ -1356,12 +1361,12 @@ export default function Planificacion() {
               </select>
             </label>
 
-            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
               {t("planning.filters.activity", { defaultValue: "Actividad" })}
               <select
                 value={filtrosPlanificacion.activityId}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, activityId: e.target.value }))}
-                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+                className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm normal-case text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="all">{t("planning.filters.allFeminine", { defaultValue: "Todas" })}</option>
                 {activitiesDb.map((a) => (
@@ -1372,12 +1377,12 @@ export default function Planificacion() {
               </select>
             </label>
 
-            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
               {t("planning.filters.status", { defaultValue: "Estado" })}
               <select
                 value={filtrosPlanificacion.estado}
                 onChange={(e) => setFiltrosPlanificacion((prev) => ({ ...prev, estado: e.target.value }))}
-                className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-700"
+                className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm normal-case text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               >
                 <option value="all">{t("planning.filters.all", { defaultValue: "Todos" })}</option>
                 <option value="draft">{t("planning.status.draft", { defaultValue: "Pendiente" })}</option>
@@ -1387,28 +1392,28 @@ export default function Planificacion() {
               </select>
             </label>
 
-            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
               {t("planning.filters.dateFrom", { defaultValue: "Fecha desde" })}
               <input
                 type="date"
                 value={filtrosPlanificacion.fechaDesde}
                 onChange={(e) => handleCambiarFechaFiltro("fechaDesde", e.target.value)}
-                className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </label>
 
-            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+            <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
               {t("planning.filters.dateTo", { defaultValue: "Fecha hasta" })}
               <input
                 type="date"
                 value={filtrosPlanificacion.fechaHasta}
                 onChange={(e) => handleCambiarFechaFiltro("fechaHasta", e.target.value)}
-                className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"
+                className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </label>
           </div>
 
-          <p className="mt-3 text-xs text-slate-500">
+          <p className="mt-3 text-xs text-gray-600">
             {t("planning.filters.showing", {
               defaultValue:
                 "Mostrando {{filtered}} de {{total}} planificaciones de la vista actual. Los KPIs, la tabla, el Gantt y la exportación usan este mismo filtro.",
@@ -1419,79 +1424,79 @@ export default function Planificacion() {
         </section>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.visible", { defaultValue: "Planificaciones visibles" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{total}</p>
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.visible", { defaultValue: "Planificaciones visibles" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">{total}</p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.closed", { defaultValue: "Cerradas" })}</p>
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.closed", { defaultValue: "Cerradas" })}</p>
             <p className="mt-1 text-2xl font-semibold text-emerald-600">{completadas}</p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.inProgress", { defaultValue: "En ejecución" })}</p>
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.inProgress", { defaultValue: "En ejecución" })}</p>
             <p className="mt-1 text-2xl font-semibold text-sky-600">{enProgreso}</p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.operationalProgress", { defaultValue: "Avance operativo" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{avancePromedio}%</p>
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.operationalProgress", { defaultValue: "Avance operativo" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">{avancePromedio}%</p>
           </article>
         </section>
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.plannedHours", { defaultValue: "Horas planificadas" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.plannedHours", { defaultValue: "Horas planificadas" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {formatMetric(planVsRealKpis.totalHorasPlanificadas)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.realHours", { defaultValue: "Horas reales" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.realHours", { defaultValue: "Horas reales" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {formatMetric(planVsRealKpis.totalHorasReales)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.hoursDifference", { defaultValue: "Dif. horas" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.hoursDifference", { defaultValue: "Dif. horas" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {formatMetric(planVsRealKpis.diferenciaHoras)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.hoursCompliance", { defaultValue: "% cumplimiento horas" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.hoursCompliance", { defaultValue: "% cumplimiento horas" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {planVsRealKpis.cumplimientoHoras === null ? "-" : `${formatMetric(planVsRealKpis.cumplimientoHoras)}%`}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.plannedCost", { defaultValue: "Costo planificado" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.plannedCost", { defaultValue: "Costo planificado" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {formatMetric(planVsRealKpis.totalCostoPlanificado)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.realCost", { defaultValue: "Costo real" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.realCost", { defaultValue: "Costo real" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {formatMetric(planVsRealKpis.totalCostoReal)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.costDifference", { defaultValue: "Dif. costo" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.costDifference", { defaultValue: "Dif. costo" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">
               {formatMetric(planVsRealKpis.diferenciaCosto)}
             </p>
           </article>
-          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-500">{t("planning.kpis.currentView", { defaultValue: "Vista actual" })}</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{showArchived ? t("planning.modes.archived", { defaultValue: "Archivadas" }) : t("planning.modes.active", { defaultValue: "Activas" })}</p>
+          <article className="rounded-xl border border-emerald-100 bg-white p-4 shadow-sm">
+            <p className="text-sm text-gray-600">{t("planning.kpis.currentView", { defaultValue: "Vista actual" })}</p>
+            <p className="mt-1 text-2xl font-semibold text-gray-900">{showArchived ? t("planning.modes.archived", { defaultValue: "Archivadas" }) : t("planning.modes.active", { defaultValue: "Activas" })}</p>
           </article>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 sm:p-6">
           <div className="mb-4 flex flex-col gap-1">
-            <h2 className="text-lg font-semibold text-slate-900">
+            <h2 className="text-lg font-semibold text-gray-900">
               {t("planning.summary.title", { defaultValue: "Resumen ejecutivo por semáforo" })}
             </h2>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-gray-600">
               {t("planning.summary.subtitle", {
                 defaultValue: "Lectura rápida del riesgo operativo según la peor desviación entre horas y costo.",
               })}
@@ -1554,16 +1559,16 @@ export default function Planificacion() {
         </section>
 
         {!showArchived ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {editingPlanningId
                   ? t("planning.form.editTitle", { defaultValue: "Editar planificación operativa" })
                   : t("planning.form.newTitle", { defaultValue: "Nueva planificación operativa" })}
               </h2>
               <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">{t("planning.badges.previewShort", { defaultValue: "Preview" })}</span>
             </div>
-            <p className="mb-4 text-sm text-slate-500">
+            <p className="mb-4 text-sm text-gray-600">
               {editingPlanningId
                 ? t("planning.form.editSubtitle", { defaultValue: "Actualiza una planificación activa sin duplicar registros. El cambio queda limitado a Preview." })
                 : t("planning.form.newSubtitle", { defaultValue: "Registra una planificación operativa para comparar luego contra la ejecución real." })}
@@ -1575,7 +1580,7 @@ export default function Planificacion() {
             ) : null}
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.filters.geofence", { defaultValue: "Geocerca" })}
                 <select
                   value={nuevaPlanificacionVisual.geofenceId}
@@ -1594,7 +1599,7 @@ export default function Planificacion() {
                 ) : null}
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.filters.activity", { defaultValue: "Actividad" })}
                 <select
                   value={nuevaPlanificacionVisual.activityId}
@@ -1613,7 +1618,7 @@ export default function Planificacion() {
                 ) : null}
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.form.startDate", { defaultValue: "Fecha inicio" })}
                 <input
                   type="date"
@@ -1626,7 +1631,7 @@ export default function Planificacion() {
                 ) : null}
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.form.endDate", { defaultValue: "Fecha fin" })}
                 <input
                   type="date"
@@ -1642,7 +1647,7 @@ export default function Planificacion() {
                 ) : null}
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.form.plannedHours", { defaultValue: "Horas planificadas" })}
                 <input
                   type="number"
@@ -1663,7 +1668,7 @@ export default function Planificacion() {
                 ) : null}
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.form.plannedCost", { defaultValue: "Costo planificado" })}
                 <input
                   type="number"
@@ -1683,7 +1688,7 @@ export default function Planificacion() {
                 {intentoGuardarVisual && erroresNuevaPlanificacion.costoPlanificado ? (
                   <span className="mt-1 text-xs normal-case text-rose-600">{erroresNuevaPlanificacion.costoPlanificado}</span>
                 ) : null}
-                <span className="mt-1 text-xs normal-case text-slate-500">
+                <span className="mt-1 text-xs normal-case text-gray-600">
                   {tieneTarifaAutomatica
                     ? t("planning.form.autoCostHint", {
                         defaultValue: "Se calcula automáticamente según tarifa de actividad y horas{{currency}}.",
@@ -1696,7 +1701,7 @@ export default function Planificacion() {
                 </span>
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
                 {t("planning.form.status", { defaultValue: "Estado" })}
                 <select
                   value={nuevaPlanificacionVisual.estado}
@@ -1713,14 +1718,14 @@ export default function Planificacion() {
                 ) : null}
               </label>
 
-              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-slate-500 xl:col-span-4">
+              <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600 xl:col-span-4">
                 {t("planning.form.notes", { defaultValue: "Notas" })}
                 <textarea
                   rows={3}
                   placeholder={t("planning.form.notesPlaceholder", { defaultValue: "Notas operativas" })}
                   value={nuevaPlanificacionVisual.notas}
                   onChange={(e) => setNuevaPlanificacionVisual((prev) => ({ ...prev, notas: e.target.value }))}
-                  className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm normal-case text-slate-700"
+                  className="mt-1 rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-sm normal-case text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </label>
             </div>
@@ -1730,7 +1735,7 @@ export default function Planificacion() {
                 type="button"
                 onClick={handleCancelarVisual}
                 disabled={savingPlanning}
-                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-emerald-100 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 shadow-sm shadow-emerald-900/5 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-md"
               >
                 {t("planning.actions.cancel", { defaultValue: "Cancelar" })}
               </button>
@@ -1738,7 +1743,7 @@ export default function Planificacion() {
                 type="button"
                 onClick={handleGuardarVisual}
                 disabled={savingPlanning}
-                className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-md disabled:cursor-not-allowed disabled:bg-emerald-300"
               >
                 {savingPlanning
                   ? t("planning.actions.saving", { defaultValue: "Guardando..." })
@@ -1746,7 +1751,7 @@ export default function Planificacion() {
                     ? t("planning.actions.saveEdit", { defaultValue: "Guardar edición" })
                     : t("planning.actions.savePlanning", { defaultValue: "Guardar planificación" })}
               </button>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-gray-600">
                 {editingPlanningId
                   ? t("planning.form.editSaveHint", { defaultValue: "Al guardar, se actualiza la planificación activa en Preview." })
                   : t("planning.form.newSaveHint", { defaultValue: "Al guardar, se inserta en Preview y se recarga la lista." })}
@@ -1755,15 +1760,15 @@ export default function Planificacion() {
           </section>
         ) : null}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 sm:p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {showArchived
                   ? t("planning.table.archivedTitle", { defaultValue: "Planificaciones archivadas" })
                   : t("planning.table.activeTitle", { defaultValue: "Planificaciones activas" })}
               </h2>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-gray-600">
                 {showArchived
                   ? t("planning.table.archivedSubtitle", { defaultValue: "Historial operativo archivado. Útil para auditoría y revisión posterior." })
                   : t("planning.table.activeSubtitle", { defaultValue: "Vista activa con presupuesto, ejecución real, desviaciones, semáforo y totales." })}
@@ -1771,7 +1776,7 @@ export default function Planificacion() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-gray-600">
                 {mostrandoDemo
                   ? t("planning.badges.localDemo", { defaultValue: "Datos demo locales" })
                   : t("planning.badges.realPreview", { defaultValue: "Datos reales Preview" })}
@@ -1779,7 +1784,7 @@ export default function Planificacion() {
               <button
                 type="button"
                 onClick={() => setShowArchived((prev) => !prev)}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                className="rounded-xl border border-emerald-100 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 shadow-sm shadow-emerald-900/5 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:shadow-md"
               >
                 {showArchived
                   ? t("planning.actions.viewActive", { defaultValue: "Ver activas" })
@@ -1789,29 +1794,29 @@ export default function Planificacion() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
-              <thead className="bg-slate-50">
+            <table className="min-w-full divide-y divide-emerald-100 text-sm">
+              <thead className="bg-emerald-50/80 text-emerald-950">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.id", { defaultValue: "ID" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.geofence", { defaultValue: "Geocerca" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.activity", { defaultValue: "Actividad" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.startDate", { defaultValue: "Fecha inicio" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.endDate", { defaultValue: "Fecha fin" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.plannedHours", { defaultValue: "Horas planificadas" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.plannedCost", { defaultValue: "Costo planificado" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.realHours", { defaultValue: "Horas reales" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.realCost", { defaultValue: "Costo real" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.hoursDiff", { defaultValue: "Dif. horas" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.costDiff", { defaultValue: "Dif. costo" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.trafficLight", { defaultValue: "Semáforo" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.status", { defaultValue: "Estado" })}</th>
-                  <th className="px-3 py-2 text-left font-semibold text-slate-600">{t("planning.table.columns.actions", { defaultValue: "Acciones" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.id", { defaultValue: "ID" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.geofence", { defaultValue: "Geocerca" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.activity", { defaultValue: "Actividad" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.startDate", { defaultValue: "Fecha inicio" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.endDate", { defaultValue: "Fecha fin" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.plannedHours", { defaultValue: "Horas planificadas" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.plannedCost", { defaultValue: "Costo planificado" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.realHours", { defaultValue: "Horas reales" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.realCost", { defaultValue: "Costo real" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.hoursDiff", { defaultValue: "Dif. horas" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.costDiff", { defaultValue: "Dif. costo" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.trafficLight", { defaultValue: "Semáforo" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.status", { defaultValue: "Estado" })}</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-600">{t("planning.table.columns.actions", { defaultValue: "Acciones" })}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white">
                 {sinDatosReales ? (
                   <tr>
-                    <td className="px-3 py-6 text-center text-slate-500" colSpan={14}>
+                    <td className="px-3 py-6 text-center text-gray-600" colSpan={14}>
                       {hayFiltrosPlanificacion
                         ? t("planning.empty.noFilterResults", { defaultValue: "No hay planificaciones que coincidan con los filtros seleccionados." })
                         : showArchived
@@ -1822,17 +1827,17 @@ export default function Planificacion() {
                 ) : (
                   tareasFiltradas.map((tarea) => (
                     <tr key={tarea.id}>
-                      <td className="px-3 py-2 text-slate-700">{tarea.id}</td>
-                      <td className="px-3 py-2 text-slate-700">{tarea.geocerca || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{tarea.actividad}</td>
-                      <td className="px-3 py-2 text-slate-700">{tarea.fechaInicio || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{tarea.fechaFin || "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{tarea.horasPlanificadas ?? "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{tarea.costoPlanificado ?? "-"}</td>
-                      <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.horasReales)}</td>
-                      <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.costoReal)}</td>
-                      <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.diferenciaHoras)}</td>
-                      <td className="px-3 py-2 text-slate-700">{formatMetric(tarea.diferenciaCosto)}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.id}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.geocerca || "-"}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.actividad}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.fechaInicio || "-"}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.fechaFin || "-"}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.horasPlanificadas ?? "-"}</td>
+                      <td className="px-3 py-2 text-gray-700">{tarea.costoPlanificado ?? "-"}</td>
+                      <td className="px-3 py-2 text-gray-700">{formatMetric(tarea.horasReales)}</td>
+                      <td className="px-3 py-2 text-gray-700">{formatMetric(tarea.costoReal)}</td>
+                      <td className="px-3 py-2 text-gray-700">{formatMetric(tarea.diferenciaHoras)}</td>
+                      <td className="px-3 py-2 text-gray-700">{formatMetric(tarea.diferenciaCosto)}</td>
                       <td className="px-3 py-2">
                         <span
                           className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium ${getTrafficLightStyle(
@@ -1843,7 +1848,7 @@ export default function Planificacion() {
                           <span aria-hidden="true">{getTrafficLightIcon(tarea.semaforoPlanVsReal?.level)}</span>
                           {getTrafficLightDisplayLabel(tarea.semaforoPlanVsReal?.level, t)}
                         </span>
-                        <p className="mt-1 text-[11px] text-slate-500">
+                        <p className="mt-1 text-[11px] text-gray-600">
                           {getTrafficLightDisplayDescription(tarea.semaforoPlanVsReal?.level, t)}
                         </p>
                       </td>
@@ -1886,7 +1891,7 @@ export default function Planificacion() {
                               : t("planning.actions.restore", { defaultValue: "Restaurar" })}
                           </button>
                         ) : (
-                          <span className="text-xs text-slate-400">-</span>
+                          <span className="text-xs text-gray-500">-</span>
                         )}
                       </td>
                     </tr>
@@ -1894,9 +1899,9 @@ export default function Planificacion() {
                 )}
               </tbody>
               {!sinDatosReales ? (
-                <tfoot className="border-t border-slate-200 bg-slate-50 font-semibold text-slate-700">
+                <tfoot className="border-t-2 border-emerald-300 bg-gradient-to-r from-emerald-100 via-emerald-50 to-teal-50 font-semibold text-emerald-950">
                   <tr>
-                    <td className="px-3 py-3 text-slate-900" colSpan={5}>
+                    <td className="px-3 py-3 text-gray-900" colSpan={5}>
                       {t("planning.table.totalFilteredView", { defaultValue: "Total vista filtrada" })}
                     </td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.horasPlanificadas)}</td>
@@ -1905,9 +1910,9 @@ export default function Planificacion() {
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.costoReal)}</td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.diferenciaHoras)}</td>
                     <td className="px-3 py-3">{formatMetric(totalesTablaPlanificacion.diferenciaCosto)}</td>
-                    <td className="px-3 py-3 text-xs font-medium text-slate-500">{t("planning.table.filteredView", { defaultValue: "Vista filtrada" })}</td>
-                    <td className="px-3 py-3 text-xs font-medium text-slate-500">-</td>
-                    <td className="px-3 py-3 text-xs font-medium text-slate-500">-</td>
+                    <td className="px-3 py-3 text-xs font-medium text-gray-600">{t("planning.table.filteredView", { defaultValue: "Vista filtrada" })}</td>
+                    <td className="px-3 py-3 text-xs font-medium text-gray-600">-</td>
+                    <td className="px-3 py-3 text-xs font-medium text-gray-600">-</td>
                   </tr>
                 </tfoot>
               ) : null}
@@ -1915,21 +1920,21 @@ export default function Planificacion() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <h2 className="text-lg font-semibold text-slate-900">{ganttConfig.title}</h2>
-          <p className="mb-4 mt-1 text-sm text-slate-500">{ganttConfig.subtitle}</p>
+        <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5 sm:p-6">
+          <h2 className="text-lg font-semibold text-gray-900">{ganttConfig.title}</h2>
+          <p className="mb-4 mt-1 text-sm text-gray-600">{ganttConfig.subtitle}</p>
 
           <div className="overflow-x-auto">
             <div style={{ minWidth: `${ganttConfig.minWidth}px` }}>
               <div
-                className="grid gap-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                className="grid gap-2 border-b border-emerald-100 pb-2 text-xs font-semibold uppercase tracking-wide text-gray-600"
                 style={{ gridTemplateColumns: `220px repeat(${ganttConfig.columns.length}, minmax(${ganttConfig.columnWidth}px, 1fr))` }}
               >
                 <div>{t("planning.gantt.task", { defaultValue: "Tarea" })}</div>
                 {ganttConfig.columns.map((column) => (
                   <div key={column.id} className="text-center">
                     <div>{column.label}</div>
-                    <div className="mt-1 text-[10px] font-medium normal-case tracking-normal text-slate-400">{column.sublabel}</div>
+                    <div className="mt-1 text-[10px] font-medium normal-case tracking-normal text-gray-500">{column.sublabel}</div>
                   </div>
                 ))}
               </div>
@@ -1945,14 +1950,14 @@ export default function Planificacion() {
                       className="grid items-center gap-2"
                       style={{ gridTemplateColumns: `220px repeat(${ganttConfig.columns.length}, minmax(${ganttConfig.columnWidth}px, 1fr))` }}
                     >
-                      <div className="truncate text-sm text-slate-700">{tarea.actividad}</div>
+                      <div className="truncate text-sm text-gray-700">{tarea.actividad}</div>
                       {ganttConfig.columns.map((column) => {
                         const activa = rangesOverlap(tareaInicio, tareaFin, column.start, column.end);
 
                         return (
-                          <div key={`${tarea.id}-${column.id}`} className="h-8 rounded-md border border-slate-200 bg-slate-50 p-1">
+                          <div key={`${tarea.id}-${column.id}`} className="h-8 rounded-md border border-emerald-100 bg-emerald-50/80 p-1">
                             {activa ? (
-                              <div className="flex h-full items-center justify-center rounded bg-teal-600 text-[10px] font-semibold text-white">
+                              <div className="flex h-full items-center justify-center rounded bg-emerald-700 text-[10px] font-semibold text-white">
                                 {tarea.id}
                               </div>
                             ) : null}
@@ -1966,7 +1971,6 @@ export default function Planificacion() {
             </div>
           </div>
         </section>
-      </div>
     </div>
   );
 }

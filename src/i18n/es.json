@@ -2659,7 +2659,9 @@
       "period": "Periodo agrupado",
       "compareBy": "Comparar por",
       "indicator": "Indicador",
-      "chartType": "Tipo de gráfico"
+      "chartType": "Tipo de gráfico",
+      "title": "Filtros",
+      "subtitle": "Ajusta la vista para comparar eficiencia operativa."
     },
     "periods": {
       "day": "Día",

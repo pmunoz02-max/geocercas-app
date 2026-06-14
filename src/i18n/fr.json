@@ -2631,7 +2631,9 @@
       "period": "Période groupée",
       "compareBy": "Comparer par",
       "indicator": "Indicateur",
-      "chartType": "Type de graphique"
+      "chartType": "Type de graphique",
+      "title": "Filtres",
+      "subtitle": "Ajustez la vue pour comparer l'efficacité opérationnelle."
     },
     "periods": {
       "day": "Jour",

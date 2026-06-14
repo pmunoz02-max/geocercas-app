@@ -244,7 +244,7 @@ function toneClasses(tone) {
   if (tone === "green") return "bg-emerald-100 text-emerald-800 border-emerald-200";
   if (tone === "yellow") return "bg-amber-100 text-amber-800 border-amber-200";
   if (tone === "red") return "bg-rose-100 text-rose-800 border-rose-200";
-  return "bg-slate-100 text-slate-700 border-slate-200";
+  return "bg-gray-50 text-gray-700 border-gray-200";
 }
 
 function buildGroupedRows(rows, filters, t, locale) {
@@ -389,12 +389,12 @@ function buildGroupedRows(rows, filters, t, locale) {
 
 function FilterSelect({ label, value, onChange, options }) {
   return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+    <label className="flex flex-col gap-1 text-sm font-medium text-gray-900">
       <span>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+        className="block h-10 w-full rounded-xl border border-emerald-100 bg-white px-3.5 text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -408,13 +408,13 @@ function FilterSelect({ label, value, onChange, options }) {
 
 function DateInput({ label, value, onChange }) {
   return (
-    <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
+    <label className="flex flex-col gap-1 text-sm font-medium text-gray-900">
       <span>{label}</span>
       <input
         type="date"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+        className="block h-10 w-full rounded-xl border border-emerald-100 bg-white px-3.5 text-sm text-gray-900 shadow-sm shadow-emerald-900/5 transition hover:border-emerald-200 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
       />
     </label>
   );
@@ -422,10 +422,10 @@ function DateInput({ label, value, onChange }) {
 
 function KpiCard({ label, value, hint }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-slate-500">{hint}</p> : null}
+    <div className="rounded-3xl border border-emerald-100 bg-white p-4 shadow-lg shadow-emerald-950/5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">{label}</p>
+      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-gray-600">{hint}</p> : null}
     </div>
   );
 }
@@ -449,7 +449,7 @@ function BarsChart({ rows, indicator, locale, emptyLabel }) {
   const maxValue = Math.max(...chartRows.map((row) => row.indicatorValue), 0);
 
   if (!chartRows.length) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">{emptyLabel}</div>;
+    return <div className="rounded-2xl border border-dashed border-emerald-100 bg-emerald-50/80 p-8 text-center text-sm text-gray-600">{emptyLabel}</div>;
   }
 
   return (
@@ -459,15 +459,15 @@ function BarsChart({ rows, indicator, locale, emptyLabel }) {
         return (
           <div key={row.key} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-3">
             <div>
-              <div className="flex items-center justify-between gap-3 text-xs text-slate-600">
-                <span className="truncate font-medium text-slate-700">{row.compareLabel}</span>
+              <div className="flex items-center justify-between gap-3 text-xs text-gray-600">
+                <span className="truncate font-medium text-gray-700">{row.compareLabel}</span>
                 <span className="shrink-0">{row.periodLabel}</span>
               </div>
-              <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-slate-800" style={{ width: `${width}%` }} />
+              <div className="mt-1 h-3 overflow-hidden rounded-full bg-emerald-50">
+                <div className="h-full rounded-full bg-emerald-800" style={{ width: `${width}%` }} />
               </div>
             </div>
-            <div className="text-right text-sm font-semibold text-slate-900">{formatIndicator(row.indicatorValue, indicator, locale)}</div>
+            <div className="text-right text-sm font-semibold text-gray-900">{formatIndicator(row.indicatorValue, indicator, locale)}</div>
           </div>
         );
       })}
@@ -493,7 +493,7 @@ function LinesChart({ rows, indicator, locale, emptyLabel }) {
     .sort((a, b) => compareDateKeys(a.periodKey, b.periodKey));
 
   if (points.length < 2) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">{emptyLabel}</div>;
+    return <div className="rounded-2xl border border-dashed border-emerald-100 bg-emerald-50/80 p-8 text-center text-sm text-gray-600">{emptyLabel}</div>;
   }
 
   const width = 720;
@@ -514,20 +514,20 @@ function LinesChart({ rows, indicator, locale, emptyLabel }) {
 
   return (
     <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[680px] rounded-2xl border border-slate-200 bg-white">
+      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[680px] rounded-2xl border border-emerald-100 bg-white">
         <line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke="currentColor" className="text-slate-200" />
         <line x1={paddingX} y1={paddingY} x2={paddingX} y2={height - paddingY} stroke="currentColor" className="text-slate-200" />
-        <polyline fill="none" stroke="currentColor" strokeWidth="3" points={svgPoints} className="text-slate-800" />
+        <polyline fill="none" stroke="currentColor" strokeWidth="3" points={svgPoints} className="text-gray-800" />
         {points.map((point, index) => {
           const x = paddingX + (index * (width - paddingX * 2)) / Math.max(1, points.length - 1);
           const y = height - paddingY - ((point.value - minValue) * (height - paddingY * 2)) / span;
           return (
             <g key={point.periodKey}>
-              <circle cx={x} cy={y} r="4" fill="currentColor" className="text-slate-900" />
-              <text x={x} y={height - 8} textAnchor="middle" fontSize="11" fill="currentColor" className="text-slate-500">
+              <circle cx={x} cy={y} r="4" fill="currentColor" className="text-gray-900" />
+              <text x={x} y={height - 8} textAnchor="middle" fontSize="11" fill="currentColor" className="text-gray-600">
                 {point.periodLabel}
               </text>
-              <text x={x} y={Math.max(14, y - 10)} textAnchor="middle" fontSize="11" fill="currentColor" className="text-slate-700">
+              <text x={x} y={Math.max(14, y - 10)} textAnchor="middle" fontSize="11" fill="currentColor" className="text-gray-700">
                 {formatIndicator(point.value, indicator, locale)}
               </text>
             </g>
@@ -710,41 +710,50 @@ export default function Benchmarking() {
   const indicatorLabel = bt(`indicators.${filters.indicator}`, filters.indicator);
 
   return (
-    <section className="space-y-6">
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">{bt("header.badge", "Mejora continua")}</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">{bt("header.title", "Benchmarking")}</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              {bt(
-                "header.subtitle",
-                "Compara eficiencia operativa entre asignaciones, geocercas, personas o actividades usando horas/m² y $/m²."
-              )}
-            </p>
+    <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
+      <section className="relative overflow-hidden rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-950 via-emerald-800 to-teal-700 px-5 py-6 text-white shadow-xl shadow-emerald-950/15 md:px-7 md:py-7">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-lime-200/10 blur-3xl" />
+
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
+              {bt("header.badge", "Mejora continua")}
+            </div>
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">{bt("header.title", "Benchmarking")}</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-50/90">
+                {bt(
+                  "header.subtitle",
+                  "Compara eficiencia operativa entre asignaciones, geocercas, personas o actividades usando horas/m² y $/m²."
+                )}
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={loadRows}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              {bt("actions.refresh", "Actualizar")}
-            </button>
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={!groupedRows.length}
-              className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {bt("actions.exportCsv", "Exportar CSV")}
-            </button>
+          <div className="w-full rounded-3xl border border-white/15 bg-white/10 p-2 shadow-lg shadow-emerald-950/10 backdrop-blur-sm lg:w-auto">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={loadRows}
+                className="rounded-2xl border border-white/15 bg-white px-4 py-3 text-sm font-semibold text-emerald-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-50 hover:shadow-md"
+              >
+                {bt("actions.refresh", "Actualizar")}
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={!groupedRows.length}
+                className="rounded-2xl border border-white/15 bg-emerald-950/70 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-950 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {bt("actions.exportCsv", "Exportar CSV")}
+              </button>
+            </div>
           </div>
         </div>
 
         {!hasTrackingEvidence ? (
-          <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <div className="relative mt-5 rounded-2xl border border-amber-200/80 bg-amber-50/95 p-4 text-sm text-amber-900 shadow-sm">
             <strong>{bt("alerts.plannedOnlyTitle", "Datos planificados.")}</strong>{" "}
             {bt(
               "alerts.plannedOnlyBody",
@@ -752,10 +761,17 @@ export default function Benchmarking() {
             )}
           </div>
         ) : null}
-      </div>
+      </section>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
+        <div className="border-b border-emerald-100 bg-gradient-to-r from-emerald-50 via-white to-teal-50 px-4 py-4 md:px-5">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">{bt("filters.title", "Filtros")}</h2>
+            <p className="text-xs text-gray-600">{bt("filters.subtitle", "Ajusta la vista para comparar eficiencia operativa.")}</p>
+          </div>
+        </div>
+        <div className="space-y-5 p-4 md:p-5">
+          <div className="grid gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 md:grid-cols-2 xl:grid-cols-4">
           <FilterSelect
             label={bt("filters.geofence", "Geocerca")}
             value={filters.geofenceId}
@@ -794,22 +810,23 @@ export default function Benchmarking() {
             onChange={(value) => updateFilter("indicator", value)}
             options={INDICATORS.map((value) => ({ value, label: bt(`indicators.${value}`, value) }))}
           />
-        </div>
+          </div>
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-emerald-100 bg-white/80 p-4 shadow-sm shadow-emerald-900/5">
           <FilterSelect
             label={bt("filters.chartType", "Tipo de gráfico")}
             value={filters.chartType}
             onChange={(value) => updateFilter("chartType", value)}
             options={CHART_TYPES.map((value) => ({ value, label: bt(`chartTypes.${value}`, value) }))}
           />
-          <button type="button" onClick={resetFilters} className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <button type="button" onClick={resetFilters} className="rounded-full border border-emerald-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-emerald-50">
             {bt("actions.resetFilters", "Limpiar filtros")}
           </button>
+          </div>
         </div>
-      </div>
+      </section>
 
-      {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{error}</div> : null}
+      {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm font-medium text-rose-800 shadow-sm shadow-red-900/5">{error}</div> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <KpiCard
@@ -840,35 +857,37 @@ export default function Benchmarking() {
         />
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <section className="overflow-visible rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
+        <div className="flex flex-col gap-1 border-b border-emerald-100 bg-gradient-to-r from-white via-emerald-50/70 to-teal-50 px-4 py-4 sm:flex-row sm:items-end sm:justify-between md:px-5">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">{bt("chart.title", "Visualización")}</h2>
-            <p className="text-sm text-slate-500">{bt("chart.subtitle", "Barras comparan grupos; líneas muestran evolución temporal promedio.")}</p>
+            <h2 className="text-lg font-bold text-gray-900">{bt("chart.title", "Visualización")}</h2>
+            <p className="text-sm text-gray-600">{bt("chart.subtitle", "Barras comparan grupos; líneas muestran evolución temporal promedio.")}</p>
           </div>
-          <p className="text-sm font-semibold text-slate-700">{indicatorLabel}</p>
+          <p className="text-sm font-semibold text-gray-700">{indicatorLabel}</p>
         </div>
-        {filters.chartType === "lines" ? (
+        <div className="p-4 md:p-5">
+          {filters.chartType === "lines" ? (
           <LinesChart rows={groupedRows} indicator={filters.indicator} locale={locale} emptyLabel={bt("empty.chart", "No hay suficientes datos para graficar.")} />
-        ) : (
-          <BarsChart rows={groupedRows} indicator={filters.indicator} locale={locale} emptyLabel={bt("empty.chart", "No hay suficientes datos para graficar.")} />
-        )}
-      </div>
+          ) : (
+            <BarsChart rows={groupedRows} indicator={filters.indicator} locale={locale} emptyLabel={bt("empty.chart", "No hay suficientes datos para graficar.")} />
+          )}
+        </div>
+      </section>
 
-      <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-1 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <section className="overflow-hidden rounded-3xl border border-emerald-100 bg-white shadow-lg shadow-emerald-950/5">
+        <div className="flex flex-col gap-1 border-b border-emerald-100 bg-gradient-to-r from-white via-emerald-50/70 to-teal-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">{bt("table.title", "Tabla comparativa")}</h2>
-            <p className="text-sm text-slate-500">{bt("table.subtitle", "Las alertas muestran desviación contra el promedio visible; no toman decisiones automáticas.")}</p>
+            <h2 className="text-lg font-bold text-gray-900">{bt("table.title", "Tabla comparativa")}</h2>
+            <p className="text-sm text-gray-600">{bt("table.subtitle", "Las alertas muestran desviación contra el promedio visible; no toman decisiones automáticas.")}</p>
           </div>
-          <span className="text-sm font-semibold text-slate-600">
+          <span className="text-sm font-semibold text-gray-600">
             {bt("table.rows", "{{count}} filas", { count: groupedRows.length })}
           </span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1900px] w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <table className="min-w-[1900px] w-full divide-y divide-emerald-100 text-sm">
+            <thead className="bg-emerald-50/80 text-left text-xs font-semibold uppercase tracking-wide text-emerald-950">
               <tr>
                 <th className="px-4 py-3">{bt("table.signal", "Semáforo")}</th>
                 <th className="px-4 py-3">{bt("table.geofence", "Geocerca")}</th>
@@ -892,47 +911,47 @@ export default function Benchmarking() {
                 <th className="px-4 py-3">{bt("table.opportunity", "Oportunidad de mejora")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
+            <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="20" className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan="20" className="px-4 py-10 text-center text-gray-600">
                     {bt("loading", "Cargando benchmarking...")}
                   </td>
                 </tr>
               ) : groupedRows.length ? (
                 groupedRows.map((row) => (
-                  <tr key={row.key} className="hover:bg-slate-50/80">
+                  <tr key={row.key} className="hover:bg-emerald-50">
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${toneClasses(row.tone)}`}>
                         {bt(`traffic.${row.tone}`, row.tone)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{row.geofenceName}</td>
-                    <td className="px-4 py-3 text-slate-700">{row.personName}</td>
-                    <td className="px-4 py-3 text-slate-700">{row.activityName}</td>
-                    <td className="px-4 py-3 text-slate-700">{row.periodLabel}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatNumber(row.areaM2, locale, 2)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{getAreaDisplay(row.areaM2, locale)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatNumber(row.observedHours, locale, 2)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatCurrency(row.costBase, locale)}</td>
-                    <td className="px-4 py-3 text-right font-medium text-slate-900">{formatCurrency(row.costFinal, locale)}</td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatPlainRateCell(row.horasM2, locale, 9)}</td>
-                    <td className="px-4 py-3 text-right font-medium tabular-nums text-slate-900">{formatCurrencyRateCell(row.costoM2, locale)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatPlainRateCell(multiplyNullable(row.horasM2, 10000), locale, 6)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatCurrencyRateCell(multiplyNullable(row.costoM2, 10000), locale, true)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatPlainRateCell(multiplyNullable(row.horasM2, 1000000), locale, 4)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{formatCurrencyRateCell(multiplyNullable(row.costoM2, 1000000), locale, true)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">{formatIndicator(row.difference, filters.indicator, locale)}</td>
-                    <td className="px-4 py-3 text-right text-slate-700">
+                    <td className="px-4 py-3 font-medium text-gray-900">{row.geofenceName}</td>
+                    <td className="px-4 py-3 text-gray-700">{row.personName}</td>
+                    <td className="px-4 py-3 text-gray-700">{row.activityName}</td>
+                    <td className="px-4 py-3 text-gray-700">{row.periodLabel}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{formatNumber(row.areaM2, locale, 2)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{getAreaDisplay(row.areaM2, locale)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{formatNumber(row.observedHours, locale, 2)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.costBase, locale)}</td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">{formatCurrency(row.costFinal, locale)}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-gray-900">{formatPlainRateCell(row.horasM2, locale, 9)}</td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-gray-900">{formatCurrencyRateCell(row.costoM2, locale)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">{formatPlainRateCell(multiplyNullable(row.horasM2, 10000), locale, 6)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">{formatCurrencyRateCell(multiplyNullable(row.costoM2, 10000), locale, true)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">{formatPlainRateCell(multiplyNullable(row.horasM2, 1000000), locale, 4)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">{formatCurrencyRateCell(multiplyNullable(row.costoM2, 1000000), locale, true)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">{formatIndicator(row.difference, filters.indicator, locale)}</td>
+                    <td className="px-4 py-3 text-right text-gray-700">
                       {filters.indicator === "costo_m2" ? formatCurrency(row.cumulativeDifference, locale) : formatNumber(row.cumulativeDifference, locale, 2)}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{bt(`evidence.${row.evidenceSource}`, row.evidenceSource)}</td>
-                    <td className="px-4 py-3 text-slate-700">{bt(`opportunities.${row.tone}`, "Revisar evidencia")}</td>
+                    <td className="px-4 py-3 text-gray-700">{bt(`evidence.${row.evidenceSource}`, row.evidenceSource)}</td>
+                    <td className="px-4 py-3 text-gray-700">{bt(`opportunities.${row.tone}`, "Revisar evidencia")}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="20" className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan="20" className="px-4 py-10 text-center text-gray-600">
                     {bt("empty.table", "No hay datos de benchmarking con los filtros actuales.")}
                   </td>
                 </tr>
@@ -940,7 +959,7 @@ export default function Benchmarking() {
             </tbody>
           </table>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
