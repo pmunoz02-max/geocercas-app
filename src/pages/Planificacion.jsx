@@ -51,7 +51,6 @@ const mockTareasBase = [
   },
 ];
 
-const ganttDias = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const PERIODO_RANGO_PERSONALIZADO = "Rango personalizado";
 const PERIODO_ANALISIS_INICIAL = PERIODO_RANGO_PERSONALIZADO;
 const periodos = ["Semana", "Mes", "Trimestre", "Semestre", "Año", PERIODO_RANGO_PERSONALIZADO];
@@ -157,6 +156,228 @@ function getPeriodoAnalisisRange(periodo, baseDate = new Date()) {
     fechaHasta: formatDateInput(end),
   };
 }
+
+function addDays(date, days) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function addMonths(date, months) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function getMonthEnd(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function getDaysDiffInclusive(start, end) {
+  if (!start || !end) return 0;
+  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
+function normalizeDateRange(start, end) {
+  if (!start || !end) return { start: null, end: null };
+  if (end.getTime() < start.getTime()) {
+    return { start: end, end: start };
+  }
+
+  return { start, end };
+}
+
+function minDate(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return a.getTime() <= b.getTime() ? a : b;
+}
+
+function maxDate(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return a.getTime() >= b.getTime() ? a : b;
+}
+
+function getTaskDateRange(tareas) {
+  return tareas.reduce(
+    (acc, tarea) => {
+      const start = parseLocalDate(tarea.fechaInicio);
+      const end = parseLocalDate(tarea.fechaFin) || start;
+
+      if (!start) return acc;
+
+      return {
+        start: minDate(acc.start, start),
+        end: maxDate(acc.end, end || start),
+      };
+    },
+    { start: null, end: null }
+  );
+}
+
+function rangesOverlap(startA, endA, startB, endB) {
+  if (!startA || !startB || !endB) return false;
+  const safeEndA = endA || startA;
+
+  return safeEndA.getTime() >= startB.getTime() && startA.getTime() <= endB.getTime();
+}
+
+function formatShortDate(date) {
+  if (!date) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${day}/${month}`;
+}
+
+const monthLabels = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+function getGanttScale(periodo, start, end) {
+  const totalDays = getDaysDiffInclusive(start, end);
+
+  if (periodo === "Semana") return "day";
+  if (periodo === "Mes") return "week";
+  if (periodo === "Trimestre" || periodo === "Semestre" || periodo === "Año") return "month";
+  if (totalDays <= 31) return "day";
+  if (totalDays <= 120) return "week";
+
+  return "month";
+}
+
+function getGanttColumnWidth(scale) {
+  if (scale === "day") return 76;
+  if (scale === "week") return 96;
+  return 104;
+}
+
+function getGanttTitle(periodo, scale) {
+  if (periodo === "Semana") return "Gantt operativo semanal";
+  if (periodo === "Mes") return "Gantt operativo mensual";
+  if (periodo === "Trimestre") return "Gantt operativo trimestral";
+  if (periodo === "Semestre") return "Gantt operativo semestral";
+  if (periodo === "Año") return "Gantt operativo anual";
+  if (scale === "day") return "Gantt operativo personalizado por día";
+  if (scale === "week") return "Gantt operativo personalizado por semana";
+
+  return "Gantt operativo personalizado por mes";
+}
+
+function getGanttSubtitle(periodo, scale, start, end, showArchived) {
+  const mode = showArchived ? "planificaciones archivadas" : "planificaciones activas";
+  const rangeLabel = start && end ? ` Del ${formatShortDate(start)} al ${formatShortDate(end)}.` : "";
+
+  if (scale === "day") {
+    return `Vista por días calendario para revisar ${mode}.${rangeLabel}`;
+  }
+
+  if (scale === "week") {
+    return `Vista por semanas operativas para revisar ${mode}.${rangeLabel}`;
+  }
+
+  if (periodo === "Trimestre") {
+    return `Vista trimestral agrupada por meses para revisar ${mode}.${rangeLabel}`;
+  }
+
+  if (periodo === "Semestre") {
+    return `Vista semestral agrupada por meses para revisar ${mode}.${rangeLabel}`;
+  }
+
+  if (periodo === "Año") {
+    return `Vista anual agrupada por meses para revisar ${mode}.${rangeLabel}`;
+  }
+
+  return `Vista agrupada por meses para revisar ${mode}.${rangeLabel}`;
+}
+
+function buildGanttColumns(scale, start, end) {
+  const columns = [];
+
+  if (!start || !end) return columns;
+
+  if (scale === "day") {
+    let cursor = start;
+    const weekdayLabels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+    while (cursor.getTime() <= end.getTime()) {
+      const bucketStart = cursor;
+      const bucketEnd = cursor;
+
+      columns.push({
+        id: `day-${formatDateInput(bucketStart)}`,
+        label: weekdayLabels[bucketStart.getDay()],
+        sublabel: formatShortDate(bucketStart),
+        start: bucketStart,
+        end: bucketEnd,
+      });
+
+      cursor = addDays(cursor, 1);
+    }
+  }
+
+  if (scale === "week") {
+    let cursor = start;
+    let weekNumber = 1;
+
+    while (cursor.getTime() <= end.getTime()) {
+      const bucketStart = cursor;
+      const bucketEnd = minDate(addDays(cursor, 6), end);
+
+      columns.push({
+        id: `week-${formatDateInput(bucketStart)}`,
+        label: `Sem ${weekNumber}`,
+        sublabel: `${formatShortDate(bucketStart)}-${formatShortDate(bucketEnd)}`,
+        start: bucketStart,
+        end: bucketEnd,
+      });
+
+      cursor = addDays(bucketEnd, 1);
+      weekNumber += 1;
+    }
+  }
+
+  if (scale === "month") {
+    let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+
+    while (cursor.getTime() <= end.getTime()) {
+      const naturalMonthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      const naturalMonthEnd = getMonthEnd(cursor);
+      const bucketStart = maxDate(naturalMonthStart, start);
+      const bucketEnd = minDate(naturalMonthEnd, end);
+
+      columns.push({
+        id: `month-${cursor.getFullYear()}-${cursor.getMonth() + 1}`,
+        label: monthLabels[cursor.getMonth()],
+        sublabel: String(cursor.getFullYear()),
+        start: bucketStart,
+        end: bucketEnd,
+      });
+
+      cursor = addMonths(cursor, 1);
+    }
+  }
+
+  return columns;
+}
+
+function buildGanttConfig(periodo, filtros, tareas, showArchived) {
+  const filterRange = normalizeDateRange(parseLocalDate(filtros.fechaDesde), parseLocalDate(filtros.fechaHasta));
+  const taskRange = getTaskDateRange(tareas);
+  const fallbackRange = getPeriodoAnalisisRange("Semana");
+  const fallbackStart = parseLocalDate(fallbackRange.fechaDesde);
+  const fallbackEnd = parseLocalDate(fallbackRange.fechaHasta);
+  const start = filterRange.start || taskRange.start || fallbackStart;
+  const end = filterRange.end || taskRange.end || fallbackEnd || start;
+  const safeRange = normalizeDateRange(start, end);
+  const scale = getGanttScale(periodo, safeRange.start, safeRange.end);
+  const columns = buildGanttColumns(scale, safeRange.start, safeRange.end);
+  const columnWidth = getGanttColumnWidth(scale);
+
+  return {
+    columns,
+    columnWidth,
+    minWidth: 220 + Math.max(columns.length, 1) * columnWidth,
+    title: getGanttTitle(periodo, scale),
+    subtitle: getGanttSubtitle(periodo, scale, safeRange.start, safeRange.end, showArchived),
+  };
+}
+
 
 function toTimeline(startDate, endDate) {
   const s = parseLocalDate(startDate);
@@ -515,6 +736,11 @@ export default function Planificacion() {
       return true;
     });
   }, [filtrosPlanificacion, tareas]);
+
+  const ganttConfig = useMemo(
+    () => buildGanttConfig(periodoAnalisis, filtrosPlanificacion, tareasFiltradas, showArchived),
+    [periodoAnalisis, filtrosPlanificacion, tareasFiltradas, showArchived]
+  );
 
   const hayFiltrosPlanificacion = useMemo(
     () =>
@@ -1577,36 +1803,41 @@ export default function Planificacion() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-          <h2 className="text-lg font-semibold text-slate-900">Gantt operativo semanal</h2>
-          <p className="mb-4 mt-1 text-sm text-slate-500">
-            {showArchived
-              ? "Escala semanal de días calendario para revisar planificaciones archivadas."
-              : "Vista semanal para coordinar actividades de lunes a domingo, incluyendo fines de semana."}
-          </p>
+          <h2 className="text-lg font-semibold text-slate-900">{ganttConfig.title}</h2>
+          <p className="mb-4 mt-1 text-sm text-slate-500">{ganttConfig.subtitle}</p>
 
           <div className="overflow-x-auto">
-            <div className="min-w-[760px]">
-              <div className="grid grid-cols-[220px_repeat(7,minmax(70px,1fr))] gap-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div style={{ minWidth: `${ganttConfig.minWidth}px` }}>
+              <div
+                className="grid gap-2 border-b border-slate-200 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                style={{ gridTemplateColumns: `220px repeat(${ganttConfig.columns.length}, minmax(${ganttConfig.columnWidth}px, 1fr))` }}
+              >
                 <div>Tarea</div>
-                {ganttDias.map((dia) => (
-                  <div key={dia} className="text-center">
-                    {dia}
+                {ganttConfig.columns.map((column) => (
+                  <div key={column.id} className="text-center">
+                    <div>{column.label}</div>
+                    <div className="mt-1 text-[10px] font-medium normal-case tracking-normal text-slate-400">{column.sublabel}</div>
                   </div>
                 ))}
               </div>
 
               <div className="mt-2 space-y-2">
                 {tareasFiltradas.map((tarea) => {
-                  const inicio = Math.max(1, tarea.inicio);
-                  const fin = Math.min(7, inicio + tarea.duracion - 1);
+                  const tareaInicio = parseLocalDate(tarea.fechaInicio);
+                  const tareaFin = parseLocalDate(tarea.fechaFin) || tareaInicio;
+
                   return (
-                    <div key={`gantt-${tarea.id}`} className="grid grid-cols-[220px_repeat(7,minmax(70px,1fr))] items-center gap-2">
+                    <div
+                      key={`gantt-${tarea.id}`}
+                      className="grid items-center gap-2"
+                      style={{ gridTemplateColumns: `220px repeat(${ganttConfig.columns.length}, minmax(${ganttConfig.columnWidth}px, 1fr))` }}
+                    >
                       <div className="truncate text-sm text-slate-700">{tarea.actividad}</div>
-                      {ganttDias.map((_, idx) => {
-                        const dia = idx + 1;
-                        const activa = dia >= inicio && dia <= fin;
+                      {ganttConfig.columns.map((column) => {
+                        const activa = rangesOverlap(tareaInicio, tareaFin, column.start, column.end);
+
                         return (
-                          <div key={`${tarea.id}-${dia}`} className="h-8 rounded-md border border-slate-200 bg-slate-50 p-1">
+                          <div key={`${tarea.id}-${column.id}`} className="h-8 rounded-md border border-slate-200 bg-slate-50 p-1">
                             {activa ? (
                               <div className="flex h-full items-center justify-center rounded bg-teal-600 text-[10px] font-semibold text-white">
                                 {tarea.id}
