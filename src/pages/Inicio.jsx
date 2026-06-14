@@ -7,43 +7,88 @@ import { supabase } from "../lib/supabaseClient.js";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements";
 
+const primaryButtonClass =
+  "inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:opacity-60";
+
+const secondaryButtonClass =
+  "inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-white/90 px-5 py-3 text-sm font-semibold text-emerald-800 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-60";
+
+const dangerButtonClass =
+  "inline-flex items-center justify-center rounded-2xl border border-red-200 bg-white px-5 py-3 text-sm font-semibold text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-300 disabled:opacity-60";
+
 function HelpCard({ title, description, cta, to }) {
   const navigate = useNavigate();
   return (
-    <div
+    <button
       onClick={() => navigate(to)}
-      className="
-        cursor-pointer
-        rounded-2xl
-        border border-slate-200
-        bg-white
-        shadow-sm
-        p-6
-        hover:shadow-md
-        hover:border-slate-300
-        transition
-      "
+      type="button"
+      className="group h-full cursor-pointer rounded-3xl border border-emerald-100 bg-white p-6 text-left shadow-sm shadow-emerald-900/5 transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-xl hover:shadow-emerald-900/10"
     >
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-      <p className="mt-2 text-sm text-slate-600">{description}</p>
-      <div className="mt-4 text-sm font-medium text-blue-700">
-        {cta}
+      <div className="flex h-full flex-col">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-lg font-bold text-emerald-700 ring-1 ring-emerald-100">
+          {String(title || "?").slice(0, 1).toUpperCase()}
+        </div>
+        <h3 className="text-lg font-semibold text-slate-950">{title}</h3>
+        <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">{description}</p>
+        <div className="mt-5 inline-flex items-center text-sm font-semibold text-emerald-700 transition group-hover:text-emerald-800">
+          {cta}
+        </div>
       </div>
-    </div>
+    </button>
+  );
+}
+
+function PageHero({ badge, title, subtitle, children }) {
+  return (
+    <section className="relative overflow-hidden rounded-[2rem] border border-emerald-200 bg-gradient-to-br from-emerald-700 via-teal-600 to-cyan-600 p-7 text-white shadow-2xl shadow-emerald-900/20 sm:p-8">
+      <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/20 blur-3xl" />
+      <div className="absolute -bottom-24 left-10 h-56 w-56 rounded-full bg-emerald-200/20 blur-3xl" />
+      <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        <div className="max-w-3xl">
+          {badge ? (
+            <div className="mb-4 inline-flex rounded-full border border-white/25 bg-white/15 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-50 backdrop-blur">
+              {badge}
+            </div>
+          ) : null}
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">{title}</h1>
+          {subtitle ? (
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-50/90 sm:text-base">
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+        {children ? (
+          <div className="rounded-3xl border border-white/20 bg-white/15 p-4 backdrop-blur">
+            {children}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function InfoPanel({ children, className = "" }) {
+  return (
+    <section
+      className={`rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm shadow-emerald-900/5 ${className}`}
+    >
+      {children}
+    </section>
   );
 }
 
 export default function Inicio() {
-    const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-    const isPreviewEnv =
-      hostname === "preview.tugeocercas.com" ||
-      hostname.endsWith(".vercel.app");
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const isPreviewEnv =
+    hostname === "preview.tugeocercas.com" || hostname.endsWith(".vercel.app");
+
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
 
   const { loading, ready, user, role, currentOrgId, authenticated } = useAuth();
-
   const [signingOut, setSigningOut] = useState(false);
+
+  const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
 
   const helpCards = useMemo(
     () => [
@@ -79,10 +124,8 @@ export default function Inicio() {
     try {
       setSigningOut(true);
 
-      // 1) Sign out supabase (client)
       await supabase.auth.signOut();
 
-      // 2) Intento best-effort de limpiar cookie tg_at (si existe endpoint)
       try {
         await fetch("/api/auth/logout", {
           method: "POST",
@@ -94,7 +137,6 @@ export default function Inicio() {
         // no-op
       }
 
-      // 3) volver a inicio / login
       navigate("/inicio", { replace: true });
       window.location.reload();
     } finally {
@@ -102,95 +144,64 @@ export default function Inicio() {
     }
   }
 
-  // 1) Loader mientras AuthContext hidrata
   if (loading || !ready) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
-        {t("home.loadingPermissions")}
+      <div className="mx-auto flex min-h-[60vh] max-w-7xl items-center justify-center px-6 py-10">
+        <InfoPanel className="max-w-xl text-center">
+          <div className="mx-auto mb-4 h-12 w-12 animate-pulse rounded-2xl bg-emerald-100" />
+          <p className="text-sm font-medium text-slate-600">{t("home.loadingPermissions")}</p>
+        </InfoPanel>
       </div>
     );
   }
 
-  // 2) No autenticado → login (botón legible)
   if (!authenticated || !user) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center px-6">
-        <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-          <h1 className="text-xl font-semibold text-slate-900">
-            {t("dashboard.welcome")}
-          </h1>
-
-          <p className="mt-2 text-slate-600">
-            {t("home.loginToContinue")}
-          </p>
-
-          <div className="mt-5 flex flex-col sm:flex-row gap-3">
-            <button
-              className="
-                w-full sm:w-auto
-                rounded-xl
-                bg-blue-600 hover:bg-blue-700
-                text-white font-semibold
-                px-6 py-3
-                shadow-md
-                transition
-                focus:outline-none focus:ring-2 focus:ring-blue-400
-              "
-              onClick={() => navigate("/login")}
-              type="button"
-            >
+      <div className="mx-auto max-w-7xl px-6 py-10">
+        <PageHero
+          badge={t("home.startBadge", { defaultValue: "GeoField GPS" })}
+          title={t("dashboard.welcome")}
+          subtitle={t("home.loginToContinue")}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button className={primaryButtonClass} onClick={() => navigate("/login")} type="button">
               {t("home.goToLogin")}
             </button>
-
-            <button
-              className="
-                w-full sm:w-auto
-                rounded-xl
-                border border-slate-300
-                bg-white hover:bg-slate-50
-                text-slate-900 font-medium
-                px-6 py-3
-                transition
-              "
-              onClick={() => navigate("/help/instructions")}
-              type="button"
-            >
+            <button className={secondaryButtonClass} onClick={() => navigate("/help/instructions")} type="button">
               {t("home.quickStart")}
             </button>
           </div>
-        </div>
+        </PageHero>
       </div>
     );
   }
 
-  // 3) Rol efectivo
-  const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
-
-  // 4) Estado: cuenta creada pero sin organización ni rol
   if (!roleLower || !currentOrgId) {
     return (
-      <div className="max-w-2xl mx-auto px-6 py-10">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 space-y-6">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">
-            {t("home.missingContextTitle", { defaultValue: "Cuenta creada correctamente" })}
-          </h1>
-          <p className="text-base text-slate-700">
-            {t("home.missingContextBody", { defaultValue: "Tu cuenta ya existe, pero todavía no está vinculada a una organización." })}
-          </p>
+      <div className="mx-auto max-w-7xl px-6 py-10 space-y-6">
+        <PageHero
+          badge={t("home.accountStatusBadge", { defaultValue: "Estado de cuenta" })}
+          title={t("home.missingContextTitle", { defaultValue: "Cuenta creada correctamente" })}
+          subtitle={t("home.missingContextBody", {
+            defaultValue: "Tu cuenta ya existe, pero todavía no está vinculada a una organización.",
+          })}
+        />
 
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-amber-900 text-sm">
-            <b>Si eres tracker:</b>
-            <ol className="list-decimal list-inside mt-2 space-y-1">
-              <li>Avisa al administrador que ya creaste tu cuenta.</li>
-              <li>Espera el enlace de invitación.</li>
-              <li>Abre el enlace desde este mismo teléfono.</li>
-              <li>Después podrás usar el tracking GPS.</li>
+        <InfoPanel className="max-w-3xl space-y-6">
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
+            <p className="font-semibold">
+              {t("home.trackerWaitingTitle", { defaultValue: "Si eres tracker" })}
+            </p>
+            <ol className="mt-3 list-decimal space-y-1 pl-5 leading-6">
+              <li>{t("home.trackerWaitingStep1", { defaultValue: "Avisa al administrador que ya creaste tu cuenta." })}</li>
+              <li>{t("home.trackerWaitingStep2", { defaultValue: "Espera el enlace de invitación." })}</li>
+              <li>{t("home.trackerWaitingStep3", { defaultValue: "Abre el enlace desde este mismo teléfono." })}</li>
+              <li>{t("home.trackerWaitingStep4", { defaultValue: "Después podrás usar el tracking GPS." })}</li>
             </ol>
-            <div className="mt-5 flex justify-center">
+            <div className="mt-5">
               <button
-                className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition shadow-md"
-                onClick={() => window.location.assign('/tracker-install')}
+                className={primaryButtonClass}
+                onClick={() => window.location.assign("/tracker-install")}
                 type="button"
               >
                 {t("home.installTrackerAppCta", { defaultValue: "Instalar app para tracking GPS" })}
@@ -198,140 +209,147 @@ export default function Inicio() {
             </div>
           </div>
 
-          <div className="text-sm text-slate-700 space-y-1 pt-2">
-            <div>
-              <b>Correo:</b> soporte@tugeocercas.com
+          <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                {t("dashboard.email", { defaultValue: "Correo" })}
+              </p>
+              <p className="mt-1 break-words font-medium text-slate-900">soporte@tugeocercas.com</p>
             </div>
-            <div>
-              <b>Organización:</b> Pendiente de invitación
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                {t("dashboard.organizationId", { defaultValue: "Organización" })}
+              </p>
+              <p className="mt-1 font-medium text-slate-900">
+                {t("home.pendingInvitation", { defaultValue: "Pendiente de invitación" })}
+              </p>
             </div>
-            <div>
-              <b>Rol:</b> Pendiente
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                {t("dashboard.role", { defaultValue: "Rol" })}
+              </p>
+              <p className="mt-1 font-medium text-slate-900">
+                {t("home.pending", { defaultValue: "Pendiente" })}
+              </p>
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              className="px-4 py-2 rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition"
-              onClick={() => window.location.reload()}
-              type="button"
-            >
+          <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+            <button className={primaryButtonClass} onClick={() => window.location.reload()} type="button">
               {t("home.retry", { defaultValue: "Revisar nuevamente" })}
             </button>
-            <button
-              className="px-4 py-2 rounded-xl bg-white border border-slate-300 text-slate-900 hover:bg-slate-50 transition"
-              onClick={onLogout}
-              disabled={signingOut}
-              type="button"
-            >
-              {signingOut ? "Cerrando sesión…" : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
+            <button className={secondaryButtonClass} onClick={onLogout} disabled={signingOut} type="button">
+              {signingOut
+                ? t("common.actions.processing", { defaultValue: "Procesando…" })
+                : t("common.actions.logout", { defaultValue: "Cerrar sesión" })}
             </button>
           </div>
-        </div>
+        </InfoPanel>
       </div>
     );
   }
 
-  // 5) HOME normal
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
+    <div className="mx-auto max-w-7xl px-6 py-10 space-y-8">
       {isPreviewEnv && (
-        <p className="mb-4 px-4 py-2 rounded-lg bg-yellow-100 text-yellow-900 border border-yellow-300 text-sm font-medium">
-        </p>
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+          {t("home.previewEnvironment", { defaultValue: "Estás revisando un deployment Preview." })}
+        </div>
       )}
-      {/* Bienvenida + logout */}
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              {t("dashboard.welcome")}
-            </h1>
 
-            <p className="text-slate-600 mt-2">
-              {t("dashboard.sessionAs", { role: roleLower })}
+      <PageHero
+        badge={t("home.startBadge", { defaultValue: "Inicio" })}
+        title={t("dashboard.welcome")}
+        subtitle={t("dashboard.sessionAs", { role: roleLower })}
+      >
+        <div className="grid gap-3 text-sm sm:min-w-[320px]">
+          <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-50/80">
+              {t("dashboard.email")}
             </p>
+            <p className="mt-1 break-all font-semibold text-white">{user.email}</p>
+          </div>
+          <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-50/80">
+              {t("dashboard.organizationId")}
+            </p>
+            <p className="mt-1 break-all font-mono text-xs font-semibold text-white">{currentOrgId}</p>
+          </div>
+        </div>
+      </PageHero>
 
-            <div className="mt-4 text-sm text-slate-700 space-y-1">
-              <div>
-                <b>{t("dashboard.email")}:</b> {user.email}
-              </div>
-              <div>
-                <b>{t("dashboard.organizationId")}:</b>{" "}
-                <span className="font-mono">{currentOrgId}</span>
-              </div>
-            </div>
+      <InfoPanel>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              {t("home.quickActions", { defaultValue: "Acciones rápidas" })}
+            </p>
+            <h2 className="mt-2 text-xl font-bold text-slate-950">
+              {t("home.manageWorkspace", { defaultValue: "Gestiona tu espacio de trabajo" })}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              {t("home.manageWorkspaceDesc", {
+                defaultValue:
+                  "Accede al panel principal, revisa tu plan o administra la cuenta desde un solo lugar.",
+              })}
+            </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button
-              className="
-                rounded-xl
-                border border-slate-300
-                bg-white hover:bg-slate-50
-                text-slate-900 font-medium
-                px-4 py-2
-                transition
-              "
-              onClick={() => navigate("/dashboard")}
-              type="button"
-            >
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button className={secondaryButtonClass} onClick={() => navigate("/dashboard")} type="button">
               {t("dashboard.goToDashboard")}
             </button>
-
-            <button
-              className="
-                rounded-xl
-                border border-red-300
-                bg-white hover:bg-red-50
-                text-red-700 font-medium
-                px-4 py-2
-                transition
-              "
-              onClick={() => navigate("/settings/delete-account")}
-              type="button"
-            >
+            <button className={dangerButtonClass} onClick={() => navigate("/settings/delete-account")} type="button">
               {t("dashboard.deleteAccount")}
             </button>
-
-            <button
-              className="
-                rounded-xl
-                bg-slate-900 hover:bg-slate-800
-                text-white font-medium
-                px-4 py-2
-                transition
-                disabled:opacity-60
-              "
-              onClick={onLogout}
-              disabled={signingOut}
-              type="button"
-            >
-              {signingOut
-                ? t("common.actions.processing")
-                : t("common.actions.logout")}
+            <button className={primaryButtonClass} onClick={onLogout} disabled={signingOut} type="button">
+              {signingOut ? t("common.actions.processing") : t("common.actions.logout")}
             </button>
           </div>
         </div>
-      </div>
+      </InfoPanel>
 
-      {/* ✅ Monetización / Plan */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-slate-900">
-            {t("dashboard.managePlan")}
-          </h2>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <InfoPanel>
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              {t("dashboard.managePlan")}
+            </p>
+            <h2 className="mt-2 text-xl font-bold text-slate-950">
+              {t("home.subscriptionSummary", { defaultValue: "Resumen del plan" })}
+            </h2>
+          </div>
           <PlanSection currentOrgId={currentOrgId} />
-        </div>
+        </InfoPanel>
+
+        <InfoPanel>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+            {t("dashboard.helpCenter")}
+          </p>
+          <h2 className="mt-2 text-xl font-bold text-slate-950">
+            {t("home.helpCenterTitle", { defaultValue: "Ayuda y aprendizaje" })}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            {t("home.helpCenterDesc", {
+              defaultValue: "Encuentra guías rápidas, preguntas frecuentes, soporte y novedades del sistema.",
+            })}
+          </p>
+        </InfoPanel>
       </div>
 
+      <section>
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              {t("dashboard.helpCenter")}
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">
+              {t("home.quickGuideCards", { defaultValue: "Centro de Ayuda" })}
+            </h2>
+          </div>
+        </div>
 
-      {/* Help Center */}
-      <div>
-        <h2 className="text-xl font-semibold text-slate-900 mb-4">
-          {t("dashboard.helpCenter")}
-        </h2>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {helpCards.map((card) => (
             <HelpCard
               key={card.to}
@@ -342,27 +360,23 @@ export default function Inicio() {
             />
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
 
-// --- PlanSection ---
 function PlanSection({ currentOrgId }) {
   const { t } = useTranslation();
-  const {
-    entitlements,
-    planCode,
-    loading: entitlementsLoading,
-  } = useOrgEntitlements();
+  const { entitlements, planCode, loading: entitlementsLoading } = useOrgEntitlements();
 
   const currentPlan = String(
     entitlements?.effective_plan_code ||
-    entitlements?.plan_code ||
-    entitlements?.billing_plan_code ||
-    planCode ||
-    "starter"
+      entitlements?.plan_code ||
+      entitlements?.billing_plan_code ||
+      planCode ||
+      "starter"
   ).toLowerCase();
+
   const planLabel =
     currentPlan === "enterprise"
       ? t("dashboard.planEnterprise", { defaultValue: "Enterprise" })
@@ -370,24 +384,31 @@ function PlanSection({ currentOrgId }) {
       ? t("dashboard.planPro", { defaultValue: "Pro" })
       : t("dashboard.planStarter", { defaultValue: "Starter" });
 
-
   const nextPlan = currentPlan === "pro" ? "enterprise" : "pro";
   const canUpgrade = currentPlan !== "enterprise";
 
   if (entitlementsLoading) {
-    return <div className="mt-2 text-slate-500">Cargando información de plan…</div>;
+    return (
+      <div className="mt-2 rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 text-sm font-medium text-slate-600">
+        {t("dashboard.loadingPlan", { defaultValue: "Cargando información de plan…" })}
+      </div>
+    );
   }
 
   return (
     <div>
-      <div className="mb-2 text-sm text-slate-700">
-        <b>{t("dashboard.currentPlan", { defaultValue: "Current plan" })}:</b> <span>{planLabel}</span>
+      <div className="mb-4 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-slate-700">
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+          {t("dashboard.currentPlan", { defaultValue: "Current plan" })}
+        </p>
+        <p className="mt-1 text-2xl font-bold text-slate-950">{planLabel}</p>
       </div>
+
       {canUpgrade ? (
         <UpgradeToProButton
           orgId={currentOrgId}
           plan={nextPlan}
-          className="w-full rounded-xl px-4 py-3 text-sm font-semibold text-white bg-slate-800 hover:bg-slate-700"
+          className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-700"
           label={
             nextPlan === "enterprise"
               ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
@@ -395,7 +416,11 @@ function PlanSection({ currentOrgId }) {
           }
         />
       ) : (
-        <div className="mt-3 text-green-700 font-semibold">{t("dashboard.maxPlanEnterprise", { defaultValue: "Your organization already has the maximum plan (Enterprise)." })}</div>
+        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+          {t("dashboard.maxPlanEnterprise", {
+            defaultValue: "Your organization already has the maximum plan (Enterprise).",
+          })}
+        </div>
       )}
     </div>
   );
