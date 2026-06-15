@@ -1,7 +1,8 @@
 import Logout from "./pages/Logout.jsx";
 import VerGeocerca from "./pages/VerGeocerca.jsx";
-import Privacy from "./pages/Privacy.jsx";
-import Terms from "./pages/Terms.jsx";
+import LegalPrivacyPage from "./pages/legal/LegalPrivacyPage.jsx";
+import LegalTermsPage from "./pages/legal/LegalTermsPage.jsx";
+import LegalRefundPage from "./pages/legal/LegalRefundPage.jsx";
 import AuthorizedLocationUse from "./pages/AuthorizedLocationUse.jsx";
 import AccountDeletion from "./pages/AccountDeletion.jsx";
 // src/App.jsx
@@ -61,7 +62,7 @@ import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
 
 import PayPage from "./pages/Pay.jsx";
-import RefundPolicy from "./pages/RefundPolicy.jsx";
+// Legacy refund page import intentionally not used by public legal routes.
 
 const TRACKER_BLOCKED_PATH_PREFIXES = [
   "/dashboard",
@@ -178,10 +179,10 @@ function MainAppRoutes() {
       <Route path="/" element={<RootEntry />} />
 
       {/* Public */}
-      <Route path="/privacy" element={<Privacy />} />
-      <Route path="/privacy-policy" element={<Privacy />} />
-      <Route path="/terms" element={<Terms />} />
-      <Route path="/terms-of-service" element={<Terms />} />
+      <Route path="/privacy" element={<LegalPrivacyPage />} />
+      <Route path="/privacy-policy" element={<LegalPrivacyPage />} />
+      <Route path="/terms" element={<LegalTermsPage />} />
+      <Route path="/terms-of-service" element={<LegalTermsPage />} />
       <Route path="/authorized-location-use" element={<AuthorizedLocationUse />} />
       <Route path="/location-privacy" element={<AuthorizedLocationUse />} />
       <Route path="/gps-tracking-policy" element={<AuthorizedLocationUse />} />
@@ -202,8 +203,8 @@ function MainAppRoutes() {
       <Route path="/tracker-invite" element={<TrackerInviteStart />} />
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/pay" element={<PayPage />} />
-      <Route path="/refund-policy" element={<RefundPolicy />} />
-      <Route path="/refund" element={<RefundPolicy />} />
+      <Route path="/refund-policy" element={<LegalRefundPage />} />
+      <Route path="/refund" element={<LegalRefundPage />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />

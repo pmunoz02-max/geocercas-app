@@ -69,3 +69,13 @@ Avoid wording that can be interpreted as covert or personal surveillance.
 
 This change does not modify billing logic, provider configuration, checkout, webhooks, API keys, subscriptions, database schema, or Android payment behavior.
 
+
+## V3 routing hardening
+
+Public legal routes now use dedicated English-only legal components under `src/pages/legal/`:
+
+- `/privacy` and `/privacy-policy` use `LegalPrivacyPage.jsx`
+- `/terms` and `/terms-of-service` use `LegalTermsPage.jsx`
+- `/refund-policy` and `/refund` use `LegalRefundPage.jsx`
+
+This avoids relying on legacy Spanish legal page files and makes the payment-provider review routes deterministic.
