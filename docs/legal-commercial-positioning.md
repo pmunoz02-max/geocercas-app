@@ -1,0 +1,71 @@
+# Legal and commercial positioning for payment provider review
+
+Last updated: 2026-06-15
+
+## Purpose
+
+This update strengthens the public legal and commercial positioning of Geocercas GPS before additional payment provider reviews.
+
+The goal is to clearly present the product as an authorized business operations SaaS platform, not as a consumer surveillance or covert tracking product.
+
+## Public positioning
+
+Preferred description:
+
+> Geocercas GPS is a business SaaS platform for authorized workforce operations, geofence-based attendance, field activity verification, and operational reporting.
+
+Avoid positioning the product only as:
+
+> GPS tracking of people
+
+## Added public route
+
+New public page:
+
+- `/authorized-location-use`
+
+Redirect aliases:
+
+- `/location-privacy`
+- `/gps-tracking-policy`
+
+The page explains:
+
+- authorized business use
+- customer responsibility for worker notice and consent
+- location data categories
+- no covert tracking
+- no spying, stalking, harassment, or non-business tracking
+- Android app operational only
+- subscriptions and payments are web-only
+
+## Updated public legal routes
+
+- `/privacy`
+- `/terms`
+- `/refund-policy`
+
+Added redirect aliases:
+
+- `/privacy-policy` -> `/privacy`
+- `/terms-of-service` -> `/terms`
+- `/refund` -> `/refund-policy`
+
+## Payment provider messaging
+
+When contacting payment providers, use wording such as:
+
+- authorized workforce operations platform
+- geofence-based attendance
+- field activity verification
+- operational reporting
+- invited and authorized trackers only
+- web-only subscription payments
+- Android app operational only, no in-app purchases
+
+Avoid wording that can be interpreted as covert or personal surveillance.
+
+## Operational rule
+
+This change does not modify billing logic, provider configuration, checkout, webhooks, API keys, subscriptions, database schema, or Android payment behavior.
+

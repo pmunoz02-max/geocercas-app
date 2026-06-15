@@ -2,6 +2,7 @@ import Logout from "./pages/Logout.jsx";
 import VerGeocerca from "./pages/VerGeocerca.jsx";
 import Privacy from "./pages/Privacy.jsx";
 import Terms from "./pages/Terms.jsx";
+import AuthorizedLocationUse from "./pages/AuthorizedLocationUse.jsx";
 import AccountDeletion from "./pages/AccountDeletion.jsx";
 // src/App.jsx
 import React from "react";
@@ -178,7 +179,12 @@ function MainAppRoutes() {
 
       {/* Public */}
       <Route path="/privacy" element={<Privacy />} />
+      <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
       <Route path="/terms" element={<Terms />} />
+      <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
+      <Route path="/authorized-location-use" element={<AuthorizedLocationUse />} />
+      <Route path="/location-privacy" element={<Navigate to="/authorized-location-use" replace />} />
+      <Route path="/gps-tracking-policy" element={<Navigate to="/authorized-location-use" replace />} />
       <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route path="/delete-account" element={<AccountDeletion />} />
       <Route path="/demo" element={<DemoGeocercas />} />
@@ -197,6 +203,7 @@ function MainAppRoutes() {
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/pay" element={<PayPage />} />
       <Route path="/refund-policy" element={<RefundPolicy />} />
+      <Route path="/refund" element={<Navigate to="/refund-policy" replace />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
