@@ -475,7 +475,7 @@ function BarsChart({ rows, indicator, locale, emptyLabel }) {
   );
 }
 
-function LinesChart({ rows, indicator, locale, emptyLabel }) {
+function LinesChart({ rows, indicator, locale, emptyLabel, scaleLabel }) {
   const validRows = rows.filter((row) => row.indicatorValue !== null && Number.isFinite(row.indicatorValue));
 
   const periodMap = new Map();
@@ -512,14 +512,42 @@ function LinesChart({ rows, indicator, locale, emptyLabel }) {
   }
 
   const values = validRows.map((row) => row.indicatorValue);
-  const maxValue = Math.max(...values, 0);
-  const minValue = Math.min(0, ...values);
-  const span = maxValue - minValue || 1;
+  const rawMinValue = Math.min(...values);
+  const rawMaxValue = Math.max(...values);
+  const positiveValues = values.filter((value) => value > 0);
+  const minPositiveValue = positiveValues.length ? Math.min(...positiveValues) : null;
+  const spreadRatio = minPositiveValue ? rawMaxValue / minPositiveValue : 1;
+  const useLogScale = positiveValues.length === values.length && minPositiveValue > 0 && spreadRatio >= 25;
+
+  let scaleMin = rawMinValue;
+  let scaleMax = rawMaxValue;
+
+  if (useLogScale) {
+    const logMin = Math.log10(minPositiveValue);
+    const logMax = Math.log10(rawMaxValue);
+    const logSpan = Math.max(logMax - logMin, 0.000001);
+    const logPadding = Math.max(logSpan * 0.08, 0.08);
+    scaleMin = logMin - logPadding;
+    scaleMax = logMax + logPadding;
+  } else {
+    const rawSpan = Math.max(rawMaxValue - rawMinValue, 0);
+    const padding = rawSpan > 0 ? rawSpan * 0.12 : Math.max(Math.abs(rawMaxValue) * 0.12, 0.000000001);
+    scaleMin = rawMinValue - padding;
+    scaleMax = rawMaxValue + padding;
+
+    if (rawMinValue >= 0 && scaleMin < 0) {
+      scaleMin = 0;
+    }
+  }
+
+  const scaleSpan = scaleMax - scaleMin || 1;
+  const scaleValue = (value) => (useLogScale ? Math.log10(Math.max(value, minPositiveValue || value || 1)) : value);
+  const unscaleValue = (scaledValue) => (useLogScale ? Math.pow(10, scaledValue) : scaledValue);
 
   const width = Math.max(840, periods.length * 170);
-  const height = 300;
-  const paddingX = 56;
-  const paddingTop = 34;
+  const height = 320;
+  const paddingX = 64;
+  const paddingTop = 40;
   const paddingBottom = 46;
   const plotHeight = height - paddingTop - paddingBottom;
   const plotWidth = width - paddingX * 2;
@@ -544,15 +572,28 @@ function LinesChart({ rows, indicator, locale, emptyLabel }) {
     return paddingX + (index * plotWidth) / Math.max(1, periods.length - 1);
   };
 
-  const yForValue = (value) => paddingTop + ((maxValue - value) * plotHeight) / span;
+  const yForValue = (value) => paddingTop + ((scaleMax - scaleValue(value)) * plotHeight) / scaleSpan;
 
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto rounded-2xl border border-emerald-100 bg-white p-3">
+        {useLogScale ? (
+          <div className="mb-2 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-800">
+            {scaleLabel || "Escala Y adaptativa"}
+          </div>
+        ) : null}
         <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[840px]">
           {[0, 0.25, 0.5, 0.75, 1].map((step) => {
             const y = paddingTop + step * plotHeight;
-            return <line key={step} x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="currentColor" className="text-emerald-50" />;
+            const scaledValue = scaleMax - step * scaleSpan;
+            return (
+              <g key={step}>
+                <line x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="currentColor" className="text-emerald-50" />
+                <text x={width - 8} y={y + 4} textAnchor="end" fontSize="10" fill="currentColor" className="text-gray-400">
+                  {formatIndicator(unscaleValue(scaledValue), indicator, locale)}
+                </text>
+              </g>
+            );
           })}
 
           <line x1={paddingX} y1={height - paddingBottom} x2={width - paddingX} y2={height - paddingBottom} stroke="currentColor" className="text-slate-200" />
@@ -942,7 +983,13 @@ export default function Benchmarking() {
         </div>
         <div className="p-4 md:p-5">
           {filters.chartType === "lines" ? (
-          <LinesChart rows={groupedRows} indicator={filters.indicator} locale={locale} emptyLabel={bt("empty.chart", "No hay suficientes datos para graficar.")} />
+          <LinesChart
+            rows={groupedRows}
+            indicator={filters.indicator}
+            locale={locale}
+            emptyLabel={bt("empty.chart", "No hay suficientes datos para graficar.")}
+            scaleLabel={bt("chart.scaleAdaptive", "Escala Y adaptativa")}
+          />
           ) : (
             <BarsChart rows={groupedRows} indicator={filters.indicator} locale={locale} emptyLabel={bt("empty.chart", "No hay suficientes datos para graficar.")} />
           )}
