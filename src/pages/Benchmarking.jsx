@@ -174,6 +174,7 @@ function formatNumber(value, locale, maximumFractionDigits = 2) {
   return new Intl.NumberFormat(locale || "es", {
     minimumFractionDigits: 0,
     maximumFractionDigits,
+    useGrouping: true,
   }).format(n);
 }
 
@@ -183,6 +184,7 @@ function formatFixedNumber(value, locale, fractionDigits = 2) {
   return new Intl.NumberFormat(locale || "es", {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
+    useGrouping: true,
   }).format(n);
 }
 
@@ -205,6 +207,7 @@ function formatRateNumber(value, locale, preferredMaximumFractionDigits = 9) {
   return new Intl.NumberFormat(locale || "es", {
     minimumFractionDigits: 0,
     maximumFractionDigits,
+    useGrouping: true,
   }).format(n);
 }
 
@@ -221,6 +224,7 @@ function formatCurrency(value, locale, currency = "USD") {
     currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+    useGrouping: true,
   }).format(n);
 }
 
