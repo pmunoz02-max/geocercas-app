@@ -127,6 +127,38 @@ The module displays:
 - Traffic-light evidence: green, yellow, red, gray
 - Improvement opportunity text
 
+## Chart behavior — group preservation and adaptive Y scale
+
+The visualization block supports two chart modes:
+
+- **Bars:** compares the selected indicator across all visible groups.
+- **Lines:** shows time evolution while preserving every compared group as its own series.
+
+The line chart must not collapse all groups into a single average line. When comparing by geofence, person, activity, or assignment, every visible group must remain represented in the line chart and legend.
+
+### Adaptive Y scale
+
+Benchmarking indicators can be extremely small because the canonical unit is `m²`. For example, values such as `0.000000002`, `0.000000045`, `0.000015703`, or `0.000646907` are valid and must not be visually flattened into zero.
+
+The line chart therefore uses adaptive Y-axis behavior:
+
+- It does not always force the Y axis to start at zero.
+- It tightens the Y domain when values are small or close together.
+- It can use a logarithmic-style visual scale when values differ by several orders of magnitude.
+- It shows an explicit scale indicator/badge when adaptive scaling is active.
+
+This is a **visual-only** behavior. It must not change:
+
+- SQL calculations
+- `v_benchmarking_efficiency_preview`
+- KPI calculations
+- table values
+- CSV exports
+- RLS/security behavior
+- organization scoping
+
+The table and CSV remain the numeric source of truth. Charts are an interpretation layer for readability.
+
 ## CSV export
 
 The CSV export must include:
@@ -165,6 +197,8 @@ After Promote, Production UI validation confirmed:
 - Indicator switch between `horas/m²` and `$/m²` works.
 - Small decimal indicators do not display as false zeroes.
 - CSV export works and includes auxiliary metrics.
+- Line chart preserves all visible comparison groups instead of collapsing them into a single average.
+- Adaptive Y scale makes very small differences visible without changing underlying values.
 
 ## Files touched in frontend rollout
 

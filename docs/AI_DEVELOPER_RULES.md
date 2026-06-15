@@ -429,7 +429,10 @@ Reglas obligatorias:
 - No presentar datos planificados como si fueran tracking auditado.
 - Mostrar claramente `fuente_horas` cuando las horas sean `PLANIFICADA`.
 - No crear decisiones automáticas a partir del benchmarking; solo evidencia de gestión.
-- Actualizar `/docs` cuando se agreguen nuevas vistas, rutas, navegación o exportaciones.
+- En gráficos de líneas, conservar todos los grupos visibles cuando el usuario compare geocercas, personas, actividades o asignaciones.
+- Usar escala Y adaptativa solo como mejora visual cuando valores muy pequeños o muy dispersos no sean legibles.
+- No alterar SQL, KPIs, CSV ni datos de tabla por cambios de escala visual.
+- Actualizar `/docs` cuando se agreguen nuevas vistas, rutas, navegación, exportaciones o comportamiento analítico de gráficos.
 
 Fuente oficial para Benchmarking:
 

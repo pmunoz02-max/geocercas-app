@@ -208,6 +208,20 @@ Los gráficos internos deben mantener:
 
 No usar gráficos para ocultar falta de datos.
 
+## Analytical charts and adaptive scales
+
+For analytical modules such as Benchmarking, charts must improve readability without changing the underlying data.
+
+Rules:
+
+- Bar charts are used for direct group comparison.
+- Line charts are used for time evolution and must preserve all visible groups as separate series.
+- Do not collapse multiple groups into a single average line unless the UI explicitly labels it as an average-only view.
+- When values are very small or spread across several orders of magnitude, the Y axis may use an adaptive scale so differences remain visible.
+- Adaptive scaling must be clearly indicated in the chart UI when active.
+- Adaptive scaling is visual only; tables, KPIs, CSV and backend views remain the numeric source of truth.
+- Do not hide lack of data with chart interpolation. Missing values should remain absent or visually distinct.
+
 ---
 
 ## Centro de Ayuda / Guía Rápida

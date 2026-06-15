@@ -457,3 +457,27 @@ Regla operativa para futuros cambios visuales:
 ```txt
 Cambio visual pequeño → build → deploy Preview → validación visual → documentación → Promote solo con orden explícita
 ```
+
+---
+
+# Caso documentado — Benchmarking: líneas por grupo y escala Y adaptativa
+
+El ajuste visual de Benchmarking siguió el protocolo oficial:
+
+1. Se detectó que el gráfico de líneas estaba promediando por periodo y ocultaba grupos visibles.
+2. Se ajustó `src/pages/Benchmarking.jsx` para que el modo líneas conserve todos los grupos comparados.
+3. Se validó build local con `npm run build`.
+4. Se hizo commit y push únicamente a `preview`.
+5. Se validó Deploy Preview.
+6. Con orden explícita, se promovió el fix a Producción.
+7. Se detectó que diferencias muy pequeñas quedaban visualmente aplastadas en el eje Y.
+8. Se agregó escala Y adaptativa en el gráfico de líneas.
+9. Se validó nuevamente Preview y se promovió con orden explícita.
+10. No se modificó base de datos, RLS, vistas SQL, tracking, billing ni lógica de cálculo.
+
+Reglas permanentes derivadas:
+
+- Los gráficos de líneas de Benchmarking deben conservar todos los grupos visibles.
+- La escala Y adaptativa es solo visual.
+- Las tablas, KPIs, CSV y vistas SQL siguen siendo la fuente numérica de verdad.
+- No se debe convertir un gráfico comparativo en un promedio general si el usuario seleccionó comparar por geocerca, persona, actividad o asignación.
