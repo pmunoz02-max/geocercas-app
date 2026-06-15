@@ -476,64 +476,139 @@ function BarsChart({ rows, indicator, locale, emptyLabel }) {
 }
 
 function LinesChart({ rows, indicator, locale, emptyLabel }) {
-  const periodMap = new Map();
+  const validRows = rows.filter((row) => row.indicatorValue !== null && Number.isFinite(row.indicatorValue));
 
-  rows.forEach((row) => {
-    if (row.indicatorValue === null || !Number.isFinite(row.indicatorValue)) return;
+  const periodMap = new Map();
+  validRows.forEach((row) => {
     if (!periodMap.has(row.periodKey)) {
-      periodMap.set(row.periodKey, { periodKey: row.periodKey, periodLabel: row.periodLabel, total: 0, count: 0 });
+      periodMap.set(row.periodKey, { periodKey: row.periodKey, periodLabel: row.periodLabel });
     }
-    const point = periodMap.get(row.periodKey);
-    point.total += row.indicatorValue;
-    point.count += 1;
   });
 
-  const points = Array.from(periodMap.values())
-    .map((point) => ({ ...point, value: point.count ? point.total / point.count : 0 }))
-    .sort((a, b) => compareDateKeys(a.periodKey, b.periodKey));
+  const periods = Array.from(periodMap.values()).sort((a, b) => compareDateKeys(a.periodKey, b.periodKey));
 
-  if (points.length < 2) {
+  const seriesMap = new Map();
+  validRows.forEach((row) => {
+    const seriesKey = String(row.compareKey || row.compareLabel || row.key);
+    if (!seriesMap.has(seriesKey)) {
+      seriesMap.set(seriesKey, {
+        key: seriesKey,
+        label: row.compareLabel || "—",
+        pointsByPeriod: new Map(),
+      });
+    }
+
+    seriesMap.get(seriesKey).pointsByPeriod.set(row.periodKey, {
+      periodKey: row.periodKey,
+      periodLabel: row.periodLabel,
+      value: row.indicatorValue,
+    });
+  });
+
+  const series = Array.from(seriesMap.values()).sort((a, b) => String(a.label || "").localeCompare(String(b.label || "")));
+
+  if (!periods.length || !series.length) {
     return <div className="rounded-2xl border border-dashed border-emerald-100 bg-emerald-50/80 p-8 text-center text-sm text-gray-600">{emptyLabel}</div>;
   }
 
-  const width = 720;
-  const height = 220;
-  const paddingX = 32;
-  const paddingY = 28;
-  const maxValue = Math.max(...points.map((point) => point.value), 0);
-  const minValue = Math.min(...points.map((point) => point.value), 0);
+  const values = validRows.map((row) => row.indicatorValue);
+  const maxValue = Math.max(...values, 0);
+  const minValue = Math.min(0, ...values);
   const span = maxValue - minValue || 1;
 
-  const svgPoints = points
-    .map((point, index) => {
-      const x = paddingX + (index * (width - paddingX * 2)) / Math.max(1, points.length - 1);
-      const y = height - paddingY - ((point.value - minValue) * (height - paddingY * 2)) / span;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const width = Math.max(840, periods.length * 170);
+  const height = 300;
+  const paddingX = 56;
+  const paddingTop = 34;
+  const paddingBottom = 46;
+  const plotHeight = height - paddingTop - paddingBottom;
+  const plotWidth = width - paddingX * 2;
+  const colors = [
+    "#065f46",
+    "#0f766e",
+    "#047857",
+    "#334155",
+    "#0369a1",
+    "#7c3aed",
+    "#b45309",
+    "#be123c",
+    "#15803d",
+    "#4338ca",
+    "#0e7490",
+    "#92400e",
+  ];
+
+  const xForPeriod = (periodKey) => {
+    const index = periods.findIndex((period) => period.periodKey === periodKey);
+    if (periods.length === 1) return paddingX + plotWidth / 2;
+    return paddingX + (index * plotWidth) / Math.max(1, periods.length - 1);
+  };
+
+  const yForValue = (value) => paddingTop + ((maxValue - value) * plotHeight) / span;
 
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[680px] rounded-2xl border border-emerald-100 bg-white">
-        <line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} stroke="currentColor" className="text-slate-200" />
-        <line x1={paddingX} y1={paddingY} x2={paddingX} y2={height - paddingY} stroke="currentColor" className="text-slate-200" />
-        <polyline fill="none" stroke="currentColor" strokeWidth="3" points={svgPoints} className="text-gray-800" />
-        {points.map((point, index) => {
-          const x = paddingX + (index * (width - paddingX * 2)) / Math.max(1, points.length - 1);
-          const y = height - paddingY - ((point.value - minValue) * (height - paddingY * 2)) / span;
+    <div className="space-y-4">
+      <div className="overflow-x-auto rounded-2xl border border-emerald-100 bg-white p-3">
+        <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[840px]">
+          {[0, 0.25, 0.5, 0.75, 1].map((step) => {
+            const y = paddingTop + step * plotHeight;
+            return <line key={step} x1={paddingX} y1={y} x2={width - paddingX} y2={y} stroke="currentColor" className="text-emerald-50" />;
+          })}
+
+          <line x1={paddingX} y1={height - paddingBottom} x2={width - paddingX} y2={height - paddingBottom} stroke="currentColor" className="text-slate-200" />
+          <line x1={paddingX} y1={paddingTop} x2={paddingX} y2={height - paddingBottom} stroke="currentColor" className="text-slate-200" />
+
+          {periods.map((period) => {
+            const x = xForPeriod(period.periodKey);
+            return (
+              <g key={period.periodKey}>
+                <line x1={x} y1={paddingTop} x2={x} y2={height - paddingBottom} stroke="currentColor" className="text-emerald-50" />
+                <text x={x} y={height - 14} textAnchor="middle" fontSize="11" fill="currentColor" className="text-gray-600">
+                  {period.periodLabel}
+                </text>
+              </g>
+            );
+          })}
+
+          {series.map((serie, index) => {
+            const color = colors[index % colors.length];
+            const points = periods
+              .map((period) => serie.pointsByPeriod.get(period.periodKey))
+              .filter(Boolean)
+              .map((point) => ({ ...point, x: xForPeriod(point.periodKey), y: yForValue(point.value) }));
+            const polylinePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+
+            return (
+              <g key={serie.key}>
+                {points.length > 1 ? <polyline fill="none" stroke={color} strokeWidth="2.5" points={polylinePoints} strokeLinecap="round" strokeLinejoin="round" /> : null}
+                {points.map((point) => (
+                  <g key={`${serie.key}:${point.periodKey}`}>
+                    <circle cx={point.x} cy={point.y} r="4" fill={color} />
+                    <title>{`${serie.label} · ${point.periodLabel}: ${formatIndicator(point.value, indicator, locale)}`}</title>
+                  </g>
+                ))}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {series.map((serie, index) => {
+          const color = colors[index % colors.length];
+          const seriePoints = periods.map((period) => serie.pointsByPeriod.get(period.periodKey)).filter(Boolean);
+          const lastPoint = seriePoints[seriePoints.length - 1];
           return (
-            <g key={point.periodKey}>
-              <circle cx={x} cy={y} r="4" fill="currentColor" className="text-gray-900" />
-              <text x={x} y={height - 8} textAnchor="middle" fontSize="11" fill="currentColor" className="text-gray-600">
-                {point.periodLabel}
-              </text>
-              <text x={x} y={Math.max(14, y - 10)} textAnchor="middle" fontSize="11" fill="currentColor" className="text-gray-700">
-                {formatIndicator(point.value, indicator, locale)}
-              </text>
-            </g>
+            <div key={serie.key} className="flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 px-3 py-2 text-xs">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+                <span className="truncate font-semibold text-gray-700">{serie.label}</span>
+              </div>
+              <span className="shrink-0 font-semibold text-gray-900">{lastPoint ? formatIndicator(lastPoint.value, indicator, locale) : "—"}</span>
+            </div>
           );
         })}
-      </svg>
+      </div>
     </div>
   );
 }
