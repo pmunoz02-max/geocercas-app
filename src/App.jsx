@@ -179,12 +179,12 @@ function MainAppRoutes() {
 
       {/* Public */}
       <Route path="/privacy" element={<Privacy />} />
-      <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
+      <Route path="/privacy-policy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
-      <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
+      <Route path="/terms-of-service" element={<Terms />} />
       <Route path="/authorized-location-use" element={<AuthorizedLocationUse />} />
-      <Route path="/location-privacy" element={<Navigate to="/authorized-location-use" replace />} />
-      <Route path="/gps-tracking-policy" element={<Navigate to="/authorized-location-use" replace />} />
+      <Route path="/location-privacy" element={<AuthorizedLocationUse />} />
+      <Route path="/gps-tracking-policy" element={<AuthorizedLocationUse />} />
       <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route path="/delete-account" element={<AccountDeletion />} />
       <Route path="/demo" element={<DemoGeocercas />} />
@@ -203,7 +203,7 @@ function MainAppRoutes() {
       <Route path="/tracker-accept" element={<TrackerInviteStart />} />
       <Route path="/pay" element={<PayPage />} />
       <Route path="/refund-policy" element={<RefundPolicy />} />
-      <Route path="/refund" element={<Navigate to="/refund-policy" replace />} />
+      <Route path="/refund" element={<RefundPolicy />} />
 
       {/* Legacy redirects */}
       <Route path="/mapa" element={<Navigate to="/geocerca" replace />} />
