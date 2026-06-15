@@ -158,14 +158,14 @@ function getAreaDisplay(areaM2, locale) {
   if (value === null) return "—";
 
   if (value >= 1000000) {
-    return `${formatNumber(value / 1000000, locale, 2)} km²`;
+    return `${formatFixedNumber(value / 1000000, locale, 2)} km²`;
   }
 
   if (value >= 10000) {
-    return `${formatNumber(value / 10000, locale, 2)} ha`;
+    return `${formatFixedNumber(value / 10000, locale, 2)} ha`;
   }
 
-  return `${formatNumber(value, locale, 0)} m²`;
+  return `${formatFixedNumber(value, locale, 2)} m²`;
 }
 
 function formatNumber(value, locale, maximumFractionDigits = 2) {
@@ -174,6 +174,15 @@ function formatNumber(value, locale, maximumFractionDigits = 2) {
   return new Intl.NumberFormat(locale || "es", {
     minimumFractionDigits: 0,
     maximumFractionDigits,
+  }).format(n);
+}
+
+function formatFixedNumber(value, locale, fractionDigits = 2) {
+  const n = toNullableNumber(value);
+  if (n === null) return "—";
+  return new Intl.NumberFormat(locale || "es", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(n);
 }
 
@@ -1008,7 +1017,7 @@ export default function Benchmarking() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="min-w-[1900px] w-full divide-y divide-emerald-100 text-sm">
+          <table className="min-w-[1800px] w-full divide-y divide-emerald-100 text-sm">
             <thead className="bg-emerald-50/80 text-left text-xs font-semibold uppercase tracking-wide text-emerald-950">
               <tr>
                 <th className="px-4 py-3">{bt("table.signal", "Semáforo")}</th>
@@ -1016,8 +1025,7 @@ export default function Benchmarking() {
                 <th className="px-4 py-3">{bt("table.person", "Persona")}</th>
                 <th className="px-4 py-3">{bt("table.activity", "Actividad")}</th>
                 <th className="px-4 py-3">{bt("table.period", "Periodo")}</th>
-                <th className="px-4 py-3 text-right">{bt("table.areaM2", "Área m²")}</th>
-                <th className="px-4 py-3 text-right">{bt("table.areaReadable", "Área legible")}</th>
+                <th className="px-4 py-3 text-right">{bt("table.area", "Área")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.observedHours", "Horas observadas")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.costBase", "Costo base")}</th>
                 <th className="px-4 py-3 text-right">{bt("table.costFinal", "Costo final auditado")}</th>
@@ -1036,7 +1044,7 @@ export default function Benchmarking() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {loading ? (
                 <tr>
-                  <td colSpan="20" className="px-4 py-10 text-center text-gray-600">
+                  <td colSpan="19" className="px-4 py-10 text-center text-gray-600">
                     {bt("loading", "Cargando benchmarking...")}
                   </td>
                 </tr>
@@ -1052,7 +1060,6 @@ export default function Benchmarking() {
                     <td className="px-4 py-3 text-gray-700">{row.personName}</td>
                     <td className="px-4 py-3 text-gray-700">{row.activityName}</td>
                     <td className="px-4 py-3 text-gray-700">{row.periodLabel}</td>
-                    <td className="px-4 py-3 text-right text-gray-700">{formatNumber(row.areaM2, locale, 2)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">{getAreaDisplay(row.areaM2, locale)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">{formatNumber(row.observedHours, locale, 2)}</td>
                     <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.costBase, locale)}</td>
@@ -1073,7 +1080,7 @@ export default function Benchmarking() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="20" className="px-4 py-10 text-center text-gray-600">
+                  <td colSpan="19" className="px-4 py-10 text-center text-gray-600">
                     {bt("empty.table", "No hay datos de benchmarking con los filtros actuales.")}
                   </td>
                 </tr>
