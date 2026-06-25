@@ -1,3 +1,29 @@
+# Billing — estado actual y transición Dodo
+
+## Hito Dodo Payments aprobado (2026-06-25)
+
+Dodo Payments aprobó la cuenta de **FENICE ECUADOR S.A.S.**:
+
+- Account Verification Forms approved.
+- Live payments active.
+- Payouts enabled.
+- UBO ID, tax document/RUC e incorporation document aceptados.
+- Productos TEST creados:
+  - Geocercas GPS PRO — USD 29/month — `pdt_0NhoMPN43aLOXnHSZhrTk`
+  - Geocercas GPS Enterprise — USD 99/month — `pdt_0NhoND6E41RsKWVP43fW1`
+
+Documento fuente: [dodo-payments-approval.md](./dodo-payments-approval.md).
+
+## Regla de transición
+
+Aunque Dodo ya está aprobado, **no activar checkout live en producción todavía**.
+
+La integración debe hacerse primero en `preview`, con TEST checkout / TEST webhooks y sin exponer secretos.
+
+La fuente de verdad del plan debe seguir siendo la base de datos interna. Dodo debe actuar como proveedor externo de cobro, checkout, suscripciones, eventos y payouts.
+
+---
+
 ## Fuente de verdad
 
 La fuente de verdad del billing actual es:

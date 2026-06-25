@@ -59,6 +59,20 @@ El objetivo es:
 
 **Esta documentación debe mantenerse actualizada en cada cambio importante.**
 
+
+## Dodo Payments aprobado (2026-06-25)
+
+Dodo Payments aprobó la cuenta de FENICE ECUADOR S.A.S. para live payments y payouts.
+
+Productos TEST creados y validados visualmente:
+
+- Geocercas GPS PRO — USD 29/month
+- Geocercas GPS Enterprise — USD 99/month
+
+La integración aún no debe tocar producción, webhooks live, API keys ni Android. La arquitectura debe mantenerse proveedor-agnóstica: la base de datos interna sigue siendo la fuente de verdad del plan y Dodo actúa solo como proveedor externo de checkout/cobro/eventos.
+
+Ver [dodo-payments-approval.md](./dodo-payments-approval.md).
+
 ## Migración Billing Preview (Paddle)
 
 - Preview usa Paddle para billing y upgrade PRO

@@ -104,3 +104,16 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - No promover a Production hasta orden explÃ­cita.
 
 
+
+
+### Actualización Dodo Payments aprobado (2026-06-25)
+
+- Dodo Payments aprobó la cuenta de FENICE ECUADOR S.A.S.
+- Live payments y payouts quedaron habilitados.
+- Se crearon y validaron visualmente productos TEST:
+  - Geocercas GPS PRO — USD 29/month.
+  - Geocercas GPS Enterprise — USD 99/month.
+- No se debe activar checkout live en producción todavía.
+- No tocar Android, API keys ni webhooks live.
+- La base de datos interna sigue siendo la fuente de verdad del plan.
+- Ver `docs/dodo-payments-approval.md`.

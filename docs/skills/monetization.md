@@ -156,3 +156,39 @@ no depender solo de UI para restricciones
 git add docs/skills/monetization.md
 git commit -m "docs: add monetization skill [allow-docs]"
 git push origin preview
+---
+
+## Actualización 2026-06-25 — proveedor MoR aprobado
+
+Dodo Payments fue aprobado como proveedor MoR para FENICE ECUADOR S.A.S.
+
+Planes TEST configurados:
+
+```txt
+Geocercas GPS PRO — USD 29/month
+Geocercas GPS Enterprise — USD 99/month
+```
+
+La arquitectura de monetización debe ser universal:
+
+```txt
+organization
+  ↓
+plan interno en base de datos
+  ↓
+entitlements y límites
+  ↓
+proveedor externo de cobro/eventos
+```
+
+Dodo no debe convertirse en la fuente única del plan dentro de la app. La app debe poder cambiar de proveedor si fuera necesario.
+
+### Reglas monetización + Dodo
+
+- Unidad comercial principal: organization.
+- Plan visible al usuario: desde estado interno de la app.
+- Eventos de Dodo: sincronizan estado, no reemplazan la lógica interna.
+- Web-only payments.
+- Android sin pagos.
+- No crear features dependientes de Dodo en frontend sin abstracción.
+- Documentar todo cambio de pricing, plan, límite, entitlement o webhook.

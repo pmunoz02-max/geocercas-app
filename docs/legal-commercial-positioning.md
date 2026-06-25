@@ -79,3 +79,20 @@ Public legal routes now use dedicated English-only legal components under `src/p
 - `/refund-policy` and `/refund` use `LegalRefundPage.jsx`
 
 This avoids relying on legacy Spanish legal page files and makes the payment-provider review routes deterministic.
+
+
+## Dodo Payments approval (2026-06-25)
+
+Dodo Payments approved the merchant/account verification for FENICE ECUADOR S.A.S. and enabled live payments and payouts.
+
+This approval was obtained using the legal/commercial framing in this document:
+
+- authorized workforce operations
+- geofence-based attendance
+- field activity verification
+- operational reporting
+- invited/authorized trackers
+- web-only subscription payments
+- Android operational only, no in-app purchases
+
+Operational note: approval does not authorize uncontrolled production rollout. Checkout, webhooks, API keys and production billing changes must still be implemented only through the preview workflow and documented before promotion.

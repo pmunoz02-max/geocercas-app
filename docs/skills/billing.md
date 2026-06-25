@@ -282,3 +282,44 @@ Rules:
 - Do not activate LIVE checkout before approval.
 - Do not configure productive webhooks before approval.
 - A new Paddle LIVE API key must be created before activation because the previous key was revoked.
+---
+
+## Actualización 2026-06-25 — Dodo Payments aprobado
+
+Dodo Payments aprobó la cuenta de FENICE ECUADOR S.A.S. para live payments y payouts.
+
+Productos TEST creados:
+
+- Geocercas GPS PRO — USD 29/month — `pdt_0NhoMPN43aLOXnHSZhrTk`
+- Geocercas GPS Enterprise — USD 99/month — `pdt_0NhoND6E41RsKWVP43fW1`
+
+Documento principal:
+
+```txt
+docs/dodo-payments-approval.md
+```
+
+### Reglas para próximos cambios de billing
+
+- No tocar producción sin orden expresa.
+- No tocar Android para pagos.
+- No pegar API keys, webhook secrets ni credenciales en chat.
+- No mezclar Dodo test con Dodo live.
+- No mezclar Preview con Producción.
+- Mantener la base de datos interna como fuente de verdad del plan.
+- Dodo debe actuar como proveedor externo de cobro, checkout, suscripción, eventos y payouts.
+- Implementar primero en branch `preview`.
+- Actualizar `/docs` en cada cambio de arquitectura, webhooks, pricing, productos, planes o estados de suscripción.
+
+### Orden recomendado para integración Dodo
+
+1. Documentar aprobación y productos TEST.
+2. Revisar app actual por ZIP.
+3. Diseñar capa proveedor-agnóstica.
+4. Configurar variables TEST fuera del chat.
+5. Implementar checkout TEST en preview.
+6. Definir success/cancel URLs.
+7. Definir webhook TEST e idempotencia.
+8. Actualizar estado interno del plan.
+9. Validar con datos sintéticos.
+10. Promover a producción solo con orden expresa.

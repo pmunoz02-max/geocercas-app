@@ -366,3 +366,33 @@ Por lo tanto cualquier cambio en pricing debe considerar impacto técnico.
 La arquitectura de monetización debe permitir que **App Geocercas** funcione como una plataforma SaaS rentable, escalable y técnicamente consistente.
 
 La monetización no debe ser un parche, sino una extensión natural de la arquitectura existen
+
+---
+
+# Actualización Dodo Payments MoR aprobado (2026-06-25)
+
+Dodo Payments fue aprobado para **FENICE ECUADOR S.A.S.** con live payments y payouts habilitados.
+
+Esto cambia el estado comercial del proyecto: Dodo pasa a ser el proveedor MoR principal para la siguiente fase de monetización web.
+
+## Productos TEST validados
+
+| Plan | Precio | Product ID TEST |
+|---|---:|---|
+| Geocercas GPS PRO | USD 29/month | `pdt_0NhoMPN43aLOXnHSZhrTk` |
+| Geocercas GPS Enterprise | USD 99/month | `pdt_0NhoND6E41RsKWVP43fW1` |
+
+## Regla de arquitectura
+
+La monetización debe seguir siendo proveedor-agnóstica:
+
+- Base de datos interna = fuente de verdad del plan.
+- Dodo = proveedor externo de cobro / checkout / eventos / payouts.
+- Android = operativo, sin pagos.
+- Web = canal de venta, pricing, checkout, billing y suscripciones.
+
+No hardcodear Dodo como concepto visible de negocio en la UI. Usar textos neutrales como "checkout seguro", "proveedor de pagos" o "portal de suscripción".
+
+## Restricción
+
+No migrar producción ni crear webhooks live hasta que la integración TEST esté documentada, construida en branch `preview`, validada en Vercel Preview y aprobada explícitamente por el usuario.
