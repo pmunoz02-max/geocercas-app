@@ -19,6 +19,7 @@ import AuthGuard from "./components/AuthGuard.jsx";
 import Landing from "./pages/Landing.jsx";
 import DemoGeocercas from "./pages/DemoGeocercas.jsx";
 import ResourcesPage from "./pages/ResourcesPage.jsx";
+import PublicPricing from "./pages/PublicPricing.jsx";
 import Login from "./pages/Login.tsx";
 import SignUp from "./pages/SignUp.tsx";
 import AuthCallback from "./pages/AuthCallback.tsx";
@@ -53,7 +54,6 @@ import Account from "@/pages/Account.jsx";
 import Billing from "./pages/Billing.jsx";
 import BillingSuccess from "./pages/BillingSuccess.jsx";
 import BillingCancel from "./pages/BillingCancel.jsx";
-import Pricing from "./pages/Pricing.jsx";
 
 // Help pages
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
@@ -192,6 +192,8 @@ function MainAppRoutes() {
       <Route path="/resources" element={<ResourcesPage />} />
       <Route path="/recursos" element={<ResourcesPage />} />
       <Route path="/ressources" element={<ResourcesPage />} />
+      <Route path="/pricing" element={<PublicPricing />} />
+      <Route path="/precios" element={<PublicPricing />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/demo/mitidja" element={<Navigate to="/demos/mitidja-geofence-demo.html" replace />} />
@@ -283,14 +285,6 @@ function MainAppRoutes() {
           }
         />
         <Route path="/account" element={<Account />} />
-        <Route
-          path="/pricing"
-          element={
-            <RequireOrg>
-              <Pricing />
-            </RequireOrg>
-          }
-        />
         <Route path="/billing/success" element={<BillingSuccess />} />
         <Route path="/billing/cancel" element={<BillingCancel />} />
 

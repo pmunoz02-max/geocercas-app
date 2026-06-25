@@ -82,3 +82,28 @@ El componente acepta `plan="pro"` o `plan="enterprise"` y conserva el texto neut
 ## Siguiente fase
 
 La activación automática del plan se hará después mediante webhooks y mapeo interno de eventos, siempre manteniendo la base de datos interna como fuente de verdad.
+
+## Public pricing page for checkout validation
+
+Added a public, provider-agnostic pricing page:
+
+- `/pricing`
+- `/precios`
+
+Purpose:
+
+- Show both checkout options independently from the user's current plan.
+- Allow testing both PRO and Enterprise checkout links from Vercel Preview.
+- Provide a neutral public sales page that does not expose the payment provider as part of the app UI.
+
+Plans shown:
+
+- Geocercas GPS PRO — USD 29/month
+- Geocercas GPS Enterprise — USD 99/month
+
+Rules:
+
+- The page uses the same provider-agnostic checkout configuration in `src/config/billingCheckout.ts`.
+- The page does not use API keys, webhook secrets, or provider-specific SDKs.
+- Android remains operational only and is not modified.
+- Live checkout must not be enabled until explicitly authorized.

@@ -89,3 +89,12 @@ Ver [dodo-payments-approval.md](./dodo-payments-approval.md).
 
 Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
 
+
+## Página pública de precios y checkout TEST
+
+Se agregó una página pública neutral para validar ambos checkouts sin depender del plan actual del usuario:
+
+- `/pricing`
+- `/precios`
+
+La página muestra PRO y Enterprise y usa configuración proveedor-agnóstica de checkout externo. No usa API keys, webhooks ni SDKs de proveedor. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
