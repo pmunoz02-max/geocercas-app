@@ -107,3 +107,17 @@ Rules:
 - The page does not use API keys, webhook secrets, or provider-specific SDKs.
 - Android remains operational only and is not modified.
 - Live checkout must not be enabled until explicitly authorized.
+
+## Navigation fix after checkout / login validation
+
+During Preview validation, browser Back from `/inicio?lang=es` could return to `/login?lang=es` after a password sign-in because the login page used `window.location.assign()` after creating the secure session cookie.
+
+This was corrected by using `window.location.replace()` after a successful password login. The authenticated destination replaces `/login` in browser history, so normal navigation does not send the user back to the login screen immediately after entering the app.
+
+Scope:
+
+- Preview-safe navigation correction.
+- No API keys.
+- No webhooks.
+- No live checkout.
+- No Android changes.

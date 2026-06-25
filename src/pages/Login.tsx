@@ -312,7 +312,9 @@ export default function Login() {
         );
 
         const dest = safeNextPath(nextInput);
-        window.location.assign(dest);
+        // Use replace so the authenticated app page does not keep /login in browser history.
+        // This prevents Back from /inicio returning to /login after a successful sign-in.
+        window.location.replace(dest);
         return;
       }
 
