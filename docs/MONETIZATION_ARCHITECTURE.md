@@ -396,3 +396,8 @@ No hardcodear Dodo como concepto visible de negocio en la UI. Usar textos neutra
 ## Restricción
 
 No migrar producción ni crear webhooks live hasta que la integración TEST esté documentada, construida en branch `preview`, validada en Vercel Preview y aprobada explícitamente por el usuario.
+
+## Integración checkout Dodo Preview (2026-06-25)
+
+Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+

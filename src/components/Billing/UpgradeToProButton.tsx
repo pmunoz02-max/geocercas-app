@@ -1,103 +1,43 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@/context/auth.js";
-// Detectar entorno preview para mostrar nota (solo preview.* o *.vercel.app)
-const hostname = typeof window !== "undefined" ? window.location.hostname : "";
-const isPreviewEnv = hostname.includes("preview.") || hostname.includes("vercel.app");
-import { supabase } from "@/lib/supabaseClient";
-import { getPaddleEnv } from "@/config/paddleEnv";
+import {
+  BILLING_CHECKOUT_MODE,
+  getCheckoutSafetyLabel,
+  getCheckoutUrl,
+  isCheckoutConfigured,
+  type CheckoutPlanCode,
+} from "@/config/billingCheckout";
 
 type Props = {
   orgId?: string;
-  plan?: "pro" | "enterprise";
+  plan?: CheckoutPlanCode;
   className?: string;
   label?: string;
 };
 
+function appendContextToCheckoutUrl(url: string, orgId?: string, plan?: CheckoutPlanCode): string {
+  try {
+    const checkoutUrl = new URL(url);
+    if (orgId && !checkoutUrl.searchParams.has("org_id")) {
+      checkoutUrl.searchParams.set("org_id", orgId);
+    }
+    if (plan && !checkoutUrl.searchParams.has("plan")) {
+      checkoutUrl.searchParams.set("plan", plan);
+    }
+    return checkoutUrl.toString();
+  } catch {
+    return url;
+  }
+}
 
 export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
   const { t } = useTranslation();
-  const checkoutPlan = plan || "pro";
-  const { activeOrgId } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const handleClick = async (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    console.clear();
-
-
-    try {
-      setLoading(true);
-      setErrorMsg(null);
-
-      console.log("[UpgradeToProButton] before invoke");
-
-      // Log Paddle env for diagnostics
-      const paddleEnv = getPaddleEnv();
-      console.log("[UpgradeToProButton] paddleEnv:", paddleEnv);
-
-      const normalizedOrgId = activeOrgId ?? null;
-
-      console.log("[UpgradeToProButton] click", {
-        normalizedOrgId,
-        activeOrgId,
-        plan: checkoutPlan,
-      });
-
-      if (!normalizedOrgId) {
-        throw new Error("No active organization id");
-      }
-
-      const payload = {
-        org_id: normalizedOrgId,
-        orgId: normalizedOrgId,
-        plan: checkoutPlan,
-      };
-
-      const { data, error } = await supabase.functions.invoke(
-        "paddle-create-checkout",
-        {
-          body: payload,
-        }
-      );
-
-      console.log("[UpgradeToProButton] after invoke", { data, error });
-
-      if (error) {
-        console.error("[UpgradeToProButton] function error", error);
-
-        setErrorMsg("No se pudo iniciar el checkout. Intenta nuevamente en unos minutos o contacta soporte.");
-
-        const response = (error as any)?.context;
-        if (response instanceof Response) {
-          const raw = await response.clone().text();
-          console.error("[UpgradeToProButton] function response status", response.status);
-          console.error("[UpgradeToProButton] function response raw", raw);
-        }
-
-        return;
-      }
-
-      const checkoutUrl = data?.checkout_url;
-      if (!checkoutUrl) {
-        console.error("[UpgradeToProButton] missing checkout_url", data);
-        setErrorMsg("No se pudo iniciar el checkout. Intenta nuevamente en unos minutos o contacta soporte.");
-        return;
-      }
-
-      console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
-      console.log("[UpgradeToProButton] redirecting to", checkoutUrl);
-      window.location.assign(checkoutUrl);
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo iniciar el checkout. Intenta nuevamente.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const checkoutPlan = plan || "pro";
+  const checkoutUrl = useMemo(() => getCheckoutUrl(checkoutPlan), [checkoutPlan]);
+  const configured = isCheckoutConfigured(checkoutPlan);
 
   const buttonLabel =
     label ||
@@ -105,25 +45,63 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
       : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" }));
 
+  const defaultClassName =
+    "inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setErrorMsg(null);
+
+    if (!configured || !checkoutUrl) {
+      setErrorMsg(
+        t("billing.checkout.notConfigured", {
+          defaultValue: "Secure checkout is not configured yet. Please contact support.",
+        }),
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const targetUrl = appendContextToCheckoutUrl(checkoutUrl, orgId, checkoutPlan);
+      window.location.assign(targetUrl);
+    } catch (error) {
+      console.error("[billing-checkout] redirect error", error);
+      setErrorMsg(
+        t("billing.checkout.openError", {
+          defaultValue: "Could not open secure checkout. Please try again.",
+        }),
+      );
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       <button
         type="button"
         onClick={handleClick}
-        disabled={loading}
-        className={className}
+        disabled={loading || !configured}
+        className={className || defaultClassName}
       >
-        {loading ? t("dashboard.openingCheckout", { defaultValue: "Opening checkout..." }) : buttonLabel}
+        {loading
+          ? t("dashboard.openingCheckout", { defaultValue: "Opening checkout..." })
+          : buttonLabel}
       </button>
-      {errorMsg && (
-        <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+
+      {BILLING_CHECKOUT_MODE === "test" ? (
+        <p className="mt-2 text-xs text-slate-500">
+          {getCheckoutSafetyLabel()}: {t("billing.checkout.testNotice", { defaultValue: "no real charge will be made." })}
+        </p>
+      ) : null}
+
+      {errorMsg && !loading ? (
+        <div className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
           {errorMsg}
         </div>
-      )}
-      {isPreviewEnv && (
-        <p className="mt-2 text-xs text-slate-500">
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }

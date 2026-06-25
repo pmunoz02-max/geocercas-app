@@ -84,3 +84,8 @@ Ver [dodo-payments-approval.md](./dodo-payments-approval.md).
 - Las rutas públicas `/resources`, `/recursos` y `/ressources` apuntan a la página `ResourcesPage.jsx`.
 - Los archivos estáticos reales para esta página viven en `public/resources/`.
 - Si un PDF, PPTX o video todavía no existe, la interfaz debe mostrar `Próximamente` en lugar de usar enlaces placeholder.
+
+## Integración checkout Dodo Preview (2026-06-25)
+
+Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+

@@ -144,3 +144,8 @@ se actualiza org_billing
 ---
 
 Ver detalles y arquitectura en [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md)
+
+## Integración checkout Dodo Preview (2026-06-25)
+
+Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+

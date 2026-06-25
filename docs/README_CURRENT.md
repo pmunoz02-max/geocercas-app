@@ -117,3 +117,13 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - No tocar Android, API keys ni webhooks live.
 - La base de datos interna sigue siendo la fuente de verdad del plan.
 - Ver `docs/dodo-payments-approval.md`.
+
+### Integración checkout Dodo Preview (2026-06-25)
+
+- Se agregó `src/config/billingCheckout.ts` para centralizar URLs públicas de checkout externo.
+- `UpgradeToProButton` redirige a checkout externo TEST sin API keys, sin webhooks y sin invocar Edge Functions de Paddle.
+- Planes configurados: PRO USD 29/month y Enterprise USD 99/month.
+- La UI mantiene copy neutral y la arquitectura sigue proveedor-agnóstica.
+- No activar producción ni checkout live sin orden explícita.
+- Ver `docs/DODO_CHECKOUT_PREVIEW_INTEGRATION.md`.
+
