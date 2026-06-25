@@ -118,6 +118,32 @@ export default function Login() {
     return e || "";
   }, [location.search]);
 
+  // Si el usuario ya tiene sesión activa y vuelve manualmente con el botón Atrás
+  // a /login, no mostramos Login: reemplazamos la entrada por el destino seguro.
+  // Esto corrige historiales antiguos y flujos donde /login quedó grabado antes
+  // de aplicar window.location.replace en el login exitoso.
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!alive) return;
+
+        if (data?.session) {
+          const dest = safeNextPath(nextFromUrl || nextInput || "/inicio");
+          window.location.replace(dest);
+        }
+      } catch {
+        // Si no se puede leer la sesión, dejamos que el login siga normal.
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [nextFromUrl, nextInput]);
+
   useEffect(() => {
     if (inboundErr) setErr(inboundErr);
   }, [inboundErr]);
@@ -312,8 +338,10 @@ export default function Login() {
         );
 
         const dest = safeNextPath(nextInput);
-        // Use replace so the authenticated app page does not keep /login in browser history.
-        // This prevents Back from /inicio returning to /login after a successful sign-in.
+
+        // Navegación segura post-login:
+        // replace evita que /login quede como entrada anterior del historial.
+        // Así, al volver desde /inicio no se regresa a /login.
         window.location.replace(dest);
         return;
       }

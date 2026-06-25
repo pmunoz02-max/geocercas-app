@@ -15,21 +15,6 @@ type Props = {
   label?: string;
 };
 
-function appendContextToCheckoutUrl(url: string, orgId?: string, plan?: CheckoutPlanCode): string {
-  try {
-    const checkoutUrl = new URL(url);
-    if (orgId && !checkoutUrl.searchParams.has("org_id")) {
-      checkoutUrl.searchParams.set("org_id", orgId);
-    }
-    if (plan && !checkoutUrl.searchParams.has("plan")) {
-      checkoutUrl.searchParams.set("plan", plan);
-    }
-    return checkoutUrl.toString();
-  } catch {
-    return url;
-  }
-}
-
 export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -65,8 +50,10 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
     try {
       setLoading(true);
-      const targetUrl = appendContextToCheckoutUrl(checkoutUrl, orgId, checkoutPlan);
-      window.location.assign(targetUrl);
+      // Fase Preview/Test: usar exactamente el Payment Link generado por el proveedor.
+      // No agregamos org_id/plan como query params porque algunos checkout links
+      // pueden rechazar parámetros adicionales y devolver /error/not-found.
+      window.location.assign(checkoutUrl.trim());
     } catch (error) {
       console.error("[billing-checkout] redirect error", error);
       setErrorMsg(

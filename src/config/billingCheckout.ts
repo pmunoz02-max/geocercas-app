@@ -4,13 +4,20 @@ export type CheckoutPlanCode = Extract<PlanCode, "pro" | "enterprise">;
 
 export type CheckoutProvider = "external_checkout" | "disabled";
 
+function cleanCheckoutUrl(value: unknown, fallback: string): string {
+  const url = String(value || "").trim();
+  return url || fallback;
+}
+
 const CHECKOUT_URLS: Record<CheckoutPlanCode, string> = {
-  pro:
-    import.meta.env.VITE_CHECKOUT_PRO_URL ||
+  pro: cleanCheckoutUrl(
+    import.meta.env.VITE_CHECKOUT_PRO_URL,
     "https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aLOXnHSZhrTk?quantity=1",
-  enterprise:
-    import.meta.env.VITE_CHECKOUT_ENTERPRISE_URL ||
+  ),
+  enterprise: cleanCheckoutUrl(
+    import.meta.env.VITE_CHECKOUT_ENTERPRISE_URL,
     "https://test.checkout.dodopayments.com/buy/pdt_0NhoND6E41RsKWVP43fW1?quantity=1",
+  ),
 };
 
 export const BILLING_CHECKOUT_PROVIDER: CheckoutProvider =

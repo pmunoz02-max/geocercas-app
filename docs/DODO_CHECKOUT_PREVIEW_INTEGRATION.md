@@ -108,16 +108,14 @@ Rules:
 - Android remains operational only and is not modified.
 - Live checkout must not be enabled until explicitly authorized.
 
-## Navigation fix after checkout / login validation
 
-During Preview validation, browser Back from `/inicio?lang=es` could return to `/login?lang=es` after a password sign-in because the login page used `window.location.assign()` after creating the secure session cookie.
+## Fix preview 2026-06-25: navegación e integridad de payment links
 
-This was corrected by using `window.location.replace()` after a successful password login. The authenticated destination replaces `/login` in browser history, so normal navigation does not send the user back to the login screen immediately after entering the app.
+Se aplicó una corrección para mantener la integración en Preview sin afectar Producción:
 
-Scope:
+- `Login.tsx` usa `window.location.replace()` después del login exitoso para que `/login` no quede en el historial anterior a `/inicio`.
+- `Login.tsx` redirige con `replace()` si el usuario vuelve manualmente a `/login` teniendo sesión activa.
+- `UpgradeToProButton.tsx` usa el payment link exacto del proveedor en Test Mode, sin agregar parámetros `org_id` o `plan`, para evitar errores `/error/not-found`.
+- `billingCheckout.ts` limpia espacios en variables públicas `VITE_CHECKOUT_*_URL`.
 
-- Preview-safe navigation correction.
-- No API keys.
-- No webhooks.
-- No live checkout.
-- No Android changes.
+No se agregaron API keys, webhooks, LIVE checkout, cambios de base de datos ni cambios Android.
