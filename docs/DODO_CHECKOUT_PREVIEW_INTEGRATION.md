@@ -119,3 +119,19 @@ Se aplicó una corrección para mantener la integración en Preview sin afectar 
 - `billingCheckout.ts` limpia espacios en variables públicas `VITE_CHECKOUT_*_URL`.
 
 No se agregaron API keys, webhooks, LIVE checkout, cambios de base de datos ni cambios Android.
+
+## Corrección de rutas públicas `/pricing` y `/precios` (Preview)
+
+Se detectó una página estática legacy en `public/pricing/index.html`.
+
+Debido a que `vercel.json` prioriza los archivos físicos antes del fallback de la SPA, una carga directa o una ventana de incógnito abría esa página antigua, mientras que la navegación interna de React mostraba la nueva página de precios.
+
+Corrección permanente:
+
+- eliminar `public/pricing/index.html`;
+- eliminar el directorio `public/pricing/` si queda vacío;
+- eliminar `public/precios/index.html` si existiera como remanente legacy;
+- mantener `/pricing` y `/precios` exclusivamente como rutas React de `PublicPricing`;
+- validar siempre mediante carga directa, recarga forzada y ventana de incógnito.
+
+Esta corrección no modifica pagos LIVE, API keys, webhooks, Android ni Producción.
