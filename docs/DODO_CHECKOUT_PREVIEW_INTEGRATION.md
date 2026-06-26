@@ -139,7 +139,36 @@ Las tres rutas:
 
 La mera visita a cualquiera de estas rutas nunca debe considerarse evidencia de pago. La base de datos interna continúa siendo la fuente de verdad del plan.
 
-En esta fase, las rutas existen y pueden validarse directamente. La configuración del redirect externo en Dodo se realizará después de validar el comportamiento visual en Vercel Preview.
+## Redirect TEST configurado en Dodo
+
+Fecha de validación: 2026-06-26  
+Ambiente: **Dodo Test Mode + Vercel Preview**
+
+Se configuró en Dodo Test Mode la URL de retorno neutral:
+
+```txt
+https://preview.tugeocercas.com/billing/return?lang=es
+```
+
+La configuración se aplicó en los payment links de los productos TEST:
+
+- Geocercas GPS PRO — USD 29/month.
+- Geocercas GPS Enterprise — USD 99/month.
+
+Validación completada:
+
+- PRO → completar/salir del flujo TEST → `/billing/return?lang=es`.
+- Enterprise → completar/salir del flujo TEST → `/billing/return?lang=es`.
+
+Esta ruta de retorno es deliberadamente neutral: no confirma pago, no activa planes y no escribe en la base de datos. La activación real de suscripciones seguirá dependiendo de una fase posterior con verificación server-side/webhooks TEST e idempotencia.
+
+Reglas para esta fase:
+
+- no usar `/billing/success` como evidencia de pago;
+- no confiar en una visita manual a `/billing/return`, `/billing/success` o `/billing/cancel`;
+- no configurar redirects LIVE todavía;
+- no modificar Production;
+- no agregar API keys ni webhook secrets.
 
 ## Fuera de alcance
 
@@ -154,11 +183,9 @@ En esta fase, las rutas existen y pueden validarse directamente. La configuraci�
 
 ## Siguiente fase propuesta
 
-1. Validar mediante acceso directo en Vercel Preview:
-   - `/billing/return?lang=es`
-   - `/billing/success?lang=es`
-   - `/billing/cancel?lang=es`
-2. Configurar, solo en Dodo Test Mode, el redirect disponible hacia una de estas rutas neutrales.
-3. Diseñar webhooks TEST con idempotencia y mapeo hacia el estado interno del plan.
+1. Diseñar el flujo de verificación server-side para eventos TEST.
+2. Definir idempotencia, mapeo de productos externos hacia planes internos y manejo de reintentos.
+3. Auditar primero la estructura real de billing antes de proponer SQL o modificar tablas.
+4. Solo después implementar webhooks TEST y activación interna controlada.
 
-No implementar SQL ni cambios de tablas sin auditar previamente la estructura real de billing.
+No implementar SQL ni cambios de tablas sin auditar previamente la estructura real de billing. No configurar checkout LIVE ni redirects LIVE sin orden expresa.

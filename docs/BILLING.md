@@ -201,3 +201,23 @@ Los archivos frontend son:
 - `src/App.jsx`
 
 La fuente de verdad del plan continúa siendo la base de datos interna.
+
+
+## Redirect de checkout TEST validado — Preview (2026-06-26)
+
+En Dodo Test Mode se configuró la URL neutral de retorno:
+
+```txt
+https://preview.tugeocercas.com/billing/return?lang=es
+```
+
+Validación realizada:
+
+- PRO → flujo TEST → `/billing/return?lang=es`.
+- Enterprise → flujo TEST → `/billing/return?lang=es`.
+
+Esta ruta no confirma pagos, no activa planes y no escribe en la base de datos. Su función es recibir al navegador después del checkout externo mientras la app mantiene la fuente de verdad del plan en la base de datos interna.
+
+`/billing/success` y `/billing/cancel` quedan disponibles como rutas neutrales informativas, pero no deben usarse como prueba de pago ni como mecanismo de activación.
+
+Próximo paso técnico: diseñar webhooks TEST con verificación server-side, idempotencia y mapeo explícito de productos externos a planes internos, después de auditar la estructura actual de billing.
