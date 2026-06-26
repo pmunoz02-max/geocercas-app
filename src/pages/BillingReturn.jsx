@@ -1,4 +1,4 @@
-// src/pages/BillingSuccess.jsx
+// src/pages/BillingReturn.jsx
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -16,37 +16,34 @@ function withLang(pathname, lang) {
 const COPY = {
   es: {
     eyebrow: "Checkout externo",
-    title: "Checkout finalizado",
-    body:
-      "Has llegado a la ruta de finalización del checkout. Esta pantalla es únicamente informativa.",
+    title: "Regreso desde el checkout",
+    body: "Has vuelto desde la página externa de checkout.",
     notice:
-      "En esta fase TEST no se valida el pago, no se activa un plan y no se escribe en la base de datos. El estado real de la suscripción debe confirmarse mediante el flujo interno que se implemente posteriormente.",
+      "Esta ruta no confirma un pago ni modifica tu plan. En esta fase TEST, el estado real de la suscripción sigue dependiendo de la base de datos interna de GeoField GPS.",
     primary: "Volver a Precios",
     secondary: "Ir al inicio",
   },
   en: {
     eyebrow: "External checkout",
-    title: "Checkout completed",
-    body:
-      "You have reached the checkout completion route. This screen is informational only.",
+    title: "Return from checkout",
+    body: "You have returned from the external checkout page.",
     notice:
-      "During this TEST phase, no payment is verified, no plan is activated, and nothing is written to the database. The actual subscription status must be confirmed by the internal flow implemented later.",
+      "This route does not confirm a payment or change your plan. During this TEST phase, the subscription status still depends on GeoField GPS's internal database.",
     primary: "Back to Pricing",
     secondary: "Go to home",
   },
   fr: {
     eyebrow: "Paiement externe",
-    title: "Paiement terminé",
-    body:
-      "Vous avez atteint la route de fin du paiement. Cet écran est uniquement informatif.",
+    title: "Retour depuis le paiement",
+    body: "Vous êtes revenu depuis la page de paiement externe.",
     notice:
-      "Pendant cette phase TEST, aucun paiement n'est vérifié, aucun forfait n'est activé et aucune donnée n'est écrite dans la base. L'état réel de l'abonnement devra être confirmé par le flux interne mis en place ultérieurement.",
+      "Cette route ne confirme aucun paiement et ne modifie pas votre forfait. Pendant cette phase TEST, l'état réel de l'abonnement dépend toujours de la base de données interne de GeoField GPS.",
     primary: "Retour aux tarifs",
     secondary: "Aller à l'accueil",
   },
 };
 
-export default function BillingSuccess() {
+export default function BillingReturn() {
   const navigate = useNavigate();
   const location = useLocation();
   const { i18n } = useTranslation();
@@ -67,7 +64,7 @@ export default function BillingSuccess() {
 
           <p className="mt-5 text-base leading-7 text-slate-700">{copy.body}</p>
 
-          <div className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-900">
+          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
             {copy.notice}
           </div>
 

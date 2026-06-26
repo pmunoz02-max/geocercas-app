@@ -129,3 +129,14 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - No se agregaron API keys, webhooks, SQL, cambios Android ni checkout LIVE.
 - Producción no fue modificada por esta fase.
 - Documento canónico: `docs/DODO_CHECKOUT_PREVIEW_INTEGRATION.md`.
+
+
+### Rutas neutrales de retorno de checkout — Preview (2026-06-26)
+
+- Se agregaron las rutas públicas `/billing/return`, `/billing/success` y `/billing/cancel`.
+- No requieren sesión y están fuera de `AuthGuard`.
+- Ninguna ruta confirma pagos, activa planes, llama webhooks o modifica la base de datos.
+- Se eliminaron de estas pantallas los textos y manejos específicos de Paddle.
+- Las páginas funcionan en ES, EN y FR mediante el parámetro `lang`.
+- Pendiente: validar visualmente en Deploy Preview y luego configurar el redirect correspondiente solo en Dodo Test Mode.
+- No promover a Production hasta orden explícita.

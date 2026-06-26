@@ -52,6 +52,7 @@ import Account from "@/pages/Account.jsx";
 
 // Billing / Pricing pages
 import Billing from "./pages/Billing.jsx";
+import BillingReturn from "./pages/BillingReturn.jsx";
 import BillingSuccess from "./pages/BillingSuccess.jsx";
 import BillingCancel from "./pages/BillingCancel.jsx";
 
@@ -194,6 +195,9 @@ function MainAppRoutes() {
       <Route path="/ressources" element={<ResourcesPage />} />
       <Route path="/pricing" element={<PublicPricing />} />
       <Route path="/precios" element={<PublicPricing />} />
+      <Route path="/billing/return" element={<BillingReturn />} />
+      <Route path="/billing/success" element={<BillingSuccess />} />
+      <Route path="/billing/cancel" element={<BillingCancel />} />
       <Route path="/demo/quito" element={<Navigate to="/demos/quito-geofence-demo.html" replace />} />
       <Route path="/demo/mwea" element={<Navigate to="/demos/mwea-geofence-demo.html" replace />} />
       <Route path="/demo/mitidja" element={<Navigate to="/demos/mitidja-geofence-demo.html" replace />} />
@@ -285,8 +289,6 @@ function MainAppRoutes() {
           }
         />
         <Route path="/account" element={<Account />} />
-        <Route path="/billing/success" element={<BillingSuccess />} />
-        <Route path="/billing/cancel" element={<BillingCancel />} />
 
         <Route
           path="/settings/delete-account"

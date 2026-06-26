@@ -1,82 +1,95 @@
-// Friendly error handler for Paddle errors (exact implementation)
-const getFriendlyError = (err, t) => {
-  if (!err) return null;
-
-  try {
-    // si viene como string JSON → parsear
-    const parsed = typeof err === 'string' ? JSON.parse(err) : err;
-
-    const code =
-      parsed?.paddle_error?.error?.code ||
-      parsed?.error ||
-      null;
-
-    if (code === 'subscription_locked_pending_changes') {
-      return t('billing.errors.pendingChange');
-    }
-
-    if (code === 'paddle_cancel_failed') {
-      return t('billing.errors.generic');
-    }
-
-  } catch (e) {
-    // fallback si no es JSON
-  }
-
-  return t('billing.errors.generic');
-}
 // src/pages/BillingCancel.jsx
 import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-function withLang(pathname, search, i18nLanguage) {
+function normalizeLang(search, i18nLanguage) {
   const params = new URLSearchParams(search || "");
-  const lang = params.get("lang") || i18nLanguage || "es";
+  const raw = String(params.get("lang") || i18nLanguage || "es").toLowerCase();
+  return ["es", "en", "fr"].includes(raw) ? raw : "es";
+}
+
+function withLang(pathname, lang) {
   return `${pathname}?lang=${encodeURIComponent(lang)}`;
 }
 
+const COPY = {
+  es: {
+    eyebrow: "Checkout externo",
+    title: "Checkout no completado",
+    body:
+      "El proceso de checkout se cerró o no llegó a completarse.",
+    notice:
+      "Esta ruta no cancela una suscripción existente y no modifica tu plan. Puedes regresar a Precios para intentarlo nuevamente.",
+    primary: "Volver a Precios",
+    secondary: "Ir al inicio",
+  },
+  en: {
+    eyebrow: "External checkout",
+    title: "Checkout not completed",
+    body:
+      "The checkout process was closed or did not reach completion.",
+    notice:
+      "This route does not cancel an existing subscription and does not change your plan. You can return to Pricing and try again.",
+    primary: "Back to Pricing",
+    secondary: "Go to home",
+  },
+  fr: {
+    eyebrow: "Paiement externe",
+    title: "Paiement non terminé",
+    body:
+      "Le processus de paiement a été fermé ou n'a pas été mené à son terme.",
+    notice:
+      "Cette route n'annule pas un abonnement existant et ne modifie pas votre forfait. Vous pouvez revenir aux tarifs et réessayer.",
+    primary: "Retour aux tarifs",
+    secondary: "Aller à l'accueil",
+  },
+};
+
 export default function BillingCancel() {
-  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Simulación: podrías obtener el error real de la navegación, querystring, o estado
-  // const error = ...
-  const error = null; // Reemplaza esto por la fuente real del error si aplica
+  const { i18n } = useTranslation();
+  const lang = normalizeLang(location.search, i18n.language);
+  const copy = COPY[lang];
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12">
-      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-8 space-y-4">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          {t("billing.cancel.title")}
-        </h1>
+    <main className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
+      <section className="mx-auto max-w-3xl">
+        <div className="rounded-3xl border border-emerald-100 bg-white p-8 shadow-sm sm:p-10">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
+            {copy.eyebrow}
+          </p>
 
-        <p className="text-slate-700">
-          {t("billing.cancel.subtitle")}
-        </p>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-emerald-950 sm:text-4xl">
+            {copy.title}
+          </h1>
 
-        {/* Mostrar error amigable si existe */}
-        {error && <div className="text-red-600 text-sm mt-2">{getFriendlyError(error, t)}</div>}
+          <p className="mt-5 text-base leading-7 text-slate-700">{copy.body}</p>
 
-        <div className="flex gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate(withLang("/billing", location.search, i18n.language))}
-            className="rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold px-5 py-3 transition"
-          >
-            {t("billing.cancel.backToBilling")}
-          </button>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+            {copy.notice}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => navigate(withLang("/inicio", location.search, i18n.language))}
-            className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 font-medium px-5 py-3 transition"
-          >
-            {t("billing.cancel.goHome")}
-          </button>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => navigate(withLang("/pricing", lang))}
+              className="rounded-xl bg-emerald-700 px-5 py-3 font-semibold text-white transition hover:bg-emerald-800"
+            >
+              {copy.primary}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate(withLang("/", lang))}
+              className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-medium text-slate-900 transition hover:bg-slate-50"
+            >
+              {copy.secondary}
+            </button>
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

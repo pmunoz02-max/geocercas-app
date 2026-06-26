@@ -171,3 +171,33 @@ Restricciones:
 - no Promote sin orden expresa.
 
 Ver `DODO_CHECKOUT_PREVIEW_INTEGRATION.md`.
+
+
+## Rutas públicas neutrales de checkout — Preview (2026-06-26)
+
+Se habilitaron:
+
+- `/billing/return`
+- `/billing/success`
+- `/billing/cancel`
+
+Estas rutas son públicas y proveedor-agnósticas. No deben colocarse dentro de `AuthGuard`, porque el proveedor externo puede devolver al navegador sin una sesión activa.
+
+Reglas:
+
+- no confirman pago por sí solas;
+- no activan planes;
+- no escriben en la base de datos;
+- no invocan webhooks;
+- no contienen lógica específica de Paddle o Dodo;
+- no requieren API keys;
+- preservan el idioma mediante `?lang=es|en|fr`.
+
+Los archivos frontend son:
+
+- `src/pages/BillingReturn.jsx`
+- `src/pages/BillingSuccess.jsx`
+- `src/pages/BillingCancel.jsx`
+- `src/App.jsx`
+
+La fuente de verdad del plan continúa siendo la base de datos interna.

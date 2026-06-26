@@ -113,15 +113,33 @@ Validado en Vercel Preview:
 - No se usaron tarjetas reales.
 - Producción conserva su implementación anterior y no recibió esta fase.
 
-## Retorno desde checkout
+## Rutas neutrales de retorno
 
-En esta fase, al salir o regresar desde Dodo, el navegador vuelve a la página de origen, normalmente:
+Se incorporaron tres rutas públicas y proveedor-agnósticas:
 
-```txt
-https://preview.tugeocercas.com/pricing
-```
+- `/billing/return`
+- `/billing/success`
+- `/billing/cancel`
 
-Esto es aceptado temporalmente. Aún no existen rutas dedicadas de retorno.
+Comportamiento:
+
+- `/billing/return`: regreso neutral desde el checkout. No confirma pago ni modifica plan.
+- `/billing/success`: pantalla informativa de finalización. En esta fase TEST no valida pago, no activa plan y no escribe en la base de datos.
+- `/billing/cancel`: informa que el checkout no se completó. No cancela suscripciones existentes ni modifica el plan.
+
+Las tres rutas:
+
+- están fuera de `AuthGuard`;
+- no requieren sesión;
+- no usan API keys;
+- no llaman webhooks;
+- no consultan ni modifican tablas;
+- conservan el parámetro `lang` para ES, EN y FR;
+- permiten volver a `/pricing` o al inicio.
+
+La mera visita a cualquiera de estas rutas nunca debe considerarse evidencia de pago. La base de datos interna continúa siendo la fuente de verdad del plan.
+
+En esta fase, las rutas existen y pueden validarse directamente. La configuración del redirect externo en Dodo se realizará después de validar el comportamiento visual en Vercel Preview.
 
 ## Fuera de alcance
 
@@ -136,10 +154,11 @@ Esto es aceptado temporalmente. Aún no existen rutas dedicadas de retorno.
 
 ## Siguiente fase propuesta
 
-Crear rutas neutrales y proveedor-agnósticas:
+1. Validar mediante acceso directo en Vercel Preview:
+   - `/billing/return?lang=es`
+   - `/billing/success?lang=es`
+   - `/billing/cancel?lang=es`
+2. Configurar, solo en Dodo Test Mode, el redirect disponible hacia una de estas rutas neutrales.
+3. Diseñar webhooks TEST con idempotencia y mapeo hacia el estado interno del plan.
 
-- `/billing/return`
-- `/billing/success`
-- `/billing/cancel`
-
-Después, diseñar webhooks TEST con idempotencia y mapeo hacia el estado interno del plan. No implementar SQL ni cambios de tablas sin auditar previamente la estructura real de billing.
+No implementar SQL ni cambios de tablas sin auditar previamente la estructura real de billing.
