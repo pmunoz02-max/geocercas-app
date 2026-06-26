@@ -73,6 +73,20 @@ La integración aún no debe tocar producción, webhooks live, API keys ni Andro
 
 Ver [dodo-payments-approval.md](./dodo-payments-approval.md).
 
+
+## Webhooks y suscripciones — diseño TEST (2026-06-26)
+
+Se documentó la arquitectura futura para webhooks Dodo TEST y suscripciones internas.
+
+Documentos:
+
+- [DODO_WEBHOOKS_TEST_ARCHITECTURE.md](./DODO_WEBHOOKS_TEST_ARCHITECTURE.md)
+- [WEBHOOKS.md](./WEBHOOKS.md)
+- [BILLING_WEBHOOKS.md](./BILLING_WEBHOOKS.md)
+- [SUBSCRIPTIONS_ARCHITECTURE.md](./SUBSCRIPTIONS_ARCHITECTURE.md)
+
+Estado: diseño solamente. No se implementa SQL, Edge Functions, webhooks reales ni checkout LIVE hasta recuperar acceso al proyecto Supabase real `mujwsfhkocsuuahlrssn` y ejecutar auditoría read-only.
+
 ## Migración Billing Preview (Paddle)
 
 - Preview usa Paddle para billing y upgrade PRO
@@ -84,14 +98,3 @@ Ver [dodo-payments-approval.md](./dodo-payments-approval.md).
 - Las rutas públicas `/resources`, `/recursos` y `/ressources` apuntan a la página `ResourcesPage.jsx`.
 - Los archivos estáticos reales para esta página viven en `public/resources/`.
 - Si un PDF, PPTX o video todavía no existe, la interfaz debe mostrar `Próximamente` en lugar de usar enlaces placeholder.
-
-## Checkout público Dodo validado en Preview (2026-06-26)
-
-- Rutas públicas React: `/pricing` y `/precios`.
-- PRO: USD 29/month — checkout TEST validado.
-- Enterprise: USD 99/month — checkout TEST validado.
-- Se eliminó `public/pricing/index.html`, que interceptaba las cargas directas antes del fallback SPA.
-- Sin API keys, webhooks, cambios de base de datos ni cambios Android.
-- Producción no fue modificada por esta fase.
-
-Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).

@@ -189,3 +189,23 @@ Reglas para esta fase:
 4. Solo después implementar webhooks TEST y activación interna controlada.
 
 No implementar SQL ni cambios de tablas sin auditar previamente la estructura real de billing. No configurar checkout LIVE ni redirects LIVE sin orden expresa.
+
+## Diseño posterior — webhooks TEST documentados (2026-06-26)
+
+Después de validar checkout TEST y retorno neutral hacia `/billing/return`, se documentó la arquitectura futura de webhooks TEST.
+
+Documentos relacionados:
+
+- `DODO_WEBHOOKS_TEST_ARCHITECTURE.md`
+- `WEBHOOKS.md`
+- `BILLING_WEBHOOKS.md`
+- `SUBSCRIPTIONS_ARCHITECTURE.md`
+
+Estado de esa fase:
+
+- diseñada;
+- no implementada;
+- bloqueada hasta recuperar acceso al proyecto Supabase `mujwsfhkocsuuahlrssn`;
+- pendiente auditoría SQL read-only antes de cualquier cambio estructural.
+
+Regla importante: `/billing/return`, `/billing/success` y `/billing/cancel` siguen siendo rutas informativas. Ninguna de estas rutas debe activar planes ni confirmar pagos. La confirmación real futura debe venir por webhook validado server-side e idempotente.

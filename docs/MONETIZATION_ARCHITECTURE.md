@@ -379,7 +379,7 @@ Esto cambia el estado comercial del proyecto: Dodo pasa a ser el proveedor MoR p
 
 | Plan | Precio | Product ID TEST |
 |---|---:|---|
-| Geocercas GPS PRO | USD 29/month | `pdt_0NhoMPN43aL0XnHSZhrTk` |
+| Geocercas GPS PRO | USD 29/month | `pdt_0NhoMPN43aLOXnHSZhrTk` |
 | Geocercas GPS Enterprise | USD 99/month | `pdt_0NhoND6E41RsKWVP43fW1` |
 
 ## Regla de arquitectura
@@ -397,15 +397,27 @@ No hardcodear Dodo como concepto visible de negocio en la UI. Usar textos neutra
 
 No migrar producción ni crear webhooks live hasta que la integración TEST esté documentada, construida en branch `preview`, validada en Vercel Preview y aprobada explícitamente por el usuario.
 
-## Implementación pública de pricing validada en Preview (2026-06-26)
+---
 
-La página pública de monetización se implementó como ruta React proveedor-agnóstica:
+# Dodo y arquitectura proveedor-agnóstica — diseño webhooks TEST (2026-06-26)
 
-- `/pricing`
-- `/precios`
+Dodo Payments está aprobado y los checkouts TEST de PRO y Enterprise fueron validados en Preview. La arquitectura futura de webhooks queda documentada, pero no implementada.
 
-Presenta siempre PRO y Enterprise, independientemente del plan actual del usuario. Los payment links se obtienen desde una configuración centralizada y no desde componentes dispersos.
+Documentos canónicos:
 
-Regla permanente de routing: no crear `public/pricing/index.html` ni `public/precios/index.html`, porque los archivos físicos interceptan las rutas SPA en Vercel.
+- `DODO_WEBHOOKS_TEST_ARCHITECTURE.md`
+- `WEBHOOKS.md`
+- `BILLING_WEBHOOKS.md`
+- `SUBSCRIPTIONS_ARCHITECTURE.md`
 
-La fase actual solo inicia checkout TEST. No modifica el estado interno del plan. El próximo cambio arquitectónico deberá añadir rutas neutrales de retorno y luego webhooks TEST idempotentes.
+Regla central:
+
+```txt
+Proveedor externo cobra
+Base interna decide acceso
+Frontend solo consulta estado interno
+```
+
+No activar planes desde rutas públicas de retorno ni desde query params. La activación futura debe depender de eventos server-side verificados, idempotentes y mapeados a planes internos.
+
+Bloqueo actual: no implementar SQL ni Edge Functions hasta recuperar acceso a Supabase `mujwsfhkocsuuahlrssn` y auditar estructura real.

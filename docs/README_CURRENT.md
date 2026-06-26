@@ -142,3 +142,17 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - Validación OK: PRO y Enterprise retornan a `/billing/return?lang=es` al completar/salir del flujo TEST.
 - Próxima fase: diseñar webhooks TEST con verificación server-side e idempotencia; no hacer SQL sin auditar primero la estructura de billing.
 - No promover a Production hasta orden explícita.
+
+### Diseño de webhooks Dodo TEST — bloqueado por acceso Supabase (2026-06-26)
+
+- Se crearon documentos de arquitectura para la fase futura de webhooks TEST:
+  - `DODO_WEBHOOKS_TEST_ARCHITECTURE.md`
+  - `WEBHOOKS.md`
+  - `BILLING_WEBHOOKS.md`
+  - `SUBSCRIPTIONS_ARCHITECTURE.md`
+- El diseño mantiene la separación proveedor externo / fuente interna de verdad.
+- Dodo enviará eventos externos; la base interna de GeoField GPS deberá decidir plan, límites y entitlements.
+- No se implementó SQL, Edge Functions, webhooks, API keys ni service role.
+- No se toca Android ni Production.
+- La implementación queda bloqueada hasta recuperar acceso al proyecto Supabase real `mujwsfhkocsuuahlrssn` y ejecutar auditoría read-only.
+- No crear un proyecto Supabase nuevo ni cambiar `VITE_SUPABASE_URL` en Vercel.

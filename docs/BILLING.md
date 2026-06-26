@@ -221,3 +221,34 @@ Esta ruta no confirma pagos, no activa planes y no escribe en la base de datos. 
 `/billing/success` y `/billing/cancel` quedan disponibles como rutas neutrales informativas, pero no deben usarse como prueba de pago ni como mecanismo de activación.
 
 Próximo paso técnico: diseñar webhooks TEST con verificación server-side, idempotencia y mapeo explícito de productos externos a planes internos, después de auditar la estructura actual de billing.
+
+## Arquitectura futura de webhooks Dodo TEST — diseño bloqueado (2026-06-26)
+
+Se documentó la arquitectura futura para procesar webhooks TEST de Dodo de forma proveedor-agnóstica.
+
+Documentos nuevos:
+
+- `DODO_WEBHOOKS_TEST_ARCHITECTURE.md`
+- `WEBHOOKS.md`
+- `BILLING_WEBHOOKS.md`
+- `SUBSCRIPTIONS_ARCHITECTURE.md`
+
+Estado:
+
+- diseño documentado;
+- no SQL;
+- no Edge Functions;
+- no webhook real;
+- no API keys;
+- no service role;
+- no checkout LIVE;
+- no Android;
+- no Production.
+
+Bloqueo actual:
+
+- falta recuperar acceso al proyecto Supabase real `mujwsfhkocsuuahlrssn`;
+- no ejecutar SQL ni crear Edge Functions hasta auditar la base de datos real;
+- no crear un proyecto Supabase nuevo para reemplazar el existente.
+
+La próxima fase técnica solo puede empezar después de recuperar acceso al Supabase correcto y ejecutar auditoría read-only de tablas, RLS, funciones/RPC y estructura actual de billing.
