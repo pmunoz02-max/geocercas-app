@@ -9,7 +9,7 @@ Dodo Payments aprobó la cuenta de **FENICE ECUADOR S.A.S.**:
 - Payouts enabled.
 - UBO ID, tax document/RUC e incorporation document aceptados.
 - Productos TEST creados:
-  - Geocercas GPS PRO — USD 29/month — `pdt_0NhoMPN43aLOXnHSZhrTk`
+  - Geocercas GPS PRO — USD 29/month — `pdt_0NhoMPN43aL0XnHSZhrTk`
   - Geocercas GPS Enterprise — USD 99/month — `pdt_0NhoND6E41RsKWVP43fW1`
 
 Documento fuente: [dodo-payments-approval.md](./dodo-payments-approval.md).
@@ -145,7 +145,29 @@ se actualiza org_billing
 
 Ver detalles y arquitectura en [PADDLE_PREVIEW_MIGRATION.md](./PADDLE_PREVIEW_MIGRATION.md)
 
-## Integración checkout Dodo Preview (2026-06-25)
+## Estado operativo Preview — checkout externo TEST validado (2026-06-26)
 
-Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+La capa web de Preview ya no depende del flujo legacy de Paddle para los botones públicos de suscripción de esta fase.
 
+Estado vigente en `preview`:
+
+- proveedor lógico: `external_checkout`;
+- proveedor externo actual: Dodo Payments Test Mode;
+- página pública: `/pricing` y `/precios`;
+- PRO: USD 29/month — `pdt_0NhoMPN43aL0XnHSZhrTk`;
+- Enterprise: USD 99/month — `pdt_0NhoND6E41RsKWVP43fW1`;
+- fuente de verdad del plan: base de datos interna;
+- sincronización automática: todavía no implementada.
+
+La documentación Paddle permanece como referencia histórica y de transición. No usarla como instrucción para crear nuevos checkouts Dodo.
+
+Restricciones:
+
+- no checkout LIVE;
+- no webhooks;
+- no API keys en frontend;
+- no modificación de tablas sin auditoría SQL previa;
+- no cambios Android;
+- no Promote sin orden expresa.
+
+Ver `DODO_CHECKOUT_PREVIEW_INTEGRATION.md`.

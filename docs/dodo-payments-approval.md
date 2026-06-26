@@ -68,13 +68,13 @@ Los siguientes productos fueron creados y validados visualmente en **Test Mode**
 
 | Plan | Product ID TEST | Precio | Tipo | Estado |
 |---|---|---:|---|---|
-| Geocercas GPS PRO | `pdt_0NhoMPN43aLOXnHSZhrTk` | USD 29/month | Subscription | TEST checkout validado |
+| Geocercas GPS PRO | `pdt_0NhoMPN43aL0XnHSZhrTk` | USD 29/month | Subscription | TEST checkout validado |
 | Geocercas GPS Enterprise | `pdt_0NhoND6E41RsKWVP43fW1` | USD 99/month | Subscription | TEST checkout validado |
 
 Links TEST validados:
 
 ```txt
-https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aLOXnHSZhrTk?quantity=1
+https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aL0XnHSZhrTk?quantity=1
 https://test.checkout.dodopayments.com/buy/pdt_0NhoND6E41RsKWVP43fW1?quantity=1
 ```
 
@@ -147,10 +147,15 @@ Antes de tocar código:
 8. Validar en Vercel Preview.
 9. Solo después definir transición a live.
 
+## Implementación Preview completada — 2026-06-26
+
+- Rutas públicas `/pricing` y `/precios` implementadas y validadas.
+- Checkouts TEST PRO y Enterprise validados.
+- Ruta estática legacy `public/pricing/index.html` eliminada en Preview.
+
 ## Pendiente de implementación
 
-- Crear o adaptar rutas web de pricing/checkout.
-- Definir success/cancel URLs internas.
+- Definir success/cancel/return URLs internas.
 - Definir tabla/estructura interna de plan como fuente de verdad.
 - Definir webhook Dodo TEST.
 - Definir mapeo de eventos Dodo → estado interno.

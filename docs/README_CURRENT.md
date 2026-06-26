@@ -1,4 +1,4 @@
-﻿---
+---
 
 ## Estado actual (2026-05-01)
 
@@ -118,12 +118,14 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - La base de datos interna sigue siendo la fuente de verdad del plan.
 - Ver `docs/dodo-payments-approval.md`.
 
-### Integración checkout Dodo Preview (2026-06-25)
+### Cierre Preview — página pública de precios y checkout Dodo TEST (2026-06-26)
 
-- Se agregó `src/config/billingCheckout.ts` para centralizar URLs públicas de checkout externo.
-- `UpgradeToProButton` redirige a checkout externo TEST sin API keys, sin webhooks y sin invocar Edge Functions de Paddle.
-- Planes configurados: PRO USD 29/month y Enterprise USD 99/month.
-- La UI mantiene copy neutral y la arquitectura sigue proveedor-agnóstica.
-- No activar producción ni checkout live sin orden explícita.
-- Ver `docs/DODO_CHECKOUT_PREVIEW_INTEGRATION.md`.
-
+- `/pricing` y `/precios` muestran la nueva página React con PRO y Enterprise.
+- PRO abre checkout TEST por USD 29/month.
+- Enterprise abre checkout TEST por USD 99/month.
+- Se corrigió el conflicto con `public/pricing/index.html`; una carga directa o incógnito ya no muestra la página legacy.
+- La configuración permanece proveedor-agnóstica y centralizada.
+- El retorno desde Dodo vuelve temporalmente a `/pricing` hasta crear rutas `/billing/return`, `/billing/success` y `/billing/cancel`.
+- No se agregaron API keys, webhooks, SQL, cambios Android ni checkout LIVE.
+- Producción no fue modificada por esta fase.
+- Documento canónico: `docs/DODO_CHECKOUT_PREVIEW_INTEGRATION.md`.

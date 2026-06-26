@@ -290,7 +290,7 @@ Dodo Payments aprobó la cuenta de FENICE ECUADOR S.A.S. para live payments y pa
 
 Productos TEST creados:
 
-- Geocercas GPS PRO — USD 29/month — `pdt_0NhoMPN43aLOXnHSZhrTk`
+- Geocercas GPS PRO — USD 29/month — `pdt_0NhoMPN43aL0XnHSZhrTk`
 - Geocercas GPS Enterprise — USD 99/month — `pdt_0NhoND6E41RsKWVP43fW1`
 
 Documento principal:
@@ -323,3 +323,23 @@ docs/dodo-payments-approval.md
 8. Actualizar estado interno del plan.
 9. Validar con datos sintéticos.
 10. Promover a producción solo con orden expresa.
+
+## Runbook 2026-06-26 — checkout público TEST validado
+
+Estado confirmado:
+
+- `/pricing` y `/precios` son rutas React.
+- PRO TEST: `pdt_0NhoMPN43aL0XnHSZhrTk` — USD 29/month.
+- Enterprise TEST: `pdt_0NhoND6E41RsKWVP43fW1` — USD 99/month.
+- Ambos checkouts fueron validados en incógnito.
+
+Checklist ante `error/not-found`:
+
+1. Abrir el payment link directo en incógnito.
+2. Copiar el link desde Dodo; no transcribir `0`/`O` manualmente.
+3. Confirmar que la variable está asignada solo a Vercel Preview.
+4. No añadir query params propios al payment link.
+5. Redeploy únicamente el deployment Preview.
+6. Verificar que no exista `public/pricing/index.html`.
+
+No tocar Production, LIVE, webhooks, base de datos ni Android durante este diagnóstico.

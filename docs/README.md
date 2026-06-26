@@ -85,16 +85,13 @@ Ver [dodo-payments-approval.md](./dodo-payments-approval.md).
 - Los archivos estáticos reales para esta página viven en `public/resources/`.
 - Si un PDF, PPTX o video todavía no existe, la interfaz debe mostrar `Próximamente` en lugar de usar enlaces placeholder.
 
-## Integración checkout Dodo Preview (2026-06-25)
+## Checkout público Dodo validado en Preview (2026-06-26)
 
-Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+- Rutas públicas React: `/pricing` y `/precios`.
+- PRO: USD 29/month — checkout TEST validado.
+- Enterprise: USD 99/month — checkout TEST validado.
+- Se eliminó `public/pricing/index.html`, que interceptaba las cargas directas antes del fallback SPA.
+- Sin API keys, webhooks, cambios de base de datos ni cambios Android.
+- Producción no fue modificada por esta fase.
 
-
-## Página pública de precios y checkout TEST
-
-Se agregó una página pública neutral para validar ambos checkouts sin depender del plan actual del usuario:
-
-- `/pricing`
-- `/precios`
-
-La página muestra PRO y Enterprise y usa configuración proveedor-agnóstica de checkout externo. No usa API keys, webhooks ni SDKs de proveedor. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).

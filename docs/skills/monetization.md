@@ -192,3 +192,12 @@ Dodo no debe convertirse en la fuente única del plan dentro de la app. La app d
 - Android sin pagos.
 - No crear features dependientes de Dodo en frontend sin abstracción.
 - Documentar todo cambio de pricing, plan, límite, entitlement o webhook.
+
+## Implementación Preview validada — 2026-06-26
+
+- Página pública neutral: `/pricing` y `/precios`.
+- PRO y Enterprise visibles simultáneamente para venta y pruebas.
+- Checkout externo TEST centralizado mediante configuración proveedor-agnóstica.
+- La página no determina ni activa el plan interno.
+- No crear páginas estáticas en `public/pricing/` o `public/precios/`.
+- Próxima fase: rutas neutrales de retorno y webhooks TEST idempotentes.

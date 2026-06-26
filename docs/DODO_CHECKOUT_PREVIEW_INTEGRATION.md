@@ -1,137 +1,145 @@
-# Dodo checkout integration — Preview phase
+# Dodo checkout — integración y validación en Preview
 
-Fecha: 2026-06-25  
-Estado: Preview / Test checkout
+Fecha de cierre: 2026-06-26  
+Estado: **VALIDADO EN PREVIEW / TEST MODE**  
+Producción: **no modificada por esta fase**
 
 ## Objetivo
 
-Integrar checkout externo para los planes SaaS de GeoField GPS sin acoplar la app a un proveedor específico y sin tocar pagos live, webhooks productivos ni Android.
+Integrar una página pública de precios y checkouts externos para los planes SaaS de GeoField GPS, manteniendo la app desacoplada del proveedor de pagos.
 
-## Alcance de esta fase
+La base de datos interna continúa siendo la fuente de verdad del plan. Dodo Payments actúa únicamente como proveedor externo de checkout, cobro, suscripciones, eventos y payouts.
 
-Esta fase habilita botones web de suscripción que redirigen a checkout externo en modo TEST.
+## Alcance implementado
 
-No activa planes automáticamente en la base de datos. La fuente de verdad del plan sigue siendo la base de datos interna.
+- Página pública neutral de precios:
+  - `/pricing`
+  - `/precios`
+- Plan PRO: USD 29 por mes.
+- Plan Enterprise: USD 99 por mes.
+- Checkout externo en Dodo Test Mode.
+- Configuración centralizada y proveedor-agnóstica.
+- Sin API keys en frontend.
+- Sin webhooks.
+- Sin activación automática de planes.
+- Sin cambios en tablas, RLS, Supabase ni Android.
 
-## Proveedor actual
+## Productos TEST confirmados
 
-Proveedor externo aprobado: Dodo Payments.
+| Plan | Product ID TEST | Precio | Periodicidad | Estado |
+|---|---|---:|---|---|
+| Geocercas GPS PRO | `pdt_0NhoMPN43aL0XnHSZhrTk` | USD 29 | 1 mes | Validado |
+| Geocercas GPS Enterprise | `pdt_0NhoND6E41RsKWVP43fW1` | USD 99 | 1 mes | Validado |
 
-Uso operativo en esta fase:
+Links TEST:
 
-- Dodo actúa como checkout externo en modo TEST.
-- La UI usa copy neutral: “checkout seguro”, “suscribirse”, “portal de suscripción”.
-- La arquitectura mantiene el patrón proveedor-agnóstico.
+```txt
+https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aL0XnHSZhrTk?quantity=1
+https://test.checkout.dodopayments.com/buy/pdt_0NhoND6E41RsKWVP43fW1?quantity=1
+```
 
-## Variables públicas de frontend
+**Regla operativa:** copiar los Product IDs y payment links directamente desde Dodo. No transcribir manualmente caracteres visualmente ambiguos como `0` y `O`.
 
-Estas variables no son secrets y pueden configurarse en Vercel Preview:
+## Variables públicas de Preview
+
+Estas variables no son secretos, pero deben configurarse únicamente para el ambiente **Preview** mientras se use Test Mode:
 
 ```env
 VITE_BILLING_PROVIDER=external_checkout
 VITE_CHECKOUT_MODE=test
-VITE_CHECKOUT_PRO_URL=https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aLOXnHSZhrTk?quantity=1
+VITE_CHECKOUT_PRO_URL=https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aL0XnHSZhrTk?quantity=1
 VITE_CHECKOUT_ENTERPRISE_URL=https://test.checkout.dodopayments.com/buy/pdt_0NhoND6E41RsKWVP43fW1?quantity=1
 ```
 
-No colocar API keys, webhook secrets, claves live, códigos 2FA ni credenciales en archivos del repositorio ni en chats.
+No colocar API keys, webhook secrets, credenciales bancarias, códigos 2FA ni recovery codes en el repositorio, frontend o chat.
 
-## Planes configurados
+## Arquitectura frontend
 
-| Plan | Precio | Tipo | Checkout |
-|---|---:|---|---|
-| Geocercas GPS PRO | USD 29/month | Subscription | TEST |
-| Geocercas GPS Enterprise | USD 99/month | Subscription | TEST |
-
-## Archivos modificados
+Archivos principales:
 
 - `src/config/billingCheckout.ts`
 - `src/components/Billing/UpgradeToProButton.tsx`
-- `docs/DODO_CHECKOUT_PREVIEW_INTEGRATION.md`
-- `docs/README.md`
-- `docs/BILLING.md`
-- `docs/MONETIZATION_ARCHITECTURE.md`
+- `src/pages/PublicPricing.jsx`
+- `src/App.jsx`
 
-## Comportamiento
+Comportamiento:
 
-Los botones existentes `UpgradeToProButton` ya no invocan la Edge Function legacy de Paddle en esta fase. Ahora leen URLs públicas de checkout externo y redirigen al usuario al checkout seguro.
+1. La página pública presenta ambos planes sin depender del plan actual del usuario.
+2. Los botones consultan una configuración centralizada.
+3. La app abre el payment link exacto del plan.
+4. No se agregan parámetros propios como `org_id` o `plan` al enlace externo en esta fase.
+5. La UI usa textos neutrales: “Suscribirse”, “checkout seguro” y “proveedor de pagos”.
 
-El componente acepta `plan="pro"` o `plan="enterprise"` y conserva el texto neutral de la interfaz.
+## Corrección de rutas públicas
 
-## Qué NO hace esta fase
+### Causa raíz
 
-- No crea webhooks.
-- No usa API keys.
-- No activa planes automáticamente.
-- No toca Android.
-- No cambia RLS ni tablas.
-- No toca producción por defecto.
-- No elimina documentación legacy de Paddle; solo la deja como referencia histórica.
+Existía una página estática legacy:
 
-## Validación en Preview
+```txt
+public/pricing/index.html
+```
 
-1. Confirmar branch `preview`.
-2. Configurar variables públicas en Vercel Preview si no se usan los defaults test.
-3. Ejecutar `npm run build`.
-4. Hacer push a `preview`.
-5. Validar `/pricing` y `/billing` en Vercel Preview.
-6. Confirmar que los botones abren URLs `https://test.checkout.dodopayments.com/...`.
-7. No ingresar tarjetas reales.
-8. No hacer Promote a Production sin orden expresa.
+`vercel.json` prioriza archivos físicos antes del fallback de la SPA. Por ello:
 
-## Siguiente fase
+- la navegación interna React mostraba la página nueva;
+- una carga directa, recarga o ventana de incógnito mostraba la página estática antigua.
 
-La activación automática del plan se hará después mediante webhooks y mapeo interno de eventos, siempre manteniendo la base de datos interna como fuente de verdad.
+### Corrección permanente
 
-## Public pricing page for checkout validation
+- Se eliminó `public/pricing/index.html`.
+- Se eliminó `public/precios/index.html` si existía.
+- `/pricing` y `/precios` quedan exclusivamente como rutas React de `PublicPricing`.
+- La validación debe incluir siempre carga directa, recarga forzada e incógnito.
 
-Added a public, provider-agnostic pricing page:
+## Navegación de autenticación
 
-- `/pricing`
-- `/precios`
+Se aplicó una protección para evitar que `/login` quede como destino intermedio después del ingreso:
 
-Purpose:
+- redirección post-login mediante `window.location.replace()`;
+- si un usuario con sesión activa vuelve a `/login`, la app reemplaza esa ruta por `/inicio` o por un `next` permitido.
 
-- Show both checkout options independently from the user's current plan.
-- Allow testing both PRO and Enterprise checkout links from Vercel Preview.
-- Provide a neutral public sales page that does not expose the payment provider as part of the app UI.
+Esta protección debe conservarse en futuras modificaciones de autenticación.
 
-Plans shown:
+## Validación completada
 
-- Geocercas GPS PRO — USD 29/month
-- Geocercas GPS Enterprise — USD 99/month
+Validado en Vercel Preview:
 
-Rules:
+- `/pricing` carga la página React nueva mediante acceso directo.
+- `/precios` carga la misma página React nueva.
+- PRO abre Dodo Test Mode con USD 29/month.
+- Enterprise abre Dodo Test Mode con USD 99/month.
+- País Ecuador disponible en el checkout.
+- No se usaron tarjetas reales.
+- Producción conserva su implementación anterior y no recibió esta fase.
 
-- The page uses the same provider-agnostic checkout configuration in `src/config/billingCheckout.ts`.
-- The page does not use API keys, webhook secrets, or provider-specific SDKs.
-- Android remains operational only and is not modified.
-- Live checkout must not be enabled until explicitly authorized.
+## Retorno desde checkout
 
+En esta fase, al salir o regresar desde Dodo, el navegador vuelve a la página de origen, normalmente:
 
-## Fix preview 2026-06-25: navegación e integridad de payment links
+```txt
+https://preview.tugeocercas.com/pricing
+```
 
-Se aplicó una corrección para mantener la integración en Preview sin afectar Producción:
+Esto es aceptado temporalmente. Aún no existen rutas dedicadas de retorno.
 
-- `Login.tsx` usa `window.location.replace()` después del login exitoso para que `/login` no quede en el historial anterior a `/inicio`.
-- `Login.tsx` redirige con `replace()` si el usuario vuelve manualmente a `/login` teniendo sesión activa.
-- `UpgradeToProButton.tsx` usa el payment link exacto del proveedor en Test Mode, sin agregar parámetros `org_id` o `plan`, para evitar errores `/error/not-found`.
-- `billingCheckout.ts` limpia espacios en variables públicas `VITE_CHECKOUT_*_URL`.
+## Fuera de alcance
 
-No se agregaron API keys, webhooks, LIVE checkout, cambios de base de datos ni cambios Android.
+- Checkout LIVE.
+- API keys o SDK privado.
+- Webhooks TEST o LIVE.
+- Activación automática de planes.
+- Portal de suscripción.
+- Cambios en `org_billing` u otras tablas.
+- Cambios en Android.
+- Promote a Production.
 
-## Corrección de rutas públicas `/pricing` y `/precios` (Preview)
+## Siguiente fase propuesta
 
-Se detectó una página estática legacy en `public/pricing/index.html`.
+Crear rutas neutrales y proveedor-agnósticas:
 
-Debido a que `vercel.json` prioriza los archivos físicos antes del fallback de la SPA, una carga directa o una ventana de incógnito abría esa página antigua, mientras que la navegación interna de React mostraba la nueva página de precios.
+- `/billing/return`
+- `/billing/success`
+- `/billing/cancel`
 
-Corrección permanente:
-
-- eliminar `public/pricing/index.html`;
-- eliminar el directorio `public/pricing/` si queda vacío;
-- eliminar `public/precios/index.html` si existiera como remanente legacy;
-- mantener `/pricing` y `/precios` exclusivamente como rutas React de `PublicPricing`;
-- validar siempre mediante carga directa, recarga forzada y ventana de incógnito.
-
-Esta corrección no modifica pagos LIVE, API keys, webhooks, Android ni Producción.
+Después, diseñar webhooks TEST con idempotencia y mapeo hacia el estado interno del plan. No implementar SQL ni cambios de tablas sin auditar previamente la estructura real de billing.

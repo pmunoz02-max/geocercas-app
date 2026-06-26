@@ -379,7 +379,7 @@ Esto cambia el estado comercial del proyecto: Dodo pasa a ser el proveedor MoR p
 
 | Plan | Precio | Product ID TEST |
 |---|---:|---|
-| Geocercas GPS PRO | USD 29/month | `pdt_0NhoMPN43aLOXnHSZhrTk` |
+| Geocercas GPS PRO | USD 29/month | `pdt_0NhoMPN43aL0XnHSZhrTk` |
 | Geocercas GPS Enterprise | USD 99/month | `pdt_0NhoND6E41RsKWVP43fW1` |
 
 ## Regla de arquitectura
@@ -397,7 +397,15 @@ No hardcodear Dodo como concepto visible de negocio en la UI. Usar textos neutra
 
 No migrar producción ni crear webhooks live hasta que la integración TEST esté documentada, construida en branch `preview`, validada en Vercel Preview y aprobada explícitamente por el usuario.
 
-## Integración checkout Dodo Preview (2026-06-25)
+## Implementación pública de pricing validada en Preview (2026-06-26)
 
-Se agregó integración inicial de checkout externo proveedor-agnóstica para Preview/Test Mode. Ver [DODO_CHECKOUT_PREVIEW_INTEGRATION.md](./DODO_CHECKOUT_PREVIEW_INTEGRATION.md).
+La página pública de monetización se implementó como ruta React proveedor-agnóstica:
 
+- `/pricing`
+- `/precios`
+
+Presenta siempre PRO y Enterprise, independientemente del plan actual del usuario. Los payment links se obtienen desde una configuración centralizada y no desde componentes dispersos.
+
+Regla permanente de routing: no crear `public/pricing/index.html` ni `public/precios/index.html`, porque los archivos físicos interceptan las rutas SPA en Vercel.
+
+La fase actual solo inicia checkout TEST. No modifica el estado interno del plan. El próximo cambio arquitectónico deberá añadir rutas neutrales de retorno y luego webhooks TEST idempotentes.

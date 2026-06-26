@@ -21,13 +21,13 @@ Dashboard mostró: `LIVE PAYMENTS ACTIVE`.
 
 | Producto | Product ID TEST | Precio | Tipo |
 |---|---|---:|---|
-| Geocercas GPS PRO | `pdt_0NhoMPN43aLOXnHSZhrTk` | USD 29/month | Subscription |
+| Geocercas GPS PRO | `pdt_0NhoMPN43aL0XnHSZhrTk` | USD 29/month | Subscription |
 | Geocercas GPS Enterprise | `pdt_0NhoND6E41RsKWVP43fW1` | USD 99/month | Subscription |
 
 ## Links TEST
 
 ```txt
-https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aLOXnHSZhrTk?quantity=1
+https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aL0XnHSZhrTk?quantity=1
 https://test.checkout.dodopayments.com/buy/pdt_0NhoND6E41RsKWVP43fW1?quantity=1
 ```
 
@@ -53,6 +53,14 @@ https://test.checkout.dodopayments.com/buy/pdt_0NhoND6E41RsKWVP43fW1?quantity=1
 - Trabajar solo en branch `preview`.
 - Promote solo con orden expresa.
 
-## Próximo paso probable
+## Estado de continuidad actualizado — 2026-06-26
 
-Revisar ZIP completo de la app y preparar integración TEST de Dodo en preview.
+La integración TEST ya fue implementada y validada en Preview:
+
+- página pública `/pricing` y `/precios`;
+- checkout PRO USD 29/month;
+- checkout Enterprise USD 99/month;
+- eliminación de la ruta estática legacy `public/pricing/index.html`;
+- sin webhooks, checkout LIVE, cambios de base de datos ni Android.
+
+Próximo paso: rutas neutrales de retorno y, después, webhooks TEST idempotentes.
