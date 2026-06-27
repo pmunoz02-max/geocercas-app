@@ -2,11 +2,13 @@ import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BILLING_CHECKOUT_MODE,
+  BILLING_CHECKOUT_PROVIDER,
   getCheckoutSafetyLabel,
-  getCheckoutUrl,
   isCheckoutConfigured,
   type CheckoutPlanCode,
 } from "@/config/billingCheckout";
+import { useAuth } from "@/context/auth.js";
+import { supabase } from "@/lib/supabaseClient.js";
 
 type Props = {
   orgId?: string;
@@ -15,14 +17,65 @@ type Props = {
   label?: string;
 };
 
+type DodoCheckoutResponse = {
+  ok?: boolean;
+  checkout_url?: string;
+  checkoutUrl?: string;
+  session_id?: string | null;
+  provider?: string;
+  mode?: string;
+  plan?: string;
+  error?: string;
+  message?: string;
+};
+
+function cleanId(value: unknown): string {
+  return String(value || "").trim();
+}
+
+function buildLoginUrl(language: string | undefined): string {
+  const params = new URLSearchParams();
+  params.set("lang", language || "es");
+  params.set("next", "/billing");
+  return `/login?${params.toString()}`;
+}
+
+function readAuthTokenFromContext(auth: any): string {
+  return cleanId(
+    auth?.session?.access_token ||
+      auth?.session?.accessToken ||
+      auth?.access_token ||
+      auth?.accessToken ||
+      "",
+  );
+}
+
+async function readSupabaseAccessToken(): Promise<string> {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return "";
+    return cleanId(data?.session?.access_token);
+  } catch {
+    return "";
+  }
+}
+
 export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const auth = useAuth() as any;
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const checkoutPlan = plan || "pro";
-  const checkoutUrl = useMemo(() => getCheckoutUrl(checkoutPlan), [checkoutPlan]);
-  const configured = isCheckoutConfigured(checkoutPlan);
+  const configured = isCheckoutConfigured(checkoutPlan) && BILLING_CHECKOUT_PROVIDER !== "disabled";
+
+  const effectiveOrgId = useMemo(() => {
+    return cleanId(orgId || auth?.currentOrgId || auth?.activeOrgId || auth?.orgId);
+  }, [orgId, auth?.currentOrgId, auth?.activeOrgId, auth?.orgId]);
+
+  const isAuthenticated = Boolean(
+    auth?.authenticated ?? auth?.isAuthenticated ?? auth?.isLoggedIn ?? auth?.user?.id,
+  );
 
   const buttonLabel =
     label ||
@@ -33,13 +86,13 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
   const defaultClassName =
     "inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
 
-  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+  async function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
     event.stopPropagation();
 
     setErrorMsg(null);
 
-    if (!configured || !checkoutUrl) {
+    if (!configured) {
       setErrorMsg(
         t("billing.checkout.notConfigured", {
           defaultValue: "Secure checkout is not configured yet. Please contact support.",
@@ -48,22 +101,79 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       return;
     }
 
+    if (!isAuthenticated) {
+      setErrorMsg(
+        t("billing.checkout.loginRequired", {
+          defaultValue: "Please sign in to choose an organization before opening checkout.",
+        }),
+      );
+
+      window.location.assign(buildLoginUrl(i18n?.language));
+      return;
+    }
+
+    if (!effectiveOrgId) {
+      setErrorMsg(
+        t("billing.checkout.orgRequired", {
+          defaultValue: "Please select an organization before opening checkout.",
+        }),
+      );
+      return;
+    }
+
     try {
       setLoading(true);
-      // Fase Preview/Test: usar exactamente el Payment Link generado por el proveedor.
-      // No agregamos org_id/plan como query params porque algunos checkout links
-      // pueden rechazar parámetros adicionales y devolver /error/not-found.
-      window.location.assign(checkoutUrl.trim());
+
+      const accessToken = readAuthTokenFromContext(auth) || (await readSupabaseAccessToken());
+
+      if (!accessToken) {
+        throw new Error(
+          t("billing.checkout.sessionRequired", {
+            defaultValue: "Your session could not be verified. Please sign in again.",
+          }),
+        );
+      }
+
+      const { data, error } = await supabase.functions.invoke("dodo-create-checkout", {
+        body: {
+          org_id: effectiveOrgId,
+          plan: checkoutPlan,
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const response = data as DodoCheckoutResponse | null;
+      const checkoutUrl = cleanId(response?.checkout_url || response?.checkoutUrl);
+
+      if (!response?.ok || !checkoutUrl) {
+        throw new Error(
+          response?.message ||
+            response?.error ||
+            t("billing.checkout.openError", {
+              defaultValue: "Could not open secure checkout. Please try again.",
+            }),
+        );
+      }
+
+      window.location.assign(checkoutUrl);
     } catch (error) {
-      console.error("[billing-checkout] redirect error", error);
+      console.error("[billing-checkout] create checkout error", error);
       setErrorMsg(
-        t("billing.checkout.openError", {
-          defaultValue: "Could not open secure checkout. Please try again.",
-        }),
+        error instanceof Error
+          ? error.message
+          : t("billing.checkout.openError", {
+              defaultValue: "Could not open secure checkout. Please try again.",
+            }),
       );
       setLoading(false);
     }
-  };
+  }
 
   return (
     <div>
@@ -80,7 +190,8 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       {BILLING_CHECKOUT_MODE === "test" ? (
         <p className="mt-2 text-xs text-slate-500">
-          {getCheckoutSafetyLabel()}: {t("billing.checkout.testNotice", { defaultValue: "no real charge will be made." })}
+          {getCheckoutSafetyLabel()}:{" "}
+          {t("billing.checkout.testNotice", { defaultValue: "no real charge will be made." })}
         </p>
       ) : null}
 
