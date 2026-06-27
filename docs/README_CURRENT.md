@@ -143,7 +143,7 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - Próxima fase: diseñar webhooks TEST con verificación server-side e idempotencia; no hacer SQL sin auditar primero la estructura de billing.
 - No promover a Production hasta orden explícita.
 
-### Diseño de webhooks Dodo TEST — bloqueado por acceso Supabase (2026-06-26)
+### Diseño de webhooks Dodo TEST — acceso CLI recuperado, dashboard pendiente (2026-06-26)
 
 - Se crearon documentos de arquitectura para la fase futura de webhooks TEST:
   - `DODO_WEBHOOKS_TEST_ARCHITECTURE.md`
@@ -154,5 +154,23 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 - Dodo enviará eventos externos; la base interna de GeoField GPS deberá decidir plan, límites y entitlements.
 - No se implementó SQL, Edge Functions, webhooks, API keys ni service role.
 - No se toca Android ni Production.
-- La implementación queda bloqueada hasta recuperar acceso al proyecto Supabase real `mujwsfhkocsuuahlrssn` y ejecutar auditoría read-only.
+- Se recuperó acceso técnico por Supabase CLI a los proyectos existentes.
+- Mapa real actual:
+  - Preview: `mujwsfhkocsuuahlrssn` / `https://mujwsfhkocsuuahlrssn.supabase.co`.
+  - Producción: `wpaixkvokdkudymgjoua` / `https://wpaixkvokdkudymgjoua.supabase.co`.
+- El dashboard web sigue sin acceso a la organización/proyectos, aunque el flujo “Account linked” fue completado.
+- Se generaron backups read-only de estructura para Preview y Producción.
+- Documento canónico: `SUPABASE_ACCESS_RECOVERY.md`.
 - No crear un proyecto Supabase nuevo ni cambiar `VITE_SUPABASE_URL` en Vercel.
+
+
+### Recuperación de acceso Supabase — Preview y Producción separados (2026-06-26)
+
+- Confirmado: Preview y Producción usan proyectos Supabase separados.
+- Preview actual: `mujwsfhkocsuuahlrssn`.
+- Producción actual: `wpaixkvokdkudymgjoua`.
+- La CLI tiene acceso a ambos proyectos dentro de la org `bwsqrbtppzvxowiytsus`.
+- El dashboard web aún devuelve “no access” para la org y ambos proyectos.
+- Regla operativa: el repo principal queda linkeado a Preview. Producción solo se audita desde carpeta externa separada.
+- No ejecutar `supabase db push`, `db pull`, `db reset`, `migration repair`, `functions deploy`, `secrets set` ni `supabase logout/login` hasta nueva orden.
+- Documento canónico: `docs/SUPABASE_ACCESS_RECOVERY.md`.

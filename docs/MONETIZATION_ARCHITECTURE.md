@@ -420,4 +420,4 @@ Frontend solo consulta estado interno
 
 No activar planes desde rutas públicas de retorno ni desde query params. La activación futura debe depender de eventos server-side verificados, idempotentes y mapeados a planes internos.
 
-Bloqueo actual: no implementar SQL ni Edge Functions hasta recuperar acceso a Supabase `mujwsfhkocsuuahlrssn` y auditar estructura real.
+Estado actualizado: acceso técnico por CLI recuperado. Preview usa `mujwsfhkocsuuahlrssn`; Producción usa `wpaixkvokdkudymgjoua`. El dashboard web sigue pendiente de membresía. No implementar SQL ni Edge Functions hasta completar auditoría real y recibir autorización explícita para modificar Preview.

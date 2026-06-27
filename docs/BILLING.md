@@ -245,10 +245,20 @@ Estado:
 - no Android;
 - no Production.
 
+Estado actualizado de acceso Supabase:
+
+- acceso técnico por CLI recuperado para los proyectos existentes;
+- Preview actual: `mujwsfhkocsuuahlrssn`;
+- Producción actual: `wpaixkvokdkudymgjoua`;
+- dashboard web pendiente de recuperación de membresía;
+- backups read-only de estructura generados para ambos proyectos;
+- no crear un proyecto Supabase nuevo para reemplazar los existentes.
+
 Bloqueo actual:
 
-- falta recuperar acceso al proyecto Supabase real `mujwsfhkocsuuahlrssn`;
-- no ejecutar SQL ni crear Edge Functions hasta auditar la base de datos real;
-- no crear un proyecto Supabase nuevo para reemplazar el existente.
+- no ejecutar SQL ni crear Edge Functions hasta completar auditoría de la base real de Preview;
+- no tocar Producción sin orden explícita;
+- no desplegar funciones legacy Stripe/Paddle desde local;
+- no usar `supabase db push`, `db pull`, `db reset`, `migration repair`, `functions deploy` ni `secrets set` hasta nueva orden.
 
-La próxima fase técnica solo puede empezar después de recuperar acceso al Supabase correcto y ejecutar auditoría read-only de tablas, RLS, funciones/RPC y estructura actual de billing.
+Documento canónico de recuperación: `SUPABASE_ACCESS_RECOVERY.md`.

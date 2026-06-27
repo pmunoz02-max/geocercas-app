@@ -9,42 +9,51 @@ Proveedor externo actual: **Dodo Payments Test Mode**
 
 Definir la arquitectura futura para recibir eventos de Dodo Payments en ambiente TEST y sincronizar el estado comercial de una organización dentro de GeoField GPS.
 
-Esta fase **no implementa** SQL, Edge Functions, secretos, webhooks reales ni cambios en producción. El objetivo es dejar una guía operativa clara para cuando se recupere acceso al proyecto Supabase correcto.
+Esta fase **no implementa** SQL, Edge Functions, secretos, webhooks reales ni cambios en producción. El objetivo es dejar una guía operativa clara para implementar Dodo TEST solo en Preview cuando termine la auditoría técnica y exista autorización explícita.
 
-## 2. Bloqueo actual
+## 2. Estado actual de acceso Supabase
 
-La app Preview usa el proyecto Supabase:
-
-```txt
-https://mujwsfhkocsuuahlrssn.supabase.co
-```
-
-Project ref:
+Mapa real actual confirmado por Vercel y Supabase CLI:
 
 ```txt
-mujwsfhkocsuuahlrssn
+Preview Supabase    -> mujwsfhkocsuuahlrssn
+Preview URL         -> https://mujwsfhkocsuuahlrssn.supabase.co
+
+Production Supabase -> wpaixkvokdkudymgjoua
+Production URL      -> https://wpaixkvokdkudymgjoua.supabase.co
 ```
 
-Actualmente no hay acceso al dashboard de ese proyecto. El dashboard visible corresponde a una organización vacía/Free, por lo que **no se debe ejecutar SQL ni crear Edge Functions** hasta recuperar acceso al proyecto real.
+La CLI tiene acceso a ambos proyectos, pero el dashboard web todavía devuelve “no access” para la organización y ambos proyectos. El flujo de verificación “Account linked” fue completado, pero Supabase Support debe corregir la membresía visible del dashboard.
+
+Backups read-only ya generados:
+
+```txt
+Preview:    schema-public-20260626-2110.sql
+Producción: schema-production-public-20260626-2143.sql
+```
 
 Acciones permitidas mientras dure el bloqueo:
 
 - documentar arquitectura;
 - revisar código frontend y documentación;
+- analizar dumps read-only;
 - validar checkout TEST y rutas de retorno;
-- preparar prompts o checklists;
+- preparar migración mínima propuesta sin ejecutarla;
 - responder a Supabase Support.
 
 Acciones prohibidas mientras dure el bloqueo:
 
-- crear un Supabase nuevo para reemplazar el actual;
+- crear un Supabase nuevo para reemplazar los existentes;
 - cambiar `VITE_SUPABASE_URL` o `VITE_SUPABASE_ANON_KEY` en Vercel;
-- ejecutar SQL en una organización vacía o equivocada;
-- crear Edge Functions sin auditoría previa;
+- ejecutar SQL de modificación;
+- desplegar Edge Functions;
+- desplegar funciones legacy Stripe/Paddle desde local;
 - usar `service_role` en frontend, repositorio o chat;
 - activar checkout LIVE;
 - tocar Android;
 - promover cambios de billing a Production sin orden expresa.
+
+Documento canónico de recuperación: `SUPABASE_ACCESS_RECOVERY.md`.
 
 ## 3. Principios de arquitectura
 
@@ -296,14 +305,14 @@ Responsabilidades futuras:
 - No cambios en Android.
 - No cambios en Production.
 
-## 16. Próximos pasos cuando Supabase responda
+## 16. Próximos pasos
 
-1. Recuperar acceso al proyecto `mujwsfhkocsuuahlrssn`.
-2. Confirmar que se está en ambiente Preview, no Production.
-3. Ejecutar auditoría SQL read-only.
-4. Documentar tablas y relaciones reales.
-5. Diseñar migración mínima, permanente y proveedor-agnóstica.
-6. Implementar webhook TEST.
+1. Mantener la sesión CLI actual intacta.
+2. Esperar que Supabase Support restaure acceso al dashboard web.
+3. Confirmar siempre que cualquier cambio sea sobre Preview `mujwsfhkocsuuahlrssn`, no Producción `wpaixkvokdkudymgjoua`.
+4. Completar auditoría read-only de tablas, constraints, RLS, funciones/RPC y Edge Functions existentes.
+5. Diseñar migración mínima, permanente y proveedor-agnóstica para Dodo TEST.
+6. Crear una función nueva separada `dodo-webhook`, sin tocar `stripe-webhook` ni `paddle-webhook`.
 7. Validar payloads Dodo TEST.
 8. Probar idempotencia.
 9. Validar actualización interna de plan en Preview.
@@ -312,4 +321,4 @@ Responsabilidades futuras:
 
 ## Estado final de este documento
 
-Este documento es diseño. No debe usarse como instrucción para ejecutar SQL ni crear funciones hasta recuperar acceso al Supabase correcto y completar la auditoría read-only.
+Este documento es diseño. No debe usarse como instrucción para ejecutar SQL ni crear funciones hasta completar la auditoría read-only y recibir autorización explícita para modificar Preview.

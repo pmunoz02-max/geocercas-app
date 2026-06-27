@@ -85,7 +85,7 @@ Documentos:
 - [BILLING_WEBHOOKS.md](./BILLING_WEBHOOKS.md)
 - [SUBSCRIPTIONS_ARCHITECTURE.md](./SUBSCRIPTIONS_ARCHITECTURE.md)
 
-Estado: diseño solamente. No se implementa SQL, Edge Functions, webhooks reales ni checkout LIVE hasta recuperar acceso al proyecto Supabase real `mujwsfhkocsuuahlrssn` y ejecutar auditoría read-only.
+Estado: diseño solamente. Se recuperó acceso técnico por CLI a los proyectos existentes; el dashboard web sigue pendiente. No se implementa SQL, Edge Functions, webhooks reales ni checkout LIVE hasta completar auditoría read-only y recibir orden explícita.
 
 ## Migración Billing Preview (Paddle)
 
@@ -98,3 +98,17 @@ Estado: diseño solamente. No se implementa SQL, Edge Functions, webhooks reales
 - Las rutas públicas `/resources`, `/recursos` y `/ressources` apuntan a la página `ResourcesPage.jsx`.
 - Los archivos estáticos reales para esta página viven en `public/resources/`.
 - Si un PDF, PPTX o video todavía no existe, la interfaz debe mostrar `Próximamente` en lugar de usar enlaces placeholder.
+
+
+## Recuperación Supabase — estado 2026-06-26
+
+Documento canónico: `SUPABASE_ACCESS_RECOVERY.md`.
+
+Mapa operativo actual:
+
+```txt
+Preview Supabase    -> mujwsfhkocsuuahlrssn
+Producción Supabase -> wpaixkvokdkudymgjoua
+```
+
+La CLI tiene acceso a ambos proyectos, pero el dashboard web sigue devolviendo “no access”. No ejecutar comandos de modificación, deploy de funciones, reparación de migraciones ni cambios de secrets hasta nueva orden.
