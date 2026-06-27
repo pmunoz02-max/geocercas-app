@@ -34,7 +34,8 @@ Esta función temporal:
 - No toca Paddle.
 - No toca Producción.
 - No guarda payload crudo completo.
-- Guarda solo resumen sanitizado en `public.audit_log`.
+- No guarda previews de `billing`, `customer`, tarjeta, links de pago ni links de factura.
+- Guarda solo resumen mínimo sanitizado en `public.audit_log`.
 
 ## Tabla usada
 
@@ -54,13 +55,55 @@ dodo.webhook.test_capture
 
 El campo `details` contiene un resumen sanitizado:
 
-- headers presentes, sin valores de firma;
+- nombres de headers presentes, sin valores de firma;
 - llaves top-level;
 - llaves de `data`;
-- previews truncados de valores primitivos;
-- posibles IDs: event, product, price, customer, subscription, payment;
+- IDs útiles cuando existen: event, business, brand, product, price, customer, subscription, payment, invoice, checkout session;
+- status, currency, total amount y fechas operativas cuando existen;
 - tamaño del body;
-- parse error si hubiera.
+- parse error si hubiera;
+- listado de llaves sensibles detectadas, pero sin valores.
+
+## Lo que aprendimos de Dodo TEST
+
+Las compras TEST de PRO y Enterprise confirmaron que Dodo envía eventos con esta forma general:
+
+```json
+{
+  "business_id": "...",
+  "data": { "...": "..." },
+  "timestamp": "...",
+  "type": "..."
+}
+```
+
+Eventos reales capturados:
+
+```text
+payment.succeeded
+subscription.renewed
+subscription.active
+subscription.updated
+```
+
+Headers reales observados:
+
+```text
+user-agent: Svix-Webhooks/rolling
+content-type: application/json
+webhook-signature: presente
+```
+
+Mapeo Dodo TEST observado:
+
+```text
+pdt_0NhoMPN43aL0XnHSZhrTk → pro
+pdt_0NhoND6E41RsKWVP43fW1 → enterprise
+```
+
+Los eventos de suscripción incluyen `data.product_id` y `data.subscription_id`, por lo que son mejores candidatos para activar o actualizar plan que `payment.succeeded`.
+
+`payment.succeeded` sirve como auditoría de pago y trae `payment_id`, `invoice_id`, `checkout_session_id`, `subscription_id`, monto y moneda.
 
 ## Configuración requerida
 
@@ -90,12 +133,20 @@ supabase secrets set DODO_CAPTURE_READ_KEY=$readKey --project-ref mujwsfhkocsuua
 
 No commitear `tmp-dodo-capture-read-key.txt`.
 
-## Probar POST manual
+## Probar POST manual desde archivo
 
 ```powershell
+@'
+{
+  "test": "manual",
+  "source": "local",
+  "ok": true
+}
+'@ | Set-Content -Path .\tmp-dodo-test-payload.json -Encoding UTF8
+
 curl.exe -i -X POST "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/dodo-webhook-test-capture" `
   -H "Content-Type: application/json" `
-  --data '{ "test": "manual", "source": "local" }'
+  --data-binary "@.\tmp-dodo-test-payload.json"
 ```
 
 Resultado esperado:
@@ -105,7 +156,8 @@ Resultado esperado:
   "ok": true,
   "captured": true,
   "stored": true,
-  "mode": "preview-test-only"
+  "mode": "preview-test-only",
+  "db_writes": "audit_log_minimal_summary_only"
 }
 ```
 
@@ -113,17 +165,29 @@ Resultado esperado:
 
 ```powershell
 $readKey = Get-Content .\tmp-dodo-capture-read-key.txt
-curl.exe -s "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/dodo-webhook-test-capture?limit=10" `
+curl.exe -s "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/dodo-webhook-test-capture?limit=20" `
   -H "x-capture-read-key: $readKey"
 ```
 
-## Flujo Dodo Test Mode
+La respuesta de lectura filtra previews antiguos para no exponer valores de tarjeta, links de pago o datos de cliente que hayan quedado en capturas previas.
 
-1. Configurar el endpoint temporal en Dodo Test Mode.
-2. Ejecutar compra TEST para PRO.
-3. Ejecutar compra TEST para Enterprise.
-4. Leer capturas con el comando GET.
-5. Diseñar `dodo-webhook` definitivo con firma, idempotencia y mapeo a `org_billing`.
+## Próximo diseño: `dodo-webhook`
+
+El webhook definitivo debe ser una función nueva separada:
+
+```text
+dodo-webhook
+```
+
+Requisitos mínimos:
+
+1. Verificación de firma `webhook-signature`.
+2. Idempotencia por evento. Si Dodo no entrega `event_id`, usar hash estable de `type + timestamp + business_id + subscription_id/payment_id`.
+3. Mapeo `product_id → plan_code`.
+4. Actualización segura de `org_billing` solo para eventos de suscripción relevantes.
+5. Registro de eventos Dodo en tabla propia o log idempotente.
+6. No tocar Stripe/Paddle legacy.
+7. No desplegar a Producción hasta orden explícita.
 
 ## Prohibiciones
 
@@ -132,3 +196,4 @@ No deployar esta función a Producción.
 No usar `wpaixkvokdkudymgjoua`.
 No activar planes desde esta función temporal.
 No guardar payload crudo completo.
+No guardar valores de tarjeta, links de pago, links de factura, email o dirección de cliente.

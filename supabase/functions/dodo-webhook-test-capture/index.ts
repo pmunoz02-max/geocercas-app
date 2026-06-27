@@ -2,7 +2,7 @@
 // Environment: Preview only.
 // Purpose: discover Dodo TEST event names/payload shape safely before final webhook.
 // This function does NOT activate plans and does NOT update org_billing.
-// It stores only sanitized summaries in public.audit_log using service_role.
+// It stores only a minimal sanitized summary in public.audit_log using service_role.
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
@@ -13,6 +13,22 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Content-Type": "application/json",
 };
+
+const SENSITIVE_KEYS = new Set([
+  "card_holder_name",
+  "card_issuing_country",
+  "card_last_four",
+  "card_network",
+  "card_type",
+  "invoice_url",
+  "payment_link",
+  "billing",
+  "address",
+  "email",
+  "customer_email",
+  "phone",
+  "name",
+]);
 
 function json(status: number, body: Record<string, unknown> | unknown[]) {
   return new Response(JSON.stringify(body), {
@@ -27,17 +43,46 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function truncate(value: string | null, max = 128): string | null {
-  if (!value) return null;
-  return value.length > max ? `${value.slice(0, max)}...` : value;
-}
-
 function getEnvAny(names: string[]): string | null {
   for (const name of names) {
     const value = asString(Deno.env.get(name));
     if (value) return value;
   }
   return null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function objectKeys(value: unknown, limit = 80): string[] {
+  if (!isPlainObject(value)) return [];
+  return Object.keys(value).slice(0, limit);
+}
+
+function sensitiveKeysPresent(value: unknown, limit = 40): string[] {
+  if (!isPlainObject(value)) return [];
+  const found = new Set<string>();
+  const stack: unknown[] = [value];
+
+  while (stack.length > 0 && found.size < limit) {
+    const current = stack.pop();
+    if (Array.isArray(current)) {
+      for (const item of current.slice(0, 20)) stack.push(item);
+      continue;
+    }
+    if (!isPlainObject(current)) continue;
+
+    for (const [key, entry] of Object.entries(current)) {
+      const normalized = key.toLowerCase();
+      if (SENSITIVE_KEYS.has(normalized) || normalized.includes("card") || normalized.includes("email")) {
+        found.add(key);
+      }
+      if (isPlainObject(entry) || Array.isArray(entry)) stack.push(entry);
+    }
+  }
+
+  return Array.from(found).sort();
 }
 
 function safeHeaderPresence(headers: Headers) {
@@ -53,11 +98,9 @@ function safeHeaderPresence(headers: Headers) {
     "content-type",
   ];
 
-  const result: Record<string, boolean | string> = {};
+  const result: Record<string, boolean> = {};
   for (const name of interesting) {
-    const value = headers.get(name);
-    if (!value) continue;
-    result[name] = name === "user-agent" || name === "content-type" ? truncate(value) ?? true : true;
+    if (headers.get(name)) result[name] = true;
   }
   return result;
 }
@@ -79,44 +122,62 @@ function pickFirstString(obj: any, paths: string[][]): string | null {
   return null;
 }
 
-function objectKeys(value: unknown, limit = 60): string[] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  return Object.keys(value as Record<string, unknown>).slice(0, limit);
+function pickFirstNumber(obj: any, paths: string[][]): number | null {
+  for (const path of paths) {
+    let current = obj;
+    for (const key of path) {
+      if (current === null || current === undefined) break;
+      if (Array.isArray(current) && /^\d+$/.test(key)) {
+        current = current[Number(key)];
+      } else {
+        current = current[key];
+      }
+    }
+    if (typeof current === "number" && Number.isFinite(current)) return current;
+    if (typeof current === "string") {
+      const parsed = Number(current);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
 }
 
-function primitivePreview(value: unknown): unknown {
-  if (value === null || value === undefined) return value;
-  if (typeof value === "string") return truncate(value, 96);
-  if (typeof value === "number" || typeof value === "boolean") return value;
-  if (Array.isArray(value)) return `[array:${value.length}]`;
-  if (typeof value === "object") return `[object:${Object.keys(value as Record<string, unknown>).length}]`;
-  return String(value);
-}
-
-function primitiveObjectPreview(value: unknown, limit = 25): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>).slice(0, limit)) {
-    out[key] = primitivePreview(entry);
+function uniqueStrings(values: unknown[], limit = 20): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const text = asString(value);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+    if (out.length >= limit) break;
   }
   return out;
 }
 
+function collectProductIdsFromCart(data: any): string[] {
+  const carts = [data?.product_cart, data?.items, data?.line_items].filter(Array.isArray) as any[][];
+  const ids: unknown[] = [];
+
+  for (const cart of carts) {
+    for (const item of cart.slice(0, 20)) {
+      ids.push(item?.product_id, item?.product?.id, item?.id);
+    }
+  }
+
+  return uniqueStrings(ids);
+}
+
 function summarizePayload(payload: any) {
   const data = payload?.data ?? payload?.payload ?? payload?.object ?? payload;
+  const productCartIds = collectProductIdsFromCart(data);
 
   return {
+    summary_schema_version: 2,
     top_level_keys: objectKeys(payload),
     data_keys: objectKeys(data),
-    top_level_preview: primitiveObjectPreview(payload),
-    data_preview: primitiveObjectPreview(data),
-    event_id: pickFirstString(payload, [
-      ["event_id"],
-      ["id"],
-      ["event", "id"],
-      ["data", "event_id"],
-      ["data", "id"],
-    ]),
+    sensitive_keys_present_redacted: sensitiveKeysPresent(payload),
+
     event_type: pickFirstString(payload, [
       ["event_type"],
       ["type"],
@@ -124,6 +185,19 @@ function summarizePayload(payload: any) {
       ["data", "event_type"],
       ["data", "type"],
     ]),
+    event_id: pickFirstString(payload, [
+      ["event_id"],
+      ["id"],
+      ["event", "id"],
+      ["data", "event_id"],
+      ["data", "id"],
+    ]),
+
+    business_id: pickFirstString(payload, [["business_id"], ["data", "business_id"], ["data", "brand_id"]]),
+    brand_id: pickFirstString(payload, [["brand_id"], ["data", "brand_id"]]),
+    payload_type: pickFirstString(payload, [["payload_type"], ["data", "payload_type"]]),
+    status: pickFirstString(payload, [["status"], ["data", "status"]]),
+
     product_id: pickFirstString(payload, [
       ["product_id"],
       ["data", "product_id"],
@@ -132,7 +206,9 @@ function summarizePayload(payload: any) {
       ["data", "items", "0", "product", "id"],
       ["data", "line_items", "0", "product_id"],
       ["data", "line_items", "0", "product", "id"],
-    ]),
+    ]) ?? productCartIds[0] ?? null,
+    product_cart_product_ids: productCartIds,
+
     price_id: pickFirstString(payload, [
       ["price_id"],
       ["data", "price_id"],
@@ -145,6 +221,7 @@ function summarizePayload(payload: any) {
     customer_id: pickFirstString(payload, [
       ["customer_id"],
       ["data", "customer_id"],
+      ["data", "customer", "customer_id"],
       ["data", "customer", "id"],
     ]),
     subscription_id: pickFirstString(payload, [
@@ -159,19 +236,34 @@ function summarizePayload(payload: any) {
       ["data", "transaction_id"],
       ["data", "transaction", "id"],
     ]),
-    metadata_keys: objectKeys(
-      payload?.metadata ??
-        payload?.custom_data ??
-        payload?.data?.metadata ??
-        payload?.data?.custom_data,
-    ),
-    custom_data_preview: primitiveObjectPreview(
-      payload?.metadata ??
-        payload?.custom_data ??
-        payload?.data?.metadata ??
-        payload?.data?.custom_data,
-    ),
+    invoice_id: pickFirstString(payload, [["invoice_id"], ["data", "invoice_id"], ["data", "invoice", "id"]]),
+    checkout_session_id: pickFirstString(payload, [["checkout_session_id"], ["data", "checkout_session_id"]]),
+
+    currency: pickFirstString(payload, [["currency"], ["data", "currency"]]),
+    total_amount: pickFirstNumber(payload, [["total_amount"], ["data", "total_amount"]]),
+    recurring_pre_tax_amount: pickFirstNumber(payload, [["recurring_pre_tax_amount"], ["data", "recurring_pre_tax_amount"]]),
+    payment_frequency_interval: pickFirstString(payload, [["payment_frequency_interval"], ["data", "payment_frequency_interval"]]),
+    payment_frequency_count: pickFirstNumber(payload, [["payment_frequency_count"], ["data", "payment_frequency_count"]]),
+    next_billing_date: pickFirstString(payload, [["next_billing_date"], ["data", "next_billing_date"]]),
+    created_at: pickFirstString(payload, [["created_at"], ["data", "created_at"]]),
+
+    metadata_keys: objectKeys(payload?.metadata ?? payload?.custom_data ?? payload?.data?.metadata ?? payload?.data?.custom_data),
+    custom_field_response_keys: objectKeys(payload?.custom_field_responses ?? payload?.data?.custom_field_responses),
   };
+}
+
+function sanitizeStoredDetails(details: any) {
+  if (!isPlainObject(details)) return details;
+  const clone = JSON.parse(JSON.stringify(details));
+  const summary = clone?.payload_summary;
+
+  if (isPlainObject(summary)) {
+    delete summary.top_level_preview;
+    delete summary.data_preview;
+    delete summary.custom_data_preview;
+  }
+
+  return clone;
 }
 
 async function insertAuditLog(summary: Record<string, unknown>) {
@@ -240,7 +332,10 @@ async function readAuditLog(req: Request) {
   }
 
   const rows = await response.json();
-  return json(200, { ok: true, rows });
+  const safeRows = Array.isArray(rows)
+    ? rows.map((row) => ({ ...row, details: sanitizeStoredDetails(row?.details) }))
+    : rows;
+  return json(200, { ok: true, rows: safeRows });
 }
 
 serve(async (req) => {
@@ -268,15 +363,24 @@ serve(async (req) => {
 
   const summary = {
     capture: "dodo-webhook-test-capture",
+    summary_schema_version: 2,
     environment: "preview-test-only",
     received_at: new Date().toISOString(),
     body_bytes: rawBody.length,
     parse_error: parseError,
-    headers_present: safeHeaderPresence(req.headers),
+    header_names_present: safeHeaderPresence(req.headers),
     payload_summary: parsed ? summarizePayload(parsed) : null,
   };
 
-  console.log("[DODO WEBHOOK TEST CAPTURE]", JSON.stringify(summary));
+  console.log("[DODO WEBHOOK TEST CAPTURE]", JSON.stringify({
+    capture: summary.capture,
+    environment: summary.environment,
+    event_type: summary.payload_summary?.event_type ?? null,
+    product_id: summary.payload_summary?.product_id ?? null,
+    subscription_id: summary.payload_summary?.subscription_id ?? null,
+    payment_id: summary.payload_summary?.payment_id ?? null,
+    parse_error: summary.parse_error,
+  }));
 
   const storeResult = await insertAuditLog(summary);
   if (!storeResult.ok) {
@@ -288,7 +392,7 @@ serve(async (req) => {
     captured: true,
     stored: storeResult.ok,
     mode: "preview-test-only",
-    db_writes: "audit_log_summary_only",
-    summary,
+    db_writes: "audit_log_minimal_summary_only",
+    summary_schema_version: 2,
   });
 });
