@@ -56,13 +56,13 @@ dodo.webhook.test_capture
 El campo `details` contiene un resumen sanitizado:
 
 - nombres de headers presentes, sin valores de firma;
-- llaves top-level;
-- llaves de `data`;
+- llaves top-level no sensibles;
+- llaves de `data` no sensibles;
 - IDs útiles cuando existen: event, business, brand, product, price, customer, subscription, payment, invoice, checkout session;
 - status, currency, total amount y fechas operativas cuando existen;
 - tamaño del body;
 - parse error si hubiera;
-- listado de llaves sensibles detectadas, pero sin valores.
+- conteo de llaves sensibles detectadas, sin nombres ni valores.
 
 ## Lo que aprendimos de Dodo TEST
 
@@ -104,6 +104,21 @@ pdt_0NhoND6E41RsKWVP43fW1 → enterprise
 Los eventos de suscripción incluyen `data.product_id` y `data.subscription_id`, por lo que son mejores candidatos para activar o actualizar plan que `payment.succeeded`.
 
 `payment.succeeded` sirve como auditoría de pago y trae `payment_id`, `invoice_id`, `checkout_session_id`, `subscription_id`, monto y moneda.
+
+
+## Endurecimiento aplicado
+
+La función temporal no debe mostrar valores ni nombres de campos sensibles. Por eso, tanto las nuevas capturas como la lectura de capturas previas filtran:
+
+```text
+card_*
+billing
+invoice_url
+payment_link
+email/address/name/phone
+```
+
+En su lugar se mantiene solo `sensitive_key_count` para saber si el payload contenía campos sensibles, sin exponerlos.
 
 ## Configuración requerida
 
@@ -169,7 +184,7 @@ curl.exe -s "https://mujwsfhkocsuuahlrssn.supabase.co/functions/v1/dodo-webhook-
   -H "x-capture-read-key: $readKey"
 ```
 
-La respuesta de lectura filtra previews antiguos para no exponer valores de tarjeta, links de pago o datos de cliente que hayan quedado en capturas previas.
+La respuesta de lectura filtra previews antiguos y también filtra nombres de llaves sensibles (`card_*`, `billing`, `invoice_url`, `payment_link`, emails, dirección, etc.) para no exponer valores ni nombres sensibles que hayan quedado en capturas previas.
 
 ## Próximo diseño: `dodo-webhook`
 

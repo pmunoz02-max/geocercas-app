@@ -55,13 +55,28 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function objectKeys(value: unknown, limit = 80): string[] {
-  if (!isPlainObject(value)) return [];
-  return Object.keys(value).slice(0, limit);
+function isSensitiveKeyName(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    SENSITIVE_KEYS.has(normalized) ||
+    normalized.includes("card") ||
+    normalized.includes("email") ||
+    normalized.includes("invoice_url") ||
+    normalized.includes("payment_link") ||
+    normalized.includes("billing") ||
+    normalized.includes("address")
+  );
 }
 
-function sensitiveKeysPresent(value: unknown, limit = 40): string[] {
+function objectKeys(value: unknown, limit = 80): string[] {
   if (!isPlainObject(value)) return [];
+  return Object.keys(value)
+    .filter((key) => !isSensitiveKeyName(key))
+    .slice(0, limit);
+}
+
+function sensitiveKeyCount(value: unknown, limit = 200): number {
+  if (!isPlainObject(value)) return 0;
   const found = new Set<string>();
   const stack: unknown[] = [value];
 
@@ -74,15 +89,14 @@ function sensitiveKeysPresent(value: unknown, limit = 40): string[] {
     if (!isPlainObject(current)) continue;
 
     for (const [key, entry] of Object.entries(current)) {
-      const normalized = key.toLowerCase();
-      if (SENSITIVE_KEYS.has(normalized) || normalized.includes("card") || normalized.includes("email")) {
+      if (isSensitiveKeyName(key)) {
         found.add(key);
       }
       if (isPlainObject(entry) || Array.isArray(entry)) stack.push(entry);
     }
   }
 
-  return Array.from(found).sort();
+  return found.size;
 }
 
 function safeHeaderPresence(headers: Headers) {
@@ -176,7 +190,7 @@ function summarizePayload(payload: any) {
     summary_schema_version: 2,
     top_level_keys: objectKeys(payload),
     data_keys: objectKeys(data),
-    sensitive_keys_present_redacted: sensitiveKeysPresent(payload),
+    sensitive_key_count: sensitiveKeyCount(payload),
 
     event_type: pickFirstString(payload, [
       ["event_type"],
@@ -252,18 +266,28 @@ function summarizePayload(payload: any) {
   };
 }
 
+function scrubStoredKeyArrays(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.filter((item) => typeof item !== "string" || !isSensitiveKeyName(item));
+  }
+  if (isPlainObject(value)) {
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      if (key === "sensitive_keys_present_redacted") {
+        if (Array.isArray(entry)) out.sensitive_key_count = entry.length;
+        continue;
+      }
+      if (key.endsWith("_preview")) continue;
+      out[key] = scrubStoredKeyArrays(entry);
+    }
+    return out;
+  }
+  return value;
+}
+
 function sanitizeStoredDetails(details: any) {
   if (!isPlainObject(details)) return details;
-  const clone = JSON.parse(JSON.stringify(details));
-  const summary = clone?.payload_summary;
-
-  if (isPlainObject(summary)) {
-    delete summary.top_level_preview;
-    delete summary.data_preview;
-    delete summary.custom_data_preview;
-  }
-
-  return clone;
+  return scrubStoredKeyArrays(JSON.parse(JSON.stringify(details)));
 }
 
 async function insertAuditLog(summary: Record<string, unknown>) {
