@@ -140,3 +140,10 @@ No migration repair
 No LIVE keys
 No checkout productivo
 ```
+
+
+## 2026-06-28 — Signature verification fallback
+
+Dodo TEST deliveries reached the signed endpoint but returned `invalid_webhook_signature`.
+The verifier now keeps the Svix / Standard Webhooks format as the first option and adds conservative HMAC fallbacks while still requiring `DODO_WEBHOOK_SECRET_TEST`, valid timestamp, and signature headers.
+No raw payloads, payment links, card details, billing address, or customer personal data are stored by this change.

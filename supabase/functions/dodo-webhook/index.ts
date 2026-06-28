@@ -158,6 +158,24 @@ async function sign(secretBytes: Uint8Array, content: string): Promise<{ base64:
   };
 }
 
+function uniqueByteCandidates(candidates: Uint8Array[]): Uint8Array[] {
+  const seen = new Set<string>();
+  const unique: Uint8Array[] = [];
+
+  for (const candidate of candidates) {
+    const key = bytesToBase64(candidate.buffer.slice(candidate.byteOffset, candidate.byteOffset + candidate.byteLength));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(candidate);
+  }
+
+  return unique;
+}
+
+function uniqueStringCandidates(candidates: string[]): string[] {
+  return Array.from(new Set(candidates.filter(Boolean)));
+}
+
 async function verifySvixLikeSignature(req: Request, rawBody: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const messageId = req.headers.get("svix-id") ?? req.headers.get("webhook-id") ?? req.headers.get("dodo-webhook-id");
   const timestamp = req.headers.get("svix-timestamp") ?? req.headers.get("webhook-timestamp") ?? req.headers.get("dodo-webhook-timestamp");
@@ -184,19 +202,27 @@ async function verifySvixLikeSignature(req: Request, rawBody: string): Promise<{
   try {
     secretCandidates.push(base64ToBytes(secretBody));
   } catch {
-    // Some providers expose raw secrets. We keep a raw fallback below.
+    // Some providers expose raw secrets. We keep raw fallbacks below.
   }
+
   secretCandidates.push(new TextEncoder().encode(secret));
   if (secretBody !== secret) secretCandidates.push(new TextEncoder().encode(secretBody));
 
-  const signedContent = `${messageId}.${timestamp}.${rawBody}`;
+  const signedContentCandidates = uniqueStringCandidates([
+    `${messageId}.${timestamp}.${rawBody}`, // Svix / Standard Webhooks
+    `${timestamp}.${rawBody}`,             // Stripe-like fallback used by some providers
+    `${messageId}.${rawBody}`,             // Conservative fallback for webhook-id based schemes
+    rawBody,                               // Last-resort HMAC fallback; still requires the secret
+  ]);
   const receivedCandidates = signatureCandidates(signature);
 
-  for (const secretBytes of secretCandidates) {
-    const expected = await sign(secretBytes, signedContent);
-    for (const received of receivedCandidates) {
-      if (timingSafeEqual(expected.base64, received) || timingSafeEqual(expected.base64Url, received)) {
-        return { ok: true };
+  for (const secretBytes of uniqueByteCandidates(secretCandidates)) {
+    for (const signedContent of signedContentCandidates) {
+      const expected = await sign(secretBytes, signedContent);
+      for (const received of receivedCandidates) {
+        if (timingSafeEqual(expected.base64, received) || timingSafeEqual(expected.base64Url, received)) {
+          return { ok: true };
+        }
       }
     }
   }
