@@ -120,6 +120,53 @@ function normalizePlanCode(value) {
   return String(value || "free").toLowerCase();
 }
 
+function normalizePlanStatus(value) {
+  return String(value || "").toLowerCase().trim();
+}
+
+function hasActivePaidOrgBilling(orgBilling) {
+  const planCode = normalizePlanCode(
+    orgBilling?.subscribed_plan_code || orgBilling?.plan_code || "free"
+  );
+  const status = normalizePlanStatus(orgBilling?.plan_status);
+  return planCode !== "free" && ["active", "trialing", "past_due", "paused"].includes(status);
+}
+
+function mergeBillingPanelWithOrgBilling(panelBilling, orgBilling, orgId) {
+  if (!panelBilling && !orgBilling) return null;
+
+  const base = panelBilling || {};
+  const useDirectBilling = Boolean(orgBilling?.billing_provider) || hasActivePaidOrgBilling(orgBilling);
+
+  const directPlanCode =
+    orgBilling?.subscribed_plan_code || orgBilling?.plan_code || base.effective_plan_code || base.billing_plan_code;
+  const basePlanCode = base.effective_plan_code || base.billing_plan_code || orgBilling?.subscribed_plan_code || orgBilling?.plan_code;
+
+  return {
+    ...base,
+    org_id: base.org_id || orgBilling?.org_id || orgId || null,
+    billing_plan_code: useDirectBilling
+      ? orgBilling?.plan_code || base.billing_plan_code || "free"
+      : base.billing_plan_code || orgBilling?.plan_code || "free",
+    effective_plan_code: useDirectBilling ? directPlanCode || "free" : basePlanCode || "free",
+    plan_status: useDirectBilling
+      ? orgBilling?.plan_status || base.plan_status || "unknown"
+      : base.plan_status || orgBilling?.plan_status || "unknown",
+    current_period_end: useDirectBilling
+      ? orgBilling?.current_period_end || base.current_period_end || null
+      : base.current_period_end || orgBilling?.current_period_end || null,
+    subscribed_plan_code: orgBilling?.subscribed_plan_code || base.subscribed_plan_code || null,
+    billing_provider: orgBilling?.billing_provider || base.billing_provider || null,
+    dodo_customer_id: orgBilling?.dodo_customer_id || base.dodo_customer_id || null,
+    dodo_subscription_id: orgBilling?.dodo_subscription_id || base.dodo_subscription_id || null,
+    dodo_product_id: orgBilling?.dodo_product_id || base.dodo_product_id || null,
+    dodo_checkout_session_id:
+      orgBilling?.dodo_checkout_session_id || base.dodo_checkout_session_id || null,
+    dodo_payment_id: orgBilling?.dodo_payment_id || base.dodo_payment_id || null,
+    last_dodo_event_at: orgBilling?.last_dodo_event_at || base.last_dodo_event_at || null,
+  };
+}
+
 function labelPlan(planCode, tr) {
   const code = normalizePlanCode(planCode);
 
@@ -205,6 +252,9 @@ export default function Billing() {
           setBillingFallback(false);
         }
 
+        let panelBilling = null;
+        let panelMissing = false;
+
         const { data, error } = await supabase
           .from("v_billing_panel")
           .select(`
@@ -228,11 +278,50 @@ export default function Billing() {
 
         if (cancelled) return;
 
-        if (error) throw error;
+        if (error) {
+          if (isMissingBillingViewError(error)) {
+            panelMissing = true;
+          } else {
+            throw error;
+          }
+        } else {
+          panelBilling = data || null;
+        }
 
-        setBilling(data || null);
+        const { data: orgBilling, error: orgBillingError } = await supabase
+          .from("org_billing")
+          .select(`
+            org_id,
+            plan_code,
+            subscribed_plan_code,
+            plan_status,
+            billing_provider,
+            current_period_end,
+            dodo_customer_id,
+            dodo_subscription_id,
+            dodo_product_id,
+            dodo_checkout_session_id,
+            dodo_payment_id,
+            last_dodo_event_at
+          `)
+          .eq("org_id", currentOrgId)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (orgBillingError) {
+          console.warn("[Billing] could not load org_billing", orgBillingError);
+        }
+
+        const mergedBilling = mergeBillingPanelWithOrgBilling(
+          panelBilling,
+          orgBillingError ? null : orgBilling,
+          currentOrgId
+        );
+
+        setBilling(mergedBilling);
         setBillingError("");
-        setBillingFallback(false);
+        setBillingFallback(panelMissing && !mergedBilling);
       } catch (err) {
         if (cancelled) return;
 
@@ -396,6 +485,43 @@ export default function Billing() {
         {(() => {
           const orgId = billing?.org_id ?? currentOrgId ?? null;
           const showUpgradeCta = ["free", "trialing", "over_limit"].includes(ctaVariant);
+          const activePlanLabel = labelPlan(effectivePlanCode, tr);
+
+          if (!showUpgradeCta && ["pro", "enterprise"].includes(effectivePlanCode)) {
+            return (
+              <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <div className="text-xl font-bold text-emerald-950">
+                      {tr("billing.currentPlanBanner.title", "Plan actual")}: {activePlanLabel}
+                    </div>
+                    <div className="mt-1 text-sm text-emerald-800">
+                      {tr("billing.currentPlanBanner.status", "Estado")}: {labelStatus(effectivePlanStatus, tr)}
+                    </div>
+                    {billing?.current_period_end ? (
+                      <div className="mt-1 text-sm text-emerald-800">
+                        {tr("billing.currentPlanBanner.currentPeriodUntil", "Período actual hasta")}: {formatDate(billing.current_period_end, dateLocale)}
+                      </div>
+                    ) : null}
+                    {billing?.billing_provider ? (
+                      <div className="mt-1 text-xs text-emerald-700">
+                        {tr("billing.currentPlanBanner.provider", "Proveedor")}: {String(billing.billing_provider).toUpperCase()}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <Link
+                    to={pricingHref}
+                    className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
+                  >
+                    {effectivePlanCode === "pro"
+                      ? tr("billing.actions.viewUpgradeOptions", "Ver opciones de upgrade")
+                      : tr("billing.actions.viewPlans", "Ver planes")}
+                  </Link>
+                </div>
+              </div>
+            );
+          }
 
           return showUpgradeCta ? (
             <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
