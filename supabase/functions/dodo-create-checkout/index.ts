@@ -124,6 +124,52 @@ async function getOrgBillingState(orgId: string): Promise<OrgBillingState | null
   return (data ?? null) as OrgBillingState | null;
 }
 
+
+async function syncOrgBillingAfterDodoChangePlan(params: {
+  orgId: string;
+  subscriptionId: string;
+  productId: string;
+  plan: PlanCode;
+}) {
+  const supabase = getAdminClient();
+
+  const { data, error } = await supabase
+    .from("org_billing")
+    .update({
+      plan_code: params.plan,
+      subscribed_plan_code: params.plan,
+      plan_status: "active",
+      billing_provider: "dodo",
+      dodo_subscription_id: params.subscriptionId,
+      dodo_product_id: params.productId,
+      last_dodo_event_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("org_id", params.orgId)
+    .select(`
+      org_id,
+      plan_code,
+      subscribed_plan_code,
+      plan_status,
+      billing_provider,
+      dodo_subscription_id,
+      dodo_product_id,
+      current_period_end
+    `)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[dodo-create-checkout] org_billing sync after change-plan failed", {
+      org_id: params.orgId,
+      code: error.code,
+      message: error.message,
+    });
+    throw new Error("Dodo changed the plan, but the app could not sync billing state.");
+  }
+
+  return (data ?? null) as OrgBillingState | null;
+}
+
 function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) {
   const currentPlan = effectiveOrgPlan(billing);
   const currentStatus = normalizeText(billing?.plan_status || "free", "free");
@@ -352,7 +398,14 @@ serve(async (req) => {
         );
       }
 
-      const redirectUrl = `${appBaseUrl}/billing?lang=${lang}&upgrade=enterprise&change_plan=completed`;
+      const syncedBilling = await syncOrgBillingAfterDodoChangePlan({
+        orgId,
+        subscriptionId: existingSubscriptionId,
+        productId,
+        plan,
+      });
+
+      const redirectUrl = `${appBaseUrl}/billing?lang=${lang}&upgrade=enterprise&change_plan=completed&billing_refresh=${Date.now()}`;
 
       return json(200, {
         ok: true,
@@ -362,9 +415,16 @@ serve(async (req) => {
         mode: "test",
         plan,
         checkout_intent: "change_plan_to_enterprise",
-        current_plan_code: checkoutAccess.currentPlan,
-        current_plan_status: checkoutAccess.currentStatus,
+        current_plan_code: syncedBilling?.subscribed_plan_code || syncedBilling?.plan_code || plan,
+        current_plan_status: syncedBilling?.plan_status || "active",
         subscription_id: existingSubscriptionId,
+        synced_billing: {
+          plan_code: syncedBilling?.plan_code ?? null,
+          subscribed_plan_code: syncedBilling?.subscribed_plan_code ?? null,
+          plan_status: syncedBilling?.plan_status ?? null,
+          billing_provider: syncedBilling?.billing_provider ?? null,
+          dodo_product_id: syncedBilling?.dodo_product_id ?? null,
+        },
       });
     }
 
