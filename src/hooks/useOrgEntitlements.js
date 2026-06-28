@@ -75,6 +75,18 @@ function buildFallbackEntitlementsFromPlan(planCode, billingRow = null) {
   };
 }
 
+function buildTrackerRouteBypassEntitlements(orgId) {
+  return {
+    ...buildFallbackEntitlementsFromPlan("free", {
+      org_id: orgId || null,
+      tracker_limit_override: 9999,
+    }),
+    plan_status: "free",
+    __source: "tracker_route_bypass",
+    __bypass_reason: "tracker_route_access",
+  };
+}
+
 export default function useOrgEntitlements() {
   const { ready, authenticated, currentOrgId, currentRole } = useAuth();
 
@@ -93,7 +105,7 @@ export default function useOrgEntitlements() {
   }, []);
 
   const trackerRoleBypass = String(currentRole || "").toLowerCase() === "tracker";
-  const shouldBypassForTracker = trackerRouteBypass || trackerRoleBypass;
+  const shouldBypassForTracker = trackerRouteBypass;
 
   const [loading, setLoading] = useState(!shouldBypassForTracker);
   const [error, setError] = useState("");
@@ -105,23 +117,18 @@ export default function useOrgEntitlements() {
     if (shouldBypassForTracker) {
       if (!bypassLoggedRef.current) {
         console.warn("[monetization-regression] source=useOrgEntitlements");
-        console.warn("[monetization-regression] tracker bypass applied");
+        console.warn("[monetization-regression] tracker route bypass applied");
         bypassLoggedRef.current = true;
       }
-      setEntitlements({
-        ...buildFallbackEntitlementsFromPlan("pro", {
-          org_id: currentOrgId || null,
-          tracker_limit_override: 9999,
-        }),
-        plan_status: "active",
-      });
+
+      setEntitlements(buildTrackerRouteBypassEntitlements(currentOrgId));
       setError("");
-      setSource("tracker_preview_bypass");
+      setSource("tracker_route_bypass");
       setLoading(false);
       return;
     }
 
-    // Wait until ready and currentOrgId are both valid before querying billing
+    // Wait until ready and currentOrgId are both valid before querying billing.
     if (!ready || !authenticated || !currentOrgId) {
       setEntitlements(null);
       setError("");
@@ -147,10 +154,6 @@ export default function useOrgEntitlements() {
       if (entitlementError) throw entitlementError;
       if (billingError) throw billingError;
 
-
-
-
-
       if (entitlementRow) {
         setEntitlements({
           ...entitlementRow,
@@ -162,7 +165,6 @@ export default function useOrgEntitlements() {
         setLoading(false);
         return;
       }
-
 
       if (billingRow) {
         const fallback = buildFallbackEntitlementsFromPlan(billingRow.plan_code, billingRow);
@@ -206,7 +208,7 @@ export default function useOrgEntitlements() {
       setError(err?.message || "No se pudieron cargar los entitlements.");
       setLoading(false);
     }
-  }, [ready, authenticated, currentOrgId, shouldBypassForTracker]);
+  }, [ready, authenticated, currentOrgId, currentRole, shouldBypassForTracker, trackerRoleBypass]);
 
   useEffect(() => {
     loadEntitlements();
@@ -241,7 +243,7 @@ export default function useOrgEntitlements() {
 
   const isFree = planCode === "free" || normalizedPlanStatus === "free";
   const isStarter = planCode === "starter" && isActive;
-  // Keep PRO enabled while plan_status is active, even if cancellation is scheduled
+  // Keep PRO enabled while plan_status is active, even if cancellation is scheduled.
   const isPro = planCode === "pro" && isActive;
   const isEnterprise = planCode === "enterprise" && isActive;
   const isElite = planCode === "elite" && isActive;
@@ -274,6 +276,5 @@ export default function useOrgEntitlements() {
     isEnterprise,
     isElite,
     isElitePlus,
-
   };
 }
