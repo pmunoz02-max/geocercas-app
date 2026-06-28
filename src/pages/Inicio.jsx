@@ -374,7 +374,7 @@ function PlanSection({ currentOrgId }) {
       entitlements?.plan_code ||
       entitlements?.billing_plan_code ||
       planCode ||
-      "starter"
+      "free"
   ).toLowerCase();
 
   const planLabel =
@@ -382,7 +382,9 @@ function PlanSection({ currentOrgId }) {
       ? t("dashboard.planEnterprise", { defaultValue: "Enterprise" })
       : currentPlan === "pro"
       ? t("dashboard.planPro", { defaultValue: "Pro" })
-      : t("dashboard.planStarter", { defaultValue: "Starter" });
+      : currentPlan === "starter"
+      ? t("dashboard.planStarter", { defaultValue: "Starter" })
+      : t("dashboard.planFree", { defaultValue: "Free" });
 
   const nextPlan = currentPlan === "pro" ? "enterprise" : "pro";
   const canUpgrade = currentPlan !== "enterprise";
