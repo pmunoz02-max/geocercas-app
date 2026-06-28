@@ -68,7 +68,23 @@ function buildBillingUrl(language: string | undefined): string {
   params.set("lang", language || "es");
   params.set("upgrade", "enterprise");
   params.set("billing_refresh", String(Date.now()));
+  params.set("source", "dodo_change_plan");
   return `/billing?${params.toString()}`;
+}
+
+function forceBillingReload(language: string | undefined): void {
+  const url = buildBillingUrl(language);
+
+  // Use a hard navigation instead of React-only routing so Billing reloads
+  // org_billing after Dodo emits subscription.plan_changed.
+  window.location.replace(url);
+
+  // Fallback for browsers that ignore replace during an in-flight state update.
+  window.setTimeout(() => {
+    if (!window.location.pathname.toLowerCase().startsWith("/billing")) {
+      window.location.href = url;
+    }
+  }, 350);
 }
 
 function readAuthTokenFromContext(auth: any): string {
@@ -163,15 +179,15 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
     "inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
 
   async function redirectToBillingAfterUpgrade() {
-    window.location.assign(buildBillingUrl(i18n?.language));
+    forceBillingReload(i18n?.language);
   }
 
   async function finishEnterpriseChangePlan() {
     if (effectiveOrgId) {
-      await waitForEnterpriseActiveBilling(effectiveOrgId);
+      await waitForEnterpriseActiveBilling(effectiveOrgId, 14);
     }
 
-    window.location.assign(buildBillingUrl(i18n?.language));
+    forceBillingReload(i18n?.language);
   }
 
   async function runCheckout({ confirmedPlanChange = false }: { confirmedPlanChange?: boolean } = {}) {
@@ -335,7 +351,11 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         className={className || defaultClassName}
       >
         {loading
-          ? t("dashboard.openingCheckout", { defaultValue: "Opening checkout..." })
+          ? checkoutPlan === "enterprise"
+            ? t("billing.checkout.confirmEnterpriseProcessing", {
+                defaultValue: "Changing plan...",
+              })
+            : t("dashboard.openingCheckout", { defaultValue: "Opening checkout..." })
           : buttonLabel}
       </button>
 
