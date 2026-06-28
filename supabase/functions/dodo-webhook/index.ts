@@ -30,6 +30,16 @@ type DodoExtractedEvent = {
   summary: JsonObject;
 };
 
+type ExistingOrgBilling = {
+  org_id?: string | null;
+  plan_code?: string | null;
+  subscribed_plan_code?: string | null;
+  plan_status?: string | null;
+  billing_provider?: string | null;
+  dodo_subscription_id?: string | null;
+  dodo_product_id?: string | null;
+};
+
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
@@ -274,7 +284,10 @@ function extractEvent(payload: JsonObject): DodoExtractedEvent {
   const productCartProductIds = getProductCartProductIds(data);
   const productId = stringOrNull(data.product_id) ?? productCartProductIds[0] ?? null;
   const metadataPlan = normalizePlan(metadata.plan_code ?? metadata.plan ?? metadata.planCode);
-  const planCode = metadataPlan ?? planFromProductId(productId);
+  const productPlan = planFromProductId(productId);
+  // Permanent rule: when Dodo sends a product_id, the product wins over metadata.
+  // Metadata is only a fallback for payment events that do not include product_cart/product_id.
+  const planCode = productPlan ?? metadataPlan;
   const orgIdRaw = stringOrNull(metadata.org_id ?? metadata.orgId);
   const orgId = looksLikeUuid(orgIdRaw) ? orgIdRaw : null;
   const currentPeriodEnd = parseTimestamp(
@@ -292,6 +305,9 @@ function extractEvent(payload: JsonObject): DodoExtractedEvent {
     product_id: productId,
     product_cart_product_ids: productCartProductIds,
     plan_code: planCode,
+    product_plan: productPlan,
+    metadata_plan: metadataPlan,
+    plan_resolution: productPlan ? "product_id" : metadataPlan ? "metadata_fallback" : "none",
     org_id_present: Boolean(orgId),
     metadata_keys: safeKeys(data.metadata),
     top_level_keys: safeKeys(payload),
@@ -339,6 +355,30 @@ function shouldCancelBilling(event: DodoExtractedEvent): boolean {
 
 function withDefinedValues(input: JsonObject): JsonObject {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+}
+
+async function getExistingOrgBilling(supabase: ReturnType<typeof createClient>, orgId: string): Promise<ExistingOrgBilling | null> {
+  const { data, error } = await supabase
+    .from("org_billing")
+    .select("org_id, plan_code, subscribed_plan_code, plan_status, billing_provider, dodo_subscription_id, dodo_product_id")
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[dodo-webhook] existing org_billing lookup failed", {
+      org_id: orgId,
+      code: error.code,
+      message: error.message,
+    });
+    throw error;
+  }
+
+  return (data ?? null) as ExistingOrgBilling | null;
+}
+
+function isSameKnownDodoSubscription(event: DodoExtractedEvent, billing: ExistingOrgBilling | null): boolean {
+  const existingSubscriptionId = stringOrNull(billing?.dodo_subscription_id);
+  return Boolean(existingSubscriptionId && event.subscriptionId && existingSubscriptionId === event.subscriptionId);
 }
 
 serve(async (req) => {
@@ -449,6 +489,39 @@ serve(async (req) => {
         event_id: event.eventId,
         event_type: event.eventType,
       });
+    }
+
+    // Guard against accidental upgrades caused by metadata on payment events.
+    // Dodo payment.succeeded events may omit product_id/product_cart. If the event is for an
+    // already-known Dodo subscription, do not let metadata.plan_code override the product
+    // already stored for that subscription. Wait for a subscription.* event with product_id
+    // to confirm an actual plan change.
+    if (shouldActivateBilling(event) && !event.productId && event.orgId && event.planCode) {
+      const existingBilling = await getExistingOrgBilling(supabase, event.orgId);
+      const existingProductPlan = planFromProductId(stringOrNull(existingBilling?.dodo_product_id));
+
+      if (isSameKnownDodoSubscription(event, existingBilling) && existingProductPlan && existingProductPlan !== event.planCode) {
+        await supabase
+          .from("dodo_webhook_events")
+          .update({
+            status: "ignored",
+            processed_at: new Date().toISOString(),
+            error_detail: "payment_metadata_plan_conflicts_existing_subscription_product",
+          })
+          .eq("event_id", event.eventId);
+
+        return json(200, {
+          ok: true,
+          processed: false,
+          ignored: true,
+          reason: "payment_metadata_plan_conflicts_existing_subscription_product",
+          event_id: event.eventId,
+          event_type: event.eventType,
+          org_id: event.orgId,
+          metadata_plan_code: event.planCode,
+          existing_product_plan: existingProductPlan,
+        });
+      }
     }
 
     const now = new Date().toISOString();
