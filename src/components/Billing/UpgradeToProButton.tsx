@@ -31,10 +31,20 @@ type DodoCheckoutResponse = {
   change_plan_completed?: boolean;
   error?: string;
   message?: string;
+  current_plan_code?: string;
+  current_plan_status?: string;
 };
 
 function cleanId(value: unknown): string {
   return String(value || "").trim();
+}
+
+function normalizePlan(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isActivePaidStatus(value: unknown): boolean {
+  return ["active", "trialing", "past_due", "paused"].includes(normalizePlan(value));
 }
 
 function buildLoginUrl(language: string | undefined): string {
@@ -71,6 +81,27 @@ async function readSupabaseAccessToken(): Promise<string> {
   }
 }
 
+async function hasEnterpriseActiveBilling(orgId: string): Promise<boolean> {
+  if (!orgId) return false;
+
+  try {
+    const { data, error } = await supabase
+      .from("org_billing")
+      .select("plan_code, subscribed_plan_code, plan_status")
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (error || !data) return false;
+
+    const plan = normalizePlan(data.subscribed_plan_code || data.plan_code);
+    const status = normalizePlan(data.plan_status);
+
+    return plan === "enterprise" && isActivePaidStatus(status);
+  } catch {
+    return false;
+  }
+}
+
 export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
   const { t, i18n } = useTranslation();
   const auth = useAuth() as any;
@@ -96,6 +127,10 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
   const defaultClassName =
     "inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
+
+  async function redirectToBillingAfterUpgrade() {
+    window.location.assign(buildBillingUrl(i18n?.language));
+  }
 
   async function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
@@ -156,15 +191,33 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         },
       });
 
-      if (error) {
-        throw error;
-      }
-
       const response = data as DodoCheckoutResponse | null;
       const checkoutUrl = cleanId(response?.checkout_url || response?.checkoutUrl);
       const redirectUrl = cleanId(response?.redirect_url || response?.redirectUrl);
 
+      if (error) {
+        if (checkoutPlan === "enterprise" && (await hasEnterpriseActiveBilling(effectiveOrgId))) {
+          await redirectToBillingAfterUpgrade();
+          return;
+        }
+
+        throw error;
+      }
+
       if (!response?.ok) {
+        const responsePlan = normalizePlan(response?.current_plan_code);
+        const responseStatus = normalizePlan(response?.current_plan_status);
+        const alreadyEnterprise =
+          checkoutPlan === "enterprise" &&
+          (response?.error === "enterprise_already_active" ||
+            (responsePlan === "enterprise" && isActivePaidStatus(responseStatus)) ||
+            (await hasEnterpriseActiveBilling(effectiveOrgId)));
+
+        if (alreadyEnterprise) {
+          window.location.assign(redirectUrl || buildBillingUrl(i18n?.language));
+          return;
+        }
+
         throw new Error(
           response?.message ||
             response?.error ||
@@ -180,6 +233,11 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       }
 
       if (!checkoutUrl) {
+        if (checkoutPlan === "enterprise" && (await hasEnterpriseActiveBilling(effectiveOrgId))) {
+          window.location.assign(redirectUrl || buildBillingUrl(i18n?.language));
+          return;
+        }
+
         throw new Error(
           response?.message ||
             response?.error ||
@@ -218,7 +276,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       {BILLING_CHECKOUT_MODE === "test" ? (
         <p className="mt-2 text-xs text-slate-500">
-          {getCheckoutSafetyLabel()}:{" "}
+          {getCheckoutSafetyLabel()}: {" "}
           {t("billing.checkout.testNotice", { defaultValue: "no real charge will be made." })}
         </p>
       ) : null}
