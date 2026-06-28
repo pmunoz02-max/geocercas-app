@@ -539,11 +539,6 @@ export default function Billing() {
                         )}: {formatDate(billing.current_period_end, dateLocale)}
                       </div>
                     ) : null}
-                    {billing?.billing_provider ? (
-                      <div className="mt-1 text-xs text-emerald-700">
-                        {tr("billing.currentPlanBanner.provider", billingCopy("Proveedor", "Provider", "Fournisseur"))}: {String(billing.billing_provider).toUpperCase()}
-                      </div>
-                    ) : null}
                   </div>
 
                   {canUpgradeToEnterprise ? (
