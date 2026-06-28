@@ -553,6 +553,36 @@ serve(async (req) => {
       if (billingResult.error) throw billingResult.error;
       billingAction = "activated";
     } else if (shouldCancelBilling(event)) {
+      const existingBilling = await getExistingOrgBilling(supabase, event.orgId);
+      const existingSubscriptionId = stringOrNull(existingBilling?.dodo_subscription_id);
+
+      // Critical guard: late cancellation events from an old/replaced Dodo subscription must
+      // never cancel or downgrade the organization if org_billing already points to a newer
+      // active subscription. This happens in TEST and can happen in production with retries,
+      // replays, delayed provider events, or manual cleanup of a replaced subscription.
+      if (existingSubscriptionId && event.subscriptionId && existingSubscriptionId !== event.subscriptionId) {
+        await supabase
+          .from("dodo_webhook_events")
+          .update({
+            status: "ignored",
+            processed_at: now,
+            error_detail: "stale_subscription_cancelled",
+          })
+          .eq("event_id", event.eventId);
+
+        return json(200, {
+          ok: true,
+          processed: false,
+          ignored: true,
+          reason: "stale_subscription_cancelled",
+          event_id: event.eventId,
+          event_type: event.eventType,
+          org_id: event.orgId,
+          cancelled_subscription_id: event.subscriptionId,
+          current_subscription_id: existingSubscriptionId,
+        });
+      }
+
       const billingPatch = withDefinedValues({
         org_id: event.orgId,
         plan_status: "canceled",
