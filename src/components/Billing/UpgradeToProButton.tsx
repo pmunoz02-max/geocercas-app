@@ -52,6 +52,10 @@ function isActivePaidStatus(value: unknown): boolean {
   return ["active", "trialing", "past_due", "paused"].includes(normalizePlan(value));
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function buildLoginUrl(language: string | undefined): string {
   const params = new URLSearchParams();
   params.set("lang", language || "es");
@@ -63,6 +67,7 @@ function buildBillingUrl(language: string | undefined): string {
   const params = new URLSearchParams();
   params.set("lang", language || "es");
   params.set("upgrade", "enterprise");
+  params.set("billing_refresh", String(Date.now()));
   return `/billing?${params.toString()}`;
 }
 
@@ -115,6 +120,15 @@ async function hasEnterpriseActiveBilling(orgId: string): Promise<boolean> {
   return snapshot.planCode === "enterprise" && isActivePaidStatus(snapshot.planStatus);
 }
 
+async function waitForEnterpriseActiveBilling(orgId: string, attempts = 10): Promise<boolean> {
+  for (let i = 0; i < attempts; i += 1) {
+    if (await hasEnterpriseActiveBilling(orgId)) return true;
+    await delay(i < 3 ? 800 : 1200);
+  }
+
+  return false;
+}
+
 function isActiveProBilling(snapshot: BillingSnapshot | null): boolean {
   if (!snapshot) return false;
 
@@ -149,6 +163,14 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
     "inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
 
   async function redirectToBillingAfterUpgrade() {
+    window.location.assign(buildBillingUrl(i18n?.language));
+  }
+
+  async function finishEnterpriseChangePlan() {
+    if (effectiveOrgId) {
+      await waitForEnterpriseActiveBilling(effectiveOrgId);
+    }
+
     window.location.assign(buildBillingUrl(i18n?.language));
   }
 
@@ -220,10 +242,9 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       const response = data as DodoCheckoutResponse | null;
       const checkoutUrl = cleanId(response?.checkout_url || response?.checkoutUrl);
-      const redirectUrl = cleanId(response?.redirect_url || response?.redirectUrl);
 
       if (error) {
-        if (checkoutPlan === "enterprise" && (await hasEnterpriseActiveBilling(effectiveOrgId))) {
+        if (checkoutPlan === "enterprise" && (await waitForEnterpriseActiveBilling(effectiveOrgId))) {
           await redirectToBillingAfterUpgrade();
           return;
         }
@@ -238,10 +259,10 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
           checkoutPlan === "enterprise" &&
           (response?.error === "enterprise_already_active" ||
             (responsePlan === "enterprise" && isActivePaidStatus(responseStatus)) ||
-            (await hasEnterpriseActiveBilling(effectiveOrgId)));
+            (await waitForEnterpriseActiveBilling(effectiveOrgId)));
 
         if (alreadyEnterprise) {
-          window.location.assign(redirectUrl || buildBillingUrl(i18n?.language));
+          await finishEnterpriseChangePlan();
           return;
         }
 
@@ -255,13 +276,13 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       }
 
       if (response.change_plan_completed) {
-        window.location.assign(redirectUrl || buildBillingUrl(i18n?.language));
+        await finishEnterpriseChangePlan();
         return;
       }
 
       if (!checkoutUrl) {
-        if (checkoutPlan === "enterprise" && (await hasEnterpriseActiveBilling(effectiveOrgId))) {
-          window.location.assign(redirectUrl || buildBillingUrl(i18n?.language));
+        if (checkoutPlan === "enterprise" && (await waitForEnterpriseActiveBilling(effectiveOrgId))) {
+          await finishEnterpriseChangePlan();
           return;
         }
 
