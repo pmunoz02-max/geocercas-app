@@ -200,6 +200,13 @@ function buildLangPath(pathname, language) {
   return `${pathname}?lang=${lang}`;
 }
 
+function localizedCopy(language, es, en, fr) {
+  const lang = String(language || "").toLowerCase();
+  if (lang.startsWith("en")) return en;
+  if (lang.startsWith("fr")) return fr;
+  return es;
+}
+
 export default function Billing() {
     // Get cancellationScheduled from entitlements
     const { cancellationScheduled } = useOrgEntitlements();
@@ -219,6 +226,11 @@ export default function Billing() {
     const qp = new URLSearchParams(location.search).get("lang");
     return qp || i18n?.language || "es";
   }, [location.search, i18n?.language]);
+
+  const billingCopy = React.useCallback(
+    (es, en, fr) => localizedCopy(currentLang || i18n?.language, es, en, fr),
+    [currentLang, i18n?.language]
+  );
 
   const pricingHref = useMemo(() => buildLangPath("/pricing", currentLang), [currentLang]);
   const homeHref = useMemo(() => buildLangPath("/inicio", currentLang), [currentLang]);
@@ -459,14 +471,21 @@ export default function Billing() {
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
             <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
-              {tr("billing.heroEyebrow", "Plan y pagos")}
+              {tr("billing.heroEyebrow", billingCopy("Plan y pagos", "Plan & payments", "Plan et paiements"))}
             </div>
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
                 {tr("billing.title", "Billing")}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-emerald-50/90">
-                {tr("billing.heroSubtitle", "Revisa el estado del plan, capacidad y opciones de actualización de tu organización.")}
+                {tr(
+                  "billing.heroSubtitle",
+                  billingCopy(
+                    "Revisa el estado del plan, capacidad y opciones de actualización de tu organización.",
+                    "Review your organization’s plan status, capacity, and upgrade options.",
+                    "Consultez l’état du plan, la capacité et les options de mise à niveau de votre organisation."
+                  )
+                )}
               </p>
             </div>
           </div>
@@ -507,19 +526,22 @@ export default function Billing() {
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="text-xl font-bold text-emerald-950">
-                      {tr("billing.currentPlanBanner.title", "Plan actual")}: {activePlanLabel}
+                      {tr("billing.currentPlanBanner.title", billingCopy("Plan actual", "Current plan", "Plan actuel"))}: {activePlanLabel}
                     </div>
                     <div className="mt-1 text-sm text-emerald-800">
-                      {tr("billing.currentPlanBanner.status", "Estado")}: {labelStatus(effectivePlanStatus, tr)}
+                      {tr("billing.currentPlanBanner.status", billingCopy("Estado", "Status", "Statut"))}: {labelStatus(effectivePlanStatus, tr)}
                     </div>
                     {billing?.current_period_end ? (
                       <div className="mt-1 text-sm text-emerald-800">
-                        {tr("billing.currentPlanBanner.currentPeriodUntil", "Período actual hasta")}: {formatDate(billing.current_period_end, dateLocale)}
+                        {tr(
+                          "billing.currentPlanBanner.currentPeriodUntil",
+                          billingCopy("Período actual hasta", "Current period until", "Période actuelle jusqu’au")
+                        )}: {formatDate(billing.current_period_end, dateLocale)}
                       </div>
                     ) : null}
                     {billing?.billing_provider ? (
                       <div className="mt-1 text-xs text-emerald-700">
-                        {tr("billing.currentPlanBanner.provider", "Proveedor")}: {String(billing.billing_provider).toUpperCase()}
+                        {tr("billing.currentPlanBanner.provider", billingCopy("Proveedor", "Provider", "Fournisseur"))}: {String(billing.billing_provider).toUpperCase()}
                       </div>
                     ) : null}
                   </div>
@@ -528,7 +550,10 @@ export default function Billing() {
                     <UpgradeToProButton
                       orgId={currentOrgId}
                       plan="enterprise"
-                      label={tr("billing.actions.upgradeToEnterprise", "Upgrade to Enterprise")}
+                      label={tr(
+                        "billing.actions.upgradeToEnterprise",
+                        billingCopy("Subir a Enterprise", "Upgrade to Enterprise", "Passer à Enterprise")
+                      )}
                       className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
                     />
                   ) : (
@@ -536,7 +561,7 @@ export default function Billing() {
                       to={pricingHref}
                       className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
                     >
-                      {tr("billing.actions.viewPlans", "Ver planes")}
+                      {tr("billing.actions.viewPlans", billingCopy("Ver planes", "View plans", "Voir les plans"))}
                     </Link>
                   )}
                 </div>
@@ -813,7 +838,10 @@ export default function Billing() {
                 <UpgradeToProButton
                   orgId={currentOrgId}
                   plan="enterprise"
-                  label={tr("billing.actions.upgradeToEnterprise", "Upgrade to Enterprise")}
+                  label={tr(
+                        "billing.actions.upgradeToEnterprise",
+                        billingCopy("Subir a Enterprise", "Upgrade to Enterprise", "Passer à Enterprise")
+                      )}
                   className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
                 />
               ) : (

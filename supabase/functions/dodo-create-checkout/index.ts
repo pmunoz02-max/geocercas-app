@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HttpError, requireOrgAdmin } from "../_shared/authz.ts";
+import { getAdminClient } from "../_shared/supabaseAdmin.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,6 +10,18 @@ const corsHeaders = {
 };
 
 type PlanCode = "pro" | "enterprise";
+type CheckoutIntent = "new_subscription" | "upgrade_to_enterprise";
+
+type OrgBillingState = {
+  org_id?: string | null;
+  plan_code?: string | null;
+  subscribed_plan_code?: string | null;
+  plan_status?: string | null;
+  billing_provider?: string | null;
+  dodo_subscription_id?: string | null;
+  dodo_product_id?: string | null;
+  current_period_end?: string | null;
+};
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -28,6 +41,21 @@ function normalizePlan(input: unknown): PlanCode | null {
   if (value === "pro") return "pro";
   if (value === "enterprise") return "enterprise";
   return null;
+}
+
+function normalizeText(input: unknown, fallback = "") {
+  return String(input ?? fallback).trim().toLowerCase();
+}
+
+function activePaidStatus(input: unknown) {
+  return ["active", "trialing", "past_due", "paused"].includes(normalizeText(input));
+}
+
+function effectiveOrgPlan(billing: OrgBillingState | null): string {
+  return normalizeText(
+    billing?.subscribed_plan_code || billing?.plan_code || "free",
+    "free",
+  );
 }
 
 function productIdForPlan(plan: PlanCode): string {
@@ -60,6 +88,103 @@ function safeDodoMessage(payload: unknown): string {
   return "Dodo checkout request failed";
 }
 
+async function getOrgBillingState(orgId: string): Promise<OrgBillingState | null> {
+  const supabase = getAdminClient();
+  const { data, error } = await supabase
+    .from("org_billing")
+    .select(`
+      org_id,
+      plan_code,
+      subscribed_plan_code,
+      plan_status,
+      billing_provider,
+      dodo_subscription_id,
+      dodo_product_id,
+      current_period_end
+    `)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[dodo-create-checkout] org_billing lookup failed", {
+      org_id: orgId,
+      code: error.code,
+      message: error.message,
+    });
+    throw new Error("Could not verify current billing state");
+  }
+
+  return (data ?? null) as OrgBillingState | null;
+}
+
+function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) {
+  const currentPlan = effectiveOrgPlan(billing);
+  const currentStatus = normalizeText(billing?.plan_status || "free", "free");
+  const hasPaidAccess = activePaidStatus(currentStatus) && ["pro", "enterprise"].includes(currentPlan);
+
+  if (!hasPaidAccess) {
+    return {
+      ok: true as const,
+      checkoutIntent: "new_subscription" as CheckoutIntent,
+      currentPlan,
+      currentStatus,
+    };
+  }
+
+  if (currentPlan === "enterprise") {
+    return {
+      ok: false as const,
+      status: 409,
+      error: "enterprise_already_active",
+      message: "This organization already has an active Enterprise plan.",
+      currentPlan,
+      currentStatus,
+    };
+  }
+
+  if (currentPlan === "pro" && plan === "pro") {
+    return {
+      ok: false as const,
+      status: 409,
+      error: "pro_already_active",
+      message: "This organization already has an active PRO plan.",
+      currentPlan,
+      currentStatus,
+    };
+  }
+
+  if (currentPlan === "pro" && plan === "enterprise") {
+    return {
+      ok: true as const,
+      checkoutIntent: "upgrade_to_enterprise" as CheckoutIntent,
+      currentPlan,
+      currentStatus,
+    };
+  }
+
+  return {
+    ok: false as const,
+    status: 409,
+    error: "paid_plan_already_active",
+    message: "This organization already has an active paid plan.",
+    currentPlan,
+    currentStatus,
+  };
+}
+
+function compactMetadata(input: Record<string, unknown>) {
+  const output: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(input)) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (!text) continue;
+    output[key] = text;
+  }
+
+  return output;
+}
+
 serve(async (req) => {
   try {
     if (req.method === "OPTIONS") {
@@ -89,6 +214,21 @@ serve(async (req) => {
     }
 
     const { user, role } = await requireOrgAdmin(req, orgId);
+    const orgBilling = await getOrgBillingState(orgId);
+    const checkoutAccess = resolveCheckoutIntent(plan, orgBilling);
+
+    if (!checkoutAccess.ok) {
+      return json(checkoutAccess.status, {
+        ok: false,
+        error: checkoutAccess.error,
+        message: checkoutAccess.message,
+        current_plan_code: checkoutAccess.currentPlan,
+        current_plan_status: checkoutAccess.currentStatus,
+        requested_plan_code: plan,
+        allowed_next_plan_codes:
+          checkoutAccess.currentPlan === "pro" ? ["enterprise"] : [],
+      });
+    }
 
     const productId = productIdForPlan(plan);
     const dodoApiKey = getEnv("DODO_API_KEY_TEST");
@@ -97,6 +237,18 @@ serve(async (req) => {
 
     const returnUrl = Deno.env.get("DODO_RETURN_URL_TEST") ?? `${appBaseUrl}/billing/return?lang=es`;
     const cancelUrl = Deno.env.get("DODO_CANCEL_URL_TEST") ?? `${appBaseUrl}/billing/cancel?lang=es`;
+
+    const metadata = compactMetadata({
+      org_id: orgId,
+      plan_code: plan,
+      checkout_intent: checkoutAccess.checkoutIntent,
+      source: "geofield-preview",
+      environment: "preview",
+      requested_by: user.id,
+      current_plan_code: checkoutAccess.currentPlan,
+      current_plan_status: checkoutAccess.currentStatus,
+      existing_dodo_subscription_id: orgBilling?.dodo_subscription_id ?? null,
+    });
 
     const dodoPayload = {
       product_cart: [
@@ -107,19 +259,16 @@ serve(async (req) => {
       ],
       return_url: returnUrl,
       cancel_url: cancelUrl,
-      metadata: {
-        org_id: orgId,
-        plan_code: plan,
-        source: "geofield-preview",
-        environment: "preview",
-        requested_by: user.id,
-      },
+      metadata,
     };
 
     console.log("[dodo-create-checkout] creating checkout", {
       org_id: orgId,
       plan,
       role,
+      current_plan_code: checkoutAccess.currentPlan,
+      current_plan_status: checkoutAccess.currentStatus,
+      checkout_intent: checkoutAccess.checkoutIntent,
       product_id: productId,
       dodo_base_url: dodoBaseUrl,
       return_url: returnUrl,
@@ -178,6 +327,9 @@ serve(async (req) => {
       provider: "dodo",
       mode: "test",
       plan,
+      checkout_intent: checkoutAccess.checkoutIntent,
+      current_plan_code: checkoutAccess.currentPlan,
+      current_plan_status: checkoutAccess.currentStatus,
     });
   } catch (error) {
     const status = error instanceof HttpError ? error.status : 500;
