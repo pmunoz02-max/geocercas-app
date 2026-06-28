@@ -35,6 +35,11 @@ type DodoCheckoutResponse = {
   current_plan_status?: string;
 };
 
+type BillingSnapshot = {
+  planCode: string;
+  planStatus: string;
+};
+
 function cleanId(value: unknown): string {
   return String(value || "").trim();
 }
@@ -81,8 +86,8 @@ async function readSupabaseAccessToken(): Promise<string> {
   }
 }
 
-async function hasEnterpriseActiveBilling(orgId: string): Promise<boolean> {
-  if (!orgId) return false;
+async function readBillingSnapshot(orgId: string): Promise<BillingSnapshot | null> {
+  if (!orgId) return null;
 
   try {
     const { data, error } = await supabase
@@ -91,15 +96,29 @@ async function hasEnterpriseActiveBilling(orgId: string): Promise<boolean> {
       .eq("org_id", orgId)
       .maybeSingle();
 
-    if (error || !data) return false;
+    if (error || !data) return null;
 
-    const plan = normalizePlan(data.subscribed_plan_code || data.plan_code);
-    const status = normalizePlan(data.plan_status);
-
-    return plan === "enterprise" && isActivePaidStatus(status);
+    return {
+      planCode: normalizePlan(data.subscribed_plan_code || data.plan_code),
+      planStatus: normalizePlan(data.plan_status),
+    };
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function hasEnterpriseActiveBilling(orgId: string): Promise<boolean> {
+  const snapshot = await readBillingSnapshot(orgId);
+
+  if (!snapshot) return false;
+
+  return snapshot.planCode === "enterprise" && isActivePaidStatus(snapshot.planStatus);
+}
+
+function isActiveProBilling(snapshot: BillingSnapshot | null): boolean {
+  if (!snapshot) return false;
+
+  return snapshot.planCode === "pro" && isActivePaidStatus(snapshot.planStatus);
 }
 
 export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
@@ -107,6 +126,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
   const auth = useAuth() as any;
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [confirmUpgradeOpen, setConfirmUpgradeOpen] = useState(false);
 
   const checkoutPlan = plan || "pro";
   const configured = isCheckoutConfigured(checkoutPlan) && BILLING_CHECKOUT_PROVIDER !== "disabled";
@@ -132,10 +152,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
     window.location.assign(buildBillingUrl(i18n?.language));
   }
 
-  async function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-
+  async function runCheckout({ confirmedPlanChange = false }: { confirmedPlanChange?: boolean } = {}) {
     setErrorMsg(null);
 
     if (!configured) {
@@ -169,6 +186,16 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
     try {
       setLoading(true);
+
+      if (checkoutPlan === "enterprise" && !confirmedPlanChange) {
+        const billingSnapshot = await readBillingSnapshot(effectiveOrgId);
+
+        if (isActiveProBilling(billingSnapshot)) {
+          setConfirmUpgradeOpen(true);
+          setLoading(false);
+          return;
+        }
+      }
 
       const accessToken = readAuthTokenFromContext(auth) || (await readSupabaseAccessToken());
 
@@ -261,6 +288,23 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
     }
   }
 
+  async function handleClick(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    await runCheckout();
+  }
+
+  async function confirmEnterpriseUpgrade() {
+    setConfirmUpgradeOpen(false);
+    await runCheckout({ confirmedPlanChange: true });
+  }
+
+  function cancelEnterpriseUpgrade() {
+    if (loading) return;
+    setConfirmUpgradeOpen(false);
+  }
+
   return (
     <div>
       <button
@@ -276,7 +320,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       {BILLING_CHECKOUT_MODE === "test" ? (
         <p className="mt-2 text-xs text-slate-500">
-          {getCheckoutSafetyLabel()}: {" "}
+          {getCheckoutSafetyLabel()}:{" "}
           {t("billing.checkout.testNotice", { defaultValue: "no real charge will be made." })}
         </p>
       ) : null}
@@ -284,6 +328,75 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       {errorMsg && !loading ? (
         <div className="mt-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
           {errorMsg}
+        </div>
+      ) : null}
+
+      {confirmUpgradeOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="enterprise-upgrade-confirm-title"
+        >
+          <div className="w-full max-w-lg rounded-3xl border border-emerald-100 bg-white p-6 shadow-2xl shadow-emerald-950/20">
+            <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">
+              {t("billing.checkout.confirmUpgradeBadge", { defaultValue: "Plan change" })}
+            </div>
+
+            <h2 id="enterprise-upgrade-confirm-title" className="mt-4 text-xl font-bold text-slate-950">
+              {t("billing.checkout.confirmEnterpriseTitle", {
+                defaultValue: "Confirm change to Enterprise",
+              })}
+            </h2>
+
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              {t("billing.checkout.confirmEnterpriseBody", {
+                defaultValue:
+                  "Your organization will change from PRO to Enterprise. Dodo will use the payment method associated with your current subscription. No second subscription will be created.",
+              })}
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4 text-sm text-slate-700">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-semibold">
+                  {t("billing.checkout.confirmEnterprisePlanLabel", { defaultValue: "New plan" })}
+                </span>
+                <span className="font-bold text-slate-950">Enterprise</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-4">
+                <span className="font-semibold">
+                  {t("billing.checkout.confirmEnterprisePriceLabel", { defaultValue: "Price" })}
+                </span>
+                <span className="font-bold text-slate-950">USD 99 / month</span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={cancelEnterpriseUpgrade}
+                disabled={loading}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {t("common.cancel", { defaultValue: "Cancel" })}
+              </button>
+
+              <button
+                type="button"
+                onClick={confirmEnterpriseUpgrade}
+                disabled={loading}
+                className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                {loading
+                  ? t("billing.checkout.confirmEnterpriseProcessing", {
+                      defaultValue: "Changing plan...",
+                    })
+                  : t("billing.checkout.confirmEnterpriseAction", {
+                      defaultValue: "Confirm change",
+                    })}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
