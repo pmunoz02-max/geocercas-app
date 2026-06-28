@@ -21,10 +21,14 @@ type DodoCheckoutResponse = {
   ok?: boolean;
   checkout_url?: string;
   checkoutUrl?: string;
+  redirect_url?: string;
+  redirectUrl?: string;
   session_id?: string | null;
   provider?: string;
   mode?: string;
   plan?: string;
+  checkout_intent?: string;
+  change_plan_completed?: boolean;
   error?: string;
   message?: string;
 };
@@ -38,6 +42,13 @@ function buildLoginUrl(language: string | undefined): string {
   params.set("lang", language || "es");
   params.set("next", "/billing");
   return `/login?${params.toString()}`;
+}
+
+function buildBillingUrl(language: string | undefined): string {
+  const params = new URLSearchParams();
+  params.set("lang", language || "es");
+  params.set("upgrade", "enterprise");
+  return `/billing?${params.toString()}`;
 }
 
 function readAuthTokenFromContext(auth: any): string {
@@ -138,6 +149,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         body: {
           org_id: effectiveOrgId,
           plan: checkoutPlan,
+          lang: i18n?.language || "es",
         },
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -150,8 +162,24 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       const response = data as DodoCheckoutResponse | null;
       const checkoutUrl = cleanId(response?.checkout_url || response?.checkoutUrl);
+      const redirectUrl = cleanId(response?.redirect_url || response?.redirectUrl);
 
-      if (!response?.ok || !checkoutUrl) {
+      if (!response?.ok) {
+        throw new Error(
+          response?.message ||
+            response?.error ||
+            t("billing.checkout.openError", {
+              defaultValue: "Could not open secure checkout. Please try again.",
+            }),
+        );
+      }
+
+      if (response.change_plan_completed) {
+        window.location.assign(redirectUrl || buildBillingUrl(i18n?.language));
+        return;
+      }
+
+      if (!checkoutUrl) {
         throw new Error(
           response?.message ||
             response?.error ||

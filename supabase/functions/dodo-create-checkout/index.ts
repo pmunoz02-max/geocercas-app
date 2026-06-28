@@ -47,6 +47,13 @@ function normalizeText(input: unknown, fallback = "") {
   return String(input ?? fallback).trim().toLowerCase();
 }
 
+function normalizeLang(input: unknown) {
+  const value = normalizeText(input || "es", "es");
+  if (value.startsWith("en")) return "en";
+  if (value.startsWith("fr")) return "fr";
+  return "es";
+}
+
 function activePaidStatus(input: unknown) {
   return ["active", "trialing", "past_due", "paused"].includes(normalizeText(input));
 }
@@ -172,6 +179,48 @@ function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) 
   };
 }
 
+async function changeDodoSubscriptionPlan(args: {
+  dodoBaseUrl: string;
+  dodoApiKey: string;
+  subscriptionId: string;
+  productId: string;
+  metadata: Record<string, string>;
+}) {
+  const response = await fetch(
+    `${args.dodoBaseUrl}/subscriptions/${encodeURIComponent(args.subscriptionId)}/change-plan`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${args.dodoApiKey}`,
+      },
+      body: JSON.stringify({
+        product_id: args.productId,
+        proration_billing_mode: "prorated_immediately",
+        quantity: 1,
+        effective_at: "immediately",
+        on_payment_failure: "prevent_change",
+        metadata: args.metadata,
+      }),
+    },
+  );
+
+  const responseText = await response.text();
+  let responseJson: any = null;
+  try {
+    responseJson = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    responseJson = null;
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: responseJson ?? responseText,
+    keys: responseJson && typeof responseJson === "object" ? Object.keys(responseJson) : [],
+  };
+}
+
 function compactMetadata(input: Record<string, unknown>) {
   const output: Record<string, string> = {};
 
@@ -204,6 +253,7 @@ serve(async (req) => {
 
     const orgId = String(body.org_id ?? body.orgId ?? "").trim();
     const plan = normalizePlan(body.plan ?? body.plan_code ?? body.planCode);
+    const lang = normalizeLang(body.lang ?? body.language);
 
     if (!orgId) {
       return json(400, { ok: false, error: "missing_org_id" });
@@ -235,8 +285,8 @@ serve(async (req) => {
     const dodoBaseUrl = getDodoBaseUrl();
     const appBaseUrl = getAppBaseUrl();
 
-    const returnUrl = Deno.env.get("DODO_RETURN_URL_TEST") ?? `${appBaseUrl}/billing/return?lang=es`;
-    const cancelUrl = Deno.env.get("DODO_CANCEL_URL_TEST") ?? `${appBaseUrl}/billing/cancel?lang=es`;
+    const returnUrl = Deno.env.get("DODO_RETURN_URL_TEST") ?? `${appBaseUrl}/billing/return?lang=${lang}`;
+    const cancelUrl = Deno.env.get("DODO_CANCEL_URL_TEST") ?? `${appBaseUrl}/billing/cancel?lang=${lang}`;
 
     const metadata = compactMetadata({
       org_id: orgId,
@@ -249,6 +299,67 @@ serve(async (req) => {
       current_plan_status: checkoutAccess.currentStatus,
       existing_dodo_subscription_id: orgBilling?.dodo_subscription_id ?? null,
     });
+
+    if (checkoutAccess.checkoutIntent === "upgrade_to_enterprise") {
+      const existingSubscriptionId = String(orgBilling?.dodo_subscription_id ?? "").trim();
+
+      if (!existingSubscriptionId || normalizeText(orgBilling?.billing_provider) !== "dodo") {
+        return json(409, {
+          ok: false,
+          error: "missing_existing_dodo_subscription",
+          message: "The organization has an active PRO plan, but no Dodo subscription was found for a direct upgrade.",
+          current_plan_code: checkoutAccess.currentPlan,
+          current_plan_status: checkoutAccess.currentStatus,
+          requested_plan_code: plan,
+        });
+      }
+
+      console.log("[dodo-create-checkout] changing Dodo subscription plan", {
+        org_id: orgId,
+        role,
+        current_plan_code: checkoutAccess.currentPlan,
+        current_plan_status: checkoutAccess.currentStatus,
+        requested_plan_code: plan,
+        subscription_id: existingSubscriptionId,
+        product_id: productId,
+        dodo_base_url: dodoBaseUrl,
+      });
+
+      const planChange = await changeDodoSubscriptionPlan({
+        dodoBaseUrl,
+        dodoApiKey,
+        subscriptionId: existingSubscriptionId,
+        productId,
+        metadata,
+      });
+
+      if (!planChange.ok) {
+        console.error("[dodo-create-checkout] Dodo plan change failed", {
+          status: planChange.status,
+          response_keys: planChange.keys,
+        });
+
+        return json(planChange.status >= 400 && planChange.status < 500 ? planChange.status : 500, {
+          ok: false,
+          error: "dodo_plan_change_failed",
+          status: planChange.status,
+          message: safeDodoMessage(planChange.body),
+        });
+      }
+
+      return json(200, {
+        ok: true,
+        provider: "dodo",
+        mode: "test",
+        plan,
+        checkout_intent: checkoutAccess.checkoutIntent,
+        change_plan_completed: true,
+        subscription_id: existingSubscriptionId,
+        current_plan_code: checkoutAccess.currentPlan,
+        current_plan_status: checkoutAccess.currentStatus,
+        redirect_url: `${appBaseUrl}/billing?lang=${lang}&upgrade=enterprise`,
+      });
+    }
 
     const dodoPayload = {
       product_cart: [
