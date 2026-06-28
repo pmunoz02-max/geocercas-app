@@ -258,12 +258,117 @@ serve(async (req) => {
       existing_dodo_subscription_id: orgBilling?.dodo_subscription_id ?? null,
     });
 
-    // Preview behavior: an active PRO org upgrading to Enterprise still opens Dodo Checkout
-    // so the user can review/confirm the Enterprise purchase in the Dodo interface.
-    // The webhook is responsible for activating Enterprise only after a signed Dodo event
-    // confirms the Enterprise product. Metadata preserves the previous PRO subscription id
-    // so a later production-safe replacement/cancellation flow can be implemented.
+    if (checkoutAccess.checkoutIntent === "upgrade_to_enterprise") {
+      const existingProvider = normalizeText(orgBilling?.billing_provider || "");
+      const existingSubscriptionId = String(orgBilling?.dodo_subscription_id ?? "").trim();
 
+      if (existingProvider && existingProvider !== "dodo") {
+        return json(409, {
+          ok: false,
+          error: "unsupported_existing_billing_provider",
+          message: "This organization has an active paid plan with another billing provider.",
+          current_plan_code: checkoutAccess.currentPlan,
+          current_plan_status: checkoutAccess.currentStatus,
+          requested_plan_code: plan,
+        });
+      }
+
+      if (!existingSubscriptionId) {
+        return json(409, {
+          ok: false,
+          error: "missing_dodo_subscription_id",
+          message: "The current PRO subscription cannot be changed because its Dodo subscription id is missing.",
+          current_plan_code: checkoutAccess.currentPlan,
+          current_plan_status: checkoutAccess.currentStatus,
+          requested_plan_code: plan,
+        });
+      }
+
+      const changePlanPayload = {
+        product_id: productId,
+        proration_billing_mode: "prorated_immediately",
+        quantity: 1,
+        effective_at: "immediately",
+        on_payment_failure: "prevent_change",
+        metadata: compactMetadata({
+          ...metadata,
+          checkout_intent: "change_plan_to_enterprise",
+          change_method: "dodo_change_plan",
+        }),
+      };
+
+      console.log("[dodo-create-checkout] changing Dodo subscription plan", {
+        org_id: orgId,
+        plan,
+        role,
+        current_plan_code: checkoutAccess.currentPlan,
+        current_plan_status: checkoutAccess.currentStatus,
+        checkout_intent: "change_plan_to_enterprise",
+        subscription_id: existingSubscriptionId,
+        product_id: productId,
+        dodo_base_url: dodoBaseUrl,
+      });
+
+      const changePlanResponse = await fetch(
+        `${dodoBaseUrl}/subscriptions/${encodeURIComponent(existingSubscriptionId)}/change-plan`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${dodoApiKey}`,
+          },
+          body: JSON.stringify(changePlanPayload),
+        },
+      );
+
+      const changePlanText = await changePlanResponse.text();
+      let changePlanJson: any = null;
+      try {
+        changePlanJson = changePlanText ? JSON.parse(changePlanText) : null;
+      } catch {
+        changePlanJson = null;
+      }
+
+      if (!changePlanResponse.ok) {
+        console.error("[dodo-create-checkout] Dodo change-plan request failed", {
+          status: changePlanResponse.status,
+          response_keys:
+            changePlanJson && typeof changePlanJson === "object" ? Object.keys(changePlanJson) : [],
+        });
+
+        return json(
+          changePlanResponse.status >= 400 && changePlanResponse.status < 500
+            ? changePlanResponse.status
+            : 500,
+          {
+            ok: false,
+            error: "dodo_change_plan_request_failed",
+            status: changePlanResponse.status,
+            message: safeDodoMessage(changePlanJson ?? changePlanText),
+            current_plan_code: checkoutAccess.currentPlan,
+            current_plan_status: checkoutAccess.currentStatus,
+            requested_plan_code: plan,
+          },
+        );
+      }
+
+      const redirectUrl = `${appBaseUrl}/billing?lang=${lang}&upgrade=enterprise&change_plan=completed`;
+
+      return json(200, {
+        ok: true,
+        change_plan_completed: true,
+        redirect_url: redirectUrl,
+        provider: "dodo",
+        mode: "test",
+        plan,
+        checkout_intent: "change_plan_to_enterprise",
+        current_plan_code: checkoutAccess.currentPlan,
+        current_plan_status: checkoutAccess.currentStatus,
+        subscription_id: existingSubscriptionId,
+      });
+    }
+
+    // New paid subscriptions continue to use Dodo Checkout.
     const dodoPayload = {
       product_cart: [
         {
