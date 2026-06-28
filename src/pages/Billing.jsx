@@ -407,6 +407,14 @@ export default function Billing() {
     [effectivePlanStatus]
   );
 
+  const normalizedPlanCodeForUpgrade = String(effectivePlanCode || "").toLowerCase();
+  const normalizedPlanStatusForUpgrade = String(effectivePlanStatus || "").toLowerCase();
+  const paidStatusForUpgrade = ["active", "trialing", "past_due", "paused"].includes(
+    normalizedPlanStatusForUpgrade
+  );
+  const canUpgradeToEnterprise =
+    normalizedPlanCodeForUpgrade === "pro" && paidStatusForUpgrade;
+
   if (loading || !ready) return null;
 
   if (!authenticated || !user) {
@@ -516,14 +524,21 @@ export default function Billing() {
                     ) : null}
                   </div>
 
-                  <Link
-                    to={pricingHref}
-                    className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
-                  >
-                    {effectivePlanCode === "pro"
-                      ? tr("billing.actions.viewUpgradeOptions", "Ver opciones de upgrade")
-                      : tr("billing.actions.viewPlans", "Ver planes")}
-                  </Link>
+                  {canUpgradeToEnterprise ? (
+                    <UpgradeToProButton
+                      orgId={currentOrgId}
+                      plan="enterprise"
+                      label={tr("billing.actions.upgradeToEnterprise", "Upgrade to Enterprise")}
+                      className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
+                    />
+                  ) : (
+                    <Link
+                      to={pricingHref}
+                      className="inline-flex items-center justify-center rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50"
+                    >
+                      {tr("billing.actions.viewPlans", "Ver planes")}
+                    </Link>
+                  )}
                 </div>
               </div>
             );
@@ -794,12 +809,21 @@ export default function Billing() {
                 tr("billing.cta.overLimitBody", "Your organization exceeded the current plan limits.")}
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <Link
-                to={pricingHref}
-                className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
-              >
-                {tr("billing.actions.viewPlans", "View plans")}
-              </Link>
+              {canUpgradeToEnterprise ? (
+                <UpgradeToProButton
+                  orgId={currentOrgId}
+                  plan="enterprise"
+                  label={tr("billing.actions.upgradeToEnterprise", "Upgrade to Enterprise")}
+                  className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
+                />
+              ) : (
+                <Link
+                  to={pricingHref}
+                  className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
+                >
+                  {tr("billing.actions.viewPlans", "View plans")}
+                </Link>
+              )}
             </div>
           </>
         ) : null}
