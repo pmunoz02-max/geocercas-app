@@ -179,48 +179,6 @@ function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) 
   };
 }
 
-async function changeDodoSubscriptionPlan(args: {
-  dodoBaseUrl: string;
-  dodoApiKey: string;
-  subscriptionId: string;
-  productId: string;
-  metadata: Record<string, string>;
-}) {
-  const response = await fetch(
-    `${args.dodoBaseUrl}/subscriptions/${encodeURIComponent(args.subscriptionId)}/change-plan`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${args.dodoApiKey}`,
-      },
-      body: JSON.stringify({
-        product_id: args.productId,
-        proration_billing_mode: "prorated_immediately",
-        quantity: 1,
-        effective_at: "immediately",
-        on_payment_failure: "prevent_change",
-        metadata: args.metadata,
-      }),
-    },
-  );
-
-  const responseText = await response.text();
-  let responseJson: any = null;
-  try {
-    responseJson = responseText ? JSON.parse(responseText) : null;
-  } catch {
-    responseJson = null;
-  }
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    body: responseJson ?? responseText,
-    keys: responseJson && typeof responseJson === "object" ? Object.keys(responseJson) : [],
-  };
-}
-
 function compactMetadata(input: Record<string, unknown>) {
   const output: Record<string, string> = {};
 
@@ -300,66 +258,11 @@ serve(async (req) => {
       existing_dodo_subscription_id: orgBilling?.dodo_subscription_id ?? null,
     });
 
-    if (checkoutAccess.checkoutIntent === "upgrade_to_enterprise") {
-      const existingSubscriptionId = String(orgBilling?.dodo_subscription_id ?? "").trim();
-
-      if (!existingSubscriptionId || normalizeText(orgBilling?.billing_provider) !== "dodo") {
-        return json(409, {
-          ok: false,
-          error: "missing_existing_dodo_subscription",
-          message: "The organization has an active PRO plan, but no Dodo subscription was found for a direct upgrade.",
-          current_plan_code: checkoutAccess.currentPlan,
-          current_plan_status: checkoutAccess.currentStatus,
-          requested_plan_code: plan,
-        });
-      }
-
-      console.log("[dodo-create-checkout] changing Dodo subscription plan", {
-        org_id: orgId,
-        role,
-        current_plan_code: checkoutAccess.currentPlan,
-        current_plan_status: checkoutAccess.currentStatus,
-        requested_plan_code: plan,
-        subscription_id: existingSubscriptionId,
-        product_id: productId,
-        dodo_base_url: dodoBaseUrl,
-      });
-
-      const planChange = await changeDodoSubscriptionPlan({
-        dodoBaseUrl,
-        dodoApiKey,
-        subscriptionId: existingSubscriptionId,
-        productId,
-        metadata,
-      });
-
-      if (!planChange.ok) {
-        console.error("[dodo-create-checkout] Dodo plan change failed", {
-          status: planChange.status,
-          response_keys: planChange.keys,
-        });
-
-        return json(planChange.status >= 400 && planChange.status < 500 ? planChange.status : 500, {
-          ok: false,
-          error: "dodo_plan_change_failed",
-          status: planChange.status,
-          message: safeDodoMessage(planChange.body),
-        });
-      }
-
-      return json(200, {
-        ok: true,
-        provider: "dodo",
-        mode: "test",
-        plan,
-        checkout_intent: checkoutAccess.checkoutIntent,
-        change_plan_completed: true,
-        subscription_id: existingSubscriptionId,
-        current_plan_code: checkoutAccess.currentPlan,
-        current_plan_status: checkoutAccess.currentStatus,
-        redirect_url: `${appBaseUrl}/billing?lang=${lang}&upgrade=enterprise`,
-      });
-    }
+    // Preview behavior: an active PRO org upgrading to Enterprise still opens Dodo Checkout
+    // so the user can review/confirm the Enterprise purchase in the Dodo interface.
+    // The webhook is responsible for activating Enterprise only after a signed Dodo event
+    // confirms the Enterprise product. Metadata preserves the previous PRO subscription id
+    // so a later production-safe replacement/cancellation flow can be implemented.
 
     const dodoPayload = {
       product_cart: [
