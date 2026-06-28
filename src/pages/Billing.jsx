@@ -484,10 +484,16 @@ export default function Billing() {
 
         {(() => {
           const orgId = billing?.org_id ?? currentOrgId ?? null;
-          const showUpgradeCta = ["free", "trialing", "over_limit"].includes(ctaVariant);
+          const normalizedPlanCode = String(effectivePlanCode || "").toLowerCase();
+          const normalizedPlanStatus = String(effectivePlanStatus || "").toLowerCase();
+          const hasPaidPlanAccess =
+            ["pro", "enterprise"].includes(normalizedPlanCode) &&
+            ["active", "trialing", "past_due", "paused"].includes(normalizedPlanStatus);
+          const showUpgradeCta =
+            !hasPaidPlanAccess && ["free", "trialing", "over_limit"].includes(ctaVariant);
           const activePlanLabel = labelPlan(effectivePlanCode, tr);
 
-          if (!showUpgradeCta && ["pro", "enterprise"].includes(effectivePlanCode)) {
+          if (hasPaidPlanAccess) {
             return (
               <div className="mt-6 mb-6 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-6 shadow-sm">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
