@@ -65,19 +65,67 @@ function effectiveOrgPlan(billing: OrgBillingState | null): string {
   );
 }
 
-function productIdForPlan(plan: PlanCode): string {
-  if (plan === "pro") return getEnv("DODO_PRODUCT_ID_PRO_TEST");
-  return getEnv("DODO_PRODUCT_ID_ENTERPRISE_TEST");
+type DodoEnvironment = "test" | "live";
+
+function getDodoEnvironment(): DodoEnvironment {
+  const raw = normalizeText(Deno.env.get("DODO_ENV") ?? "test", "test");
+  if (["live", "prod", "production"].includes(raw)) return "live";
+  return "test";
 }
 
-function getDodoBaseUrl() {
-  const raw = Deno.env.get("DODO_API_BASE_URL") ?? "https://test.dodopayments.com";
+function envSuffix(env: DodoEnvironment): "TEST" | "LIVE" {
+  return env === "live" ? "LIVE" : "TEST";
+}
+
+function getDodoEnvValue(baseName: string, env: DodoEnvironment, fallback?: string): string {
+  const suffix = envSuffix(env);
+  const envSpecificName = `${baseName}_${suffix}`;
+  const envSpecificValue = Deno.env.get(envSpecificName);
+  if (envSpecificValue) return envSpecificValue;
+
+  // Generic names are allowed only as explicit overrides. Never fall back from LIVE to TEST.
+  const genericValue = Deno.env.get(baseName);
+  if (genericValue) return genericValue;
+
+  if (fallback) return fallback;
+  throw new Error(`Missing env var: ${envSpecificName}`);
+}
+
+function productIdForPlan(plan: PlanCode, env: DodoEnvironment): string {
+  if (plan === "pro") return getDodoEnvValue("DODO_PRODUCT_ID_PRO", env);
+  return getDodoEnvValue("DODO_PRODUCT_ID_ENTERPRISE", env);
+}
+
+function getDodoBaseUrl(env: DodoEnvironment) {
+  const fallback = env === "live"
+    ? "https://live.dodopayments.com"
+    : "https://test.dodopayments.com";
+  const raw = getDodoEnvValue("DODO_API_BASE_URL", env, fallback);
   return raw.replace(/\/+$/, "");
 }
 
-function getAppBaseUrl() {
-  const raw = Deno.env.get("DODO_APP_BASE_URL") ?? "https://preview.tugeocercas.com";
+function getAppBaseUrl(env: DodoEnvironment) {
+  const fallback = env === "live"
+    ? "https://tugeocercas.com"
+    : "https://preview.tugeocercas.com";
+  const raw = getDodoEnvValue("DODO_APP_BASE_URL", env, fallback);
   return raw.replace(/\/+$/, "");
+}
+
+function getDodoApiKey(env: DodoEnvironment): string {
+  return getDodoEnvValue("DODO_API_KEY", env);
+}
+
+function getDodoReturnUrl(env: DodoEnvironment, appBaseUrl: string, lang: string): string {
+  return Deno.env.get(`DODO_RETURN_URL_${envSuffix(env)}`)
+    ?? Deno.env.get("DODO_RETURN_URL")
+    ?? `${appBaseUrl}/billing/return?lang=${lang}`;
+}
+
+function getDodoCancelUrl(env: DodoEnvironment, appBaseUrl: string, lang: string): string {
+  return Deno.env.get(`DODO_CANCEL_URL_${envSuffix(env)}`)
+    ?? Deno.env.get("DODO_CANCEL_URL")
+    ?? `${appBaseUrl}/billing/cancel?lang=${lang}`;
 }
 
 function safeDodoMessage(payload: unknown): string {
@@ -284,20 +332,21 @@ serve(async (req) => {
       });
     }
 
-    const productId = productIdForPlan(plan);
-    const dodoApiKey = getEnv("DODO_API_KEY_TEST");
-    const dodoBaseUrl = getDodoBaseUrl();
-    const appBaseUrl = getAppBaseUrl();
+    const dodoEnv = getDodoEnvironment();
+    const productId = productIdForPlan(plan, dodoEnv);
+    const dodoApiKey = getDodoApiKey(dodoEnv);
+    const dodoBaseUrl = getDodoBaseUrl(dodoEnv);
+    const appBaseUrl = getAppBaseUrl(dodoEnv);
 
-    const returnUrl = Deno.env.get("DODO_RETURN_URL_TEST") ?? `${appBaseUrl}/billing/return?lang=${lang}`;
-    const cancelUrl = Deno.env.get("DODO_CANCEL_URL_TEST") ?? `${appBaseUrl}/billing/cancel?lang=${lang}`;
+    const returnUrl = getDodoReturnUrl(dodoEnv, appBaseUrl, lang);
+    const cancelUrl = getDodoCancelUrl(dodoEnv, appBaseUrl, lang);
 
     const metadata = compactMetadata({
       org_id: orgId,
       plan_code: plan,
       checkout_intent: checkoutAccess.checkoutIntent,
-      source: "geofield-preview",
-      environment: "preview",
+      source: dodoEnv === "live" ? "geofield-production" : "geofield-preview",
+      environment: dodoEnv,
       requested_by: user.id,
       current_plan_code: checkoutAccess.currentPlan,
       current_plan_status: checkoutAccess.currentStatus,
@@ -412,7 +461,7 @@ serve(async (req) => {
         change_plan_completed: true,
         redirect_url: redirectUrl,
         provider: "dodo",
-        mode: "test",
+        mode: dodoEnv,
         plan,
         checkout_intent: "change_plan_to_enterprise",
         current_plan_code: syncedBilling?.subscribed_plan_code || syncedBilling?.plan_code || plan,
@@ -504,7 +553,7 @@ serve(async (req) => {
       checkout_url: checkoutUrl,
       session_id: sessionId,
       provider: "dodo",
-      mode: "test",
+      mode: dodoEnv,
       plan,
       checkout_intent: checkoutAccess.checkoutIntent,
       current_plan_code: checkoutAccess.currentPlan,
