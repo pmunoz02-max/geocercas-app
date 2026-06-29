@@ -87,15 +87,32 @@ function looksLikeUuid(value: string | null): value is string {
   return Boolean(value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value));
 }
 
+function getDodoEnv(): "test" | "live" {
+  const raw = String(Deno.env.get("DODO_ENV") ?? "test").trim().toLowerCase();
+  return raw === "live" ? "live" : "test";
+}
+
+function dodoEnvSuffix(): "TEST" | "LIVE" {
+  return getDodoEnv() === "live" ? "LIVE" : "TEST";
+}
+
+function getDodoEnvVar(baseName: string): string {
+  return getEnv(`${baseName}_${dodoEnvSuffix()}`);
+}
+
+function getOptionalDodoEnvVar(baseName: string): string | null {
+  return Deno.env.get(`${baseName}_${dodoEnvSuffix()}`) ?? null;
+}
+
 function productIdForPlan(plan: PlanCode): string {
-  if (plan === "pro") return getEnv("DODO_PRODUCT_ID_PRO_TEST");
-  return getEnv("DODO_PRODUCT_ID_ENTERPRISE_TEST");
+  if (plan === "pro") return getDodoEnvVar("DODO_PRODUCT_ID_PRO");
+  return getDodoEnvVar("DODO_PRODUCT_ID_ENTERPRISE");
 }
 
 function planFromProductId(productId: string | null): PlanCode | null {
   if (!productId) return null;
-  if (productId === Deno.env.get("DODO_PRODUCT_ID_PRO_TEST")) return "pro";
-  if (productId === Deno.env.get("DODO_PRODUCT_ID_ENTERPRISE_TEST")) return "enterprise";
+  if (productId === getOptionalDodoEnvVar("DODO_PRODUCT_ID_PRO")) return "pro";
+  if (productId === getOptionalDodoEnvVar("DODO_PRODUCT_ID_ENTERPRISE")) return "enterprise";
   return null;
 }
 
@@ -205,7 +222,7 @@ async function verifySvixLikeSignature(req: Request, rawBody: string): Promise<{
     return { ok: false, error: "webhook_timestamp_outside_tolerance" };
   }
 
-  const secret = getEnv("DODO_WEBHOOK_SECRET_TEST").trim();
+  const secret = getDodoEnvVar("DODO_WEBHOOK_SECRET").trim();
   const secretBody = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
   const secretCandidates: Uint8Array[] = [];
 
