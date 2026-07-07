@@ -164,7 +164,38 @@ async function ensureMembership(
   }
 
   if (!legacyLookup.data) {
-    return { membership: null, error: "membership_required" as const };
+    const ownerLookup = await supabaseAdmin
+      .from("organizations")
+      .select("id, owner_id, created_by")
+      .eq("id", orgId)
+      .maybeSingle();
+
+    if (ownerLookup.error) {
+      console.error("[invite-edge] organizations owner lookup failed", {
+        message: ownerLookup.error.message,
+        details: ownerLookup.error.details,
+        hint: ownerLookup.error.hint,
+        code: ownerLookup.error.code,
+      });
+      return { membership: null, error: "membership_lookup_failed" as const };
+    }
+
+    const isOwner =
+      ownerLookup.data?.owner_id === userId ||
+      ownerLookup.data?.created_by === userId;
+
+    if (!isOwner) {
+      return { membership: null, error: "membership_required" as const };
+    }
+
+    return {
+      membership: {
+        org_id: orgId,
+        user_id: userId,
+        role: "owner",
+      },
+      error: null,
+    };
   }
 
   return { membership: legacyLookup.data, error: null };
