@@ -58,7 +58,6 @@ function rangesOverlapInclusive(startA, endA, startB, endB) {
 
 function buildWritableFields(incoming) {
   const allowed = [
-    "tenant_id",
     "org_id",
     "personal_id",
     "org_people_id",
@@ -392,9 +391,6 @@ export default async function handler(req, res) {
         return send(res, 400, { ok: false, error: "missing_required_fields" });
       }
 
-      // Universal rule: tenant_id === org_id
-      insertFields.tenant_id = org_id;
-
       if (!insertFields.geocerca_id && insertFields.geofence_id) {
         const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
           orgId: org_id,
@@ -518,9 +514,6 @@ export default async function handler(req, res) {
       const nextEndTime = Object.prototype.hasOwnProperty.call(updateFields, "end_time")
         ? updateFields.end_time
         : currentRow.end_time;
-
-      // Universal rule: tenant_id === org_id
-      updateFields.tenant_id = nextOrgId;
 
       if (!nextStartTime || !nextEndTime) {
         return send(res, 400, {
