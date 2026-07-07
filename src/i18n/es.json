@@ -1892,13 +1892,13 @@
     },
     "invite": {
       "title": "Permiso de ubicación",
-      "intro": "GeoField GPS usa tu ubicación con tu consentimiento para iniciar una sesión de tracking autorizada, compartirla con la organización que te invitó y mantener geocercas y reportes operativos actualizados, incluso cuando la app esté en segundo plano o no esté visible.",
+      "intro": "GeoField GPS recopila y usa tu ubicación precisa con tu consentimiento para iniciar una sesión de tracking autorizada, compartirla con la organización que te invitó y validar recorridos, geocercas y reportes. El seguimiento puede funcionar en segundo plano o cuando la app no está visible. Puedes detener el seguimiento en cualquier momento o revocar el permiso de ubicación desde la configuración de tu dispositivo.",
       "introStep": {
         "before": "Primero acepta este aviso. Después verás una pantalla del sistema para permitir la ubicación. Solo necesitas tocar",
         "allow": "Permitir",
         "after": "."
       },
-      "consentLabel": "Entiendo y acepto compartir mi ubicación durante esta sesión de tracking autorizada, incluso cuando la app esté en segundo plano o no esté visible.",
+      "consentLabel": "Entiendo y acepto que GeoField GPS recopile, use y comparta mi ubicación precisa con la organización que me invitó durante esta sesión de tracking autorizada, incluso cuando la app esté en segundo plano o no esté visible, para validar recorridos, geocercas y reportes operativos.",
       "acceptContinue": "Aceptar y continuar",
       "processing": "Procesando...",
       "permissionCardTitle": "Permitir el uso de ubicación",

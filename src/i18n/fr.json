@@ -1863,13 +1863,13 @@
     },
     "invite": {
       "title": "Autorisation de localisation",
-      "intro": "GeoField GPS utilise votre localisation avec votre consentement pendant une session de suivi autorisée, la partage avec l’organisation qui vous a invité et maintient les géorepérages et rapports opérationnels à jour, même lorsque l’app est en arrière-plan ou n’est pas visible.",
+      "intro": "GeoField GPS collecte et utilise votre localisation précise avec votre consentement pour démarrer une session de suivi autorisée, la partager avec l’organisation qui vous a invité et valider les trajets, les géorepérages et les rapports. Le suivi peut fonctionner en arrière-plan ou lorsque l’app n’est pas visible. Vous pouvez arrêter le suivi à tout moment ou révoquer l’autorisation de localisation dans les paramètres de votre appareil.",
       "introStep": {
         "before": "Acceptez d'abord cet avis. Ensuite, vous verrez un écran système pour autoriser la localisation. Il vous suffit d'appuyer sur",
         "allow": "Autoriser",
         "after": "."
       },
-      "consentLabel": "Je comprends et j’accepte de partager ma localisation pendant cette session de suivi autorisée, même lorsque l’app est en arrière-plan ou n’est pas visible.",
+      "consentLabel": "Je comprends et j’accepte que GeoField GPS collecte, utilise et partage ma localisation précise avec l’organisation qui m’a invité pendant cette session de suivi autorisée, y compris lorsque l’app est en arrière-plan ou n’est pas visible, afin de valider les trajets, les géorepérages et les rapports opérationnels.",
       "acceptContinue": "Accepter et continuer",
       "processing": "Traitement en cours...",
       "permissionCardTitle": "Autoriser l'utilisation de la localisation",

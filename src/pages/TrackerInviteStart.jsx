@@ -622,9 +622,6 @@ export default function TrackerInviteStart() {
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 leading-6">
           <p>{t("tracker.invite.intro")}</p>
-          <p className="mt-2">
-            {t("tracker.invite.introStep.before")} <strong>{t("tracker.invite.introStep.allow")}</strong>{t("tracker.invite.introStep.after")}
-          </p>
         </div>
 
         <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
