@@ -237,8 +237,8 @@ export default async function handler(req, res) {
       throw billingError;
     }
 
-    const planStatus = billing?.plan_status ?? null;
-    const planCode = billing?.plan_code ?? "free";
+    const planStatus = String(billing?.plan_status || "free").trim().toLowerCase();
+    const planCode = String(billing?.plan_code || "free").trim().toLowerCase();
 
     if (planStatus !== "active") {
       return res.status(403).json({
@@ -322,10 +322,24 @@ export default async function handler(req, res) {
       .maybeSingle();
 
     if (limitsError) {
-      throw limitsError;
+      console.warn("[api/invite-tracker] plan_limits lookup failed, using fallback", {
+        planCode,
+        message: limitsError.message,
+      });
     }
 
-    const maxTrackers = planLimits?.max_trackers ?? 0;
+    const fallbackMaxTrackersByPlan = {
+      free: 1,
+      starter: 1,
+      pro: 10,
+      enterprise: 9999,
+      elite: 9999,
+      elite_plus: 9999,
+    };
+
+    const maxTrackers = Number(
+      planLimits?.max_trackers ?? fallbackMaxTrackersByPlan[planCode] ?? 0
+    );
 
     // ===============================
     // CONTAR TRACKERS ACTIVOS
