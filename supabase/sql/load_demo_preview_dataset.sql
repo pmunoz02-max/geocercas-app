@@ -85,11 +85,11 @@ begin
   )
   values (
     v_demo_org_id,
-    'starter',
+    'enterprise',
     'active',
     v_now,
     false,
-    'starter'
+    'enterprise'
   )
   on conflict (org_id) do update
     set plan_code = excluded.plan_code,
