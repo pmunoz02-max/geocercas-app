@@ -1892,17 +1892,17 @@
       "title": "Location permission",
       "intro": "GeoField GPS collects and uses your precise location with your consent to start an authorized tracking session, share it with the inviting organization, and validate routes, geofences, and reports. Tracking may continue in the background or when the app is not visible. You can stop tracking at any time or revoke location permission in your device settings.",
       "introStep": {
-        "before": "First accept this notice. Then you will see a system screen to allow location. You only need to tap",
-        "allow": "Allow",
-        "after": "."
+        "before": "Read and accept the location disclosure before continuing.",
+        "allow": "GeoField GPS collects, uses, and shares your precise location during the authorized session.",
+        "after": " Tracking may continue in the background or when the app is not visible."
       },
       "consentLabel": "I understand and agree that GeoField GPS may collect, use, and share my precise location with the organization that invited me during this authorized tracking session, including when the app is in the background or not visible, to validate routes, geofences, and operational reports.",
       "acceptContinue": "Accept and continue",
       "processing": "Processing...",
       "permissionCardTitle": "Allow location usage",
       "permissionCardBody": {
-        "before": "In the next step the system permission will appear. Tap",
-        "after": "to continue."
+        "before": "In the next step, the system permission for precise location and background tracking will appear. Tap",
+        "after": "to allow it and continue."
       },
       "permissionAction": "Allow location usage",
       "requestingPermission": "Requesting permission...",

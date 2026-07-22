@@ -1865,17 +1865,17 @@
       "title": "Autorisation de localisation",
       "intro": "GeoField GPS collecte et utilise votre localisation précise avec votre consentement pour démarrer une session de suivi autorisée, la partager avec l’organisation qui vous a invité et valider les trajets, les géorepérages et les rapports. Le suivi peut fonctionner en arrière-plan ou lorsque l’app n’est pas visible. Vous pouvez arrêter le suivi à tout moment ou révoquer l’autorisation de localisation dans les paramètres de votre appareil.",
       "introStep": {
-        "before": "Acceptez d'abord cet avis. Ensuite, vous verrez un écran système pour autoriser la localisation. Il vous suffit d'appuyer sur",
-        "allow": "Autoriser",
-        "after": "."
+        "before": "Lisez et acceptez l’avis de localisation précise et de suivi en arrière-plan avant de continuer.",
+        "allow": "GeoField GPS collecte, utilise et partage votre localisation précise pendant la session autorisée.",
+        "after": " Le suivi peut fonctionner en arrière-plan ou lorsque l’app n’est pas visible."
       },
       "consentLabel": "Je comprends et j’accepte que GeoField GPS collecte, utilise et partage ma localisation précise avec l’organisation qui m’a invité pendant cette session de suivi autorisée, y compris lorsque l’app est en arrière-plan ou n’est pas visible, afin de valider les trajets, les géorepérages et les rapports opérationnels.",
       "acceptContinue": "Accepter et continuer",
       "processing": "Traitement en cours...",
       "permissionCardTitle": "Autoriser l'utilisation de la localisation",
       "permissionCardBody": {
-        "before": "À l'étape suivante, l'autorisation du système apparaîtra. Appuyez sur",
-        "after": "pour continuer."
+        "before": "À l'étape suivante, l'autorisation du système pour la localisation précise et le suivi en arrière-plan apparaîtra. Appuyez sur",
+        "after": "pour l'autoriser et continuer."
       },
       "permissionAction": "Autoriser l'utilisation de la localisation",
       "requestingPermission": "Demande d'autorisation...",
