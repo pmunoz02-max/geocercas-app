@@ -70,10 +70,10 @@ Hasta nuevo aviso:
 
 - Se implementó validación fail-closed para firma del webhook de Paddle.
 - Respuesta 401 y terminación inmediata cuando:
-	- Falta el header `Paddle-Signature`.
-	- El formato de firma es inválido.
-	- Existe mismatch entre firma recibida y firma calculada.
-	- Ocurre error durante la validación de firma.
+  - Falta el header `Paddle-Signature`.
+  - El formato de firma es inválido.
+  - Existe mismatch entre firma recibida y firma calculada.
+  - Ocurre error durante la validación de firma.
 - Se eliminó el registro de firmas recibidas o calculadas en logs.
 - Estado de despliegue: esta actualización aún no se desplegó en Supabase Preview.
 
@@ -84,6 +84,31 @@ Hasta nuevo aviso:
 - No se modificó la validación de firma.
 - No se modificó la lógica de negocio (ramas de transaction/subscription ni escrituras funcionales).
 - Estado de despliegue: esta actualización aún no se desplegó en Supabase Preview.
+
+## Implementación 3: idempotencia transaccional en Preview
+
+- Se agregó migración Preview para endurecer el estado de idempotencia en `public.paddle_webhook_events`.
+- Nuevas/ajustadas columnas:
+  - `occurred_at` (obligatoria).
+  - `status` con estados válidos: `received`, `processing`, `applied`, `failed`.
+  - `processed_at` ahora nullable.
+  - `attempt_count` para contabilizar intentos.
+  - `last_error` para trazabilidad de fallos.
+  - `updated_at` para auditoría de cambios.
+- Se añadió función SQL atómica `public.claim_paddle_webhook_event(...)` para:
+  - reclamar `event_id` nuevo en estado `processing` con `INSERT ... ON CONFLICT`.
+  - permitir reintento cuando el estado previo es `failed`.
+  - recuperar `processing` obsoleto cuando `updated_at` supera 15 minutos sin cierre.
+  - rechazar reclamación cuando el evento ya está en estado no reclamable.
+- Se añadieron funciones de cierre de transición desde `processing`:
+  - `public.mark_paddle_webhook_event_applied(event_id)` para `processing -> applied`.
+  - `public.mark_paddle_webhook_event_failed(event_id, last_error)` para `processing -> failed`.
+  - ambas validan `event_id` y rechazan transiciones inválidas.
+  - en `failed`, `processed_at` queda en `null` y `last_error` se normaliza (trim), vacío a `null`, con límite de 2000 caracteres.
+- Se añadió trigger de mantenimiento de `updated_at` en updates.
+- Se restringió ejecución de funciones de idempotencia/transición a roles `service_role` y `postgres`.
+- Se revocó acceso público también sobre la función interna del trigger.
+- Estado de despliegue: pendiente de aplicación en Supabase Preview.
 
 ## Estado de Go-Live
 
