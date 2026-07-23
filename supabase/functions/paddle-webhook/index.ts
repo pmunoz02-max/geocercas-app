@@ -282,6 +282,31 @@ function buildPaddleFields({
   };
 }
 
+async function markPaddleWebhookEventApplied(supabase: any, eventId: string) {
+  const { error } = await supabase.rpc("mark_paddle_webhook_event_applied", {
+    p_event_id: eventId,
+  });
+
+  if (error) {
+    throw new Error(`mark_paddle_webhook_event_applied failed: ${error.message}`);
+  }
+}
+
+async function markPaddleWebhookEventFailed(
+  supabase: any,
+  eventId: string,
+  sanitizedMessage: string,
+) {
+  const { error } = await supabase.rpc("mark_paddle_webhook_event_failed", {
+    p_event_id: eventId,
+    p_last_error: sanitizedMessage,
+  });
+
+  if (error) {
+    throw new Error(`mark_paddle_webhook_event_failed failed: ${error.message}`);
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -290,6 +315,9 @@ serve(async (req) => {
   if (req.method !== "POST") {
     return json(405, { ok: false, error: "Method not allowed" });
   }
+
+  let claimedEventId: string | null = null;
+  let claimedSupabase: any = null;
 
   try {
     const SUPABASE_URL = requireEnv("SUPABASE_URL");
@@ -343,50 +371,84 @@ serve(async (req) => {
       return json(400, { ok: false, error: "Missing event_id or occurred_at" });
     }
 
-    // Check if event already processed
-    const { data: existingEvent, error: eventLookupError } = await supabase
-      .from("paddle_webhook_events")
-      .select("event_id")
-      .eq("event_id", eventId)
-      .maybeSingle();
+    const occurredAtDate = new Date(occurredAt);
+    if (Number.isNaN(occurredAtDate.getTime())) {
+      return json(400, { ok: false, error: "Invalid occurred_at timestamp" });
+    }
+    const occurredAtIso = occurredAtDate.toISOString();
 
-    if (eventLookupError) {
-      console.error("[PADDLE WEBHOOK] event lookup error", eventLookupError);
-      return json(500, { ok: false, error: "Event lookup failed" });
+    const { data: claimData, error: claimError } = await supabase.rpc(
+      "claim_paddle_webhook_event",
+      {
+        p_event_id: eventId,
+        p_event_type: type,
+        p_occurred_at: occurredAtIso,
+        p_received_at: new Date().toISOString(),
+      },
+    );
+
+    if (claimError) {
+      console.error("[PADDLE WEBHOOK] event claim error", claimError);
+      return json(500, { ok: false, error: "Event claim failed" });
     }
 
-    if (existingEvent) {
-      console.log("[PADDLE WEBHOOK] duplicate event ignored", { event_id: eventId });
-      return json(200, { ok: true, duplicate: true, event_id: eventId });
+    const claimRow = Array.isArray(claimData) ? claimData[0] : claimData;
+    const wasClaimed = claimRow?.claimed === true;
+    const previousStatus = asString(claimRow?.previous_status);
+
+    if (!wasClaimed) {
+      console.log("[PADDLE WEBHOOK] event not claimed", {
+        event_id: eventId,
+        previous_status: previousStatus,
+      });
+      return json(200, {
+        ok: true,
+        claimed: false,
+        not_claimed: true,
+        duplicate: previousStatus === "applied",
+        event_id: eventId,
+        previous_status: previousStatus,
+      });
     }
 
-    // Insert event as processed (before actual processing for strict idempotency)
-    const { error: insertEventError } = await supabase
-      .from("paddle_webhook_events")
-      .insert({ event_id: eventId, occurred_at: occurredAt, event_type: type });
-    if (insertEventError) {
-      console.error("[PADDLE WEBHOOK] event insert error", insertEventError);
-      return json(500, { ok: false, error: "Event insert failed" });
-    }
+    const eventClaimed = true;
+    claimedEventId = eventId;
+    claimedSupabase = supabase;
 
-    console.log("[PADDLE WEBHOOK] event received", { type });
+    console.log("[PADDLE WEBHOOK] event claimed", { type, eventClaimed, event_id: eventId });
 
     if (type === "transaction.completed") {
       const paddleSubscriptionId = pickSubscriptionId(data);
       const paddleCustomerId = pickCustomerId(data);
       const paddlePriceId = pickPriceIdFromTransactionData(data);
       const transactionId = asString(data?.id);
-      const customData = data?.custom_data ?? null;
 
       console.log("[PADDLE WEBHOOK] transaction.completed", {
         transaction_id: transactionId,
         paddle_customer_id: paddleCustomerId,
         paddle_subscription_id: paddleSubscriptionId,
         paddle_price_id: paddlePriceId,
-        custom_data: customData,
+        custom_data_present: data?.custom_data != null,
       });
 
       if (!paddlePriceId) {
+        const failureMessage = "Cannot resolve price_id from transaction.completed";
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(400, {
           ok: false,
           error: "Cannot resolve price_id from transaction.completed",
@@ -395,11 +457,26 @@ serve(async (req) => {
 
       const resolvedPlan = resolvePlanByPriceId(paddlePriceId);
       if (!resolvedPlan) {
+        const failureMessage = "Unsupported Paddle price_id for current environment";
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(400, {
           ok: false,
           error: "Unsupported Paddle price_id for current environment",
-          price_id: paddlePriceId,
-          paddle_env: getPaddleEnv(),
         });
       }
 
@@ -420,10 +497,26 @@ serve(async (req) => {
       }
 
       if (!orgId) {
+        const failureMessage = "Cannot resolve org_id for transaction.completed";
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(400, {
           ok: false,
           error: "Cannot resolve org_id for transaction.completed",
-          transaction_id: transactionId,
         });
       }
 
@@ -453,10 +546,26 @@ serve(async (req) => {
 
       if (upsertError) {
         console.error("[PADDLE WEBHOOK] org_billing upsert error", upsertError);
+        const failureMessage = `DB update failed: ${upsertError.message}`;
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(500, {
           ok: false,
-          error: "DB update failed",
-          details: upsertError.message,
+          error: "Event processing failed",
         });
       }
 
@@ -465,6 +574,35 @@ serve(async (req) => {
         plan_code: resolvedPlan.planCode,
         transaction_id: transactionId,
       });
+
+      try {
+        await markPaddleWebhookEventApplied(supabase, eventId);
+        claimedEventId = null;
+        claimedSupabase = null;
+      } catch (markAppliedError) {
+        const failureMessage = "Failed to mark event as applied";
+        console.error("[PADDLE WEBHOOK] failed to mark event as applied", {
+          event_id: eventId,
+          mark_applied_error: markAppliedError,
+        });
+
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed after mark applied error", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+        }
+
+        return json(500, {
+          ok: false,
+          error: "Event processing failed",
+        });
+      }
 
       return json(200, {
         ok: true,
@@ -486,32 +624,79 @@ serve(async (req) => {
         paddle_subscription_id: paddleSubscriptionId,
         paddle_customer_id: paddleCustomerId,
         paddle_price_id: paddlePriceId,
-        custom_data: data?.custom_data ?? null,
+        custom_data_present: data?.custom_data != null,
       });
 
       if (!paddleSubscriptionId) {
+        const failureMessage = "Cannot resolve subscription id";
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(400, {
           ok: false,
           error: "Cannot resolve subscription id",
-          event_type: type,
         });
       }
 
       if (!paddlePriceId) {
+        const failureMessage = "Cannot resolve price_id from subscription event";
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(400, {
           ok: false,
           error: "Cannot resolve price_id from subscription event",
-          event_type: type,
         });
       }
 
       const resolvedPlan = resolvePlanByPriceId(paddlePriceId);
       if (!resolvedPlan) {
+        const failureMessage = "Unsupported Paddle price_id for current environment";
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(400, {
           ok: false,
           error: "Unsupported Paddle price_id for current environment",
-          price_id: paddlePriceId,
-          paddle_env: getPaddleEnv(),
         });
       }
 
@@ -524,18 +709,33 @@ serve(async (req) => {
       });
 
       if (!orgId) {
-        console.warn("[PADDLE WEBHOOK] org_id not resolved yet, skipping upsert but keeping event valid", {
+        const failureMessage = "Cannot resolve org_id for subscription event";
+        console.warn("[PADDLE WEBHOOK] org_id not resolved for subscription event", {
           event_type: type,
           paddle_subscription_id: paddleSubscriptionId,
           paddle_customer_id: paddleCustomerId,
           method_tried: method,
         });
 
-        return json(200, {
-          ok: true,
-          skipped: true,
-          reason: "org_id_not_resolved",
-          event_type: type,
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve org_id for subscription event",
         });
       }
 
@@ -549,9 +749,38 @@ serve(async (req) => {
         .eq("org_id", orgId)
         .maybeSingle();
 
-      if (currentBilling?.last_paddle_event_at && new Date(currentBilling.last_paddle_event_at) >= new Date(now)) {
+      if (currentBilling?.last_paddle_event_at && new Date(currentBilling.last_paddle_event_at) >= new Date(occurredAtIso)) {
         console.log("[PADDLE WEBHOOK] Ignoring out-of-order subscription.updated", { org_id: orgId, eventId });
-        return json(200, { ok: true, ignored: true, reason: "event_out_of_order", event_id: eventId });
+        try {
+          await markPaddleWebhookEventApplied(supabase, eventId);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markAppliedError) {
+          const failureMessage = "Failed to mark out-of-order subscription event as applied";
+          console.error("[PADDLE WEBHOOK] failed to mark event as applied", {
+            event_id: eventId,
+            mark_applied_error: markAppliedError,
+          });
+
+          try {
+            await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+            claimedEventId = null;
+            claimedSupabase = null;
+          } catch (markFailedError) {
+            console.error("[PADDLE WEBHOOK] failed to mark event as failed after mark applied error", {
+              event_id: eventId,
+              original_failure: failureMessage,
+              mark_failed_error: markFailedError,
+            });
+          }
+
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
+        return json(200, { ok: true, ignored: true, reason: "event_out_of_order" });
       }
 
       // Scheduled change fields
@@ -568,10 +797,10 @@ serve(async (req) => {
         plan_status: "active",
         tracker_limit_override: resolvedPlan.trackerLimit,
         updated_at: now,
-        last_paddle_event_at: now,
+        last_paddle_event_at: occurredAtIso,
         last_paddle_event_id: eventId,
         last_paddle_event_type: type,
-        last_paddle_event_occurred_at: occurredAt,
+        last_paddle_event_occurred_at: occurredAtIso,
         cancel_at_period_end: hasScheduled ? true : false,
         scheduled_change_action,
         scheduled_change_effective_at,
@@ -589,10 +818,26 @@ serve(async (req) => {
 
       if (upsertError) {
         console.error("[PADDLE WEBHOOK] subscription upsert error", upsertError);
+        const failureMessage = `DB update failed: ${upsertError.message}`;
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(500, {
           ok: false,
-          error: "DB update failed",
-          details: upsertError.message,
+          error: "Event processing failed",
         });
       }
 
@@ -603,6 +848,35 @@ serve(async (req) => {
         plan_status: "active",
         method_used: method,
       });
+
+      try {
+        await markPaddleWebhookEventApplied(supabase, eventId);
+        claimedEventId = null;
+        claimedSupabase = null;
+      } catch (markAppliedError) {
+        const failureMessage = "Failed to mark subscription event as applied";
+        console.error("[PADDLE WEBHOOK] failed to mark event as applied", {
+          event_id: eventId,
+          mark_applied_error: markAppliedError,
+        });
+
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed after mark applied error", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+        }
+
+        return json(500, {
+          ok: false,
+          error: "Event processing failed",
+        });
+      }
 
       return json(200, {
         ok: true,
@@ -619,6 +893,13 @@ serve(async (req) => {
       const subscriptionId = pickSubscriptionId(data);
       const customerId = pickCustomerId(data);
 
+      console.log("[PADDLE WEBHOOK] cancellation/pause event", {
+        type,
+        subscription_id: subscriptionId,
+        customer_id: customerId,
+        custom_data_present: data?.custom_data != null,
+      });
+
       const { orgId, method } = await resolveOrgIdForSubscription({
         supabase,
         customOrgId: asString(data?.custom_data?.org_id),
@@ -628,18 +909,33 @@ serve(async (req) => {
       });
 
       if (!orgId) {
-        console.warn("[PADDLE WEBHOOK] org_id not resolved for cancellation/pause, skipping upsert", {
+        const failureMessage = "Cannot resolve org_id for cancellation/pause event";
+        console.warn("[PADDLE WEBHOOK] org_id not resolved for cancellation/pause", {
           event_type: type,
           subscription_id: subscriptionId,
           customer_id: customerId,
           method_tried: method,
         });
 
-        return json(200, {
-          ok: true,
-          skipped: true,
-          reason: "org_id_not_resolved",
-          event_type: type,
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
+        return json(400, {
+          ok: false,
+          error: "Cannot resolve org_id for cancellation/pause event",
         });
       }
 
@@ -653,9 +949,38 @@ serve(async (req) => {
         .eq("org_id", orgId)
         .maybeSingle();
 
-      if (currentBilling?.last_paddle_event_at && new Date(currentBilling.last_paddle_event_at) >= new Date(now)) {
+      if (currentBilling?.last_paddle_event_at && new Date(currentBilling.last_paddle_event_at) >= new Date(occurredAtIso)) {
         console.log("[PADDLE WEBHOOK] Ignoring out-of-order subscription.canceled", { org_id: orgId, eventId });
-        return json(200, { ok: true, ignored: true, reason: "event_out_of_order", event_id: eventId });
+        try {
+          await markPaddleWebhookEventApplied(supabase, eventId);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markAppliedError) {
+          const failureMessage = "Failed to mark out-of-order cancellation/pause event as applied";
+          console.error("[PADDLE WEBHOOK] failed to mark event as applied", {
+            event_id: eventId,
+            mark_applied_error: markAppliedError,
+          });
+
+          try {
+            await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+            claimedEventId = null;
+            claimedSupabase = null;
+          } catch (markFailedError) {
+            console.error("[PADDLE WEBHOOK] failed to mark event as failed after mark applied error", {
+              event_id: eventId,
+              original_failure: failureMessage,
+              mark_failed_error: markFailedError,
+            });
+          }
+
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
+        return json(200, { ok: true, ignored: true, reason: "event_out_of_order" });
       }
 
       // Only for canceled, not paused
@@ -669,10 +994,10 @@ serve(async (req) => {
         scheduled_change_action: null,
         scheduled_change_effective_at: null,
         updated_at: now,
-        last_paddle_event_at: now,
+        last_paddle_event_at: occurredAtIso,
         last_paddle_event_id: eventId,
         last_paddle_event_type: type,
-        last_paddle_event_occurred_at: occurredAt,
+        last_paddle_event_occurred_at: occurredAtIso,
         ...buildPaddleFields({
           existingBilling,
           paddleSubscriptionId: subscriptionId,
@@ -687,10 +1012,55 @@ serve(async (req) => {
 
       if (updateError) {
         console.error("[PADDLE WEBHOOK] cancellation update error", updateError);
+        const failureMessage = `DB update failed: ${updateError.message}`;
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+          return json(500, {
+            ok: false,
+            error: "Event processing failed",
+          });
+        }
+
         return json(500, {
           ok: false,
-          error: "DB update failed",
-          details: updateError.message,
+          error: "Event processing failed",
+        });
+      }
+
+      try {
+        await markPaddleWebhookEventApplied(supabase, eventId);
+        claimedEventId = null;
+        claimedSupabase = null;
+      } catch (markAppliedError) {
+        const failureMessage = "Failed to mark cancellation/pause event as applied";
+        console.error("[PADDLE WEBHOOK] failed to mark event as applied", {
+          event_id: eventId,
+          mark_applied_error: markAppliedError,
+        });
+
+        try {
+          await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+          claimedEventId = null;
+          claimedSupabase = null;
+        } catch (markFailedError) {
+          console.error("[PADDLE WEBHOOK] failed to mark event as failed after mark applied error", {
+            event_id: eventId,
+            original_failure: failureMessage,
+            mark_failed_error: markFailedError,
+          });
+        }
+
+        return json(500, {
+          ok: false,
+          error: "Event processing failed",
         });
       }
 
@@ -699,12 +1069,42 @@ serve(async (req) => {
         event_type: type,
         org_id: orgId,
         subscription_id: subscriptionId,
-        plan_status: "inactive",
+        plan_status: isCanceled ? "canceled" : "inactive",
         method_used: method,
       });
     }
 
     console.log("[PADDLE WEBHOOK] ignored event", { type });
+
+    try {
+      await markPaddleWebhookEventApplied(supabase, eventId);
+      claimedEventId = null;
+      claimedSupabase = null;
+    } catch (markAppliedError) {
+      const failureMessage = "Failed to mark unknown event as applied";
+      console.error("[PADDLE WEBHOOK] failed to mark event as applied", {
+        event_id: eventId,
+        mark_applied_error: markAppliedError,
+      });
+
+      try {
+        await markPaddleWebhookEventFailed(supabase, eventId, failureMessage);
+        claimedEventId = null;
+        claimedSupabase = null;
+      } catch (markFailedError) {
+        console.error("[PADDLE WEBHOOK] failed to mark event as failed after mark applied error", {
+          event_id: eventId,
+          original_failure: failureMessage,
+          mark_failed_error: markFailedError,
+        });
+      }
+
+      return json(500, {
+        ok: false,
+        error: "Event processing failed",
+      });
+    }
+
     return json(200, {
       ok: true,
       ignored: true,
@@ -712,10 +1112,25 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("[PADDLE WEBHOOK] fatal error", error);
+
+    if (claimedEventId && claimedSupabase) {
+      const failureMessage = "Unhandled webhook processing error";
+      try {
+        await markPaddleWebhookEventFailed(claimedSupabase, claimedEventId, failureMessage);
+        claimedEventId = null;
+        claimedSupabase = null;
+      } catch (markFailedError) {
+        console.error("[PADDLE WEBHOOK] failed to mark event as failed in global catch", {
+          event_id: claimedEventId,
+          original_failure: failureMessage,
+          mark_failed_error: markFailedError,
+        });
+      }
+    }
+
     return json(500, {
       ok: false,
       error: "internal_error",
-      message: error instanceof Error ? error.message : String(error),
     });
   }
 });

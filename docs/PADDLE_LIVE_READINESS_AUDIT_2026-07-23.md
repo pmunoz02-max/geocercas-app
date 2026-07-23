@@ -114,6 +114,82 @@ Hasta nuevo aviso:
   - `schema_migrations` y el esquema real de base están correctos.
   - Queda prohibido repetir `migration repair` o usar `db push` sobre este caso.
 
+## Implementación 4: claim RPC en webhook (sin cambios de negocio)
+
+- Se reemplazó exclusivamente el bloque de idempotencia de webhook (SELECT/INSERT directo) por llamada RPC atómica a `public.claim_paddle_webhook_event(...)`.
+- El bloque ahora valida `event_id` y `occurred_at`.
+- `occurred_at` se convierte/normaliza a timestamp válido antes de invocar la RPC.
+- La llamada aplicada en código es:
+
+```ts
+supabase.rpc("claim_paddle_webhook_event", {
+  p_event_id: eventId,
+  p_event_type: type,
+  p_occurred_at: occurredAtIso,
+  p_received_at: new Date().toISOString(),
+});
+```
+
+- Si la RPC devuelve error, el webhook responde `500`.
+- Si `claimed === false`, el webhook responde `200` y termina sin ejecutar ramas de negocio; la respuesta incluye `previous_status` para informar por qué no se reclamó.
+- En este paso no se inserta ni actualiza `paddle_webhook_events` de forma directa desde TypeScript.
+- Se mantiene disponible una variable `eventClaimed = true` para la siguiente etapa de implementación.
+- No se modificaron ramas de negocio (`transaction.completed`, `subscription.*`, etc.).
+
+## Implementación 5: transición applied/failed en transaction.completed
+
+- Se integró marcado de estado de idempotencia solo en la rama `transaction.completed`.
+- Antes de cada `return` de error posterior al claim en esa rama, se ejecuta `mark_paddle_webhook_event_failed(...)`:
+  - falta `price_id`.
+  - `price_id` no soportado para el entorno.
+  - no se resuelve `org_id`.
+  - error de base de datos en upsert.
+- Antes del `return 200` exitoso de `transaction.completed`, se ejecuta `mark_paddle_webhook_event_applied(...)`.
+- Si falla la RPC que marca `failed`, se registra el error y se responde `500` incluyendo referencia al fallo original para no ocultarlo.
+- No se modificaron ramas `subscription.*` ni otros caminos fuera de `transaction.completed`.
+
+## Implementación 6: transición applied/failed en subscription.created y subscription.updated
+
+- Se integró marcado de estado de idempotencia solo en las ramas `subscription.created` y `subscription.updated`.
+- Casos que ahora marcan `failed`:
+  - falta `subscription_id`.
+  - falta `price_id`.
+  - precio no soportado.
+  - `org_id_not_resolved` (ya no se trata como `applied`).
+  - error de base de datos en upsert.
+- Caso que marca `applied`:
+  - evento fuera de orden (`event_out_of_order`).
+  - actualización exitosa de `org_billing`.
+- Si falla `mark applied`, se intenta `mark failed` y se responde `500` genérico.
+- Se endurecieron logs/respuestas en estas ramas:
+  - no se registra `custom_data` completo (solo presencia).
+  - no se exponen detalles internos al cliente (`details`, ids internos o datos de entorno) en respuestas de error.
+- No se modificaron `subscription.canceled`, `subscription.paused` ni eventos desconocidos.
+
+## Implementación 7: transición applied/failed en subscription.canceled y subscription.paused
+
+- Se integró marcado de estado de idempotencia solo en `subscription.canceled` y `subscription.paused`.
+- `org_id_not_resolved` ahora marca `failed` y responde `400`.
+- `event_out_of_order` ahora marca `applied` y responde `200`.
+- Error de base de datos en upsert marca `failed`.
+- Actualización exitosa marca `applied`.
+- Si falla `mark applied`, se intenta `mark failed` y se responde `500` genérico.
+- En esta rama, la comparación de orden usa `occurredAtIso` (no `now`) y se persiste `last_paddle_event_at = occurredAtIso`.
+- No se exponen detalles internos en respuestas de error y no se registra `custom_data` completo (solo presencia).
+- No se modificaron los eventos desconocidos.
+
+## Implementación 8: cierre de eventos desconocidos y catch global endurecido
+
+- Los eventos desconocidos ahora se cierran como `applied` antes de responder `200 ignored`.
+- Si falla ese cierre `applied`, se intenta marcar `failed` y se responde `500` genérico (`Event processing failed`).
+- Se añadieron variables de contexto fuera del `try` para conocer si un evento fue reclamado (`claimedEventId`, `claimedSupabase`), asignadas solo tras claim exitoso.
+- En el `catch` global:
+  - si hubo claim exitoso, se intenta `mark_paddle_webhook_event_failed(...)`.
+  - si no hubo claim, no se escribe transición de estado.
+  - la respuesta al cliente es solo `{ ok: false, error: "internal_error" }`.
+  - no se expone `error.message` interno.
+- Se corrigió la respuesta final de cancelación/pausa para reflejar `plan_status: canceled/inactive` según el tipo de evento.
+
 ## Estado de Go-Live
 
 - Decisión: NO GO para Paddle en Live al 2026-07-23.
