@@ -108,7 +108,11 @@ Hasta nuevo aviso:
 - Se añadió trigger de mantenimiento de `updated_at` en updates.
 - Se restringió ejecución de funciones de idempotencia/transición a roles `service_role` y `postgres`.
 - Se revocó acceso público también sobre la función interna del trigger.
-- Estado de despliegue: pendiente de aplicación en Supabase Preview.
+- Estado de despliegue: migración aplicada y verificada en Supabase Preview.
+- Verificación operativa:
+  - `migration list` en CLI 2.108.0 y 2.109.1 muestra una anomalía de emparejamiento.
+  - `schema_migrations` y el esquema real de base están correctos.
+  - Queda prohibido repetir `migration repair` o usar `db push` sobre este caso.
 
 ## Estado de Go-Live
 
