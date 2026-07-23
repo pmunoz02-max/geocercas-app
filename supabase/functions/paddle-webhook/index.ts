@@ -348,13 +348,12 @@ serve(async (req) => {
       const computed = await hmac(WEBHOOK_SECRET, `${ts}:${rawBody}`);
 
       if (computed !== h1) {
-        console.warn("[PADDLE WEBHOOK] signature mismatch - continuing for debug", {
-          expected: h1,
-          computed,
-        });
+        console.warn("[PADDLE WEBHOOK] signature mismatch");
+        return json(401, { ok: false, error: "Invalid signature" });
       }
     } catch (err) {
-      console.warn("[PADDLE WEBHOOK] signature validation error - continuing", err);
+      console.warn("[PADDLE WEBHOOK] signature validation error", err);
+      return json(401, { ok: false, error: "Signature validation failed" });
     }
 
     const event = JSON.parse(rawBody);

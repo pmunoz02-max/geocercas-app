@@ -66,6 +66,17 @@ Hasta nuevo aviso:
 5. Consolidar planes/límites con matriz oficial única y pruebas de regresión funcional.
 6. Eliminar o bloquear rutas residuales de billing antes de cualquier promoción a Live.
 
+## Implementación 1: firma fail-closed
+
+- Se implementó validación fail-closed para firma del webhook de Paddle.
+- Respuesta 401 y terminación inmediata cuando:
+	- Falta el header `Paddle-Signature`.
+	- El formato de firma es inválido.
+	- Existe mismatch entre firma recibida y firma calculada.
+	- Ocurre error durante la validación de firma.
+- Se eliminó el registro de firmas recibidas o calculadas en logs.
+- Estado de despliegue: esta actualización aún no se desplegó en Supabase Preview.
+
 ## Estado de Go-Live
 
 - Decisión: NO GO para Paddle en Live al 2026-07-23.
