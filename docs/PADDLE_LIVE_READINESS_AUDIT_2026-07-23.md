@@ -77,6 +77,14 @@ Hasta nuevo aviso:
 - Se eliminó el registro de firmas recibidas o calculadas en logs.
 - Estado de despliegue: esta actualización aún no se desplegó en Supabase Preview.
 
+## Implementación 2: orden de declaración en webhook
+
+- Se reordenó el flujo interno de la función para evitar uso de `event`, `type` y `supabase` antes de su declaración.
+- El bloque de idempotencia permanece igual en comportamiento y validaciones; solo cambió su posición dentro del flujo.
+- No se modificó la validación de firma.
+- No se modificó la lógica de negocio (ramas de transaction/subscription ni escrituras funcionales).
+- Estado de despliegue: esta actualización aún no se desplegó en Supabase Preview.
+
 ## Estado de Go-Live
 
 - Decisión: NO GO para Paddle en Live al 2026-07-23.

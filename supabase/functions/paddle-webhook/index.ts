@@ -283,38 +283,6 @@ function buildPaddleFields({
 }
 
 serve(async (req) => {
-      // --- Idempotency: event_id and occurred_at ---
-      const eventId = asString(event?.event_id);
-      const occurredAt = asString(event?.occurred_at);
-      if (!eventId || !occurredAt) {
-        return json(400, { ok: false, error: "Missing event_id or occurred_at" });
-      }
-
-      // Check if event already processed
-      const { data: existingEvent, error: eventLookupError } = await supabase
-        .from("paddle_webhook_events")
-        .select("event_id")
-        .eq("event_id", eventId)
-        .maybeSingle();
-
-      if (eventLookupError) {
-        console.error("[PADDLE WEBHOOK] event lookup error", eventLookupError);
-        return json(500, { ok: false, error: "Event lookup failed" });
-      }
-
-      if (existingEvent) {
-        console.log("[PADDLE WEBHOOK] duplicate event ignored", { event_id: eventId });
-        return json(200, { ok: true, duplicate: true, event_id: eventId });
-      }
-
-      // Insert event as processed (before actual processing for strict idempotency)
-      const { error: insertEventError } = await supabase
-        .from("paddle_webhook_events")
-        .insert({ event_id: eventId, occurred_at: occurredAt, event_type: type });
-      if (insertEventError) {
-        console.error("[PADDLE WEBHOOK] event insert error", insertEventError);
-        return json(500, { ok: false, error: "Event insert failed" });
-      }
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -367,6 +335,39 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
       auth: { persistSession: false },
     });
+
+    // --- Idempotency: event_id and occurred_at ---
+    const eventId = asString(event?.event_id);
+    const occurredAt = asString(event?.occurred_at);
+    if (!eventId || !occurredAt) {
+      return json(400, { ok: false, error: "Missing event_id or occurred_at" });
+    }
+
+    // Check if event already processed
+    const { data: existingEvent, error: eventLookupError } = await supabase
+      .from("paddle_webhook_events")
+      .select("event_id")
+      .eq("event_id", eventId)
+      .maybeSingle();
+
+    if (eventLookupError) {
+      console.error("[PADDLE WEBHOOK] event lookup error", eventLookupError);
+      return json(500, { ok: false, error: "Event lookup failed" });
+    }
+
+    if (existingEvent) {
+      console.log("[PADDLE WEBHOOK] duplicate event ignored", { event_id: eventId });
+      return json(200, { ok: true, duplicate: true, event_id: eventId });
+    }
+
+    // Insert event as processed (before actual processing for strict idempotency)
+    const { error: insertEventError } = await supabase
+      .from("paddle_webhook_events")
+      .insert({ event_id: eventId, occurred_at: occurredAt, event_type: type });
+    if (insertEventError) {
+      console.error("[PADDLE WEBHOOK] event insert error", insertEventError);
+      return json(500, { ok: false, error: "Event insert failed" });
+    }
 
     console.log("[PADDLE WEBHOOK] event received", { type });
 
