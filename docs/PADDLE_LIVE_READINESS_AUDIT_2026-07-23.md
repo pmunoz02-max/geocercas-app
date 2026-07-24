@@ -190,6 +190,27 @@ supabase.rpc("claim_paddle_webhook_event", {
   - no se expone `error.message` interno.
 - Se corrigió la respuesta final de cancelación/pausa para reflejar `plan_status: canceled/inactive` según el tipo de evento.
 
+## Implementación 9: alineación de planes y límites
+
+- `paddle-create-checkout` ahora resuelve precios por plan y entorno con cuatro variables explícitas:
+
+```text
+PADDLE_PRO_PRICE_ID_SANDBOX
+PADDLE_PRO_PRICE_ID_LIVE
+PADDLE_ENTERPRISE_PRICE_ID_SANDBOX
+PADDLE_ENTERPRISE_PRICE_ID_LIVE
+```
+
+- El checkout solo acepta `pro` y `enterprise`; cualquier otro valor se rechaza con error controlado.
+- Se corrigió el bug donde un checkout de Enterprise podía salir con precio de PRO por selección no dependiente de plan.
+- El webhook de Paddle ya no duplica límites comerciales en runtime (sin límites hardcodeados en la resolución de plan por `price_id`).
+- En escrituras de `org_billing`, `tracker_limit_override` queda en `null` para activar la política normal del catálogo.
+- `public.plans` se mantiene como fuente oficial de límites: PRO = 10 y Enterprise = 50.
+- Validación técnica completada en Preview: `deno check` y diff check aprobados.
+- Alcance operativo: sin deploy adicional, sin uso de secrets Live y sin activar webhook Live.
+- Todo continúa exclusivamente en Preview.
+- Estado Paddle para producción se mantiene en **NO GO para Live**.
+
 ## Estado de Go-Live
 
 - Decisión: NO GO para Paddle en Live al 2026-07-23.

@@ -154,17 +154,16 @@ function pickCustomerId(data: any): string | null {
 
 function resolvePlanByPriceId(priceId: string): {
   planCode: "pro" | "enterprise";
-  trackerLimit: number;
 } | null {
   const proPriceId = getPaddleProPriceId();
   const enterprisePriceId = getPaddleEnterprisePriceId();
 
   if (priceId === proPriceId) {
-    return { planCode: "pro", trackerLimit: 3 };
+    return { planCode: "pro" };
   }
 
   if (enterprisePriceId && priceId === enterprisePriceId) {
-    return { planCode: "enterprise", trackerLimit: 10 };
+    return { planCode: "enterprise" };
   }
 
   return null;
@@ -529,7 +528,7 @@ serve(async (req) => {
         plan_code: resolvedPlan.planCode,
         subscribed_plan_code: resolvedPlan.planCode,
         plan_status: "active",
-        tracker_limit_override: resolvedPlan.trackerLimit,
+        tracker_limit_override: null,
         updated_at: now,
         last_paddle_event_at: now,
         ...buildPaddleFields({
@@ -795,7 +794,7 @@ serve(async (req) => {
         plan_code: resolvedPlan.planCode,
         subscribed_plan_code: resolvedPlan.planCode,
         plan_status: "active",
-        tracker_limit_override: resolvedPlan.trackerLimit,
+        tracker_limit_override: null,
         updated_at: now,
         last_paddle_event_at: occurredAtIso,
         last_paddle_event_id: eventId,

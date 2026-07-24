@@ -21,15 +21,27 @@ function getPaddleApiKey() {
   return key;
 }
 
-function getPaddleProPriceId() {
+function getPaddlePriceId(plan: unknown) {
   const env = getPaddleEnv();
-  const priceId =
-    env === "live"
-      ? Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE")
-      : Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX");
+  const normalizedPlan = typeof plan === "string" ? plan.trim().toLowerCase() : "";
+
+  let priceId: string | undefined;
+  if (normalizedPlan === "pro") {
+    priceId =
+      env === "live"
+        ? Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE")
+        : Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX");
+  } else if (normalizedPlan === "enterprise") {
+    priceId =
+      env === "live"
+        ? Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_LIVE")
+        : Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_SANDBOX");
+  } else {
+    throw new Error(`Unsupported plan: ${String(plan)}`);
+  }
 
   if (!priceId) {
-    throw new Error(`Missing Paddle PRO price id for env: ${env}`);
+    throw new Error(`Missing Paddle ${normalizedPlan.toUpperCase()} price id for env: ${env}`);
   }
 
   return priceId;
@@ -97,7 +109,7 @@ serve(async (req) => {
         }),
         {
           status: 400,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
@@ -107,8 +119,10 @@ serve(async (req) => {
     console.log("[paddle-create-checkout] PLAN:", plan);
     console.log("[paddle-create-checkout] ENV:", {
       hasPaddleApiKey: !!Deno.env.get("PADDLE_API_KEY"),
-      hasProPriceId: !!Deno.env.get("PADDLE_PRICE_ID_PRO"),
-      hasEnterprisePriceId: !!Deno.env.get("PADDLE_PRICE_ID_ENTERPRISE"),
+      hasProPriceIdSandbox: !!Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX"),
+      hasProPriceIdLive: !!Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE"),
+      hasEnterprisePriceIdSandbox: !!Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_SANDBOX"),
+      hasEnterprisePriceIdLive: !!Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_LIVE"),
     });
 
     console.log("[paddle-create-checkout] validating inputs", { orgId, plan });
@@ -121,7 +135,20 @@ serve(async (req) => {
     // Central Paddle config
     const paddleEnv = getPaddleEnv();
     const PADDLE_API_KEY = getPaddleApiKey();
-    const priceId = getPaddleProPriceId();
+    let priceId: string;
+    try {
+      priceId = getPaddlePriceId(plan);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Unsupported plan:")) {
+        return json(400, {
+          ok: false,
+          error: "unsupported_plan",
+          plan,
+          allowed: ["pro", "enterprise"],
+        });
+      }
+      throw error;
+    }
 
     console.log("[paddle-create-checkout] paddleEnv:", paddleEnv);
     console.log("[paddle-create-checkout] using API key exists:", !!PADDLE_API_KEY);
