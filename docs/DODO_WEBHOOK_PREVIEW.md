@@ -147,3 +147,24 @@ No checkout productivo
 Dodo TEST deliveries reached the signed endpoint but returned `invalid_webhook_signature`.
 The verifier now keeps the Svix / Standard Webhooks format as the first option and adds conservative HMAC fallbacks while still requiring `DODO_WEBHOOK_SECRET_TEST`, valid timestamp, and signature headers.
 No raw payloads, payment links, card details, billing address, or customer personal data are stored by this change.
+
+## 2026-07-24 — Protección contra eventos Dodo antiguos
+
+Se documentan dos guardas para evitar que eventos tardíos o reemplazados alteren el estado vigente:
+
+- `stale_subscription_cancelled`: ignora cancelaciones antiguas cuando el `subscription_id` entrante no coincide con el `dodo_subscription_id` actual en `org_billing`.
+- `stale_active_event_for_replaced_subscription`: ignora eventos activos antiguos cuando `org_billing` ya tiene una suscripción Dodo activa y el evento trae otro `subscription_id`.
+
+En ambos casos, `org_billing` no se modifica.
+
+Se confirma que el cambio PRO a Enterprise conserva el mismo `subscription_id`, por lo que estos guardas no bloquean upgrades válidos.
+
+Validación realizada solo en Preview:
+
+```text
+- deno check
+- deploy
+- GET de verificación
+```
+
+Producción no fue tocada.

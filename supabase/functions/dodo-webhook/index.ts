@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -39,6 +40,8 @@ type ExistingOrgBilling = {
   dodo_subscription_id?: string | null;
   dodo_product_id?: string | null;
 };
+
+type WebhookSupabaseClient = SupabaseClient;
 
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -148,6 +151,16 @@ function bytesToBase64Url(bytes: ArrayBuffer): string {
   return bytesToBase64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+function ownArrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
+function ownUint8Array(bytes: Uint8Array): Uint8Array {
+  return new Uint8Array(ownArrayBufferFromBytes(bytes));
+}
+
 function timingSafeEqual(a: string, b: string): boolean {
   const aBytes = new TextEncoder().encode(a);
   const bBytes = new TextEncoder().encode(b);
@@ -171,9 +184,10 @@ function signatureCandidates(signatureHeader: string): string[] {
 }
 
 async function sign(secretBytes: Uint8Array, content: string): Promise<{ base64: string; base64Url: string }> {
+  const ownedSecretBuffer = ownArrayBufferFromBytes(secretBytes);
   const key = await crypto.subtle.importKey(
     "raw",
-    secretBytes,
+    ownedSecretBuffer,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
@@ -190,10 +204,11 @@ function uniqueByteCandidates(candidates: Uint8Array[]): Uint8Array[] {
   const unique: Uint8Array[] = [];
 
   for (const candidate of candidates) {
-    const key = bytesToBase64(candidate.buffer.slice(candidate.byteOffset, candidate.byteOffset + candidate.byteLength));
+    const ownedCandidate = ownUint8Array(candidate);
+    const key = bytesToBase64(ownArrayBufferFromBytes(ownedCandidate));
     if (seen.has(key)) continue;
     seen.add(key);
-    unique.push(candidate);
+    unique.push(ownedCandidate);
   }
 
   return unique;
@@ -374,7 +389,7 @@ function withDefinedValues(input: JsonObject): JsonObject {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 }
 
-async function getExistingOrgBilling(supabase: ReturnType<typeof createClient>, orgId: string): Promise<ExistingOrgBilling | null> {
+async function getExistingOrgBilling(supabase: WebhookSupabaseClient, orgId: string): Promise<ExistingOrgBilling | null> {
   const { data, error } = await supabase
     .from("org_billing")
     .select("org_id, plan_code, subscribed_plan_code, plan_status, billing_provider, dodo_subscription_id, dodo_product_id")
@@ -545,6 +560,38 @@ serve(async (req) => {
     let billingAction = "logged_only";
 
     if (shouldActivateBilling(event)) {
+      const existingBilling = await getExistingOrgBilling(supabase, event.orgId);
+      const existingSubscriptionId = stringOrNull(existingBilling?.dodo_subscription_id);
+      const existingBillingProvider = stringOrNull(existingBilling?.billing_provider);
+      const existingPlanStatus = (stringOrNull(existingBilling?.plan_status) ?? "").toLowerCase();
+
+      if (
+        existingBillingProvider === "dodo" &&
+        existingPlanStatus === "active" &&
+        existingSubscriptionId &&
+        event.subscriptionId &&
+        existingSubscriptionId !== event.subscriptionId
+      ) {
+        await supabase
+          .from("dodo_webhook_events")
+          .update({
+            status: "ignored",
+            processed_at: now,
+            error_detail: "stale_active_event_for_replaced_subscription",
+          })
+          .eq("event_id", event.eventId);
+
+        return json(200, {
+          ok: true,
+          processed: false,
+          ignored: true,
+          reason: "stale_active_event_for_replaced_subscription",
+          event_id: event.eventId,
+          event_type: event.eventType,
+          org_id: event.orgId,
+        });
+      }
+
       const billingPatch = withDefinedValues({
         org_id: event.orgId,
         plan_code: event.planCode,

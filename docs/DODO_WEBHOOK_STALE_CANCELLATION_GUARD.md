@@ -51,3 +51,27 @@ dodo_product_id: pdt_0NhoND6E41RsKWVP43fW1
 ## Notes
 
 This patch does not change Stripe/Paddle behavior and does not touch Production.
+
+## Protección complementaria para eventos activos antiguos
+
+Como refuerzo adicional, el webhook también protege la ruta de activación: una suscripción Dodo activa existente no puede ser reemplazada por un evento activo que traiga otro `subscription_id`.
+
+Cuando `org_billing` ya está en `billing_provider = dodo` y `plan_status = active`, si entra un evento de activación con un `subscription_id` distinto del actual, el evento se marca como ignorado con:
+
+```text
+error_detail = stale_active_event_for_replaced_subscription
+```
+
+En ese caso, no se modifica `org_billing`.
+
+También se confirma que el cambio de plan PRO a Enterprise conserva el mismo `subscription_id`, por lo que este guard no bloquea upgrades válidos.
+
+Validación realizada:
+
+```text
+- deno check
+- deploy en Preview
+- GET de verificación en Preview
+```
+
+Producción no fue tocada.
