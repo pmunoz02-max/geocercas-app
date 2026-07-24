@@ -20,3 +20,6 @@ entrypoint = "./functions/paddle-webhook/index.ts"
 
 [functions.paddle-cancel-subscription]
 verify_jwt = true
+
+[functions.paddle-create-checkout]
+verify_jwt = true

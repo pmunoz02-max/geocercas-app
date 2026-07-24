@@ -62,17 +62,6 @@ function json(status: number, body: unknown) {
 }
 
 serve(async (req) => {
-    // Paddle env/key debug log
-    const env = Deno.env.get("PADDLE_ENV");
-    const apiKey = Deno.env.get("PADDLE_API_KEY_LIVE") || "";
-    console.log("[PADDLE DEBUG]", {
-      env,
-      keyPrefix: apiKey?.slice(0, 4),
-    });
-
-    if (env === "live" && !apiKey.startsWith("pdl_")) {
-      throw new Error("Invalid Paddle live API key");
-    }
   try {
     if (req.method === "OPTIONS") {
       return new Response("ok", { headers: corsHeaders });
@@ -118,7 +107,9 @@ serve(async (req) => {
     console.log("[paddle-create-checkout] ORG ID:", orgId);
     console.log("[paddle-create-checkout] PLAN:", plan);
     console.log("[paddle-create-checkout] ENV:", {
-      hasPaddleApiKey: !!Deno.env.get("PADDLE_API_KEY"),
+      paddleEnv: getPaddleEnv(),
+      hasApiKeySandbox: !!Deno.env.get("PADDLE_API_KEY_SANDBOX"),
+      hasApiKeyLive: !!Deno.env.get("PADDLE_API_KEY_LIVE"),
       hasProPriceIdSandbox: !!Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX"),
       hasProPriceIdLive: !!Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE"),
       hasEnterprisePriceIdSandbox: !!Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_SANDBOX"),
@@ -168,7 +159,7 @@ serve(async (req) => {
 
 
 
-    // Determina dominio correcto para success_url según entorno
+    // Determina el dominio correcto para success_url según el entorno
     const isLive = getPaddleEnv() === "live";
     const APP_URL = isLive
       ? "https://app.tugeocercas.com"
@@ -193,7 +184,6 @@ serve(async (req) => {
         cancel_url: cancelUrl,
       },
     };
-    console.log("[paddle-create-checkout] PADDLE PAYLOAD:", JSON.stringify(paddlePayload));
 
     console.log("[paddle-create-checkout] creating paddle transaction", {
       orgId,
@@ -216,7 +206,6 @@ serve(async (req) => {
 
     const rawText = await paddleResponse.text();
     console.log("[paddle-create-checkout] PADDLE STATUS:", paddleResponse.status);
-    console.log("[paddle-create-checkout] PADDLE RAW RESPONSE:", rawText);
 
     let paddleJson: any = null;
     try {
@@ -224,7 +213,6 @@ serve(async (req) => {
     } catch (parseError) {
       console.error("[paddle-create-checkout] paddle json parse error", parseError);
     }
-    console.log("[paddle-create-checkout] PADDLE RESPONSE JSON:", paddleJson);
 
 
     if (!paddleResponse.ok) {
@@ -246,7 +234,6 @@ serve(async (req) => {
       return json(500, {
         error: "paddle_request_failed",
         status: paddleResponse.status,
-        paddle: paddleJson ?? rawText,
       });
     }
 
@@ -256,7 +243,6 @@ serve(async (req) => {
       return json(500, {
         ok: false,
         error: "no_checkout_url",
-        raw: paddleJson,
       });
     }
 
@@ -267,13 +253,11 @@ serve(async (req) => {
   } catch (error) {
     console.error("[paddle-create-checkout] unhandled error", {
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : null,
-      error,
+      name: error instanceof Error ? error.name : "UnknownError",
     });
 
     return json(500, {
       error: "internal_error",
-      message: error instanceof Error ? error.message : String(error),
     });
   }
 });

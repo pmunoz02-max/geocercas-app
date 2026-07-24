@@ -211,6 +211,34 @@ PADDLE_ENTERPRISE_PRICE_ID_LIVE
 - Todo continúa exclusivamente en Preview.
 - Estado Paddle para producción se mantiene en **NO GO para Live**.
 
+## Implementación 10: endurecimiento de paddle-create-checkout
+
+- Se eliminó el bloque de debug previo al `try` que leía/enviaba datos de key (`[PADDLE DEBUG]`, `keyPrefix`) y su validación asociada.
+- El log de entorno se normalizó para diagnóstico seguro, exponiendo solo presencia booleana de configuración:
+  - `paddleEnv`.
+  - `hasApiKeySandbox` y `hasApiKeyLive`.
+  - `hasProPriceIdSandbox` y `hasProPriceIdLive`.
+  - `hasEnterprisePriceIdSandbox` y `hasEnterprisePriceIdLive`.
+- Se eliminaron logs sensibles de contenido:
+  - payload completo enviado a Paddle.
+  - raw response de Paddle.
+  - response JSON completo de Paddle.
+- Se conserva únicamente el log seguro de estado HTTP de Paddle (`PADDLE STATUS`).
+- Se endurecieron respuestas públicas `500` para no exponer internals:
+  - en fallo de request a Paddle: sin `paddleJson`/`rawText` en la respuesta.
+  - en ausencia de `checkout_url`: sin `raw` ni payload interno.
+- En el `catch` general:
+  - el log registra solo `message` y `name` del error.
+  - la respuesta al cliente devuelve únicamente `{ error: "internal_error" }`.
+- Se corrigió redacción del comentario operativo de `success_url` con acentuación correcta.
+- No se modificó la petición HTTP a Paddle ni la respuesta exitosa con `checkout_url`.
+- `verify_jwt = true` quedó configurado para `paddle-create-checkout` en `supabase/config.toml`.
+- Validaciones aprobadas: `deno check --no-lock` y `git diff --check`.
+- El `deno.lock` generado accidentalmente fue retirado y no se incorporará.
+- Alcance exclusivo en rama `preview`, sin deploy ni cambios en secrets.
+- Sigue pendiente configurar `PADDLE_ENTERPRISE_PRICE_ID_SANDBOX`.
+- El estado se mantiene en **NO GO para Live**.
+
 ## Estado de Go-Live
 
 - Decisión: NO GO para Paddle en Live al 2026-07-23.
