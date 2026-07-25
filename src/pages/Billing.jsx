@@ -159,6 +159,8 @@ function mergeBillingPanelWithOrgBilling(panelBilling, orgBilling, orgId) {
     billing_provider: orgBilling?.billing_provider || base.billing_provider || null,
     dodo_customer_id: orgBilling?.dodo_customer_id || base.dodo_customer_id || null,
     dodo_subscription_id: orgBilling?.dodo_subscription_id || base.dodo_subscription_id || null,
+    paddle_subscription_id:
+      orgBilling?.paddle_subscription_id || base.paddle_subscription_id || null,
     dodo_product_id: orgBilling?.dodo_product_id || base.dodo_product_id || null,
     dodo_checkout_session_id:
       orgBilling?.dodo_checkout_session_id || base.dodo_checkout_session_id || null,
@@ -311,6 +313,7 @@ export default function Billing() {
             current_period_end,
             dodo_customer_id,
             dodo_subscription_id,
+            paddle_subscription_id,
             dodo_product_id,
             dodo_checkout_session_id,
             dodo_payment_id,
@@ -414,10 +417,17 @@ export default function Billing() {
     return "none";
   }, [billingFallback, isOverLimit, effectivePlanStatus, effectivePlanCode]);
 
-  const hasActivePlan = useMemo(
-    () => ["active", "past_due", "paused"].includes(effectivePlanStatus),
-    [effectivePlanStatus]
-  );
+  const canManagePaddleSubscription = useMemo(() => {
+    const provider = String(billing?.billing_provider || "").toLowerCase();
+    const subscriptionId = String(billing?.paddle_subscription_id || "").trim();
+    const status = String(effectivePlanStatus || "").toLowerCase();
+
+    return (
+      provider === "paddle" &&
+      subscriptionId.length > 0 &&
+      ["active", "past_due", "paused"].includes(status)
+    );
+  }, [billing?.billing_provider, billing?.paddle_subscription_id, effectivePlanStatus]);
 
   const normalizedPlanCodeForUpgrade = String(effectivePlanCode || "").toLowerCase();
   const normalizedPlanStatusForUpgrade = String(effectivePlanStatus || "").toLowerCase();
@@ -905,7 +915,7 @@ export default function Billing() {
               )}
             </div>
 
-            {hasActivePlan ? (
+            {canManagePaddleSubscription ? (
               <ManageSubscriptionButton
                 orgId={billing?.org_id ?? currentOrgId ?? null}
                 buttonLabel={tr("billing.subscriptionManagement.suspendPlan", "Suspend plan")}
