@@ -103,6 +103,40 @@ which organizations a user belongs to
 
 the user's role within that organization
 
+Preview emergency hardening (20260725100000_emergency_membership_integrity_preview.sql)
+
+Membership integrity for owner is enforced with three triggers on public.memberships:
+
+trg_memberships_owner_integrity_insert (BEFORE INSERT)
+
+trg_memberships_owner_integrity_update (BEFORE UPDATE OF org_id, user_id, role, revoked_at)
+
+trg_memberships_owner_integrity_delete (BEFORE DELETE)
+
+The existing limit guard is preserved:
+
+trg_enforce_membership_limit
+
+Current memberships RLS policies in Preview are:
+
+memberships_select_own
+
+memberships_select_admin
+
+memberships_insert_admin
+
+memberships_update_admin
+
+memberships_delete_admin
+
+Audited function permissions in Preview:
+
+ensure_tracker_membership (both signatures): EXECUTE only for service_role (revoked from public, anon, authenticated)
+
+is_org_admin (both signatures): EXECUTE allowed for authenticated and service_role, but not for anon
+
+rpc_claim_tracker_pairing_code: EXECUTE allowed for authenticated and service_role, but not for anon
+
 5. Role-Based Access Model
 
 Users may have different roles within an organization.

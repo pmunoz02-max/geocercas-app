@@ -1,9 +1,16 @@
 # QA Checklist: Memberships Role Integrity (Preview)
 
-**Status**: Manual QA — run against preview/staging environment  
-**Scope**: `memberships` table, `accept-tracker-invite` edge function, `safeUpsertMembership`  
+**Status**: Manual QA — controls from Preview migration `20260725100000_emergency_membership_integrity_preview.sql` already applied and audited in preview/staging
+**Scope**: `memberships` table, `accept-tracker-invite` edge function, `safeUpsertMembership`, and applied/audited controls from Preview migration `20260725100000_emergency_membership_integrity_preview.sql`
 **Role priority**: `owner (3) > admin (2) > tracker (1)`  
 **Integrity rule**: Within the same `(org_id, user_id)`, role must never decrease.
+
+## Applied controls in Preview
+
+- Owner integrity triggers: `trg_memberships_owner_integrity_insert`, `trg_memberships_owner_integrity_update`, `trg_memberships_owner_integrity_delete`.
+- Membership limit trigger preserved: `trg_enforce_membership_limit`.
+- Active RLS policies on `memberships`: `memberships_select_own`, `memberships_select_admin`, `memberships_insert_admin`, `memberships_update_admin`, `memberships_delete_admin`.
+- Function permissions: `ensure_tracker_membership` (both signatures) allows only `service_role`; `is_org_admin` (both signatures) and `rpc_claim_tracker_pairing_code` allow `authenticated` and `service_role`, but not `anon`.
 
 ---
 

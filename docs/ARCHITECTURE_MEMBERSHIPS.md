@@ -95,7 +95,9 @@ Comportamiento explícito:
 
 - Capa runtime (principal): `safeUpsertMembership` y flows proxy/edge.
 - Capa DB adicional (segun despliegue): RPC `set_member_role` y `accept_invitation` con logica de no degradación en same-org (`supabase/migrations/20260317000100_*`, `20260317000300_*`).
-- Capa DB (preview hardening): trigger `trg_prevent_membership_role_downgrade` en `memberships` bloquea downgrade en misma org (`owner/admin -> tracker`) como defensa en profundidad.
+- Capa DB (preview hardening): se reemplaza el trigger legacy de downgrade por integridad explícita de owner en `memberships` con tres triggers activos: `trg_memberships_owner_integrity_insert` (BEFORE INSERT), `trg_memberships_owner_integrity_update` (BEFORE UPDATE de `org_id`, `user_id`, `role`, `revoked_at`) y `trg_memberships_owner_integrity_delete` (BEFORE DELETE), todos sobre `public.enforce_membership_owner_integrity()` (`supabase/migrations/20260725100000_emergency_membership_integrity_preview.sql`). Además, se conserva `trg_enforce_membership_limit` para control de límite de membresías.
+- Permisos de funciones en Preview: `ensure_tracker_membership` (ambas firmas) queda exclusivo para `service_role`; `is_org_admin` y `rpc_claim_tracker_pairing_code` revocan `anon` y solo permiten ejecución a roles autorizados (principalmente `authenticated` y `service_role`, según función).
+- RLS de `memberships` en Preview: cinco políticas administrativas/propias, por nombre: `memberships_select_own`, `memberships_select_admin`, `memberships_insert_admin`, `memberships_update_admin` y `memberships_delete_admin`.
 
 ---
 
