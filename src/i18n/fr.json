@@ -2239,7 +2239,12 @@
     },
     "subscriptionManagement": {
       "title": "Gestion de l’abonnement",
-      "description": "Ouvrez la facturation pour gérer votre abonnement."
+      "description": "Ouvrez la facturation pour gérer votre abonnement.",
+      "cancelRenewal": "Annuler le renouvellement",
+      "confirmCancelRenewal": "Cela annulera le renouvellement automatique. Votre forfait restera actif jusqu’à la fin de la période de facturation actuelle. Souhaitez-vous continuer ?",
+      "cancelingRenewal": "Annulation du renouvellement...",
+      "renewalCanceled": "Renouvellement annulé. Le forfait restera actif jusqu’à la fin de la période de facturation.",
+      "cancelRenewalError": "Impossible d’annuler le renouvellement."
     },
     "messages": {
       "cancelAtPeriodEnd": "Votre abonnement sera annulé à la fin de la période actuelle.",

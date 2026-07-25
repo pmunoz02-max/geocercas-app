@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 export default function ManageSubscriptionButton({
   orgId,
   disabled = false,
-  buttonLabel = "Suspend plan",
+  buttonLabel = "Cancel renewal",
 }) {
   const { t } = useTranslation();
   // Friendly Paddle error handler for billing cancel/modify
@@ -51,6 +51,17 @@ export default function ManageSubscriptionButton({
         throw new Error("Missing organization context.");
       }
 
+      const confirmed = window.confirm(
+        t(
+          "billing.subscriptionManagement.confirmCancelRenewal",
+          "This will cancel automatic renewal. Your plan will remain active until the end of the current billing period. Do you want to continue?"
+        )
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
       const { data, error: invokeError } = await supabase.functions.invoke(
         "paddle-cancel-subscription",
         {
@@ -77,10 +88,21 @@ export default function ManageSubscriptionButton({
         throw new Error(JSON.stringify(data));
       }
 
-      setSuccess("Plan will be canceled at end of billing period");
+      setSuccess(
+        t(
+          "billing.subscriptionManagement.renewalCanceled",
+          "Renewal canceled. The plan will remain active until the end of the billing period."
+        )
+      );
     } catch (err) {
       console.error("[manage-subscription] final error", err);
-      setError(err?.message || "Could not suspend the plan.");
+      setError(
+        err?.message ||
+          t(
+            "billing.subscriptionManagement.cancelRenewalError",
+            "Could not cancel renewal."
+          )
+      );
     } finally {
       setLoading(false);
     }
@@ -100,7 +122,12 @@ export default function ManageSubscriptionButton({
             : "bg-slate-900 text-white hover:bg-slate-800"
         }`}
       >
-        {loading ? "Suspending..." : buttonLabel}
+        {loading
+          ? t(
+              "billing.subscriptionManagement.cancelingRenewal",
+              "Canceling renewal..."
+            )
+          : buttonLabel}
       </button>
 
       {error && !loading && (

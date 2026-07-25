@@ -918,7 +918,7 @@ export default function Billing() {
             {canManagePaddleSubscription ? (
               <ManageSubscriptionButton
                 orgId={billing?.org_id ?? currentOrgId ?? null}
-                buttonLabel={tr("billing.subscriptionManagement.suspendPlan", "Suspend plan")}
+                buttonLabel={tr("billing.subscriptionManagement.cancelRenewal", "Cancel renewal")}
               />
             ) : null}
           </div>

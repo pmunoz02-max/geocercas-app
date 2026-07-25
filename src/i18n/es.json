@@ -2267,7 +2267,12 @@
     },
     "subscriptionManagement": {
       "title": "Gestión de suscripción",
-      "description": "Abre Facturación para gestionar los detalles de tu suscripción."
+      "description": "Abre Facturación para gestionar los detalles de tu suscripción.",
+      "cancelRenewal": "Cancelar renovación",
+      "confirmCancelRenewal": "Esto cancelará la renovación automática. Tu plan permanecerá activo hasta el final del periodo de facturación actual. ¿Deseas continuar?",
+      "cancelingRenewal": "Cancelando renovación...",
+      "renewalCanceled": "Renovación cancelada. El plan permanecerá activo hasta el final del periodo de facturación.",
+      "cancelRenewalError": "No se pudo cancelar la renovación."
     },
     "messages": {
       "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",

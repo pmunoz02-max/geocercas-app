@@ -2266,7 +2266,12 @@
     },
     "subscriptionManagement": {
       "title": "Subscription management",
-      "description": "Open Billing to manage your subscription details."
+      "description": "Open Billing to manage your subscription details.",
+      "cancelRenewal": "Cancel renewal",
+      "confirmCancelRenewal": "This will cancel automatic renewal. Your plan will remain active until the end of the current billing period. Do you want to continue?",
+      "cancelingRenewal": "Canceling renewal...",
+      "renewalCanceled": "Renewal canceled. Your plan will remain active until the end of the current billing period.",
+      "cancelRenewalError": "Could not cancel the renewal."
     },
     "messages": {
       "cancelAtPeriodEnd": "Your subscription is set to cancel at the end of the current period.",
