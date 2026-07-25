@@ -2,12 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
-
-function safeNextPath(next) {
-  if (!next) return "/inicio";
-  if (next.startsWith("/")) return next;
-  return "/inicio";
-}
+import { safeNextPath } from "../utils/safeNextPath";
 
 function parseHashParams(hash) {
   const h = (hash || "").startsWith("#") ? hash.slice(1) : hash || "";
@@ -22,7 +17,7 @@ function parseHashParams(hash) {
 
 function isStrongEnough(pw) {
   const s = String(pw || "");
-  return s.length >= 6;
+  return s.length >= 8;
 }
 
 export default function UpdatePassword() {
@@ -35,7 +30,7 @@ export default function UpdatePassword() {
 
   const rpNext = useMemo(() => {
     const sp = new URLSearchParams(location.search || "");
-    return safeNextPath(sp.get("rp_next") || sp.get("next") || "/inicio");
+    return safeNextPath(sp.get("rp_next") || sp.get("next"), "/inicio");
   }, [location.search]);
 
   const token_hash = useMemo(() => {
@@ -214,7 +209,14 @@ export default function UpdatePassword() {
       });
 
       await supabase.auth.signOut().catch(() => {});
-      setTimeout(() => navigate("/login", { replace: true }), 900);
+      setTimeout(
+        () =>
+          navigate(
+            `/login?mode=password&next=${encodeURIComponent(rpNext)}`,
+            { replace: true }
+          ),
+        900
+      );
     } catch (e2) {
       setMsg({
         type: "error",

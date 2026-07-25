@@ -4,16 +4,11 @@ import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import { supabaseTracker } from "../lib/supabaseTrackerClient";
+import { isTrackerNextPath, safeNextPath } from "../utils/safeNextPath";
 
 function getQueryParam(search: string, key: string) {
   const v = new URLSearchParams(search).get(key);
   return v ?? "";
-}
-
-function safeNextPath(next: string) {
-  if (!next) return "/inicio";
-  if (next.startsWith("/")) return next;
-  return "/inicio";
 }
 
 function parseHashParams(hash: string) {
@@ -100,11 +95,6 @@ function normalizeOtpType(t: string) {
   return "magiclink";
 }
 
-function isTrackerNextPath(next: string) {
-  const value = String(next || "").trim().toLowerCase();
-  return value.includes("/tracker-gps");
-}
-
 async function waitForSession(authClient: typeof supabase | typeof supabaseTracker) {
   let session = null;
   for (let i = 0; i < 20; i++) {
@@ -127,10 +117,37 @@ export default function AuthCallback() {
     tips: string[];
   } | null>(null);
 
+  const rpNext = useMemo(() => {
+    const rawRpNext = getQueryParam(location.search, "rp_next");
+    return safeNextPath(rawRpNext, "/inicio");
+  }, [location.search]);
+
   const next = useMemo(() => {
     const n = getQueryParam(location.search, "next");
-    return safeNextPath(n || "/inicio");
-  }, [location.search]);
+    const safeNext = safeNextPath(n, "/inicio");
+    const type = normalizeOtpType(getQueryParam(location.search, "type"));
+
+    if (type !== "recovery") {
+      return safeNext;
+    }
+
+    const origin =
+      typeof window !== "undefined" && window.location?.origin
+        ? window.location.origin
+        : "http://localhost";
+
+    try {
+      const parsed = new URL(safeNext, origin);
+      if (parsed.pathname !== "/reset-password") {
+        return safeNext;
+      }
+
+      parsed.searchParams.set("rp_next", rpNext);
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch {
+      return safeNext;
+    }
+  }, [location.search, rpNext]);
 
   const isTrackerFlow = useMemo(() => isTrackerNextPath(next), [next]);
 
@@ -233,8 +250,9 @@ export default function AuthCallback() {
             ? sessionStorage.getItem("trackerAcceptedRedirect")
             : null;
         if (trackerAcceptedRedirect) {
+          const safeTrackerAcceptedRedirect = safeNextPath(trackerAcceptedRedirect, next);
           sessionStorage.removeItem("trackerAcceptedRedirect");
-          window.location.replace(trackerAcceptedRedirect);
+          window.location.replace(safeTrackerAcceptedRedirect);
         } else {
           window.location.replace(next);
         }

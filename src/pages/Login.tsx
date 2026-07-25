@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
 import LanguageSwitcher from "../components/LanguageSwitcher";
+import { safeNextPath } from "../utils/safeNextPath";
 
 function getQueryParam(search: string, key: string) {
   const v = new URLSearchParams(search).get(key);
@@ -12,12 +13,6 @@ function getQueryParam(search: string, key: string) {
 
 function hasQueryParam(search: string, key: string) {
   return new URLSearchParams(search).has(key);
-}
-
-function safeNextPath(next: string) {
-  if (!next) return "/inicio";
-  if (next.startsWith("/")) return next;
-  return "/inicio";
 }
 
 type Mode = "magic" | "password" | "reset";
@@ -110,7 +105,7 @@ export default function Login() {
 
   const nextFromUrl = useMemo(() => {
     const n = getQueryParam(location.search, "next");
-    return safeNextPath(n || "/inicio");
+    return safeNextPath(n, "/inicio");
   }, [location.search]);
 
   const inboundErr = useMemo(() => {
@@ -131,7 +126,7 @@ export default function Login() {
         if (!alive) return;
 
         if (data?.session) {
-          const dest = safeNextPath(nextFromUrl || nextInput || "/inicio");
+          const dest = safeNextPath(nextFromUrl || nextInput, "/inicio");
           window.location.replace(dest);
         }
       } catch {
@@ -213,7 +208,7 @@ export default function Login() {
   }, []);
 
   const redirectTo = useMemo(() => {
-    const next = safeNextPath(nextInput);
+    const next = safeNextPath(nextInput, "/inicio");
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", next);
     return url.toString();
@@ -222,7 +217,7 @@ export default function Login() {
   const resetRedirectTo = useMemo(() => {
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", "/reset-password");
-    url.searchParams.set("rp_next", safeNextPath(nextInput));
+    url.searchParams.set("rp_next", safeNextPath(nextInput, "/inicio"));
     return url.toString();
   }, [siteUrl, nextInput]);
 
@@ -337,7 +332,7 @@ export default function Login() {
           })
         );
 
-        const dest = safeNextPath(nextInput);
+        const dest = safeNextPath(nextInput, "/inicio");
 
         // Navegación segura post-login:
         // replace evita que /login quede como entrada anterior del historial.
