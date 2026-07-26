@@ -239,6 +239,33 @@ PADDLE_ENTERPRISE_PRICE_ID_LIVE
 - Sigue pendiente configurar `PADDLE_ENTERPRISE_PRICE_ID_SANDBOX`.
 - El estado se mantiene en **NO GO para Live**.
 
+## Implementación 11: endurecimiento final de paddle-webhook — 2026-07-26
+
+- Extracción de `subscription_id` reforzada por tipo de evento, aceptando solo IDs con prefijo seguro `sub_`:
+  - transacciones: `subscription_id` o `subscription.id`.
+  - suscripciones: `data.id` (y variantes), siempre validando `sub_`.
+- Control cronológico anti out-of-order alineado a `occurred_at`:
+  - comparaciones contra `last_paddle_event_occurred_at`.
+  - eventos no más recientes se marcan `applied` y se ignoran.
+- `plan_status` en eventos de suscripción ahora respeta estados reales de Paddle desde `data.status`:
+  - `active`, `trialing`, `past_due`, `paused -> inactive`, `canceled`.
+  - estados desconocidos se rechazan antes de cualquier `upsert`.
+- En `scheduled_change`, `cancel_at_period_end` solo queda `true` cuando `scheduled_change.action === "cancel"`.
+  - `scheduled_change_action` y `scheduled_change_effective_at` se conservan para cualquier cambio programado.
+- Endurecimiento criptográfico del webhook:
+  - anti-replay por timestamp con tolerancia máxima de 5 minutos (300s, pasado o futuro).
+  - comparación HMAC hexadecimal en tiempo constante y con validación de misma longitud.
+- Se incorporaron explícitamente al bloque principal de suscripciones los eventos:
+  - `subscription.activated`
+  - `subscription.trialing`
+  - `subscription.past_due`
+  - `subscription.resumed`
+  manteniendo `data.status` como fuente del estado final.
+- Validación técnica aprobada en Preview: `deno fmt` y `deno check` aprobados.
+- Alcance operativo: solo Preview, sin deploy y sin activación de Paddle Live.
+- No se configuraron secretos de Paddle Live.
+- El destino de notificaciones/webhook de Paddle Live no fue guardado.
+
 ## Estado de Go-Live
 
 - Decisión: NO GO para Paddle en Live al 2026-07-23.
