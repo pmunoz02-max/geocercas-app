@@ -78,9 +78,9 @@ export default function RequireOrg({ children }) {
     return <FullScreenLoader text={t("auth.requireOrg.resolvingOrganization")} />;
   }
 
-  // 4) Logueado pero sin organizaciones -> redirige a /inicio
+  // 4) Logueado pero sin organizaciones -> redirige al onboarding
   if (!currentOrg?.id) {
-    return <Navigate to="/inicio" replace />;
+    return <Navigate to="/onboarding/create-org" replace />;
   }
 
   return children;
