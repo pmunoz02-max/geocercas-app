@@ -84,7 +84,10 @@ Migración, verificación SQL y QA funcional mínimo: completados satisfactoriam
 7. [COMPLETADO] No continuar si cualquier control devuelve `FAIL`.
 8. [COMPLETADO] Probar onboarding, invitación tracker, cambio de organización,
    gestión de miembros y página Billing.
-9. [PENDIENTE] Hacer push únicamente a `preview` después de la validación.
+9. [COMPLETADO] Hacer push únicamente a `preview` después de la validación.
+
+Publicación y despliegue: el commit 74e3450e fue publicado y desplegado
+correctamente en Preview.
 
 Validación clave: usuario owner/admin en A aceptó invitación como tracker en B
 sin perder su rol en A y sin privilegios administrativos en B.
