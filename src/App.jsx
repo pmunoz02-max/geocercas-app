@@ -239,7 +239,14 @@ function MainAppRoutes() {
           element={<OnboardingCreateOrgPage />}
         />
 
-        <Route path="/inicio" element={<Inicio />} />
+        <Route
+          path="/inicio"
+          element={
+            <RequireOrg>
+              <Inicio />
+            </RequireOrg>
+          }
+        />
 
         <Route
           path="/dashboard"
