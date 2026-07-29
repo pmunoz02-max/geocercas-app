@@ -90,8 +90,13 @@ async function hmac(secret: string, payload: string): Promise<string> {
 }
 
 function getPaddleEnv(): "sandbox" | "live" {
-  const env = Deno.env.get("PADDLE_ENV")?.toLowerCase();
-  return env === "live" ? "live" : "sandbox";
+  const env = Deno.env.get("PADDLE_ENV")?.trim().toLowerCase();
+
+  if (env !== "sandbox" && env !== "live") {
+    throw new Error('PADDLE_ENV must be exactly "sandbox" or "live"');
+  }
+
+  return env;
 }
 
 function getPaddleProPriceId(): string {

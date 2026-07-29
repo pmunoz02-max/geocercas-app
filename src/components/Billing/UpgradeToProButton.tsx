@@ -17,27 +17,20 @@ type Props = {
   label?: string;
 };
 
-type DodoCheckoutResponse = {
+type PaddleFunctionResponse = {
   ok?: boolean;
+  success?: boolean;
   checkout_url?: string;
-  checkoutUrl?: string;
-  redirect_url?: string;
-  redirectUrl?: string;
-  session_id?: string | null;
-  provider?: string;
-  mode?: string;
-  plan?: string;
-  checkout_intent?: string;
-  change_plan_completed?: boolean;
+  pending_webhook?: boolean;
+  already_active?: boolean;
   error?: string;
   message?: string;
-  current_plan_code?: string;
-  current_plan_status?: string;
 };
 
 type BillingSnapshot = {
   planCode: string;
   planStatus: string;
+  billingProvider: string;
 };
 
 function cleanId(value: unknown): string {
@@ -68,7 +61,7 @@ function buildBillingUrl(language: string | undefined): string {
   params.set("lang", language || "es");
   params.set("upgrade", "enterprise");
   params.set("billing_refresh", String(Date.now()));
-  params.set("source", "dodo_change_plan");
+  params.set("source", "paddle_change_plan");
   return `/billing?${params.toString()}`;
 }
 
@@ -76,7 +69,7 @@ function forceBillingReload(language: string | undefined): void {
   const url = buildBillingUrl(language);
 
   // Use a hard navigation instead of React-only routing so Billing reloads
-  // org_billing after Dodo emits subscription.plan_changed.
+  // org_billing after Paddle emits the subscription update webhook.
   window.location.replace(url);
 
   // Fallback for browsers that ignore replace during an in-flight state update.
@@ -113,7 +106,7 @@ async function readBillingSnapshot(orgId: string): Promise<BillingSnapshot | nul
   try {
     const { data, error } = await supabase
       .from("org_billing")
-      .select("plan_code, subscribed_plan_code, plan_status")
+      .select("plan_code, subscribed_plan_code, plan_status, billing_provider")
       .eq("org_id", orgId)
       .maybeSingle();
 
@@ -122,6 +115,7 @@ async function readBillingSnapshot(orgId: string): Promise<BillingSnapshot | nul
     return {
       planCode: normalizePlan(data.subscribed_plan_code || data.plan_code),
       planStatus: normalizePlan(data.plan_status),
+      billingProvider: normalizePlan(data.billing_provider),
     };
   } catch {
     return null;
@@ -149,6 +143,12 @@ function isActiveProBilling(snapshot: BillingSnapshot | null): boolean {
   if (!snapshot) return false;
 
   return snapshot.planCode === "pro" && isActivePaidStatus(snapshot.planStatus);
+}
+
+function isActiveEnterpriseBilling(snapshot: BillingSnapshot | null): boolean {
+  if (!snapshot) return false;
+
+  return snapshot.planCode === "enterprise" && isActivePaidStatus(snapshot.planStatus);
 }
 
 export default function UpgradeToProButton({ orgId, plan = "pro", className = "", label }: Props) {
@@ -225,10 +225,35 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
     try {
       setLoading(true);
 
-      if (checkoutPlan === "enterprise" && !confirmedPlanChange) {
-        const billingSnapshot = await readBillingSnapshot(effectiveOrgId);
+      const billingSnapshot = await readBillingSnapshot(effectiveOrgId);
 
-        if (isActiveProBilling(billingSnapshot)) {
+      if (isActiveEnterpriseBilling(billingSnapshot)) {
+        throw new Error(
+          t("billing.checkout.enterpriseAlreadyActive", {
+            defaultValue: "This organization already has an active Enterprise plan.",
+          }),
+        );
+      }
+
+      if (checkoutPlan === "pro" && isActiveProBilling(billingSnapshot)) {
+        throw new Error(
+          t("billing.checkout.proAlreadyActive", {
+            defaultValue: "This organization already has an active PRO plan.",
+          }),
+        );
+      }
+
+      if (checkoutPlan === "enterprise" && isActiveProBilling(billingSnapshot)) {
+        if (billingSnapshot?.billingProvider !== "paddle") {
+          throw new Error(
+            t("billing.checkout.otherProviderManaged", {
+              defaultValue:
+                "This subscription is managed by another billing provider. Contact support before changing plans.",
+            }),
+          );
+        }
+
+        if (!confirmedPlanChange) {
           setConfirmUpgradeOpen(true);
           setLoading(false);
           return;
@@ -245,22 +270,33 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         );
       }
 
-      const { data, error } = await supabase.functions.invoke("dodo-create-checkout", {
+      const isPaddlePlanChange =
+        checkoutPlan === "enterprise" &&
+        confirmedPlanChange &&
+        isActiveProBilling(billingSnapshot) &&
+        billingSnapshot?.billingProvider === "paddle";
+
+      const functionName = isPaddlePlanChange
+        ? "paddle-change-plan"
+        : "paddle-create-checkout";
+
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: {
           org_id: effectiveOrgId,
-          plan: checkoutPlan,
-          lang: i18n?.language || "es",
+          ...(isPaddlePlanChange
+            ? { plan_code: "enterprise" }
+            : { plan: checkoutPlan, lang: i18n?.language || "es" }),
         },
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
       });
 
-      const response = data as DodoCheckoutResponse | null;
-      const checkoutUrl = cleanId(response?.checkout_url || response?.checkoutUrl);
+      const response = data as PaddleFunctionResponse | null;
+      const checkoutUrl = cleanId(response?.checkout_url);
 
       if (error) {
-        if (checkoutPlan === "enterprise" && (await waitForEnterpriseActiveBilling(effectiveOrgId))) {
+        if (isPaddlePlanChange && (await waitForEnterpriseActiveBilling(effectiveOrgId))) {
           await redirectToBillingAfterUpgrade();
           return;
         }
@@ -268,16 +304,8 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         throw error;
       }
 
-      if (!response?.ok) {
-        const responsePlan = normalizePlan(response?.current_plan_code);
-        const responseStatus = normalizePlan(response?.current_plan_status);
-        const alreadyEnterprise =
-          checkoutPlan === "enterprise" &&
-          (response?.error === "enterprise_already_active" ||
-            (responsePlan === "enterprise" && isActivePaidStatus(responseStatus)) ||
-            (await waitForEnterpriseActiveBilling(effectiveOrgId)));
-
-        if (alreadyEnterprise) {
+      if (isPaddlePlanChange) {
+        if (response?.success && (response.pending_webhook || response.already_active)) {
           await finishEnterpriseChangePlan();
           return;
         }
@@ -291,17 +319,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         );
       }
 
-      if (response.change_plan_completed) {
-        await finishEnterpriseChangePlan();
-        return;
-      }
-
-      if (!checkoutUrl) {
-        if (checkoutPlan === "enterprise" && (await waitForEnterpriseActiveBilling(effectiveOrgId))) {
-          await finishEnterpriseChangePlan();
-          return;
-        }
-
+      if (!response?.ok || !checkoutUrl) {
         throw new Error(
           response?.message ||
             response?.error ||
@@ -393,7 +411,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
             <p className="mt-3 text-sm leading-6 text-slate-600">
               {t("billing.checkout.confirmEnterpriseBody", {
                 defaultValue:
-                  "Your organization will change from PRO to Enterprise. Dodo will use the payment method associated with your current subscription. No second subscription will be created.",
+                  "Your organization will change from PRO to Enterprise. Paddle will use the payment method associated with your current subscription. No second subscription will be created.",
               })}
             </p>
 

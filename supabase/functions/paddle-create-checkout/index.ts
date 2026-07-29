@@ -1,10 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { HttpError, requireOrgAdmin } from "../_shared/authz.ts";
 
 
 // --- Paddle environment/config logic ---
-function getPaddleEnv() {
-  const env = Deno.env.get("PADDLE_ENV")?.toLowerCase();
-  return env === "live" ? "live" : "sandbox";
+function getPaddleEnv(): "sandbox" | "live" {
+  const env = Deno.env.get("PADDLE_ENV")?.trim().toLowerCase();
+
+  if (env !== "sandbox" && env !== "live") {
+    throw new Error('PADDLE_ENV must be exactly "sandbox" or "live"');
+  }
+
+  return env;
 }
 
 function getPaddleApiKey() {
@@ -102,6 +108,8 @@ serve(async (req) => {
         }
       );
     }
+
+    await requireOrgAdmin(req, String(orgId));
 
     console.log("[paddle-create-checkout] BODY:", body);
     console.log("[paddle-create-checkout] ORG ID:", orgId);
@@ -251,6 +259,20 @@ serve(async (req) => {
       checkout_url: checkoutUrl,
     });
   } catch (error) {
+    if (error instanceof HttpError) {
+      const publicError =
+        error.status === 401
+          ? "unauthorized"
+          : error.status === 403
+            ? "forbidden"
+            : "bad_request";
+
+      return json(error.status, {
+        ok: false,
+        error: publicError,
+      });
+    }
+
     console.error("[paddle-create-checkout] unhandled error", {
       message: error instanceof Error ? error.message : String(error),
       name: error instanceof Error ? error.name : "UnknownError",
