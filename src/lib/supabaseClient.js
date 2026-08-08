@@ -45,7 +45,7 @@ function normRef(r) {
 /**
  * Determina el "tipo de entorno" por hostname (fuente de verdad).
  */
-function detectEnvKind() {
+export function detectEnvKind() {
   if (typeof window === "undefined") return "unknown";
   const h = String(window.location.hostname || "").toLowerCase();
 
