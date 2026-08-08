@@ -8,7 +8,7 @@ import {
   type CheckoutPlanCode,
 } from "@/config/billingCheckout";
 import { useAuth } from "@/context/auth.js";
-import { supabase } from "@/lib/supabaseClient.js";
+import { detectEnvKind, supabase } from "@/lib/supabaseClient.js";
 
 type Props = {
   orgId?: string;
@@ -276,17 +276,23 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         isActiveProBilling(billingSnapshot) &&
         billingSnapshot?.billingProvider === "paddle";
 
-      const functionName = isPaddlePlanChange
-        ? "paddle-change-plan"
-        : "paddle-create-checkout";
+      const envKind = detectEnvKind();
+      const useDodoCheckout = envKind === "production";
+
+      const functionName = useDodoCheckout
+        ? "dodo-create-checkout"
+        : isPaddlePlanChange
+          ? "paddle-change-plan"
+          : "paddle-create-checkout";
+
+      const functionBody = useDodoCheckout
+        ? { org_id: effectiveOrgId, plan: checkoutPlan, lang: i18n?.language || "es" }
+        : isPaddlePlanChange
+          ? { org_id: effectiveOrgId, plan_code: "enterprise" }
+          : { org_id: effectiveOrgId, plan: checkoutPlan, lang: i18n?.language || "es" };
 
       const { data, error } = await supabase.functions.invoke(functionName, {
-        body: {
-          org_id: effectiveOrgId,
-          ...(isPaddlePlanChange
-            ? { plan_code: "enterprise" }
-            : { plan: checkoutPlan, lang: i18n?.language || "es" }),
-        },
+        body: functionBody,
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
