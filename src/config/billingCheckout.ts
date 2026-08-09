@@ -2,7 +2,7 @@ import { PRICING, type PlanCode } from "./pricing";
 
 export type CheckoutPlanCode = Extract<PlanCode, "pro" | "enterprise">;
 
-export type CheckoutProvider = "external_checkout" | "disabled";
+export type CheckoutProvider = "paddle" | "dodo" | "external_checkout" | "disabled";
 
 function cleanCheckoutUrl(value: unknown, fallback: string): string {
   const url = String(value || "").trim();
@@ -35,6 +35,9 @@ export function getCheckoutUrl(plan: CheckoutPlanCode): string {
 }
 
 export function isCheckoutConfigured(plan: CheckoutPlanCode): boolean {
+  if (BILLING_CHECKOUT_PROVIDER === "paddle" || BILLING_CHECKOUT_PROVIDER === "dodo") {
+    return true;
+  }
   return Boolean(getCheckoutUrl(plan));
 }
 

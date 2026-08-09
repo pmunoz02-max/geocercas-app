@@ -8,7 +8,7 @@ import {
   type CheckoutPlanCode,
 } from "@/config/billingCheckout";
 import { useAuth } from "@/context/auth.js";
-import { detectEnvKind, supabase } from "@/lib/supabaseClient.js";
+import { supabase } from "@/lib/supabaseClient.js";
 
 type Props = {
   orgId?: string;
@@ -276,18 +276,26 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         isActiveProBilling(billingSnapshot) &&
         billingSnapshot?.billingProvider === "paddle";
 
-      const envKind = detectEnvKind();
-      const useDodoCheckout = envKind === "production";
+      const usePaddleCheckout = BILLING_CHECKOUT_PROVIDER === "paddle";
+      const useDodoCheckout = BILLING_CHECKOUT_PROVIDER === "dodo";
+
+      if (!usePaddleCheckout && !useDodoCheckout) {
+        throw new Error(
+          t("billing.checkout.providerUnsupported", {
+            defaultValue: "Unsupported billing checkout provider.",
+          }),
+        );
+      }
 
       const functionName = useDodoCheckout
         ? "dodo-create-checkout"
-        : isPaddlePlanChange
+        : isPaddlePlanChange && usePaddleCheckout
           ? "paddle-change-plan"
           : "paddle-create-checkout";
 
       const functionBody = useDodoCheckout
         ? { org_id: effectiveOrgId, plan: checkoutPlan, lang: i18n?.language || "es" }
-        : isPaddlePlanChange
+        : isPaddlePlanChange && usePaddleCheckout
           ? { org_id: effectiveOrgId, plan_code: "enterprise" }
           : { org_id: effectiveOrgId, plan: checkoutPlan, lang: i18n?.language || "es" };
 
@@ -310,7 +318,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         throw error;
       }
 
-      if (isPaddlePlanChange) {
+      if (isPaddlePlanChange && usePaddleCheckout) {
         if (response?.success && (response.pending_webhook || response.already_active)) {
           await finishEnterpriseChangePlan();
           return;

@@ -27,6 +27,7 @@ La recuperación se realizó exclusivamente en Preview.
   - Se validó el checkout Paddle Sandbox.
   - Se confirmó la recepción y procesamiento de `transaction.completed`.
   - El webhook actualizó correctamente `org_billing`.
+  - El proveedor de checkout ahora se selecciona con `VITE_BILLING_PROVIDER`, y en Preview se usa `paddle`.
 
 ## Estado final validado
 
@@ -50,4 +51,4 @@ La organización de prueba terminó con:
 - Enterprise activo correctamente desde webhook.
 - Historial Stripe legacy preservado.
 - Protección anti-trial preservada.
-- No se realizaron cambios en Producción.
+- Durante la recuperación de Preview descrita en este documento no se realizaron cambios en Producción.
