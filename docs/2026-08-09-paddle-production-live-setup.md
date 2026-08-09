@@ -29,3 +29,9 @@ Se documenta la puesta en producción de Paddle Live para el flujo de billing de
   - GeoField GPS Enterprise — 99 USD/mes.
 - Ambos checkouts Live mostraron correctamente el trial de 10 días.
 - La validación de Enterprise se realizó abriendo el checkout Live sin completar un cobro real.
+
+## Simulación de webhook Paddle
+- Se creó una Edge Function aislada `paddle-webhook-simulation` sin acceso a base de datos, RPC ni lógica de billing.
+- Su propósito es validar la firma, el timestamp y los metadatos del evento sin modificar estado alguno.
+- Se validó en Paddle Sandbox el flujo de `transaction.completed` con respuesta HTTP 200.
+- Esta validación corresponde a la simulación aislada; no valida todavía el webhook Live real end-to-end.

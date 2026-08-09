@@ -24,5 +24,11 @@ verify_jwt = true
 [functions.paddle-create-checkout]
 verify_jwt = true
 
+[functions.paddle-webhook-simulation]
+# paddle-webhook-simulation config
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/paddle-webhook-simulation/index.ts"
+
 [functions.billing-reconcile]
 verify_jwt = false
