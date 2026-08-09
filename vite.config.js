@@ -11,6 +11,11 @@ export default defineConfig(() => {
     process.env.VERCEL_GITLAB_COMMIT_SHA ||
     "local";
 
+  console.log(
+    "[BUILD] VITE_PADDLE_CLIENT_TOKEN_LIVE present:",
+    Boolean(process.env.VITE_PADDLE_CLIENT_TOKEN_LIVE),
+  );
+
   return {
     plugins: [react()],
 
