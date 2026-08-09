@@ -1,4 +1,5 @@
 import { PRICING, type PlanCode } from "./pricing";
+import { getPaddleEnv } from "./paddleEnv";
 
 export type CheckoutPlanCode = Extract<PlanCode, "pro" | "enterprise">;
 
@@ -24,10 +25,14 @@ export const BILLING_CHECKOUT_PROVIDER: CheckoutProvider =
   (import.meta.env.VITE_BILLING_PROVIDER as CheckoutProvider) || "external_checkout";
 
 export const BILLING_CHECKOUT_MODE =
-  import.meta.env.VITE_CHECKOUT_MODE ||
-  (CHECKOUT_URLS.pro.includes("test.checkout") || CHECKOUT_URLS.enterprise.includes("test.checkout")
-    ? "test"
-    : "preview");
+  BILLING_CHECKOUT_PROVIDER === "paddle"
+    ? getPaddleEnv() === "live"
+      ? "live"
+      : "test"
+    : import.meta.env.VITE_CHECKOUT_MODE ||
+      (CHECKOUT_URLS.pro.includes("test.checkout") || CHECKOUT_URLS.enterprise.includes("test.checkout")
+        ? "test"
+        : "preview");
 
 export function getCheckoutUrl(plan: CheckoutPlanCode): string {
   if (BILLING_CHECKOUT_PROVIDER === "disabled") return "";

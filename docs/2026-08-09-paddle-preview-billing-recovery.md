@@ -28,6 +28,7 @@ La recuperación se realizó exclusivamente en Preview.
   - Se confirmó la recepción y procesamiento de `transaction.completed`.
   - El webhook actualizó correctamente `org_billing`.
   - El proveedor de checkout ahora se selecciona con `VITE_BILLING_PROVIDER`, y en Preview se usa `paddle`.
+  - Paddle determina sandbox/live con `getPaddleEnv` según el hostname, y el mismo build promovido funciona en Preview y Producción.
 
 ## Estado final validado
 

@@ -19,9 +19,6 @@ export default function Pay() {
     const liveToken = import.meta.env.VITE_PADDLE_CLIENT_TOKEN_LIVE;
     const token = isPreview ? sandboxToken : liveToken;
 
-    console.log("[PAY] sandbox token raw:", sandboxToken);
-    console.log("[PAY] live token raw:", liveToken);
-
     const initPaddle = () => {
       try {
         console.log("[PAY] hostname:", hostname);
