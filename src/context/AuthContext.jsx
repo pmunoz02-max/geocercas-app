@@ -633,11 +633,15 @@ export function AuthProvider({ children }) {
     async (orgIdToSelect) => {
       if (!orgIdToSelect) return;
 
-      if (!canSwitchOrganizations && currentOrg?.id && currentOrg.id !== orgIdToSelect) {
+      const found = organizations.find((o) => o?.id === orgIdToSelect);
+
+      if (!found) {
         return;
       }
 
-      const found = organizations.find((o) => o?.id === orgIdToSelect);
+      if (!isNonTrackerRole(found?.role)) {
+        return;
+      }
 
       setCurrentOrg(found || { id: orgIdToSelect });
       setResolvedOrgId(orgIdToSelect);
