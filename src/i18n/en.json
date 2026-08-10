@@ -931,6 +931,8 @@
     "onboarding": {
       "title": "First steps",
       "subtitle": "How to start using the tracker for the first time.",
+      "orgCreationLimitReached": "You already have an organization. You can switch organizations or contact support to create an additional one.",
+      "orgCreateFailed": "The organization could not be created.",
       "sections": [
         {
           "title": "Invitation and access",

@@ -933,6 +933,8 @@
     "onboarding": {
       "title": "Primeros pasos",
       "subtitle": "Cómo comenzar a usar el tracker por primera vez.",
+      "orgCreationLimitReached": "Ya tienes una organización creada. Puedes cambiar de organización o contactar soporte para crear una organización adicional.",
+      "orgCreateFailed": "No se pudo crear la organización.",
       "sections": [
         {
           "title": "Invitación y acceso",

@@ -894,6 +894,8 @@
     "onboarding": {
       "title": "Primeros pasos",
       "subtitle": "Cómo comenzar a usar el tracker por primera vez.",
+      "orgCreationLimitReached": "Vous avez déjà créé une organisation. Vous pouvez changer d’organisation ou contacter le support pour en créer une autre.",
+      "orgCreateFailed": "Impossible de créer l’organisation.",
       "sections": [
         {
           "title": "Invitación y acceso",
