@@ -1,9 +1,11 @@
 ﻿import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { useAuth } from "@/context/auth.js";
 
 export default function OnboardingCreateOrgPage() {
   const { user, currentOrg, reloadAuth, setCurrentOrg } = useAuth();
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -17,7 +19,7 @@ export default function OnboardingCreateOrgPage() {
     try {
       setMsg("");
       if (!user) {
-          setMsg("Debes iniciar sesión.");
+        setMsg("Debes iniciar sesión.");
         return;
       }
       if (!name.trim()) {
@@ -48,12 +50,22 @@ export default function OnboardingCreateOrgPage() {
       window.location.replace("/app");
     } catch (e) {
       console.error("[OnboardingCreateOrgPage] createOrg error:", e);
-      // Supabase a veces entrega error como objeto con { message, details, hint, code }
-      const friendly =
-        e?.message ||
-        e?.details ||
-        (typeof e === "string" ? e : null) ||
-        "No se pudo crear la organización.";
+      const code = e?.code || e?.details?.code || e?.message?.code;
+      const isLimitReached =
+        code === "organization_creation_limit_reached" ||
+        /organization_creation_limit_reached/i.test(String(e?.message || ""));
+
+      const friendly = isLimitReached
+        ? t("onboarding.orgCreationLimitReached", {
+            defaultValue:
+              "No puedes crear otra organización en este momento. Contacta con soporte o elimina una organización anterior.",
+          })
+        : e?.message ||
+          e?.details ||
+          (typeof e === "string" ? e : null) ||
+          t("onboarding.orgCreateFailed", {
+            defaultValue: "No se pudo crear la organización.",
+          });
       setMsg(friendly);
     } finally {
       setBusy(false);
