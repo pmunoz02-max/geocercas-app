@@ -12,18 +12,18 @@ export default function OnboardingCreateOrgPage() {
 
   useEffect(() => {
     // Si ya tiene org, no debería estar aquí (tu router lo redirigirá; igual protegemos)
-    if (currentOrg?.id) setMsg("Ya tienes una organización activa.");
-  }, [currentOrg]);
+    if (currentOrg?.id) setMsg(t("onboardingCreateOrg.alreadyActive", { defaultValue: "Ya tienes una organización activa." }));
+  }, [currentOrg, t]);
 
   async function createOrg() {
     try {
       setMsg("");
       if (!user) {
-        setMsg("Debes iniciar sesión.");
+        setMsg(t("onboardingCreateOrg.loginRequired", { defaultValue: "Debes iniciar sesión." }));
         return;
       }
       if (!name.trim()) {
-        setMsg("Escribe el nombre de tu organización.");
+        setMsg(t("onboardingCreateOrg.nameRequired", { defaultValue: "Escribe el nombre de tu organización." }));
         return;
       }
 
@@ -46,7 +46,7 @@ export default function OnboardingCreateOrgPage() {
         setCurrentOrg({ id: data, name: name.trim() });
       }
 
-      setMsg("Organización creada. Redirigiendo…");
+      setMsg(t("onboardingCreateOrg.createdRedirecting", { defaultValue: "Organización creada. Redirigiendo…" }));
       window.location.replace("/app");
     } catch (e) {
       console.error("[OnboardingCreateOrgPage] createOrg error:", e);
@@ -56,14 +56,14 @@ export default function OnboardingCreateOrgPage() {
         /organization_creation_limit_reached/i.test(String(e?.message || ""));
 
       const friendly = isLimitReached
-        ? t("onboarding.orgCreationLimitReached", {
+        ? t("onboardingCreateOrg.limitReached", {
             defaultValue:
-              "No puedes crear otra organización en este momento. Contacta con soporte o elimina una organización anterior.",
+              "Ya tienes una organización creada. Puedes cambiar de organización o contactar soporte para crear una organización adicional.",
           })
         : e?.message ||
           e?.details ||
           (typeof e === "string" ? e : null) ||
-          t("onboarding.orgCreateFailed", {
+          t("onboardingCreateOrg.createFailed", {
             defaultValue: "No se pudo crear la organización.",
           });
       setMsg(friendly);
@@ -75,23 +75,25 @@ export default function OnboardingCreateOrgPage() {
   return (
     <div style={styles.screen}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Crea tu organización</h1>
+        <h1 style={styles.title}>{t("onboardingCreateOrg.title", { defaultValue: "Crea tu organización" })}</h1>
         <p style={styles.text}>
-          Para usar GeoField GPS necesitas una organización. Esto habilita el
-           modelo multi-tenant y la seguridad por organización.
+          {t("onboardingCreateOrg.body", {
+            defaultValue:
+              "Para usar GeoField GPS necesitas una organización. Esto habilita el modelo multi-tenant y la seguridad por organización.",
+          })}
         </p>
 
-        <label style={styles.label}>Nombre de la organización</label>
+        <label style={styles.label}>{t("onboardingCreateOrg.nameLabel", { defaultValue: "Nombre de la organización" })}</label>
         <input
           style={styles.input}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Ej: Org de Pietro (producción)"
+          placeholder={t("onboardingCreateOrg.namePlaceholder", { defaultValue: "Ej: Org de Pietro (producción)" })}
           disabled={busy}
         />
 
         <button style={styles.btn} onClick={createOrg} disabled={busy}>
-          {busy ? "Creando…" : "Crear mi organización"}
+          {busy ? t("onboardingCreateOrg.creating", { defaultValue: "Creando…" }) : t("onboardingCreateOrg.submit", { defaultValue: "Crear mi organización" })}
         </button>
 
         {msg && <div style={styles.msg}>{msg}</div>}

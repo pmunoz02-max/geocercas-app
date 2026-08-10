@@ -140,6 +140,20 @@
     },
     "title": "GeoField GPS"
   },
+  "onboardingCreateOrg": {
+    "title": "Create your organization",
+    "body": "To use GeoField GPS, you need an organization. This enables the multi-tenant model and organization-level security.",
+    "nameLabel": "Organization name",
+    "namePlaceholder": "Example: Pietro's organization (production)",
+    "submit": "Create my organization",
+    "creating": "Creating…",
+    "alreadyActive": "You already have an active organization.",
+    "loginRequired": "You must sign in.",
+    "nameRequired": "Enter your organization name.",
+    "createdRedirecting": "Organization created. Redirecting…",
+    "limitReached": "You already have an organization. You can switch organizations or contact support to create an additional one.",
+    "createFailed": "The organization could not be created."
+  },
   "asignaciones": {
     "actions": {
       "activate": "Activar",
