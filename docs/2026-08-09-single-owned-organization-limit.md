@@ -40,3 +40,26 @@ Error backend:
 
 ```txt
 organization_creation_limit_reached
+```
+
+## Producción
+
+Aplicado y validado en Producción.
+
+Se creó la función:
+
+```txt
+public.enforce_single_owned_organization
+```
+
+y el trigger:
+
+```txt
+trg_enforce_single_owned_organization
+```
+
+sobre:
+
+```txt
+public.organizations
+```
