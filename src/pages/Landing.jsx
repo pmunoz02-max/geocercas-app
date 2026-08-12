@@ -48,6 +48,36 @@ const FALLBACKS = {
     en: "SaaS platform for GPS control and geofences",
     fr: "Plateforme SaaS pour le contrôle GPS et les géorepères",
   },
+  "landing.loginTitle": {
+    es: "Iniciar sesión",
+    en: "Sign in",
+    fr: "Se connecter",
+  },
+  "landing.magicLoginCta": {
+    es: "Entrar con link mágico",
+    en: "Continue with magic link",
+    fr: "Se connecter avec un lien magique",
+  },
+  "landing.noAccount": {
+    es: "¿No tienes cuenta?",
+    en: "No account?",
+    fr: "Pas encore de compte ?",
+  },
+  "landing.createAccount": {
+    es: "Crear cuenta",
+    en: "Create account",
+    fr: "Créer un compte",
+  },
+  "landing.hasPassword": {
+    es: "¿Ya tienes contraseña?",
+    en: "Have a password?",
+    fr: "Vous avez déjà un mot de passe ?",
+  },
+  "landing.passwordLogin": {
+    es: "Entrar con contraseña",
+    en: "Log in with password",
+    fr: "Se connecter avec mot de passe",
+  },
   "landing.heroTitle": {
     es: "Convierte posiciones GPS en control operativo",
     en: "Turn GPS positions into operational control",
@@ -331,7 +361,7 @@ export default function Landing() {
 
       <main>
         <div style={{ maxWidth: 320, margin: "32px auto", textAlign: "center" }}>
-          <h2>Iniciar sesión</h2>
+          <h2>{tr("landing.loginTitle")}</h2>
           <a
             href="/login?mode=magic"
             style={{
@@ -349,18 +379,18 @@ export default function Landing() {
               transition: "background 0.2s"
             }}
           >
-            Entrar con link mágico
+            {tr("landing.magicLoginCta")}
           </a>
           <div style={{ marginTop: 8, marginBottom: 8 }}>
-            <span style={{ color: "#cbd5e1" }}>¿No tienes cuenta? </span>
+            <span style={{ color: "#cbd5e1" }}>{tr("landing.noAccount")} </span>
             <a href="/signup" style={{ color: "#0ea5e9", fontWeight: 500, textDecoration: "underline" }}>
-              Crear cuenta
+              {tr("landing.createAccount")}
             </a>
           </div>
           <div style={{ marginTop: 8 }}>
-            <span style={{ color: "#cbd5e1" }}>¿Ya tienes contraseña? </span>
+            <span style={{ color: "#cbd5e1" }}>{tr("landing.hasPassword")} </span>
             <a href="/login?mode=password" style={{ color: "#0ea5e9", fontWeight: 500, textDecoration: "underline" }}>
-              Entrar con contraseña
+              {tr("landing.passwordLogin")}
             </a>
           </div>
         </div>
