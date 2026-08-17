@@ -914,6 +914,117 @@
         ]
       }
     },
+    "reportsGuide": {
+      "badge": "Guía de reportes",
+      "breadcrumb": "Centro de Ayuda / Reportes",
+      "title": "Guía de reportes",
+      "subtitle": "Consulta datos, filtra resultados y exporta el análisis que necesitas para decidir con rapidez.",
+      "goHome": "Ir a Inicio",
+      "goToFilters": "Ir a filtros",
+      "openReports": "Abrir reportes",
+      "overviewTitle": "¿Qué puedes revisar en Reportes?",
+      "overviewBody": "Aquí puedes entender el comportamiento por geocerca, persona, actividad y periodo de tiempo, con un resumen operativo listo para análisis y toma de decisiones.",
+      "summaryTitle": "Resultado esperado",
+      "summaryBody": "Al terminar, tendrás la vista correcta del rendimiento y podrás exportar los datos para compartirlos.",
+      "resultTitle": "Qué debes comprobar",
+      "summaryBullets": [
+        "El rango de fechas coincide con el periodo que necesitas revisar.",
+        "Los filtros por geocerca, persona y actividad están alineados con la operación.",
+        "Los KPI muestran la tendencia y los puntos de riesgo o mejora.",
+        "Puedes exportar los datos a CSV si necesitas compartir el análisis."
+      ],
+      "toc": {
+        "title": "Tabla de contenido",
+        "subtitle": "Usa estos accesos para avanzar rápido.",
+        "items": [
+          "Resumen",
+          "Filtros",
+          "Exportación",
+          "Interpretación",
+          "Buenas prácticas"
+        ]
+      },
+      "cards": [
+        {
+          "tag": "KPI",
+          "title": "Horas totales",
+          "body": "Revisa la carga real por periodo y compara la operación entre días, personas o geocercas."
+        },
+        {
+          "tag": "COSTO",
+          "title": "Costo total",
+          "body": "Analiza el impacto económico del trabajo ejecutado y detecta actividades con mayor gasto."
+        },
+        {
+          "tag": "ASIGNACIÓN",
+          "title": "Tendencia por actividad",
+          "body": "Mira cómo cambia el rendimiento de cada actividad con el tiempo para priorizar acciones."
+        }
+      ],
+      "sections": {
+        "title": "Cómo usar reportes",
+        "items": [
+          {
+            "title": "Define el rango de tiempo",
+            "body": "Elige desde y hasta para centrar el análisis en el periodo correcto antes de interpretar los resultados.",
+            "bullets": [
+              "Usa días, semanas o meses según la decisión que quieras tomar.",
+              "Verifica que el rango incluya todo el trabajo operativo relevante."
+            ]
+          },
+          {
+            "title": "Aplica filtros por contexto",
+            "body": "Restringe la vista por geocerca, persona y actividad para aislar problemas o comparar ejecuciones reales.",
+            "bullets": [
+              "Combina filtros para revisar un detalle puntual o una vista global.",
+              "Limpia los filtros cuando quieras volver a la vista general."
+            ]
+          },
+          {
+            "title": "Interpreta los indicadores",
+            "body": "Busca cambios en horas, costo y proporciones para identificar diferencias de eficiencia o zonas de mejora.",
+            "bullets": [
+              "Compara el mismo periodo con tendencias previas.",
+              "Revisa los valores más altos y los más bajos antes de actuar."
+            ]
+          },
+          {
+            "title": "Exporta cuando necesites compartir",
+            "body": "Si el análisis va a ir a un correo, Excel o comité operativo, exporta la tabla con los datos filtrados.",
+            "bullets": [
+              "Usa CSV para abrirlo en Excel, Google Sheets o herramientas de análisis.",
+              "Haz una exportación por segmento cuando la consulta sea muy específica."
+            ]
+          }
+        ]
+      },
+      "exportTitle": "Exportación y análisis",
+      "exportPrimaryTitle": "Descarga para trabajo externo",
+      "exportPrimaryBody": "La exportación te permite abrir los resultados en Excel o Google Sheets para compartir con supervisión, finanzas o coordinación.",
+      "exportSecondaryTitle": "Usa la vista como diagnóstico",
+      "exportSecondaryBody": "La combinación de filtros y KPI te ayuda a validar si la ejecución está dentro del plan o si requiere corregir la operación.",
+      "tips": {
+        "title": "Buenas prácticas",
+        "items": [
+          {
+            "title": "Mantén un rango claro",
+            "body": "Un periodo demasiado amplio puede ocultar cambios puntuales; un rango corto puede ser demasiado fino para decidir."
+          },
+          {
+            "title": "Filtra por caso real",
+            "body": "Si quieres comparar dos equipos o dos zonas, limita el análisis a esos segmentos para evitar ruido."
+          },
+          {
+            "title": "Usa la exportación como evidencia",
+            "body": "Cuando necesites presentar resultados, exporta el dato limpio y comparte el contexto del período analizado."
+          },
+          {
+            "title": "Revisa la tendencia",
+            "body": "No te fijes solo en el valor del día; compara la serie para detectar cambios sostenidos."
+          }
+        ]
+      }
+    },
     "support": {
       "breadcrumb": "Centro de Ayuda / Soporte",
       "calendlyLabel": "Calendly",

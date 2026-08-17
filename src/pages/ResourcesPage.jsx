@@ -11,6 +11,7 @@ const LOCAL_COPY = {
     downloadLabel: "Descargar",
     watchLabel: "Ver video",
     comingSoon: "Próximamente",
+    openGuide: "Abrir guía",
     backHome: "Volver al inicio",
     cards: {
       pdf: {
@@ -53,6 +54,7 @@ const LOCAL_COPY = {
     downloadLabel: "Download",
     watchLabel: "Watch video",
     comingSoon: "Coming soon",
+    openGuide: "Open guide",
     backHome: "Back to home",
     cards: {
       pdf: {
@@ -95,6 +97,7 @@ const LOCAL_COPY = {
     downloadLabel: "Télécharger",
     watchLabel: "Voir la vidéo",
     comingSoon: "Bientôt disponible",
+    openGuide: "Ouvrir le guide",
     backHome: "Retour à l'accueil",
     cards: {
       pdf: {
@@ -150,31 +153,37 @@ export default function ResourcesPage() {
         key: "pdf",
         format: "PDF",
         available: false,
+        href: "",
       },
       {
         key: "pptx",
         format: "PPTX",
         available: false,
+        href: "",
       },
       {
         key: "video",
         format: "VIDEO",
         available: false,
+        href: "",
       },
       {
         key: "trackerGuide",
         format: "GUIDE",
         available: false,
+        href: "",
       },
       {
         key: "geofences",
         format: "GEOFENCES",
         available: false,
+        href: "",
       },
       {
         key: "reports",
         format: "REPORTS",
-        available: false,
+        available: true,
+        href: "/help/reports",
       },
     ],
     []
@@ -232,13 +241,22 @@ export default function ResourcesPage() {
                     {description}
                   </p>
 
-                  <button
-                    type="button"
-                    disabled
-                    className="mt-5 inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-500 opacity-80 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                  >
-                    {t("resources.comingSoon", { defaultValue: copy.comingSoon })}
-                  </button>
+                  {card.available ? (
+                    <Link
+                      to={card.href || "/"}
+                      className="mt-5 inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 dark:border-emerald-400 dark:bg-emerald-500 dark:hover:bg-emerald-400"
+                    >
+                      {copy.openGuide}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="mt-5 inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-500 opacity-80 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
+                    >
+                      {t("resources.comingSoon", { defaultValue: copy.comingSoon })}
+                    </button>
+                  )}
                 </article>
               );
             })}

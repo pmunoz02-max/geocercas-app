@@ -59,6 +59,7 @@ import BillingCancel from "./pages/BillingCancel.jsx";
 
 // Help pages
 import InstructionsPage from "./pages/help/InstructionsPage.jsx";
+import ReportsGuidePage from "./pages/help/ReportsGuidePage.jsx";
 import FaqPage from "./pages/help/FaqPage.jsx";
 import SupportPage from "./pages/help/SupportPage.jsx";
 import ChangelogPage from "./pages/help/ChangelogPage.jsx";
@@ -394,6 +395,8 @@ function MainAppRoutes() {
         />
 
         <Route path="/help/instructions" element={<InstructionsPage />} />
+        <Route path="/help/reports" element={<ReportsGuidePage />} />
+        <Route path="/help/reports-guide" element={<ReportsGuidePage />} />
         <Route path="/help/faq" element={<FaqPage />} />
         <Route path="/help/support" element={<SupportPage />} />
         <Route path="/help/changelog" element={<ChangelogPage />} />

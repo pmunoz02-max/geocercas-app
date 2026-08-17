@@ -912,6 +912,117 @@
         ]
       }
     },
+    "reportsGuide": {
+      "badge": "Reports guide",
+      "breadcrumb": "Help Center / Reports",
+      "title": "Reports guide",
+      "subtitle": "Review data, filter results, and export the analysis you need to make faster decisions.",
+      "goHome": "Go to Home",
+      "goToFilters": "Go to filters",
+      "openReports": "Open reports",
+      "overviewTitle": "What can you review in Reports?",
+      "overviewBody": "Use this view to understand performance by geofence, person, activity and time period, with a summary that is ready for operational decisions.",
+      "summaryTitle": "Expected outcome",
+      "summaryBody": "When you finish, you should have the right view of performance and be ready to export the data for sharing.",
+      "resultTitle": "What to check",
+      "summaryBullets": [
+        "The date range matches the period you want to review.",
+        "The filters for geofence, person, and activity match the operation being analyzed.",
+        "The KPIs show the trend and highlight risk or improvement areas.",
+        "You can export the data to CSV when you need to share the analysis."
+      ],
+      "toc": {
+        "title": "Table of contents",
+        "subtitle": "Use these shortcuts to move faster.",
+        "items": [
+          "Overview",
+          "Filters",
+          "Export",
+          "Interpretation",
+          "Best practices"
+        ]
+      },
+      "cards": [
+        {
+          "tag": "KPI",
+          "title": "Total hours",
+          "body": "Review the actual workload by period and compare operations between days, people, or geofences."
+        },
+        {
+          "tag": "COST",
+          "title": "Total cost",
+          "body": "Analyze the economic impact of the work completed and identify activities with the highest spending."
+        },
+        {
+          "tag": "ASSIGNMENTS",
+          "title": "Activity trend",
+          "body": "See how each activity changes over time so you can prioritize the right actions."
+        }
+      ],
+      "sections": {
+        "title": "How to use reports",
+        "items": [
+          {
+            "title": "Set the time range",
+            "body": "Choose the from and to dates to focus the analysis on the correct operating period before relying on the results.",
+            "bullets": [
+              "Use days, weeks or months depending on the decision to be made.",
+              "Verify that the range includes all relevant work."
+            ]
+          },
+          {
+            "title": "Apply context filters",
+            "body": "Restrict the view by geofence, person, and activity to isolate problems or compare real executions.",
+            "bullets": [
+              "Combine filters to review a specific detail or a broader view.",
+              "Clear the filters when you want to return to the general view."
+            ]
+          },
+          {
+            "title": "Read the indicators",
+            "body": "Look for changes in hours, cost, and ratios to identify efficiency gaps or opportunities for improvement.",
+            "bullets": [
+              "Compare the same period against previous trends.",
+              "Review the highest and lowest values before taking action."
+            ]
+          },
+          {
+            "title": "Export when you need to share",
+            "body": "If the analysis needs to go by email, Excel or to an operations committee, export the filtered table.",
+            "bullets": [
+              "Use CSV to open the file in Excel, Google Sheets or analysis tools.",
+              "Create a segment-based export when the query is very specific."
+            ]
+          }
+        ]
+      },
+      "exportTitle": "Export and analysis",
+      "exportPrimaryTitle": "Download for external work",
+      "exportPrimaryBody": "The export lets you open the results in Excel or Google Sheets to share them with supervision, finance, or coordination teams.",
+      "exportSecondaryTitle": "Use the view as a diagnosis",
+      "exportSecondaryBody": "Combining filters and KPIs helps you confirm whether execution is within plan or whether the operation requires corrections.",
+      "tips": {
+        "title": "Best practices",
+        "items": [
+          {
+            "title": "Keep the range clear",
+            "body": "A range that is too wide can hide short-term changes; a very narrow range can be too detailed to decide well."
+          },
+          {
+            "title": "Filter to the real case",
+            "body": "If you want to compare two teams or zones, limit the analysis to those segments to avoid noise."
+          },
+          {
+            "title": "Use the export as evidence",
+            "body": "When you need to present results, export the clean data and share the context of the reviewed period."
+          },
+          {
+            "title": "Review the trend",
+            "body": "Do not focus only on the day value; compare the series to detect sustained changes."
+          }
+        ]
+      }
+    },
     "support": {
       "breadcrumb": "Help Center / Support",
       "calendlyLabel": "Calendly",

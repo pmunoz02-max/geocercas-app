@@ -875,6 +875,117 @@
         ]
       }
     },
+    "reportsGuide": {
+      "badge": "Guide des rapports",
+      "breadcrumb": "Centre d’aide / Rapports",
+      "title": "Guide des rapports",
+      "subtitle": "Consultez les données, filtrez les résultats et exportez l’analyse dont vous avez besoin pour décider plus vite.",
+      "goHome": "Aller à l’accueil",
+      "goToFilters": "Aller aux filtres",
+      "openReports": "Ouvrir les rapports",
+      "overviewTitle": "Que pouvez-vous consulter dans les rapports ?",
+      "overviewBody": "Cette vue vous permet de comprendre la performance par géofence, personne, activité et période, avec un résumé prêt pour la prise de décision opérationnelle.",
+      "summaryTitle": "Résultat attendu",
+      "summaryBody": "À la fin, vous aurez la bonne vue de la performance et serez prêt à exporter les données pour les partager.",
+      "resultTitle": "À vérifier",
+      "summaryBullets": [
+        "La plage de dates correspond à la période que vous souhaitez analyser.",
+        "Les filtres par géofence, personne et activité correspondent à l’opération étudiée.",
+        "Les KPI montrent la tendance et mettent en évidence les zones de risque ou d’amélioration.",
+        "Vous pouvez exporter les données au format CSV pour partager l’analyse."
+      ],
+      "toc": {
+        "title": "Table des matières",
+        "subtitle": "Utilisez ces raccourcis pour aller plus vite.",
+        "items": [
+          "Vue d’ensemble",
+          "Filtres",
+          "Exportation",
+          "Interprétation",
+          "Bonnes pratiques"
+        ]
+      },
+      "cards": [
+        {
+          "tag": "KPI",
+          "title": "Heures totales",
+          "body": "Consultez la charge réelle par période et comparez les opérations entre jours, personnes ou géofences."
+        },
+        {
+          "tag": "COÛT",
+          "title": "Coût total",
+          "body": "Analysez l’impact économique du travail exécuté et identifiez les activités les plus coûteuses."
+        },
+        {
+          "tag": "AFFECTATION",
+          "title": "Tendance par activité",
+          "body": "Voyez comment chaque activité évolue dans le temps pour prioriser les bonnes actions."
+        }
+      ],
+      "sections": {
+        "title": "Comment utiliser les rapports",
+        "items": [
+          {
+            "title": "Définissez la plage de temps",
+            "body": "Choisissez la date de début et la date de fin pour concentrer l’analyse sur la période opératoire correcte avant d’interpréter les résultats.",
+            "bullets": [
+              "Utilisez des jours, des semaines ou des mois selon la décision à prendre.",
+              "Vérifiez que la plage inclut tout le travail opérationnel pertinent."
+            ]
+          },
+          {
+            "title": "Appliquez des filtres de contexte",
+            "body": "Réduisez la vue par géofence, personne et activité pour isoler les problèmes ou comparer les exécutions réelles.",
+            "bullets": [
+              "Combinez plusieurs filtres pour examiner un détail précis ou une vue générale.",
+              "Effacez les filtres pour revenir à la vue globale."
+            ]
+          },
+          {
+            "title": "Interprétez les indicateurs",
+            "body": "Recherchez des changements d’heures, de coût et de ratios pour identifier les écarts d’efficacité ou les opportunités d’amélioration.",
+            "bullets": [
+              "Comparez la même période avec les tendances précédentes.",
+              "Examinez les valeurs les plus faibles et les plus élevées avant d’agir."
+            ]
+          },
+          {
+            "title": "Exportez pour partager",
+            "body": "Si l’analyse doit être envoyée par e-mail, Excel ou présentée à une équipe opérationnelle, exportez la table filtrée.",
+            "bullets": [
+              "Utilisez le CSV pour ouvrir le fichier dans Excel, Google Sheets ou d’autres outils d’analyse.",
+              "Faites une exportation segmentée lorsque la requête est très spécifique."
+            ]
+          }
+        ]
+      },
+      "exportTitle": "Exportation et analyse",
+      "exportPrimaryTitle": "Téléchargez pour un travail externe",
+      "exportPrimaryBody": "L’export permet d’ouvrir les résultats dans Excel ou Google Sheets pour les partager avec la supervision, la finance ou la coordination.",
+      "exportSecondaryTitle": "Utilisez la vue comme diagnostic",
+      "exportSecondaryBody": "Le mélange des filtres et des KPI aide à vérifier si l’exécution est conforme au plan ou si l’opération nécessite une correction.",
+      "tips": {
+        "title": "Bonnes pratiques",
+        "items": [
+          {
+            "title": "Gardez la plage claire",
+            "body": "Une plage trop large peut masquer des changements ponctuels; une plage trop courte peut être trop fine pour décider correctement."
+          },
+          {
+            "title": "Filtrez sur le cas réel",
+            "body": "Si vous souhaitez comparer deux équipes ou deux zones, limitez l’analyse à ces segments pour éviter le bruit."
+          },
+          {
+            "title": "Utilisez l’export comme preuve",
+            "body": "Quand vous devez présenter des résultats, exportez les données propres et partagez le contexte de la période examinée."
+          },
+          {
+            "title": "Analysez la tendance",
+            "body": "Ne vous attachez pas seulement à la valeur du jour; comparez la série pour détecter les changements durables."
+          }
+        ]
+      }
+    },
     "support": {
       "breadcrumb": "Centre d’aide / Support",
       "calendlyLabel": "Calendly",
