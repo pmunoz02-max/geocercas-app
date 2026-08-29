@@ -14,6 +14,7 @@ import { AuthProvider, useAuthSafe } from "@/context/auth.js";
 import ProtectedShell from "./layouts/ProtectedShell.jsx";
 import RequireOrg from "./components/RequireOrg.jsx";
 import AuthGuard from "./components/AuthGuard.jsx";
+import CanonicalUrl from "./components/CanonicalUrl.jsx";
 
 // Public pages
 import Landing from "./pages/Landing.jsx";
@@ -434,16 +435,19 @@ function MainApp() {
 
 export default function App() {
   return (
-    <Routes>
-      {/* Rutas públicas para tracker */}
-      <Route path="/tracker-gps" element={<TrackerGpsPage />} />
-      <Route path="/tracker-open" element={<TrackerOpen />} />
-      <Route path="/tracker-install" element={<TrackerInstall />} />
-      <Route path="/tracker-accept" element={<TrackerInviteStart />} />
-      <Route path="/accept-invite" element={<TrackerInviteStart />} />
-      <Route path="/pay" element={<PayPage />} />
-      <Route path="/logout" element={<Logout />} />
-      <Route path="/*" element={<MainApp />} />
-    </Routes>
+    <>
+      <CanonicalUrl />
+      <Routes>
+        {/* Rutas públicas para tracker */}
+        <Route path="/tracker-gps" element={<TrackerGpsPage />} />
+        <Route path="/tracker-open" element={<TrackerOpen />} />
+        <Route path="/tracker-install" element={<TrackerInstall />} />
+        <Route path="/tracker-accept" element={<TrackerInviteStart />} />
+        <Route path="/accept-invite" element={<TrackerInviteStart />} />
+        <Route path="/pay" element={<PayPage />} />
+        <Route path="/logout" element={<Logout />} />
+        <Route path="/*" element={<MainApp />} />
+      </Routes>
+    </>
   );
 }
