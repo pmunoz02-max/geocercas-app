@@ -47,7 +47,7 @@ export default function OnboardingCreateOrgPage() {
       }
 
       setMsg(t("onboardingCreateOrg.createdRedirecting", { defaultValue: "Organización creada. Redirigiendo…" }));
-      window.location.replace("/app");
+      window.location.replace("/inicio");
     } catch (e) {
       console.error("[OnboardingCreateOrgPage] createOrg error:", e);
       const code = e?.code || e?.details?.code || e?.message?.code;
