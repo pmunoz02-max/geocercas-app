@@ -215,6 +215,26 @@ export default function Inicio() {
     };
   }, [currentOrgId]);
 
+  const bundleCatalogs = bundleState.data?.catalogs ?? null;
+
+  const personalCount = useMemo(() => {
+    const list = bundleCatalogs?.personal;
+    if (bundleState.loading || bundleState.error || !Array.isArray(list)) return null;
+    return list.length;
+  }, [bundleCatalogs, bundleState.loading, bundleState.error]);
+
+  const geofencesCount = useMemo(() => {
+    const list = bundleCatalogs?.geofences;
+    if (bundleState.loading || bundleState.error || !Array.isArray(list)) return null;
+    return list.length;
+  }, [bundleCatalogs, bundleState.loading, bundleState.error]);
+
+  const activitiesCount = useMemo(() => {
+    const list = bundleCatalogs?.activities;
+    if (bundleState.loading || bundleState.error || !Array.isArray(list)) return null;
+    return list.length;
+  }, [bundleCatalogs, bundleState.loading, bundleState.error]);
+
   const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
 
   const helpCards = useMemo(
