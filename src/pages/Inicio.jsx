@@ -1,5 +1,5 @@
 ﻿// src/pages/Inicio.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
@@ -87,6 +87,75 @@ export default function Inicio() {
 
   const { loading, ready, user, role, currentOrgId, authenticated } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
+  const [trackerCountState, setTrackerCountState] = useState({
+    count: null,
+    loading: false,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!currentOrgId) {
+      setTrackerCountState({ count: null, loading: false, error: null });
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadTrackerCount() {
+      setTrackerCountState({ count: null, loading: true, error: null });
+
+      try {
+        const { count, error } = await supabase
+          .from("memberships")
+          .select("*", { count: "exact", head: true })
+          .eq("org_id", currentOrgId)
+          .eq("role", "tracker")
+          .is("revoked_at", null);
+
+        if (isCancelled) return;
+
+        if (error) {
+          setTrackerCountState({
+            count: null,
+            loading: false,
+            error: error.message || "Error al contar trackers.",
+          });
+          return;
+        }
+
+        const validCount = Number.isInteger(count) && count >= 0 ? count : null;
+
+        if (validCount === null) {
+          setTrackerCountState({
+            count: null,
+            loading: false,
+            error: "Error al contar trackers.",
+          });
+          return;
+        }
+
+        setTrackerCountState({
+          count: validCount,
+          loading: false,
+          error: null,
+        });
+      } catch (error) {
+        if (isCancelled) return;
+
+        setTrackerCountState({
+          count: null,
+          loading: false,
+          error: error instanceof Error ? error.message : "Error al contar trackers.",
+        });
+      }
+    }
+
+    loadTrackerCount();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentOrgId]);
 
   const roleLower = useMemo(() => String(role || "").toLowerCase().trim(), [role]);
 
