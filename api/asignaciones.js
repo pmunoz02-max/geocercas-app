@@ -775,6 +775,16 @@ export default async function handler(req, res) {
       });
     }
 
+    const hasQueryError = Array.isArray(debug?.queries)
+      && debug.queries.some((query) => Boolean(query?.error));
+
+    if (hasQueryError) {
+      return send(res, 500, {
+        ok: false,
+        error: "internal_server_error",
+      });
+    }
+
     return send(res, 200, {
       ok: true,
       data: {
