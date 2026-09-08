@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
+import { getAsignacionesBundle } from "../lib/asignacionesApi";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import useOrgEntitlements from "@/hooks/useOrgEntitlements";
 
@@ -92,6 +93,11 @@ export default function Inicio() {
     loading: false,
     error: null,
   });
+  const [bundleState, setBundleState] = useState({
+    data: null,
+    loading: false,
+    error: null,
+  });
 
   useEffect(() => {
     if (!currentOrgId) {
@@ -151,6 +157,58 @@ export default function Inicio() {
     }
 
     loadTrackerCount();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentOrgId]);
+
+  useEffect(() => {
+    if (!currentOrgId) {
+      setBundleState({ data: null, loading: false, error: null });
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadBundle() {
+      setBundleState({ data: null, loading: true, error: null });
+
+      try {
+        const result = await getAsignacionesBundle(currentOrgId);
+
+        if (isCancelled) return;
+
+        if (result?.error) {
+          throw new Error(result.error.message || "Error al cargar asignaciones");
+        }
+
+        const isValidDataObject =
+          result?.data !== null &&
+          typeof result?.data === "object" &&
+          !Array.isArray(result?.data);
+
+        if (!isValidDataObject) {
+          throw new Error("Error al cargar asignaciones");
+        }
+
+        setBundleState({
+          data: result.data,
+          loading: false,
+          error: null,
+        });
+      } catch (error) {
+        if (isCancelled) return;
+
+        setBundleState({
+          data: null,
+          loading: false,
+          error: error instanceof Error ? error.message : "Error al cargar asignaciones",
+        });
+      }
+    }
+
+    loadBundle();
 
     return () => {
       isCancelled = true;
