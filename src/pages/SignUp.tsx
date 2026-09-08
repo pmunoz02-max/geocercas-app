@@ -152,7 +152,7 @@ export default function SignUp() {
 
             <button
               type="submit"
-              className="w-full rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-200 disabled:shadow-none"
               disabled={!canSubmit}
             >
               {sending ? t("auth.signup.buttons.creating") : t("auth.signup.buttons.create")}
