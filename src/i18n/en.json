@@ -1337,6 +1337,15 @@
       "subtitle": "From here you can access instructions, frequently asked questions, support and GeoField GPS updates.",
       "title": "Welcome to your panel"
     },
+    "onboarding": {
+      "badge": "Initial setup",
+      "title": "Get started in 5 steps",
+      "stepGeocercas": "1. Geofences",
+      "stepPersonal": "2. Personnel",
+      "stepActividades": "3. Activities",
+      "stepAsignaciones": "4. Assignments",
+      "stepInvitarTracker": "5. Invite tracker"
+    },
     "userInfo": {
       "connectedAs": "Connected as",
       "inOrg": "in the organization",

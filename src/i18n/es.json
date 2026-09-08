@@ -1339,6 +1339,15 @@
       "subtitle": "Desde aquí puedes acceder a instrucciones, preguntas frecuentes, soporte y novedades de GeoField GPS.",
       "title": "Bienvenido a tu panel"
     },
+    "onboarding": {
+      "badge": "Configuración inicial",
+      "title": "Empieza en 5 pasos",
+      "stepGeocercas": "1. Geocercas",
+      "stepPersonal": "2. Personal",
+      "stepActividades": "3. Actividades",
+      "stepAsignaciones": "4. Asignaciones",
+      "stepInvitarTracker": "5. Invitar tracker"
+    },
     "userInfo": {
       "connectedAs": "Conectado como",
       "inOrg": "en la organización",
