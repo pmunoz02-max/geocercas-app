@@ -98,6 +98,22 @@ function normalizeFrequencyMinutes(row) {
   return 5;
 }
 
+export function resolvePatchGeocercaInputs({ updateFields, currentRow, changedGeofenceId = false }) {
+  const hasOwn = Object.prototype.hasOwnProperty;
+
+  const geofenceIdToValidate = hasOwn.call(updateFields, "geofence_id")
+    ? updateFields.geofence_id
+    : currentRow?.geofence_id ?? null;
+
+  const geocercaIdToValidate = hasOwn.call(updateFields, "geocerca_id")
+    ? updateFields.geocerca_id
+    : changedGeofenceId
+      ? null
+      : currentRow?.geocerca_id ?? null;
+
+  return { geofenceIdToValidate, geocercaIdToValidate };
+}
+
 async function findOverlap(supabase, { currentId = null, orgId, personalId, startTime, endTime }) {
   if (!orgId || !personalId || !startTime || !endTime) return null;
 
@@ -166,32 +182,81 @@ async function resolvePersonalUserId(supabase, { orgId, personalId }) {
   return { userId: data.user_id || null, error: null };
 }
 
-async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId }) {
-  if (!orgId || !geofenceId) {
-    return { geocercaId: null, error: "missing_org_or_geofence_id" };
+async function resolveGeocercaIdFromGeofence(supabase, { orgId, geofenceId = null, geocercaId = null }) {
+  if (!orgId) {
+    return { geocercaId: null, error: "missing_org_id" };
   }
 
-  const { data: gf, error: gfError } = await supabase
-    .from("geofences")
-    .select("id, name, org_id")
-    .eq("id", geofenceId)
-    .eq("org_id", orgId)
-    .maybeSingle();
+  const normalizedIncomingGeocercaId =
+    geocercaId === undefined || geocercaId === null || geocercaId === ""
+      ? null
+      : String(geocercaId);
 
-  if (gfError) return { geocercaId: null, error: gfError.message };
-  if (!gf?.name) return { geocercaId: null, error: "geofence_not_found" };
+  if (!geofenceId && !normalizedIncomingGeocercaId) {
+    return { geocercaId: null, error: null };
+  }
 
-  const { data: gz, error: gzError } = await supabase
-    .from("geocercas")
-    .select("id, nombre, org_id")
-    .eq("org_id", orgId)
-    .eq("nombre", gf.name)
-    .maybeSingle();
+  if (geofenceId) {
+    const { data: gf, error: gfError } = await supabase
+      .from("geofences")
+      .select("id, org_id, source_geocerca_id")
+      .eq("id", geofenceId)
+      .eq("org_id", orgId)
+      .maybeSingle();
 
-  if (gzError) return { geocercaId: null, error: gzError.message };
-  if (!gz?.id) return { geocercaId: null, error: "matching_geocerca_not_found" };
+    if (gfError) return { geocercaId: null, error: gfError.message };
+    if (!gf) return { geocercaId: null, error: "geofence_not_found" };
 
-  return { geocercaId: gz.id, error: null };
+    const linkedGeocercaId =
+      gf.source_geocerca_id === undefined || gf.source_geocerca_id === null
+        ? null
+        : String(gf.source_geocerca_id);
+
+    if (normalizedIncomingGeocercaId && linkedGeocercaId) {
+      if (normalizedIncomingGeocercaId !== linkedGeocercaId) {
+        return { geocercaId: null, error: "invalid_geofence_geocerca_link" };
+      }
+    }
+
+    if (!linkedGeocercaId) {
+      if (normalizedIncomingGeocercaId) {
+        return { geocercaId: null, error: "invalid_geofence_geocerca_link" };
+      }
+      return { geocercaId: null, error: null };
+    }
+
+    const { data: gz, error: gzError } = await supabase
+      .from("geocercas")
+      .select("id, org_id")
+      .eq("id", linkedGeocercaId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (gzError) return { geocercaId: null, error: gzError.message };
+    if (!gz) return { geocercaId: null, error: "invalid_geofence_geocerca_link" };
+
+    if (normalizedIncomingGeocercaId && normalizedIncomingGeocercaId !== String(gz.id)) {
+      return { geocercaId: null, error: "invalid_geofence_geocerca_link" };
+    }
+
+    return { geocercaId: gz.id, error: null };
+  }
+
+  if (normalizedIncomingGeocercaId) {
+    const { data: gz, error: gzError } = await supabase
+      .from("geocercas")
+      .select("id, org_id")
+      .eq("id", normalizedIncomingGeocercaId)
+      .eq("org_id", orgId)
+      .maybeSingle();
+
+    if (gzError) return { geocercaId: null, error: gzError.message };
+    if (!gz) return { geocercaId: null, error: "geocerca_not_found" };
+
+    return { geocercaId: gz.id, error: null };
+  }
+
+  return { geocercaId: null, error: null };
 }
 
 
@@ -391,10 +456,14 @@ export default async function handler(req, res) {
         return send(res, 400, { ok: false, error: "missing_required_fields" });
       }
 
-      if (!insertFields.geocerca_id && insertFields.geofence_id) {
+      const geofenceIdToValidate = insertFields.geofence_id ?? null;
+      const geocercaIdToValidate = insertFields.geocerca_id ?? null;
+
+      if (geofenceIdToValidate || geocercaIdToValidate) {
         const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
           orgId: org_id,
-          geofenceId: insertFields.geofence_id,
+          geofenceId: geofenceIdToValidate,
+          geocercaId: geocercaIdToValidate,
         });
 
         if (resolvedGeocerca.error) {
@@ -570,23 +639,40 @@ export default async function handler(req, res) {
         }
       }
 
-      if (!updateFields.geocerca_id) {
-        const geofenceIdToUse = updateFields.geofence_id || currentRow.geofence_id;
-        if (geofenceIdToUse) {
-          const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
-            orgId: nextOrgId,
-            geofenceId: geofenceIdToUse,
+      const changedGeofenceId = Object.prototype.hasOwnProperty.call(updateFields, "geofence_id")
+        ? updateFields.geofence_id !== currentRow.geofence_id
+        : false;
+
+      const changedGeocercaId = Object.prototype.hasOwnProperty.call(updateFields, "geocerca_id")
+        ? updateFields.geocerca_id !== currentRow.geocerca_id
+        : false;
+
+      const shouldRevalidateGeocercaLink =
+        changedGeofenceId || changedGeocercaId ||
+        (Object.prototype.hasOwnProperty.call(updateFields, "geofence_id") && updateFields.geofence_id === null) ||
+        (Object.prototype.hasOwnProperty.call(updateFields, "geocerca_id") && updateFields.geocerca_id === null);
+
+      if (shouldRevalidateGeocercaLink) {
+        const { geofenceIdToValidate, geocercaIdToValidate } = resolvePatchGeocercaInputs({
+          updateFields,
+          currentRow,
+          changedGeofenceId,
+        });
+
+        const resolvedGeocerca = await resolveGeocercaIdFromGeofence(supabase, {
+          orgId: nextOrgId,
+          geofenceId: geofenceIdToValidate,
+          geocercaId: geocercaIdToValidate,
+        });
+
+        if (resolvedGeocerca.error) {
+          return send(res, 400, {
+            ok: false,
+            error: resolvedGeocerca.error,
           });
-
-          if (resolvedGeocerca.error) {
-            return send(res, 400, {
-              ok: false,
-              error: resolvedGeocerca.error,
-            });
-          }
-
-          updateFields.geocerca_id = resolvedGeocerca.geocercaId;
         }
+
+        updateFields.geocerca_id = resolvedGeocerca.geocercaId;
       }
 
       if (nextOrgId && nextPersonalId) {
