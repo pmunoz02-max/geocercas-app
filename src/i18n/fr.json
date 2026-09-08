@@ -300,42 +300,42 @@
       "redirecting": "Redirection..."
     },
     "signup": {
-      "title": "Crear cuenta",
-      "subtitle": "Crea tu cuenta con Magic Link o usa Google.",
+      "title": "Créez votre compte gratuit",
+      "subtitle": "Commencez à superviser votre équipe terrain avec GeoField GPS.",
       "labels": {
-        "fullName": "Nombre completo (opcional)",
-        "email": "Correo"
+        "fullName": "Nom complet (facultatif)",
+        "email": "E-mail"
       },
       "placeholders": {
-        "fullName": "Tu nombre",
-        "email": "tucorreo@dominio.com"
+        "fullName": "Votre nom",
+        "email": "votre@email.com"
       },
       "buttons": {
-        "creating": "Enviando...",
-        "create": "Crear cuenta con Magic Link"
+        "creating": "Envoi...",
+        "create": "Créer un compte gratuit"
       },
       "errors": {
-        "invalidEmail": "Ingresa un correo válido.",
-        "mustAcceptTerms": "Debes aceptar los Términos y la Política de Privacidad.",
-        "sendFailed": "No se pudo enviar el Magic Link: {{message}}",
-        "unknown": "Error desconocido{{#if message}}: {{message}}{{/if}}",
-        "googleFailed": "No se pudo iniciar con Google: {{message}}",
-        "googleNoUrl": "No se obtuvo URL de redirección de Google.",
-        "googleUnknown": "Error desconocido con Google OAuth{{#if message}}: {{message}}{{/if}}"
+        "invalidEmail": "Saisissez une adresse e-mail valide.",
+        "mustAcceptTerms": "Vous devez accepter les Conditions et la Politique de confidentialité.",
+        "sendFailed": "Impossible d'envoyer le Magic Link : {{message}}",
+        "unknown": "Erreur inconnue{{#if message}} : {{message}}{{/if}}",
+        "googleFailed": "Impossible de se connecter avec Google : {{message}}",
+        "googleNoUrl": "Aucune URL de redirection reçue de Google.",
+        "googleUnknown": "Erreur Google OAuth inconnue{{#if message}} : {{message}}{{/if}}"
       },
       "messages": {
-        "magicLinkSent": "Te enviamos un Magic Link. Revisa tu correo y abre el enlace para confirmar tu cuenta."
+        "magicLinkSent": "Nous vous avons envoyé un lien sécurisé. Vérifiez votre e-mail et ouvrez-le pour confirmer votre compte."
       },
       "terms": {
-        "acceptance": "Acepto los",
-        "terms": "Términos",
-        "and": "y la",
-        "privacy": "Política de Privacidad"
+        "acceptance": "J’accepte les",
+        "terms": "Conditions",
+        "and": "et la",
+        "privacy": "Politique de confidentialité"
       },
-      "alreadyHaveAccount": "¿Ya tienes cuenta?",
-      "loginLink": "Inicia sesión",
-      "separator": "o",
-      "oauthGoogle": "Registrarse con Google"
+      "alreadyHaveAccount": "Vous avez déjà un compte ?",
+      "loginLink": "Se connecter",
+      "separator": "ou",
+      "oauthGoogle": "S’inscrire avec Google"
     }
   },
   "authInvite": {

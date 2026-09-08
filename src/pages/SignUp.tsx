@@ -46,10 +46,7 @@ export default function SignUp() {
       if (error) {
         setMsg(t("auth.signup.errors.sendFailed", { message: error.message }));
       } else {
-        setMsg(
-          t("auth.signup.messages.magicLinkSent") +
-          "\nRevisa tu correo y abre el último enlace que recibiste para continuar con el registro."
-        );
+        setMsg(t("auth.signup.messages.magicLinkSent"));
       }
     } catch (e: any) {
       setMsg(e?.message ? t("auth.signup.errors.unknown", { message: e.message }) : t("auth.signup.errors.unknown"));
@@ -93,7 +90,7 @@ export default function SignUp() {
       <p className="text-sm text-gray-600 mb-6">
         {googleEnabled
           ? t("auth.signup.subtitle")
-          : "Crea tu cuenta con Magic Link."}
+          : t("auth.signup.subtitle")}
       </p>
 
       <form onSubmit={onSubmit} className="space-y-4">

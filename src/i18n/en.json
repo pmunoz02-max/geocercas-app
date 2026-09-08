@@ -337,8 +337,8 @@
       "redirecting": "Redirecting..."
     },
     "signup": {
-      "title": "Create account",
-      "subtitle": "Create your account with Magic Link or use Google.",
+      "title": "Create your free account",
+      "subtitle": "Start supervising your field team with GeoField GPS.",
       "labels": {
         "fullName": "Full name (optional)",
         "email": "Email"
@@ -349,7 +349,7 @@
       },
       "buttons": {
         "creating": "Sending...",
-        "create": "Create account with Magic Link"
+        "create": "Create free account"
       },
       "errors": {
         "invalidEmail": "Enter a valid email address.",
@@ -361,7 +361,7 @@
         "googleUnknown": "Unknown Google OAuth error{{#if message}}: {{message}}{{/if}}"
       },
       "messages": {
-        "magicLinkSent": "We sent you a Magic Link. Check your email and open the link to confirm your account."
+        "magicLinkSent": "We sent you a secure link. Check your email and open it to confirm your account."
       },
       "terms": {
         "acceptance": "I accept the",
