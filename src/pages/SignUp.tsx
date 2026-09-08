@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { Link } from "react-router-dom";
+import LanguageSwitcher from "../components/LanguageSwitcher";
 // Detecta si Google está habilitado por variable de entorno (solo si === "true")
 const googleEnabled = import.meta.env.VITE_AUTH_GOOGLE_ENABLED === "true";
 
@@ -86,6 +87,9 @@ export default function SignUp() {
 
   return (
     <div className="max-w-md mx-auto p-6">
+      <div className="flex justify-end mb-3">
+        <LanguageSwitcher />
+      </div>
       <h1 className="text-2xl font-bold mb-1">{t("auth.signup.title")}</h1>
       <p className="text-sm text-gray-600 mb-6">
         {googleEnabled

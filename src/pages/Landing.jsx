@@ -254,12 +254,12 @@ export default function Landing() {
   const { user } = useAuth();
 
   const loginHref = "/login?mode=magic";
-  const signupHref = "/signup";
-  const dashboardHref = "/dashboard";
-  const primaryHref = user ? dashboardHref : signupHref;
   const currentLang = String(i18n.resolvedLanguage || i18n.language || "es")
     .toLowerCase()
     .slice(0, 2);
+  const signupHref = `/signup?lang=${currentLang}`;
+  const dashboardHref = "/dashboard";
+  const primaryHref = user ? dashboardHref : signupHref;
   const resourcesHref =
     currentLang === "fr" ? "/ressources" : currentLang === "es" ? "/recursos" : "/resources";
 
