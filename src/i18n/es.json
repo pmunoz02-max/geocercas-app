@@ -135,9 +135,9 @@
   },
   "onboardingCreateOrg": {
     "title": "Crea tu organización",
-    "body": "Para usar GeoField GPS necesitas una organización. Esto habilita el modelo multi-tenant y la seguridad por organización.",
+    "body": "Crea el espacio de trabajo de tu empresa para empezar a supervisar tu equipo de campo.",
     "nameLabel": "Nombre de la organización",
-    "namePlaceholder": "Ej: Org de Pietro (producción)",
+    "namePlaceholder": "Ej: Mi Empresa",
     "submit": "Crear mi organización",
     "creating": "Creando…",
     "alreadyActive": "Ya tienes una organización activa.",
