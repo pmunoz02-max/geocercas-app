@@ -86,103 +86,112 @@ export default function SignUp() {
   const canSubmit = email.trim().length > 3 && accept && !sending;
 
   return (
-    <div className="max-w-md mx-auto p-6">
-      <div className="flex justify-end mb-3">
-        <LanguageSwitcher />
-      </div>
-      <h1 className="text-2xl font-bold mb-1">{t("auth.signup.title")}</h1>
-      <p className="text-sm text-gray-600 mb-6">
-        {googleEnabled
-          ? t("auth.signup.subtitle")
-          : t("auth.signup.subtitle")}
-      </p>
-
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("auth.signup.labels.fullName")}</label>
-          <input
-            type="text"
-            className="w-full border rounded px-3 py-2"
-            placeholder={t("auth.signup.placeholders.fullName")}
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            autoComplete="name"
-          />
+    <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
+      <div className="mx-auto max-w-md">
+        <div className="mb-4 flex justify-end">
+          <LanguageSwitcher />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1">{t("auth.signup.labels.email")}</label>
-          <input
-            type="email"
-            className="w-full border rounded px-3 py-2"
-            placeholder={t("auth.signup.placeholders.email")}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-        </div>
-
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={accept}
-            onChange={(e) => setAccept(e.target.checked)}
-          />
-          <span>
-            {t("auth.signup.terms.acceptance")} {" "}
-            <a href="/terms" className="underline" onClick={(e) => e.stopPropagation()}>
-              {t("auth.signup.terms.terms")}
-            </a>{" "}
-            {t("auth.signup.terms.and")} {" "}
-            <a href="/privacy" className="underline" onClick={(e) => e.stopPropagation()}>
-              {t("auth.signup.terms.privacy")}
-            </a>
-            .
-          </span>
-        </label>
-
-        <button
-          type="submit"
-          className="w-full px-4 py-2 rounded bg-black text-white disabled:opacity-50"
-          disabled={!canSubmit}
-        >
-            {sending ? t("auth.signup.buttons.creating") : t("auth.signup.buttons.create")}
-        </button>
-
-        {googleEnabled && (
-          <div className="relative my-2">
-            <div className="pointer-events-none absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-gray-500">{t("auth.signup.separator")}</span>
-            </div>
+        <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur-sm">
+          <div className="mb-6 text-left">
+            <div className="text-lg font-black tracking-tight text-white">GeoField GPS</div>
           </div>
-        )}
 
-        {googleEnabled && (
-          <button
-            type="button"
-            onClick={signUpWithGoogle}
-            className="w-full px-4 py-2 rounded border disabled:opacity-50"
-            disabled={sending}
-            title={t("auth.signup.oauthGoogle")}
-          >
-            Continuar con Google
-          </button>
-        )}
+          <h1 className="mb-2 text-3xl font-bold tracking-tight text-white">{t("auth.signup.title")}</h1>
+          <p className="mb-6 text-sm text-slate-300">
+            {googleEnabled
+              ? t("auth.signup.subtitle")
+              : t("auth.signup.subtitle")}
+          </p>
 
-        {msg && <p className="text-sm text-gray-700">{msg}</p>}
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-200">{t("auth.signup.labels.fullName")}</label>
+              <input
+                type="text"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-50 placeholder-slate-400 outline-none transition focus:border-sky-500"
+                placeholder={t("auth.signup.placeholders.fullName")}
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                autoComplete="name"
+              />
+            </div>
 
-        <p className="text-sm text-gray-600">
-          {t("auth.signup.alreadyHaveAccount")} {" "}
-          <Link to="/login" className="underline">
-            {t("auth.signup.loginLink")}
-          </Link>
-        </p>
-      </form>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-200">{t("auth.signup.labels.email")}</label>
+              <input
+                type="email"
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-slate-50 placeholder-slate-400 outline-none transition focus:border-sky-500"
+                placeholder={t("auth.signup.placeholders.email")}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
+
+            <label className="flex items-start gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                className="mt-1 h-4 w-4 accent-sky-500"
+                checked={accept}
+                onChange={(e) => setAccept(e.target.checked)}
+              />
+              <span>
+                {t("auth.signup.terms.acceptance")} {" "}
+                <a href="/terms" className="underline text-sky-300" onClick={(e) => e.stopPropagation()}>
+                  {t("auth.signup.terms.terms")}
+                </a>{" "}
+                {t("auth.signup.terms.and")} {" "}
+                <a href="/privacy" className="underline text-sky-300" onClick={(e) => e.stopPropagation()}>
+                  {t("auth.signup.terms.privacy")}
+                </a>
+                .
+              </span>
+            </label>
+
+            <button
+              type="submit"
+              className="w-full rounded-2xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!canSubmit}
+            >
+              {sending ? t("auth.signup.buttons.creating") : t("auth.signup.buttons.create")}
+            </button>
+
+            {googleEnabled && (
+              <div className="relative my-2">
+                <div className="pointer-events-none absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-slate-700" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase tracking-[0.2em] text-slate-400">
+                  <span className="bg-slate-900 px-2">{t("auth.signup.separator")}</span>
+                </div>
+              </div>
+            )}
+
+            {googleEnabled && (
+              <button
+                type="button"
+                onClick={signUpWithGoogle}
+                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm font-medium text-slate-100 transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={sending}
+                title={t("auth.signup.oauthGoogle")}
+              >
+                Continuar con Google
+              </button>
+            )}
+
+            {msg && <p className="text-sm text-slate-200">{msg}</p>}
+
+            <p className="text-sm text-slate-300">
+              {t("auth.signup.alreadyHaveAccount")} {" "}
+              <Link to="/login" className="font-medium text-sky-300 underline">
+                {t("auth.signup.loginLink")}
+              </Link>
+            </p>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
