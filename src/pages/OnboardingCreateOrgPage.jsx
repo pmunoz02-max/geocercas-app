@@ -79,7 +79,7 @@ export default function OnboardingCreateOrgPage() {
         <p style={styles.text}>
           {t("onboardingCreateOrg.body", {
             defaultValue:
-              "Para usar GeoField GPS necesitas una organización. Esto habilita el modelo multi-tenant y la seguridad por organización.",
+              "Crea el espacio de trabajo de tu empresa para empezar a supervisar tu equipo de campo.",
           })}
         </p>
 
@@ -88,7 +88,7 @@ export default function OnboardingCreateOrgPage() {
           style={styles.input}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={t("onboardingCreateOrg.namePlaceholder", { defaultValue: "Ej: Org de Pietro (producción)" })}
+          placeholder={t("onboardingCreateOrg.namePlaceholder", { defaultValue: "Ej: Mi Empresa" })}
           disabled={busy}
         />
 
