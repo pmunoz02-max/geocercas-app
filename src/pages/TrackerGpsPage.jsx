@@ -125,6 +125,8 @@ function callNativeBridge(bridge, session) {
       bridge.startTracking(runtimeToken, trackerUserId || "", orgId);
     } else if (typeof bridge.requestStartTracking === "function") {
       bridge.requestStartTracking();
+    } else {
+      return false;
     }
 
     return true;
@@ -147,9 +149,6 @@ function openNativeSetting(methodNames, fallbackMessage) {
 
   alert(fallbackMessage);
 }
-
-const BRIDGE_UNAVAILABLE_MESSAGE =
-  "No pudimos iniciar el seguimiento desde este navegador. Abre GeoField GPS desde la app instalada y actualízala desde Google Play.";
 
 export default function TrackerGpsPage() {
   const { t } = useTranslation();
@@ -181,6 +180,7 @@ export default function TrackerGpsPage() {
   }, [runtimeSession]);
 
   const trackingActive = ready && nativeBridgeReady === true;
+  const needsNativeApp = ready && nativeBridgeReady === false;
 
   useEffect(() => {
     disposedRef.current = false;
@@ -227,7 +227,8 @@ export default function TrackerGpsPage() {
     let cancelled = false;
 
     const startNativeTracking = async () => {
-      if (!permissionRequestedRef.current) {
+      const availableBridge = getNativeBridge();
+      if (availableBridge && !permissionRequestedRef.current) {
         permissionRequestedRef.current = true;
         await requestLocationPermission();
       }
@@ -248,7 +249,7 @@ export default function TrackerGpsPage() {
 
       setNativeBridgeReady(bridgeReady);
 
-      setMsg(bridgeReady ? t("tracker.gps.messageActive") : BRIDGE_UNAVAILABLE_MESSAGE);
+      setMsg(bridgeReady ? t("tracker.gps.messageActive") : t("tracker.gps.browserHelp"));
 
       setDebugInfo((prev) => ({
         ...prev,
@@ -407,20 +408,20 @@ export default function TrackerGpsPage() {
         <div style={titleStyle}>
           {trackingActive
             ? t("tracker.gps.titleActive")
-            : t("tracker.gps.titleStarting")}
+            : needsNativeApp ? t("tracker.gps.browserTitle") : t("tracker.gps.titleStarting")}
         </div>
 
         <div style={subtitleStyle}>
           {trackingActive
             ? t("tracker.gps.subtitleActive")
-            : t("tracker.gps.subtitleStarting")}
+            : needsNativeApp ? t("tracker.gps.browserSubtitle") : t("tracker.gps.subtitleStarting")}
         </div>
 
         <div style={badgeStyle(trackingActive)}>
           <span>
             {trackingActive
               ? t("tracker.gps.badgeActive")
-              : t("tracker.gps.badgeInitializing")}
+              : needsNativeApp ? t("tracker.gps.browserBadge") : t("tracker.gps.badgeInitializing")}
           </span>
         </div>
 
@@ -431,7 +432,7 @@ export default function TrackerGpsPage() {
         )}
 
         {/* Critical tracker permissions panel */}
-        <div style={criticalPermissionsPanelStyle}>
+        <div style={criticalPermissionsPanelStyle} hidden={needsNativeApp}>
           <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "#b45309" }}>
             {t("trackerGps.perms.panelTitle")}
           </div>
