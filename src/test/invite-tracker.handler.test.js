@@ -45,6 +45,7 @@ function buildInviteMocks({
   trackerCount = 0,
   trackerCountError = null,
   personalUserId = 'tracker-user-123',
+  personalExists = true,
 }) {
   mockSupabase.from.mockImplementation((table) => {
     if (table === 'org_billing') {
@@ -73,7 +74,7 @@ function buildInviteMocks({
           eq: () => ({
             ilike: () => ({
               maybeSingle: async () => ({
-                data: { id: 'personal-1', user_id: personalUserId },
+                data: personalExists ? { id: 'personal-1', user_id: personalUserId } : null,
                 error: null,
               }),
             }),
@@ -160,6 +161,27 @@ describe('api/invite-tracker normal invite guard', () => {
     }
   });
 
+  it('invites an unlinked person without synchronizing identity or granting membership', async () => {
+    buildInviteMocks({ orgId: baseReq.body.org_id, personalUserId: null });
+    mockFetch.mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify({ ok: true, inviteToken: 'token-only' }) });
+    const res = makeResponse();
+    await handler(baseReq, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.tracker_user_id).toBeUndefined();
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a missing person without sending or synchronizing identity', async () => {
+    buildInviteMocks({ orgId: baseReq.body.org_id, personalExists: false });
+    const res = makeResponse();
+    await handler(baseReq, res);
+    expect(res.statusCode).toBe(409);
+    expect(res.body.error).toBe('tracker_person_required');
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
   it('rejects missing or invalid entitlement data without sending the invite', async () => {
     buildInviteMocks({
       orgId: baseReq.body.org_id,

@@ -280,8 +280,8 @@ export default async function handler(req, res) {
     // ===============================
     // VALIDAR IDENTIDAD TRACKER
     // personal.email + org_id + user_id
-    // Si auth.users existe pero personal.user_id está vacío,
-    // sincroniza identidad y membership tracker automáticamente.
+    // La persona debe existir en la organización invitante.
+    // La identidad Auth y la membresía se validan al aceptar.
     // ===============================
     const { data: personalRow, error: personalError } = await supabase
       .from("personal")
@@ -294,53 +294,15 @@ export default async function handler(req, res) {
       throw personalError;
     }
 
-    let resolvedPersonalRow = personalRow;
-
-    if (!resolvedPersonalRow || !resolvedPersonalRow.user_id) {
-      const { data: syncResult, error: syncError } = await supabase.rpc(
-        "sync_tracker_identity_for_invite",
-        {
-          p_org_id: org_id,
-          p_email: normalizedEmail,
-        }
-      );
-
-      if (syncError) {
-        console.warn("[api/invite-tracker] tracker identity sync failed", {
-          org_id,
-          email: normalizedEmail,
-          message: syncError.message,
-        });
-      } else {
-        console.log("[api/invite-tracker] tracker identity sync result", {
-          org_id,
-          email: normalizedEmail,
-          result: syncResult,
-        });
-      }
-
-      const { data: retriedPersonalRow, error: retriedPersonalError } = await supabase
-        .from("personal")
-        .select("id, user_id")
-        .eq("org_id", org_id)
-        .ilike("email", normalizedEmail)
-        .maybeSingle();
-
-      if (retriedPersonalError) {
-        throw retriedPersonalError;
-      }
-
-      resolvedPersonalRow = retriedPersonalRow;
-    }
-
-    if (!resolvedPersonalRow || !resolvedPersonalRow.user_id) {
+    // Sending an invitation does not grant membership or require linked Auth yet.
+    const resolvedPersonalRow = personalRow;
+    if (!personalRow) {
       return res.status(409).json({
         ok: false,
-        error: "tracker_identity_required",
-        message: "No se encontró user_id para el email y organización dados.",
+        error: "tracker_person_required",
+        message: "No se encontró la persona para el email y organización dados.",
       });
     }
-
     // ===============================
     // OBTENER LÍMITE DEL PLAN DESDE ORG_ENTITLEMENTS
     // ===============================
@@ -471,7 +433,7 @@ export default async function handler(req, res) {
       null;
 
     // Asegurar que userId sea personal.user_id del invitado si existe.
-    // Si la Edge Function no lo devuelve, usamos el user_id ya resuelto/sincronizado aquí.
+    // Si la Edge Function no lo devuelve, usamos el user_id ya vinculado a personal, si existe.
     let trackerUserId = null;
     if (upstreamJson?.personal && upstreamJson.personal.user_id) {
       trackerUserId = upstreamJson.personal.user_id;
