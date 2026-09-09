@@ -5,20 +5,20 @@ import { useAuth } from "@/context/auth.js";
 
 const FALLBACK_LIMITS_BY_PLAN = {
   free: {
-    max_geocercas: 5,
-    max_trackers: 1,
+    max_geocercas: 1,
+    max_trackers: 2,
   },
   starter: {
     max_geocercas: 10,
     max_trackers: 3,
   },
   pro: {
-    max_geocercas: 200,
-    max_trackers: 50,
+    max_geocercas: 25,
+    max_trackers: 10,
   },
   enterprise: {
-    max_geocercas: 9999,
-    max_trackers: 9999,
+    max_geocercas: 250,
+    max_trackers: 50,
   },
   elite: {
     max_geocercas: 9999,
