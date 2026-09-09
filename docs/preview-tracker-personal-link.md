@@ -42,13 +42,17 @@ Si una escritura posterior falla, el vínculo también se revierte.
 
 ## Recuperación del registro existente
 
-Pendiente: la revisión automática rechazó incluso la prueba con rollback sobre datos reales
-por exigir autorización explícita para la organización afectada. No se ha reparado ese registro
-ni se afirma que el móvil ya guarde posiciones. Tras autorización específica, completar solo
-el vínculo vacío respaldado por invitación aceptada, Auth y membresía tracker activa; verificar
-que el cupo no cambia y observar una posición real antes de dar seguimiento por resuelto.
+Con autorización explícita del usuario se ejecutó la recuperación en la organización afectada
+el 2026-09-09. Resultado: repaired_personal_count=1. Confirmado después: linked_people=1,
+active_trackers=1. No se crearon membresías ni sesiones y no se cambiaron roles.
 
+Verificación pasiva posterior: el servicio Android seguía activo y el servidor recibió una
+posición real por su envío normal. tracker_positions pasó de 0 a 1; last_seen de la sesión
+fue 2026-09-09T19:07:16.309Z. La asignación estaba vigente, no eliminada, con geocerca activa.
+No se publicaron coordenadas ni tokens. No se ejecutó el reenvío manual de diagnóstico.
+Esto verifica la recepción y persistencia desde el móvil; no es una comprobación visual del
+panel web ni una prueba prolongada de funcionamiento en segundo plano.
 La corrección permanente de la RPC sí está aplicada. Producción no se modificó.
 Pruebas de handler: 29/29 aprobadas. Security advisor (nivel error): sin incidencias.
-SQL de recuperación preparado, NO ejecutado: scripts/sql/repair-accepted-tracker-personal-preview.sql.
+SQL de recuperación ejecutado con autorización específica: scripts/sql/repair-accepted-tracker-personal-preview.sql.
 Requiere app.repair_org_id explícito dentro de una transacción; no contiene un UUID real.
