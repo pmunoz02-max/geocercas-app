@@ -2148,9 +2148,9 @@
       "validatingPlan": "Validando plan de la organización...",
       "planValidationFailed": "No se pudo validar el plan de la organización.",
       "moduleUnavailable": "Este módulo no está disponible en el plan actual de la organización.",
-      "requiresPro": "El panel de seguimiento requiere PRO o superior.",
-      "upgradeHint": "Haz mejora de plan para visualizar posiciones, rutas y geocercas desde este panel.",
-      "upgradeOrgPrompt": "Actualiza esta organización para habilitar Tracker panel.",
+      "requiresPro": "Le tableau de suivi est indisponible pour cette organisation.",
+      "upgradeHint": "Vérifiez le statut du forfait et le quota de trackers.",
+      "upgradeOrgPrompt": "Gérez le forfait pour vérifier les permissions.",
       "resolvingActiveOrg": "Resolviendo organización activa…"
     },
     "messages": {

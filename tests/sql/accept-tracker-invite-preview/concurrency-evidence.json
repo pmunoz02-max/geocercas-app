@@ -1,0 +1,216 @@
+{
+  "initial_run": [
+    {
+      "label": "last slot observer",
+      "code": 0,
+      "rows": [
+        {
+          "application_name": "rpc_test_A",
+          "blockers": [],
+          "pid": 2755678,
+          "wait_event": "PgSleep",
+          "wait_event_type": "Timeout"
+        },
+        {
+          "application_name": "rpc_test_B",
+          "blockers": [
+            2755678
+          ],
+          "pid": 2755681,
+          "wait_event": "transactionid",
+          "wait_event_type": "Lock"
+        }
+      ]
+    },
+    {
+      "label": "last slot A",
+      "code": 0,
+      "rows": [
+        {
+          "acceptance": {
+            "accepted_at": "2026-09-09T10:19:51.819406-05:00",
+            "already_accepted": false,
+            "invite_id": "a29da1cc-817b-4b4d-b0a2-e09277e1fc86",
+            "ok": true,
+            "org_id": "2997908f-592a-4649-a901-49efafa3b65d",
+            "tracker_user_id": "33b167ff-f055-4d48-988f-4785554cb997"
+          },
+          "pid": 2755678
+        }
+      ]
+    },
+    {
+      "label": "last slot B",
+      "code": 0,
+      "rows": [
+        {
+          "elapsed_seconds": "10.161448",
+          "pid": 2755681,
+          "scenario": "last_slot"
+        }
+      ]
+    },
+    {
+      "label": "last slot final",
+      "code": 0,
+      "rows": [
+        {
+          "accepted": 1,
+          "pending": 1
+        }
+      ]
+    },
+    {
+      "label": "same invite retry observer",
+      "code": 0,
+      "rows": [
+        {
+          "application_name": "rpc_test_B",
+          "blockers": [
+            2755698
+          ],
+          "pid": 2755701,
+          "wait_event": "transactionid",
+          "wait_event_type": "Lock"
+        },
+        {
+          "application_name": "rpc_test_A",
+          "blockers": [],
+          "pid": 2755698,
+          "wait_event": "PgSleep",
+          "wait_event_type": "Timeout"
+        }
+      ]
+    },
+    {
+      "label": "same invite retry A",
+      "code": 0,
+      "rows": [
+        {
+          "acceptance": {
+            "accepted_at": "2026-09-09T10:19:51.819406-05:00",
+            "already_accepted": true,
+            "invite_id": "a29da1cc-817b-4b4d-b0a2-e09277e1fc86",
+            "ok": true,
+            "org_id": "2997908f-592a-4649-a901-49efafa3b65d",
+            "tracker_user_id": "33b167ff-f055-4d48-988f-4785554cb997"
+          },
+          "pid": 2755698
+        }
+      ]
+    },
+    {
+      "label": "same invite retry B",
+      "code": 0,
+      "rows": [
+        {
+          "elapsed_seconds": "10.254561",
+          "pid": 2755701,
+          "scenario": "retry"
+        }
+      ]
+    },
+    {
+      "label": "reset synthetic fixture",
+      "code": 0,
+      "rows": []
+    },
+    {
+      "label": "winner rolls back B",
+      "code": 0,
+      "rows": [
+        {
+          "elapsed_seconds": "0.014509",
+          "pid": 2755718,
+          "scenario": "rollback"
+        }
+      ]
+    },
+    {
+      "label": "winner rolls back A",
+      "code": 1,
+      "error": "Initialising login role...\n"
+    },
+    {
+      "label": "winner rolls back observer",
+      "code": 0,
+      "rows": []
+    }
+  ],
+  "synchronized_rollback": [
+    {
+      "label": "reset synthetic fixture",
+      "code": 0,
+      "rows": []
+    },
+    {
+      "label": "winner rolls back ready",
+      "code": 0,
+      "rows": [
+        {
+          "pid": 2755745
+        }
+      ]
+    },
+    {
+      "label": "winner rolls back observer",
+      "code": 0,
+      "rows": [
+        {
+          "application_name": "rpc_test_B",
+          "blockers": [
+            2755745
+          ],
+          "pid": 2755751,
+          "wait_event": "transactionid",
+          "wait_event_type": "Lock"
+        },
+        {
+          "application_name": "rpc_test_A",
+          "blockers": [],
+          "pid": 2755745,
+          "wait_event": "PgSleep",
+          "wait_event_type": "Timeout"
+        }
+      ]
+    },
+    {
+      "label": "winner rolls back A",
+      "code": 0,
+      "rows": [
+        {
+          "acceptance": {
+            "accepted_at": "2026-09-09T10:21:33.333879-05:00",
+            "already_accepted": false,
+            "invite_id": "a29da1cc-817b-4b4d-b0a2-e09277e1fc86",
+            "ok": true,
+            "org_id": "2997908f-592a-4649-a901-49efafa3b65d",
+            "tracker_user_id": "33b167ff-f055-4d48-988f-4785554cb997"
+          },
+          "pid": 2755745
+        }
+      ]
+    },
+    {
+      "label": "winner rolls back B",
+      "code": 0,
+      "rows": [
+        {
+          "elapsed_seconds": "20.264042",
+          "pid": 2755751,
+          "scenario": "rollback"
+        }
+      ]
+    },
+    {
+      "label": "rollback final",
+      "code": 0,
+      "rows": [
+        {
+          "user_id": "d7004ded-3eca-4643-aac6-eedff8ff5575"
+        }
+      ]
+    }
+  ],
+  "cleanup": "Verified zero fixture rows and zero temporary failure triggers"
+}

@@ -490,7 +490,7 @@ export default async function handler(req, res) {
 
     console.log("[api/accept-tracker-invite] request", {
       hasInviteToken: !!inviteToken,
-      inviteTokenPrefix: inviteToken ? inviteToken.slice(0, 8) : null,
+
       bodyHasToken: Boolean(body?.token || body?.inviteToken || body?.invite_token),
       bodyHasOrgId: Boolean(body?.org_id || body?.orgId),
       bodyHasUserId: Boolean(
@@ -536,84 +536,50 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "missing_org_id" });
     }
 
-    const { planStatus, trackerLimit } = await resolvePlanAndLimit(supabase, orgId);
-
-    if (planStatus !== "active") {
-      return res.status(403).json({ ok: false, error: "plan_inactive" });
+    const requestedOrgId = body?.org_id || body?.orgId;
+    if (requestedOrgId && String(requestedOrgId) !== String(invite.org_id)) {
+      return res.status(409).json({ ok: false, error: "invite_org_mismatch" });
     }
 
-    const personalRow = await findOrCreatePersonalRow(supabase, invite, orgId);
-    const trackerUserId = resolveTrackerUserId({ invite, body, personalRow });
-
-    // Log seguro de resolución de tracker_user_id
-    let resolvedTrackerUserIdSource = null;
-    if (personalRow && personalRow.user_id) {
-      resolvedTrackerUserIdSource = "personal.user_id";
-    } else if (personalRow) {
-      resolvedTrackerUserIdSource = "personal.missing_user_id";
-    } else if (invite?.tracker_user_id) {
-      resolvedTrackerUserIdSource = "invite.tracker_user_id";
-    } else if (invite?.used_by_user_id) {
-      resolvedTrackerUserIdSource = "invite.used_by_user_id";
-    } else if (invite?.created_for_user_id) {
-      resolvedTrackerUserIdSource = "invite.created_for_user_id";
-    } else if (invite?.created_by_user_id) {
-      resolvedTrackerUserIdSource = "invite.created_by_user_id";
-    } else {
-      resolvedTrackerUserIdSource = "other";
-    }
-
-    console.log("[api/accept-tracker-invite] resolved tracker user id", {
-      resolved_tracker_user_id_source: resolvedTrackerUserIdSource,
-      invite_email: invite?.email || null,
-      org_id: orgId,
+    // Delegate identity, plan, quota and atomic membership acceptance to the
+    // deployed Edge Function. Pairing-code handling above remains independent.
+    const upstream = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/accept-tracker-invite`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ org_id: invite.org_id, inviteToken }),
     });
-
-    // Si existe personal pero no tiene user_id, error 409
-    if (personalRow && !personalRow.user_id) {
-      return res.status(409).json({ ok: false, error: "tracker_identity_missing" });
+    const data = await upstream.json().catch(() => null);
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({
+        ok: false,
+        error: typeof data?.error === "string" ? data.error : "accept_upstream_failed",
+        ...(data?.retryable === true ? { retryable: true } : {}),
+      });
     }
-    if (!trackerUserId) {
-      return res.status(400).json({ ok: false, error: "missing_tracker_user_id" });
+    const runtimeToken = data?.session?.access_token;
+    if (data?.ok !== true || data?.org_id !== invite.org_id ||
+        typeof runtimeToken !== "string" || !runtimeToken ||
+        typeof data?.tracker_user_id !== "string" || !data.tracker_user_id) {
+      return res.status(502).json({ ok: false, error: "invalid_acceptance_response" });
     }
-
-    const membershipResult = await ensureTrackerMembership(
-      supabase,
-      orgId,
-      trackerUserId,
-      trackerLimit
-    );
-
-    if (!membershipResult.ok) {
-      return res.status(403).json(membershipResult);
-    }
-
-    const { runtimeToken, expiresAt, insertedSession } = await persistRuntimeSession(
-      supabase,
-      {
-        orgId,
-        trackerUserId,
-        inviteId: invite.id,
-      }
-    );
-
-    await markInviteUsed(supabase, invite.id, trackerUserId);
-
     return res.status(200).json({
       ok: true,
+      already_accepted: data.already_accepted,
       tracker_runtime_token: runtimeToken,
       runtimeToken,
       tracker_access_token: runtimeToken,
       access_token: runtimeToken,
-      tracker_user_id: trackerUserId,
-      user_id: trackerUserId,
-      userId: trackerUserId,
-      org_id: orgId,
-      orgId,
+      tracker_user_id: data.tracker_user_id,
+      user_id: data.tracker_user_id,
+      userId: data.tracker_user_id,
+      org_id: data.org_id,
+      orgId: data.org_id,
       invite_id: invite.id,
-      runtime_session_id: insertedSession?.id || null,
       frequency_minutes: 1,
-      expires_at: expiresAt.toISOString(),
     });
   } catch (error) {
     console.error("[api/accept-tracker-invite] unhandled", {

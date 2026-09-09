@@ -1,0 +1,11 @@
+# Membership limit Preview draft tests
+
+Not executed. No test result is claimed. Apply/review the migration separately only after explicit authorization and verification of the Preview project. These are psql scripts, not SQL Editor macros.
+
+Use an isolated disposable Preview database or dedicated test organization with existing billing, no active trackers, and two existing Auth users that are not its owner. Both users must have no memberships/org_members/app_user_roles in that org. Do not use customer identities. Supply psql variables org_id, user_a and user_b; scripts deliberately do not guess required organization/Auth fixture fields or create Auth accounts.
+
+transactional.sql runs at READ COMMITTED and always rolls back on success. It tests overrides 0/1, insertion, role-only update, reactivation, existing UPSERT at capacity, missing billing and bridge rollback. On any unexpected error, issue ROLLBACK before further work. A foreign key that prevents the missing-billing fixture is a test setup failure, not a passing test; use a separately prepared org without billing instead.
+
+For concurrency, first prepare and commit dedicated fixtures with override 1 and zero active trackers. Open TWO independent psql connections using the same org_id and different user_a/user_b. Run session-a.sql and leave its prompt waiting. Run session-b.sql; it must wait for A. Resume A to COMMIT. B must then reject with P0001 and assert exactly one tracker. If B times out, deadlocks or raises any other error, the test did not pass. A commits a real test membership so B can observe it: dispose of the dedicated fixture/database after testing; do not reuse customer data. Repeat with A rolling back manually instead of committing: B should then succeed (use a plain INSERT and ROLLBACK in B for this variant).
+
+Additional required review before application: negative/null limits (if source schema disallows them, verify those constraints rather than disabling them), owner conversion/deletion rejection, multi-row INSERT atomic rollback, cross-org UPDATE, stronger isolation rejection (25001), and the same last-slot concurrency test using role-only updates and reactivation. Repeat on the PostgreSQL version used by Preview. No mocked test substitutes for these two-connection checks.

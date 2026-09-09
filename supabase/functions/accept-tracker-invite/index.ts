@@ -1,8 +1,8 @@
-﻿import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { SignJWT } from "https://esm.sh/jose@5.9.6";
 
-const BUILD_TAG = "accept-tracker-invite-v3_preview_20260410";
+const BUILD_TAG = "accept-tracker-invite-v4_preview_20260909";
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -56,7 +56,7 @@ async function createTrackerAccessToken(params: {
     .sign(secret);
 }
 
-serve(async (req) => {
+export async function handleAcceptTrackerInvite(req: Request) {
   console.log("[ACCEPT] function entered", { build_tag: BUILD_TAG });
 
   try {
@@ -114,245 +114,72 @@ serve(async (req) => {
       });
     }
 
-    const inviteTokenHash = await sha256Hex(inviteToken);
-
-    const { data: inviteRow, error: inviteErr } = await sbAdmin
-      .from("tracker_invites")
-      .select(`
-        id,
-        org_id,
-        email,
-        email_norm,
-        created_at,
-        expires_at,
-        used_at,
-        accepted_at,
-        is_active,
-        invite_token_hash
-      `)
-      .eq("org_id", orgId)
-      .eq("invite_token_hash", inviteTokenHash)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    if (inviteErr) {
-      console.error("[accept-tracker-invite] invite lookup error", {
-        build_tag: BUILD_TAG,
-        message: inviteErr.message,
-        code: (inviteErr as any)?.code ?? null,
-        details: (inviteErr as any)?.details ?? null,
-      });
-
-      return jsonResponse(500, {
-        ok: false,
-        error: "invite_lookup_failed",
-        detail: inviteErr.message,
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    if (!inviteRow) {
-      return jsonResponse(404, {
-        ok: false,
-        error: "invite_not_found",
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    const nowMs = Date.now();
-    const expiresMs = Date.parse(String(inviteRow.expires_at ?? ""));
-
-    if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) {
-      return jsonResponse(410, {
-        ok: false,
-        error: "invite_expired",
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-      });
-    }
-
-    if (!inviteRow.is_active) {
-      return jsonResponse(409, {
-        ok: false,
-        error: "invite_inactive",
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-      });
-    }
-
-    const inviteEmail = String(inviteRow.email || inviteRow.email_norm || "")
-      .trim()
-      .toLowerCase();
-
-    if (!inviteEmail || !inviteEmail.includes("@")) {
-      return jsonResponse(500, {
-        ok: false,
-        error: "invite_missing_email",
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-      });
-    }
-
-    const { data: claimData, error: claimErr } = await sbAdmin.rpc("get_tracker_invite_claim", {
-      p_invite_id: inviteRow.id,
-    });
-
-    if (claimErr) {
-      console.error("[accept-tracker-invite] get_tracker_invite_claim error", {
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-        message: claimErr.message,
-        code: (claimErr as any)?.code ?? null,
-      });
-
-      return jsonResponse(500, {
-        ok: false,
-        error: "get_tracker_invite_claim_failed",
-        detail: claimErr.message,
-        build_tag: BUILD_TAG,
-      });
-    }
-
-    let trackerUserId: string | null = null;
-    let ensureData: unknown = null;
-    let resolvedUserId: unknown = null;
-
-    const claimTrackerUserId = String(
-      (claimData as Record<string, unknown> | null)?.tracker_user_id ??
-        (claimData as Record<string, unknown> | null)?.user_id ??
-        (claimData as Record<string, unknown> | null)?.resolved_user_id ??
-        "",
-    ).trim();
-
-    if (isUuid(claimTrackerUserId)) {
-      trackerUserId = claimTrackerUserId;
-    }
-
-    if (!trackerUserId) {
-      const ensureResp = await sbAdmin.rpc("ensure_tracker_membership", {
-        p_email: inviteEmail,
-        p_org_id: orgId,
-        p_role: "tracker",
-      });
-
-      ensureData = ensureResp.data;
-
-      if (ensureResp.error) {
-        console.error("[accept-tracker-invite] ensure_tracker_membership error", {
-          build_tag: BUILD_TAG,
-          invite_id: inviteRow.id,
-          email: inviteEmail,
-          message: ensureResp.error.message,
-          code: (ensureResp.error as any)?.code ?? null,
-        });
-
-        return jsonResponse(500, {
-          ok: false,
-          error: "ensure_tracker_membership_failed",
-          detail: ensureResp.error.message,
-          build_tag: BUILD_TAG,
-        });
-      }
-
-      const ensuredUserId = String(ensureResp.data ?? "").trim();
-      if (isUuid(ensuredUserId)) {
-        trackerUserId = ensuredUserId;
-      }
-    }
-
-    if (!trackerUserId) {
-      const resolveResp = await sbAdmin.rpc("resolve_tracker_user_id", {
-        p_org_id: orgId,
-      });
-
-      resolvedUserId = resolveResp.data;
-
-      if (resolveResp.error) {
-        console.error("[accept-tracker-invite] resolve_tracker_user_id error", {
-          build_tag: BUILD_TAG,
-          invite_id: inviteRow.id,
-          message: resolveResp.error.message,
-          code: (resolveResp.error as any)?.code ?? null,
-        });
-
-        return jsonResponse(500, {
-          ok: false,
-          error: "resolve_tracker_user_id_failed",
-          detail: resolveResp.error.message,
-          build_tag: BUILD_TAG,
-        });
-      }
-
-      const resolved = String(resolveResp.data ?? "").trim();
-      if (isUuid(resolved)) {
-        trackerUserId = resolved;
-      }
-    }
-
-    if (!trackerUserId) {
-      console.log("[accept-tracker-invite] resolution_debug", {
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-        invite_email: inviteEmail,
-        claimData,
-        claimTrackerUserId,
-        ensureData,
-        resolvedUserId,
-      });
-
-      return jsonResponse(500, {
-        ok: false,
-        error: "tracker_user_id_not_resolved",
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-      });
-    }
-
-    const patch: Record<string, unknown> = {
-      accepted_at: inviteRow.accepted_at ?? new Date().toISOString(),
-      used_at: new Date().toISOString(),
-      used_by_user_id: trackerUserId,
-      is_active: true,
-    };
-
-    const { error: updateErr } = await sbAdmin
-      .from("tracker_invites")
-      .update(patch)
-      .eq("id", inviteRow.id);
-
-    if (updateErr) {
-      console.error("[accept-tracker-invite] invite update error", {
-        build_tag: BUILD_TAG,
-        invite_id: inviteRow.id,
-        message: updateErr.message,
-        code: (updateErr as any)?.code ?? null,
-      });
-
-      return jsonResponse(500, {
-        ok: false,
-        error: "invite_update_failed",
-        detail: updateErr.message,
-        build_tag: BUILD_TAG,
-      });
-    }
-
     const JWT_SECRET = (Deno.env.get("JWT_SECRET") || "").trim();
-
     if (!JWT_SECRET) {
-      return jsonResponse(500, {
+      return jsonResponse(500, { ok: false, error: "missing_jwt_secret", build_tag: BUILD_TAG });
+    }
+
+    // The database owns identity, plan, quota, membership and invite consumption.
+    // Do not pass a user id supplied by the browser as a trusted identity.
+    const { data: acceptance, error: acceptanceError } = await sbAdmin.rpc(
+      "accept_tracker_invite_transactional",
+      { p_org_id: orgId, p_invite_token: inviteToken, p_expected_user_id: null },
+    );
+    if (acceptanceError) {
+      const businessStatuses: Record<string, number> = {
+        invalid_invite_input: 400,
+        invite_not_found: 404,
+        invite_expired: 410,
+        invite_inactive: 409,
+        invite_ambiguous: 409,
+        invite_role_mismatch: 409,
+        invite_identity_unavailable: 409,
+        invite_identity_mismatch: 409,
+        invite_identity_ambiguous: 409,
+        tracker_user_id_not_resolved: 409,
+        inviting_org_owner_protected: 409,
+        plan_unavailable: 503,
+        plan_inactive: 403,
+        tracker_limit_reached: 403,
+        invite_already_used_or_inconsistent: 409,
+        accepted_membership_not_active_tracker: 403,
+      };
+      const code = String(acceptanceError.code || "");
+      const message = String(acceptanceError.message || "");
+      if (code === "P0001" && Object.hasOwn(businessStatuses, message)) {
+        return jsonResponse(businessStatuses[message], { ok: false, error: message, build_tag: BUILD_TAG });
+      }
+      const retryable = ["40P01", "40001", "55P03"].includes(code);
+      return jsonResponse(retryable || code === "25001" ? 503 : 500, {
         ok: false,
-        error: "missing_jwt_secret",
+        error: retryable ? "acceptance_retry_required" : "acceptance_failed",
+        retryable,
         build_tag: BUILD_TAG,
       });
     }
-
-    console.log("[accept-tracker-invite] jwt_debug", {
-      build_tag: BUILD_TAG,
-      tracker_user_id: trackerUserId,
-      email: inviteEmail,
-      org_id: orgId,
-      jwt_secret_length: JWT_SECRET.length,
-    });
+    if (!acceptance || Array.isArray(acceptance) || acceptance.ok !== true ||
+        acceptance.org_id !== orgId || !isUuid(acceptance.tracker_user_id) ||
+        !isUuid(acceptance.invite_id) || typeof acceptance.already_accepted !== "boolean" ||
+        typeof acceptance.accepted_at !== "string" || !Number.isFinite(Date.parse(acceptance.accepted_at))) {
+      return jsonResponse(500, { ok: false, error: "invalid_acceptance_result", build_tag: BUILD_TAG });
+    }
+    const trackerUserId = acceptance.tracker_user_id;
+    // Get email for the session from Auth, not from stale invite/profile snapshots.
+    const { data: authData, error: authError } = await sbAdmin.auth.admin.getUserById(trackerUserId);
+    const inviteEmail = String(authData?.user?.email || "").trim().toLowerCase();
+    if (authError || authData?.user?.id !== trackerUserId || !inviteEmail.includes("@")) {
+      return jsonResponse(503, { ok: false, error: "accepted_identity_unavailable", build_tag: BUILD_TAG });
+    }
+    // Never reactivate a membership revoked after the acceptance committed.
+    const { data: membership, error: membershipError } = await sbAdmin.from("memberships")
+      .select("org_id,user_id,role,revoked_at").eq("org_id", orgId).eq("user_id", trackerUserId).maybeSingle();
+    if (membershipError) {
+      return jsonResponse(503, { ok: false, error: "accepted_membership_unavailable", build_tag: BUILD_TAG });
+    }
+    if (!membership || membership.org_id !== orgId || membership.user_id !== trackerUserId ||
+        membership.role !== "tracker" || membership.revoked_at !== null) {
+      return jsonResponse(403, { ok: false, error: "accepted_membership_not_active_tracker", build_tag: BUILD_TAG });
+    }
 
     try {
       const access_token = await createTrackerAccessToken({
@@ -393,7 +220,6 @@ serve(async (req) => {
         return jsonResponse(500, {
           ok: false,
           error: "runtime_session_revoke_failed",
-          detail: revokeError.message,
           build_tag: BUILD_TAG,
         });
       }
@@ -457,6 +283,7 @@ serve(async (req) => {
         tracker_user_id: trackerUserId,
         org_id: orgId,
         email: inviteEmail,
+        already_accepted: acceptance.already_accepted,
         session: {
           access_token,
           refresh_token: null,
@@ -477,7 +304,6 @@ serve(async (req) => {
       return jsonResponse(500, {
         ok: false,
         error: "jwt_create_failed",
-        detail: String(err?.message || err),
         build_tag: BUILD_TAG,
       });
     }
@@ -491,8 +317,9 @@ serve(async (req) => {
     return jsonResponse(500, {
       ok: false,
       error: "unhandled_exception",
-      message: String(err?.message || err),
       build_tag: BUILD_TAG,
     });
   }
-});
+}
+
+serve(handleAcceptTrackerInvite);

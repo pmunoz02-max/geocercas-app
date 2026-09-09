@@ -2175,9 +2175,9 @@
       "validatingPlan": "Validating organization plan...",
       "planValidationFailed": "Could not validate the organization plan.",
       "moduleUnavailable": "This module is not available on the organization's current plan.",
-      "requiresPro": "The tracking panel requires PRO or higher.",
-      "upgradeHint": "Upgrade your plan to view positions, routes and geofences from this panel.",
-      "upgradeOrgPrompt": "Upgrade this organization to enable the Tracker panel.",
+      "requiresPro": "The tracking dashboard is not enabled for this organization.",
+      "upgradeHint": "Check the organization plan status and tracker allowance.",
+      "upgradeOrgPrompt": "Manage the organization plan to review access.",
       "resolvingActiveOrg": "Resolving active organization…"
     },
     "messages": {

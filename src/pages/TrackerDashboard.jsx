@@ -1,4 +1,4 @@
-﻿// Nombre amigable de tracker según prioridad estricta
+// Nombre amigable de tracker según prioridad estricta
 function getFriendlyTrackerName(tracker) {
   return (
     tracker?.display_name ||
@@ -884,9 +884,10 @@ export default function TrackerDashboard() {
     loading: entitlementsLoading,
     error: entitlementsError,
     planCode,
-    isFree,
+    canInviteTrackers: canAccessTrackerDashboard,
   } = useOrgEntitlements();
 
+  const trackerAccessUnavailable = !canAccessTrackerDashboard;
   const orgId = activeOrgId || null;
   const orgIdSource = "auth.activeOrgId";
   const orgResolveError =
@@ -1847,7 +1848,7 @@ export default function TrackerDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || trackerAccessUnavailable) return;
     (async () => {
       await Promise.all([
         fetchAssignments(resolvedOrgId),
@@ -1855,15 +1856,15 @@ export default function TrackerDashboard() {
         fetchGeofenceEvents(resolvedOrgId),
       ]);
     })();
-  }, [resolvedOrgId, entitlementsLoading, isFree, fetchAssignments, fetchPersonalCatalog, fetchGeofenceEvents]);
+  }, [resolvedOrgId, entitlementsLoading, trackerAccessUnavailable, fetchAssignments, fetchPersonalCatalog, fetchGeofenceEvents]);
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || trackerAccessUnavailable) return;
     fetchGeofences(resolvedOrgId);
-  }, [resolvedOrgId, entitlementsLoading, isFree, fetchGeofences]);
+  }, [resolvedOrgId, entitlementsLoading, trackerAccessUnavailable, fetchGeofences]);
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || trackerAccessUnavailable) return;
     if (isHistoryRequested) return;
 
     let cancelled = false;
@@ -1876,19 +1877,19 @@ export default function TrackerDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, fetchDashboardData]);
+  }, [resolvedOrgId, entitlementsLoading, trackerAccessUnavailable, isHistoryRequested, fetchDashboardData]);
 
   // Removed preview/debug live subscription effect
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree) return;
+    if (!resolvedOrgId || entitlementsLoading || trackerAccessUnavailable) return;
     if (!isHistoryRequested) return;
     fetchPositions(resolvedOrgId, { showSpinner: true });
-  }, [resolvedOrgId, assignmentTrackers, timeWindowId, entitlementsLoading, isFree, isHistoryRequested, fetchPositions]);
+  }, [resolvedOrgId, assignmentTrackers, timeWindowId, entitlementsLoading, trackerAccessUnavailable, isHistoryRequested, fetchPositions]);
 
 
   useEffect(() => {
-    if (!resolvedOrgId || entitlementsLoading || isFree || isHistoryRequested) return;
+    if (!resolvedOrgId || entitlementsLoading || trackerAccessUnavailable || isHistoryRequested) return;
 
     console.log("[dashboard] polling started", resolvedOrgId);
 
@@ -1917,7 +1918,7 @@ export default function TrackerDashboard() {
       isActive = false;
       clearInterval(intervalId);
     };
-  }, [resolvedOrgId, entitlementsLoading, isFree, isHistoryRequested, fetchDashboardData]);
+  }, [resolvedOrgId, entitlementsLoading, trackerAccessUnavailable, isHistoryRequested, fetchDashboardData]);
 
   // Only map by user_id, no fallbacks
   const personalByUserId = useMemo(() => {
@@ -2463,7 +2464,7 @@ export default function TrackerDashboard() {
   );
 
   const effectiveOrgText = orgId ? String(orgId) : "—";
-  const trackerBlockedByPlan = !entitlementsLoading && isFree;
+  const trackerBlockedByPlan = !entitlementsLoading && trackerAccessUnavailable;
 
   if (entitlementsLoading) {
     return (
@@ -2513,7 +2514,7 @@ export default function TrackerDashboard() {
 
           <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-4 text-amber-900">
             <div className="text-base font-semibold">
-              {tOr("trackerDashboard.states.requiresPro", "The tracking dashboard requires PRO or higher.")}
+              {tOr("trackerDashboard.states.requiresPro", "The tracking dashboard is not enabled for this organization.")}
             </div>
             <div className="mt-2 text-sm">
               {tOr("trackerDashboard.labels.detectedPlan", "Detected plan")}{" "}
@@ -2524,14 +2525,14 @@ export default function TrackerDashboard() {
               <span className="font-mono">{effectiveOrgText}</span>
             </div>
             <div className="mt-3 text-sm">
-              {tOr("trackerDashboard.states.upgradeHint", "Upgrade to visualize positions, routes and geofences from this panel.")}
+              {tOr("trackerDashboard.states.upgradeHint", "Check the organization plan status and tracker allowance.")}
             </div>
           </div>
 
           {orgId ? (
             <div className="rounded-xl border border-emerald-100 bg-white p-4">
               <div className="text-sm text-gray-700 mb-3">
-                {tOr("trackerDashboard.states.upgradeOrgPrompt", "Upgrade this organization to enable Tracker Dashboard.")}
+                {tOr("trackerDashboard.states.upgradeOrgPrompt", "Manage the organization plan to review access.")}
               </div>
               <UpgradeToProButton
                 orgId={orgId}

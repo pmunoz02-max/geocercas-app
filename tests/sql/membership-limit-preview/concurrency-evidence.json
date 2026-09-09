@@ -1,0 +1,45 @@
+[
+  {
+    "label": "A",
+    "exit_code": 0,
+    "rows": [
+      {
+        "pid": 2754971,
+        "result": "winner_committed"
+      }
+    ]
+  },
+  {
+    "label": "B",
+    "exit_code": 0,
+    "rows": [
+      {
+        "elapsed_seconds": "12.487495",
+        "pid": 2754974,
+        "result": "loser_rejected"
+      }
+    ]
+  },
+  {
+    "label": "observer",
+    "exit_code": 0,
+    "rows": [
+      {
+        "application_name": "codex_quota_A",
+        "blockers": [],
+        "pid": 2754971,
+        "wait_event": "PgSleep",
+        "wait_event_type": "Timeout"
+      },
+      {
+        "application_name": "codex_quota_B",
+        "blockers": [
+          2754971
+        ],
+        "pid": 2754974,
+        "wait_event": "transactionid",
+        "wait_event_type": "Lock"
+      }
+    ]
+  }
+]
