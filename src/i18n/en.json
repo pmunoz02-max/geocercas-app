@@ -1369,6 +1369,8 @@
       "emailRequired": "You must enter an email address.",
       "noOrg": "Could not resolve an active organization for this user.",
       "planBlocked": "The organization's current plan does not allow tracker invitations.",
+      "planLoadFailed": "Could not load the plan information for this organization.",
+      "trackerCountFailed": "Could not check the available tracker quota.",
       "notInOrg": "Your user is not linked to the active organization.",
       "inviteErrorPrefix": "Error sending the invitation"
     },
@@ -1399,10 +1401,9 @@
     "plan": {
       "validating": "Validating organization plan…",
       "validationError": "Could not validate the organization plan.",
-      "requiresProTitle": "PRO plan required",
-      "detectedPlan": "Detected plan",
-      "freeBlockedBody": "Tracker invitations are not available on the current FREE plan.",
-      "upgradePrompt": "Upgrade this organization to PRO to enable tracker invitations."
+      "permissionDisabledTitle": "Invitation permission is not enabled",
+      "permissionDisabledBody": "This organization cannot invite trackers right now.",
+      "detectedPlan": "Detected plan"
     },
     "messages": {
       "createdWithoutEmail": "Tracker access was created without sending an email.",

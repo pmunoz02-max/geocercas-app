@@ -44,13 +44,20 @@ export default function InvitarTracker() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const auth = useAuthSafe();
-  const { entitlements, loading: entitlementsLoading } = useOrgEntitlements();
+  const {
+    entitlements,
+    loading: entitlementsLoading,
+    error: entitlementsError,
+    canInviteTrackers,
+  } = useOrgEntitlements();
 
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
   const [activeAssignaciones, setActiveAssignaciones] = useState([]);
-  const [trackerCount, setTrackerCount] = useState(0);
+  const [trackerCount, setTrackerCount] = useState(null);
+  const [trackerCountOrgId, setTrackerCountOrgId] = useState(null);
+  const [trackerCountError, setTrackerCountError] = useState(null);
   const [loadingTrackerCount, setLoadingTrackerCount] = useState(true);
   const [selectedPersonKey, setSelectedPersonKey] = useState("");
   const [emailInput, setEmailInput] = useState("");
@@ -85,6 +92,7 @@ export default function InvitarTracker() {
 
   const isCancellationScheduled = Boolean(entitlements?.cancel_at_period_end);
   const isActive = normalizedPlanStatus === "active";
+  const permissionsLoading = auth?.loading || entitlementsLoading;
 
   // =========================
   // MEMOS
@@ -126,19 +134,114 @@ export default function InvitarTracker() {
   }, [activeAssignaciones]);
 
   const inviteBlockedByPlan = useMemo(() => {
-    return !entitlementsLoading && !isActive;
-  }, [entitlementsLoading, isActive]);
+    return !permissionsLoading && !canInviteTrackers;
+  }, [permissionsLoading, canInviteTrackers]);
+
+  const trackerCountUnavailable = useMemo(() => {
+    return (
+      trackerCount === null ||
+      trackerCountError !== null ||
+      loadingTrackerCount ||
+      trackerCountOrgId !== orgId
+    );
+  }, [loadingTrackerCount, orgId, trackerCount, trackerCountError, trackerCountOrgId]);
 
   const trackerLimitReached = useMemo(() => {
-    if (loadingTrackerCount) return false;
+    if (loadingTrackerCount || trackerCountUnavailable || trackerCount === null) return false;
+    if (!Number.isInteger(trackerCount) || trackerCount < 0) return false;
     if (safeMaxTrackers <= 0) return true;
     return trackerCount >= safeMaxTrackers;
-  }, [loadingTrackerCount, trackerCount, safeMaxTrackers]);
+  }, [loadingTrackerCount, safeMaxTrackers, trackerCount, trackerCountUnavailable]);
+
+  const inviteAccessBlock = useMemo(() => {
+    if (permissionsLoading) {
+      return {
+        kind: "loading",
+        title: t("inviteTracker.org.syncing", {
+          defaultValue: "Sincronizando organización y plan...",
+        }),
+        body: t("inviteTracker.org.syncing", {
+          defaultValue: "Sincronizando organización y plan...",
+        }),
+      };
+    }
+
+    if (entitlementsError) {
+      return {
+        kind: "error",
+        title: t("inviteTracker.errors.planLoadFailed", {
+          defaultValue: "No se pudo cargar la información del plan para esta organización.",
+        }),
+        body: t("inviteTracker.errors.planLoadFailed", {
+          defaultValue: "No se pudo cargar la información del plan para esta organización.",
+        }),
+      };
+    }
+
+    if (!canInviteTrackers) {
+      return {
+        kind: "plan",
+        title: t("inviteTracker.plan.permissionDisabledTitle", {
+          defaultValue: "Permiso de invitación no habilitado.",
+        }),
+        body: t("inviteTracker.plan.permissionDisabledBody", {
+          defaultValue: "Esta organización no puede invitar trackers en este momento.",
+        }),
+      };
+    }
+
+    if (trackerCountError) {
+      return {
+        kind: "error",
+        title: t("inviteTracker.errors.trackerCountFailed", {
+          defaultValue: "No se pudo consultar el cupo de trackers disponible.",
+        }),
+        body: t("inviteTracker.errors.trackerCountFailed", {
+          defaultValue: "No se pudo consultar el cupo de trackers disponible.",
+        }),
+      };
+    }
+
+    if (loadingTrackerCount || trackerCountUnavailable) {
+      return {
+        kind: "loading",
+        title: t("inviteTracker.usage.loading", {
+          defaultValue: "Calculando uso…",
+        }),
+        body: t("inviteTracker.usage.loading", {
+          defaultValue: "Calculando uso…",
+        }),
+      };
+    }
+
+    if (trackerLimitReached) {
+      return {
+        kind: "limit",
+        title: t("inviteTracker.usage.limitReached", {
+          defaultValue: "Límite alcanzado",
+        }),
+        body: t("inviteTracker.usage.upgradeLimit", {
+          defaultValue: "Tu plan actual llegó al límite. Actualiza para agregar más trackers.",
+        }),
+      };
+    }
+
+    return null;
+  }, [
+    permissionsLoading,
+    entitlementsError,
+    canInviteTrackers,
+    loadingTrackerCount,
+    trackerCountError,
+    trackerCountUnavailable,
+    trackerLimitReached,
+    t,
+  ]);
 
   const trackersUsageLabel = useMemo(() => {
-    if (loadingTrackerCount) return "…";
+    if (trackerCountUnavailable) return "—";
     return `${trackerCount} / ${safeMaxTrackers}`;
-  }, [loadingTrackerCount, trackerCount, safeMaxTrackers]);
+  }, [safeMaxTrackers, trackerCount, trackerCountUnavailable]);
 
   const activeAssignmentByPersonId = useMemo(() => {
     const map = new Map();
@@ -223,7 +326,9 @@ export default function InvitarTracker() {
     async function loadTrackerCount() {
       if (!orgId) {
         if (!cancelled) {
-          setTrackerCount(0);
+          setTrackerCount(null);
+          setTrackerCountOrgId(null);
+          setTrackerCountError(null);
           setLoadingTrackerCount(false);
         }
         return;
@@ -231,6 +336,9 @@ export default function InvitarTracker() {
 
       try {
         setLoadingTrackerCount(true);
+        setTrackerCountError(null);
+        setTrackerCount(null);
+        setTrackerCountOrgId(null);
 
         const { count, error } = await supabase
           .from("memberships")
@@ -241,13 +349,20 @@ export default function InvitarTracker() {
 
         if (error) throw error;
 
+        if (count === null || !Number.isInteger(count) || count < 0) {
+          throw new Error("El conteo de trackers no es un entero no negativo.");
+        }
+
         if (!cancelled) {
-          setTrackerCount(count || 0);
+          setTrackerCount(count);
+          setTrackerCountOrgId(orgId);
         }
       } catch (error) {
         console.error("[invite-tracker] tracker count error", error);
         if (!cancelled) {
-          setTrackerCount(0);
+          setTrackerCount(null);
+          setTrackerCountOrgId(null);
+          setTrackerCountError(String(error?.message || error || "No se pudo cargar el conteo de trackers."));
         }
       } finally {
         if (!cancelled) {
@@ -285,7 +400,7 @@ export default function InvitarTracker() {
         return;
       }
 
-      if (entitlementsLoading || !isActive) {
+      if (entitlementsLoading || entitlementsError || !canInviteTrackers) {
         if (!cancelled) {
           setPeople([]);
           setActiveAssignaciones([]);
@@ -353,7 +468,7 @@ export default function InvitarTracker() {
     return () => {
       cancelled = true;
     };
-  }, [orgId, entitlementsLoading, isActive, t]);
+  }, [orgId, entitlementsLoading, entitlementsError, canInviteTrackers, t]);
 
   useEffect(() => {
     if (!selectedPerson) {
@@ -466,10 +581,50 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
         );
       }
 
-      if (inviteBlockedByPlan) {
+      if (permissionsLoading) {
         throw new Error(
-          t("inviteTracker.plan.genericBlockedBody", {
-            defaultValue: "Las invitaciones de tracker requieren una suscripción activa compatible.",
+          t("inviteTracker.org.syncing", {
+            defaultValue: "Sincronizando organización y plan...",
+          })
+        );
+      }
+
+      if (entitlementsError) {
+        throw new Error(
+          t("inviteTracker.errors.planLoadFailed", {
+            defaultValue: "No se pudo cargar la información del plan para esta organización.",
+          })
+        );
+      }
+
+      if (!canInviteTrackers) {
+        throw new Error(
+          t("inviteTracker.plan.permissionDisabledBody", {
+            defaultValue: "Esta organización no puede invitar trackers en este momento.",
+          })
+        );
+      }
+
+      if (trackerCountError) {
+        throw new Error(
+          t("inviteTracker.errors.trackerCountFailed", {
+            defaultValue: "No se pudo consultar el cupo de trackers disponible.",
+          })
+        );
+      }
+
+      if (loadingTrackerCount || trackerCount === null || trackerCountOrgId !== orgId) {
+        throw new Error(
+          t("inviteTracker.usage.loading", {
+            defaultValue: "Calculando uso…",
+          })
+        );
+      }
+
+      if (!Number.isInteger(trackerCount) || trackerCount < 0) {
+        throw new Error(
+          t("inviteTracker.errors.sendFailed", {
+            defaultValue: "No se pudo validar el cupo disponible.",
           })
         );
       }
@@ -580,6 +735,19 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
     }
   }
 
+  const isSubmitDisabled =
+    busy ||
+    loadingPeople ||
+    loadingTrackerCount ||
+    trackerCountUnavailable ||
+    !orgId ||
+    !hasActiveAssignmentsInOrg ||
+    !selectedAssignment?.id ||
+    permissionsLoading ||
+    !!entitlementsError ||
+    !canInviteTrackers ||
+    trackerLimitReached;
+
   // =========================
   // GUARDS
   // =========================
@@ -600,69 +768,10 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
     );
   }
 
-  if (inviteBlockedByPlan) {
-    let blockMsg = null;
-
-    if (planCode === "pro" && !isActive) {
-      blockMsg = (
-        <>
-          <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">PRO</span>
-          </div>
-          <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: {" "}
-            <span className="font-semibold">
-              {t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}
-            </span>
-          </div>
-          <div className="mt-3 text-sm">
-            {t("inviteTracker.plan.proInactiveBlockedBody", {
-              defaultValue: "Las invitaciones de tracker requieren una suscripción PRO activa.",
-            })}
-          </div>
-          {isCancellationScheduled ? (
-            <div className="mt-2 text-xs text-amber-800">
-              {t("inviteTracker.plan.cancellationScheduled", {
-                defaultValue: "Tu suscripción tiene una cancelación programada al final del período.",
-              })}
-            </div>
-          ) : null}
-        </>
-      );
-    } else if (planCode === "free") {
-      blockMsg = (
-        <>
-          <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: <span className="font-semibold">FREE</span>
-          </div>
-          <div className="mt-3 text-sm">
-            {t("inviteTracker.plan.freeBlockedBody", {
-              defaultValue: "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
-            })}
-          </div>
-        </>
-      );
-    } else {
-      blockMsg = (
-        <>
-          <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: {" "}
-            <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
-          </div>
-          <div className="mt-2 text-sm">
-            {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: {" "}
-            <span className="font-semibold">
-              {t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}
-            </span>
-          </div>
-          <div className="mt-3 text-sm">
-            {t("inviteTracker.plan.genericBlockedBody", {
-              defaultValue: "Las invitaciones de tracker requieren una suscripción activa compatible.",
-            })}
-          </div>
-        </>
-      );
-    }
+  if (inviteBlockedByPlan || inviteAccessBlock) {
+    const reason = inviteAccessBlock || { title: t("inviteTracker.plan.permissionDisabledTitle", { defaultValue: "Permiso de invitación no habilitado." }), body: t("inviteTracker.plan.permissionDisabledBody", { defaultValue: "Esta organización no puede invitar trackers en este momento." }) };
+    const blockTitle = reason.title;
+    const blockBody = reason.body || reason.title;
 
     return (
       <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
@@ -681,20 +790,43 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
           </div>
 
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
-            <div className="text-base font-semibold">
-              {t("inviteTracker.plan.requiresProTitle", { defaultValue: "Esta función requiere PRO o superior." })}
-            </div>
-            {blockMsg}
-          </div>
-
-          {orgId ? (
-            <div className="rounded-xl border border-emerald-100 bg-white p-4">
-              <div className="text-sm text-gray-700 mb-3">
-                {t("inviteTracker.plan.upgradePrompt", {
-                  defaultValue: "Actualiza esta organización para habilitar invitaciones de trackers.",
+            <div className="text-base font-semibold">{blockTitle}</div>
+            <div className="mt-3 text-sm">{blockBody}</div>
+            {planCode && !inviteAccessBlock?.kind?.includes("loading") ? (
+              <>
+                <div className="mt-2 text-sm">
+                  {t("inviteTracker.plan.detectedPlan", { defaultValue: "Plan detectado" })}: {" "}
+                  <span className="font-semibold">{normalizePlanLabel(planCode)}</span>
+                </div>
+                <div className="mt-2 text-sm">
+                  {t("inviteTracker.plan.statusLabel", { defaultValue: "Estado del plan" })}: {" "}
+                  <span className="font-semibold">
+                    {t(`status.${normalizedPlanStatus}`, { defaultValue: normalizedPlanStatus })}
+                  </span>
+                </div>
+              </>
+            ) : null}
+            {isCancellationScheduled && inviteAccessBlock?.kind === "plan" ? (
+              <div className="mt-2 text-xs text-amber-800">
+                {t("inviteTracker.plan.cancellationScheduled", {
+                  defaultValue: "Tu suscripción tiene una cancelación programada al final del período.",
                 })}
               </div>
-              <UpgradeToProButton orgId={orgId} getAccessToken={getAccessToken} />
+            ) : null}
+          </div>
+
+          {orgId && inviteAccessBlock?.kind === "plan" ? (
+            <div className="rounded-xl border border-emerald-100 bg-white p-4">
+              <div className="text-sm text-gray-700 mb-3">
+                {t("billing.managePlan", { defaultValue: "Administrar plan" })}
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/billing")}
+                className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                {t("billing.goToBilling", { defaultValue: "Ir a Facturación" })}
+              </button>
             </div>
           ) : null}
         </div>
@@ -1055,26 +1187,10 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
 
           <button
             type="submit"
-            disabled={
-              busy ||
-              loadingPeople ||
-              loadingTrackerCount ||
-              !orgId ||
-              !hasActiveAssignmentsInOrg ||
-              !selectedAssignment?.id ||
-              inviteBlockedByPlan ||
-              trackerLimitReached
-            }
+            disabled={isSubmitDisabled}
             className={[
               "w-full rounded-xl px-4 py-3 text-sm font-semibold",
-              busy ||
-              loadingPeople ||
-              loadingTrackerCount ||
-              !orgId ||
-              !hasActiveAssignmentsInOrg ||
-              !selectedAssignment?.id ||
-              inviteBlockedByPlan ||
-              trackerLimitReached
+              isSubmitDisabled
                 ? "bg-emerald-300 text-emerald-700 cursor-not-allowed"
                 : "bg-black text-white hover:bg-emerald-950",
             ].join(" ")}

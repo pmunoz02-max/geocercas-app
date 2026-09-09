@@ -1328,12 +1328,14 @@
     "emailLabel": "Correo electrónico del tracker",
     "emailPlaceholder": "tracker@ejemplo.com",
     "errors": {
-      "emailInvalid": "Ingresa un correo electrónico válido.",
-      "emailRequired": "Debes ingresar un correo electrónico.",
-      "noOrg": "No se pudo resolver una organización activa para este usuario.",
-      "planBlocked": "El plan actual de la organización no permite invitaciones de tracker.",
-      "notInOrg": "Tu usuario no está vinculado a la organización activa.",
-      "inviteErrorPrefix": "Error al enviar la invitación"
+      "emailInvalid": "Saisissez une adresse e-mail valide.",
+      "emailRequired": "Vous devez saisir une adresse e-mail.",
+      "noOrg": "Impossible de résoudre une organisation active pour cet utilisateur.",
+      "planBlocked": "Le plan actuel de l’organisation ne permet pas les invitations de tracker.",
+      "planLoadFailed": "Impossible de charger les informations du plan pour cette organisation.",
+      "trackerCountFailed": "Impossible de vérifier le quota de trackers disponible.",
+      "notInOrg": "Votre utilisateur n’est pas lié à l’organisation active.",
+      "inviteErrorPrefix": "Erreur lors de l’envoi de l’invitation"
     },
     "form": {
       "buttonSend": "Enviar invitación",
@@ -1360,12 +1362,11 @@
       "magicLinkFallback": "Link mágico generado como respaldo."
     },
     "plan": {
-      "validating": "Validando plan de la organización…",
-      "validationError": "No se pudo validar el plan de la organización.",
-      "requiresProTitle": "Plan PRO requerido",
-      "detectedPlan": "Plan detectado",
-      "freeBlockedBody": "Las invitaciones de tracker no están disponibles en el plan FREE actual.",
-      "upgradePrompt": "Actualiza esta organización a PRO para habilitar invitaciones de tracker."
+      "validating": "Validation du plan de l’organisation…",
+      "validationError": "Impossible de valider le plan de l’organisation.",
+      "permissionDisabledTitle": "Permission d’invitation non activée",
+      "permissionDisabledBody": "Cette organisation ne peut pas inviter de trackers pour le moment.",
+      "detectedPlan": "Plan détecté"
     },
     "messages": {
       "createdWithoutEmail": "Se creó el acceso del tracker sin enviar correo electrónico.",

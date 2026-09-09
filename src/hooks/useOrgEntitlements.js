@@ -112,8 +112,21 @@ export default function useOrgEntitlements() {
   const [entitlements, setEntitlements] = useState(null);
   const [source, setSource] = useState("none");
   const bypassLoggedRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestIdRef.current += 1;
+    };
+  }, []);
 
   const loadEntitlements = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    const isCurrentRequest = () => mountedRef.current && requestId === requestIdRef.current;
+
     if (shouldBypassForTracker) {
       if (!bypassLoggedRef.current) {
         console.warn("[monetization-regression] source=useOrgEntitlements");
@@ -121,6 +134,7 @@ export default function useOrgEntitlements() {
         bypassLoggedRef.current = true;
       }
 
+      if (!isCurrentRequest()) return;
       setEntitlements(buildTrackerRouteBypassEntitlements(currentOrgId));
       setError("");
       setSource("tracker_route_bypass");
@@ -130,6 +144,7 @@ export default function useOrgEntitlements() {
 
     // Wait until ready and currentOrgId are both valid before querying billing.
     if (!ready || !authenticated || !currentOrgId) {
+      if (!isCurrentRequest()) return;
       setEntitlements(null);
       setError("");
       setSource("none");
@@ -138,6 +153,7 @@ export default function useOrgEntitlements() {
     }
 
     try {
+      if (!isCurrentRequest()) return;
       setLoading(true);
       setError("");
 
@@ -151,28 +167,42 @@ export default function useOrgEntitlements() {
             .maybeSingle(),
         ]);
 
+      if (!isCurrentRequest()) return;
       if (entitlementError) throw entitlementError;
       if (billingError) throw billingError;
 
-      if (entitlementRow) {
+      const currentEntitlementRow =
+        entitlementRow && String(entitlementRow.org_id || "") === String(currentOrgId) ? entitlementRow : null;
+      const currentBillingRow =
+        billingRow && String(billingRow.org_id || "") === String(currentOrgId) ? billingRow : null;
+
+      if (currentEntitlementRow) {
+        const effectiveMaxTrackers =
+          currentBillingRow?.tracker_limit_override == null
+            ? normalizeNumber(currentEntitlementRow.max_trackers, 0)
+            : normalizeNumber(currentBillingRow.tracker_limit_override, normalizeNumber(currentEntitlementRow.max_trackers, 0));
+
+        if (!isCurrentRequest()) return;
         setEntitlements({
-          ...entitlementRow,
-          plan_status: billingRow?.plan_status ?? null,
-          cancel_at_period_end: !!billingRow?.cancel_at_period_end,
-          __source: billingRow ? "org_entitlements+org_billing" : "org_entitlements",
+          ...currentEntitlementRow,
+          max_trackers: effectiveMaxTrackers,
+          plan_status: currentBillingRow?.plan_status ?? currentEntitlementRow.plan_status ?? null,
+          cancel_at_period_end: !!currentBillingRow?.cancel_at_period_end,
+          __source: currentBillingRow ? "org_entitlements+org_billing" : "org_entitlements",
         });
-        setSource(billingRow ? "org_entitlements+org_billing" : "org_entitlements");
+        setSource(currentBillingRow ? "org_entitlements+org_billing" : "org_entitlements");
         setLoading(false);
         return;
       }
 
-      if (billingRow) {
-        const fallback = buildFallbackEntitlementsFromPlan(billingRow.plan_code, billingRow);
+      if (currentBillingRow) {
+        const fallback = buildFallbackEntitlementsFromPlan(currentBillingRow.plan_code, currentBillingRow);
 
+        if (!isCurrentRequest()) return;
         setEntitlements({
           ...fallback,
-          plan_status: billingRow.plan_status ?? null,
-          cancel_at_period_end: !!billingRow?.cancel_at_period_end,
+          plan_status: currentBillingRow.plan_status ?? null,
+          cancel_at_period_end: !!currentBillingRow?.cancel_at_period_end,
           __source: "billing_fallback",
         });
         setSource("billing_fallback");
@@ -184,6 +214,7 @@ export default function useOrgEntitlements() {
         org_id: currentOrgId,
       });
 
+      if (!isCurrentRequest()) return;
       setEntitlements({
         ...defaultFallback,
         plan_status: "free",
@@ -195,6 +226,7 @@ export default function useOrgEntitlements() {
       );
       setLoading(false);
     } catch (err) {
+      if (!isCurrentRequest()) return;
       const defaultFallback = buildFallbackEntitlementsFromPlan("free", {
         org_id: currentOrgId,
       });
@@ -211,7 +243,11 @@ export default function useOrgEntitlements() {
   }, [ready, authenticated, currentOrgId, currentRole, shouldBypassForTracker, trackerRoleBypass]);
 
   useEffect(() => {
+    requestIdRef.current += 1;
     loadEntitlements();
+    return () => {
+      requestIdRef.current += 1;
+    };
   }, [loadEntitlements]);
 
   const planCode = useMemo(() => normalizePlanCode(entitlements?.plan_code), [entitlements]);
@@ -250,8 +286,33 @@ export default function useOrgEntitlements() {
   const isElitePlus = planCode === "elite_plus" && isActive;
 
   const canInviteTrackers = useMemo(() => {
-    return isActive && maxTrackers > 1;
-  }, [isActive, maxTrackers]);
+    const validSources = new Set([
+      "org_entitlements",
+      "org_entitlements+org_billing",
+      "billing_fallback",
+    ]);
+
+    const matchesOrg =
+      !!currentOrgId &&
+      !!entitlements &&
+      String(entitlements.org_id || "") === String(currentOrgId);
+
+    const hasRealEntitlements =
+      !loading &&
+      !error &&
+      !!currentOrgId &&
+      !!entitlements &&
+      matchesOrg &&
+      validSources.has(source);
+
+    const hasPositiveIntegerLimit = Number.isInteger(maxTrackers) && maxTrackers > 0;
+    const isAllowedPlanState =
+      planCode === "free"
+        ? normalizedPlanStatus === "free" || normalizedPlanStatus === "active"
+        : normalizedPlanStatus === "active";
+
+    return hasRealEntitlements && hasPositiveIntegerLimit && isAllowedPlanState;
+  }, [loading, error, currentOrgId, entitlements, source, maxTrackers, planCode, normalizedPlanStatus]);
 
   return {
     loading,

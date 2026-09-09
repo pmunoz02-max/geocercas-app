@@ -28,6 +28,13 @@ export default defineConfig(() => {
       __TG_BUILD_SHA__: JSON.stringify(BUILD_SHA),
     },
 
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: ["./src/test/setup.js"],
+      css: false,
+      include: ["src/**/*.test.{js,jsx,ts,tsx}"],
+    },
 
     // --- Build config: preview vs producción ---
     build: {
