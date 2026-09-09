@@ -17,6 +17,24 @@ function normalizePositiveInt(value, fallback, maxValue) {
   return Math.min(n, maxValue);
 }
 
+function normalizePlanStatus(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+
+  if (["active", "trialing", "trial", "paid", "current", "approved"].includes(value)) {
+    return "active";
+  }
+
+  if (["canceled", "cancelled", "expired", "past_due", "inactive"].includes(value)) {
+    return "inactive";
+  }
+
+  if (["free", ""].includes(value)) {
+    return "free";
+  }
+
+  return "unknown";
+}
+
 function createPairingCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const bytes = crypto.randomBytes(12);
@@ -229,18 +247,29 @@ export default async function handler(req, res) {
     // ===============================
     const { data: billing, error: billingError } = await supabase
       .from("org_billing")
-      .select("plan_status, plan_code")
+      .select("org_id, plan_status, plan_code")
       .eq("org_id", org_id)
       .maybeSingle();
 
-    if (billingError) {
-      throw billingError;
+    const billingRow =
+      !billingError && billing && String(billing.org_id || "") === String(org_id) ? billing : null;
+
+    if (billingError || !billingRow) {
+      return res.status(403).json({
+        ok: false,
+        error: "plan_unavailable",
+        message: "No se pudo validar el plan de la organización.",
+      });
     }
 
-    const planStatus = String(billing?.plan_status || "free").trim().toLowerCase();
-    const planCode = String(billing?.plan_code || "free").trim().toLowerCase();
+    const planStatus = normalizePlanStatus(billingRow.plan_status);
+    const planCode = String(billingRow.plan_code || "free").trim().toLowerCase();
+    const isPlanAllowed =
+      planCode === "free"
+        ? planStatus === "free" || planStatus === "active"
+        : planStatus === "active";
 
-    if (planStatus !== "active") {
+    if (!isPlanAllowed) {
       return res.status(403).json({
         ok: false,
         error: "plan_inactive",
@@ -313,45 +342,54 @@ export default async function handler(req, res) {
     }
 
     // ===============================
-    // OBTENER LÍMITES DEL PLAN
+    // OBTENER LÍMITE DEL PLAN DESDE ORG_ENTITLEMENTS
     // ===============================
-    const { data: planLimits, error: limitsError } = await supabase
-      .from("plan_limits")
-      .select("max_trackers")
-      .eq("plan", planCode)
+    const { data: entitlementRow, error: entitlementError } = await supabase
+      .from("org_entitlements")
+      .select("org_id, max_trackers")
+      .eq("org_id", org_id)
       .maybeSingle();
 
-    if (limitsError) {
-      console.warn("[api/invite-tracker] plan_limits lookup failed, using fallback", {
-        planCode,
-        message: limitsError.message,
+    if (entitlementError) {
+      throw entitlementError;
+    }
+
+    const validEntitlementRow =
+      entitlementRow && String(entitlementRow.org_id || "") === String(org_id) ? entitlementRow : null;
+
+    if (!validEntitlementRow) {
+      return res.status(403).json({
+        ok: false,
+        error: "plan_unavailable",
+        message: "No se pudo validar el plan de la organización.",
       });
     }
 
-    const fallbackMaxTrackersByPlan = {
-      free: 1,
-      starter: 1,
-      pro: 10,
-      enterprise: 9999,
-      elite: 9999,
-      elite_plus: 9999,
-    };
-
-    const maxTrackers = Number(
-      planLimits?.max_trackers ?? fallbackMaxTrackersByPlan[planCode] ?? 0
-    );
+    const maxTrackers = validEntitlementRow.max_trackers;
+    if (!Number.isInteger(maxTrackers) || maxTrackers < 0) {
+      return res.status(403).json({
+        ok: false,
+        error: "plan_unavailable",
+        message: "No se pudo validar el plan de la organización.",
+      });
+    }
 
     // ===============================
-    // CONTAR TRACKERS ACTIVOS
+    // CONTAR TRACKERS ACTIVOS EN LA ORG
     // ===============================
     const { count: trackerCount, error: countError } = await supabase
-      .from("tracker_memberships")
+      .from("memberships")
       .select("*", { count: "exact", head: true })
       .eq("org_id", org_id)
-      .eq("status", "active");
+      .eq("role", "tracker")
+      .is("revoked_at", null);
 
     if (countError) {
       throw countError;
+    }
+
+    if (trackerCount === null || !Number.isInteger(trackerCount) || trackerCount < 0) {
+      throw new Error("El conteo de trackers no es un entero no negativo.");
     }
 
     if (trackerCount >= maxTrackers) {
