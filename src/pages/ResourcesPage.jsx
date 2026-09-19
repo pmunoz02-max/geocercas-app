@@ -9,6 +9,8 @@ const LOCAL_COPY = {
     subtitle:
       "Descarga materiales listos para usar y acelera onboarding, capacitación y operación diaria.",
     downloadLabel: "Descargar",
+    viewPdf: "Ver PDF",
+    pdfDetails: "Español · 4 páginas · Septiembre 2026",
     watchLabel: "Ver video",
     comingSoon: "Próximamente",
     openGuide: "Abrir guía",
@@ -52,6 +54,8 @@ const LOCAL_COPY = {
     subtitle:
       "Download ready-to-use materials to speed up onboarding, training, and daily operations.",
     downloadLabel: "Download",
+    viewPdf: "View PDF",
+    pdfDetails: "English · 4 pages · September 2026",
     watchLabel: "Watch video",
     comingSoon: "Coming soon",
     openGuide: "Open guide",
@@ -95,6 +99,8 @@ const LOCAL_COPY = {
     subtitle:
       "Téléchargez des supports prêts à l'emploi pour accélérer l'onboarding, la formation et l'opération.",
     downloadLabel: "Télécharger",
+    viewPdf: "Voir le PDF",
+    pdfDetails: "Français · 4 pages · Septembre 2026",
     watchLabel: "Voir la vidéo",
     comingSoon: "Bientôt disponible",
     openGuide: "Ouvrir le guide",
@@ -152,8 +158,8 @@ export default function ResourcesPage() {
       {
         key: "pdf",
         format: "PDF",
-        available: false,
-        href: "",
+        available: true,
+        href: `/resources/geofield-gps-manual-${lang}.pdf`,
       },
       {
         key: "pptx",
@@ -186,7 +192,7 @@ export default function ResourcesPage() {
         href: "/help/reports",
       },
     ],
-    []
+    [lang]
   );
 
   return (
@@ -241,7 +247,23 @@ export default function ResourcesPage() {
                     {description}
                   </p>
 
-                  {card.available ? (
+                  {card.key === "pdf" ? (
+                    <div className="mt-5">
+                      <p className="mb-3 text-xs text-slate-500 dark:text-slate-300">{copy.pdfDetails}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <a href={card.href} target="_blank" rel="noopener noreferrer"
+                          aria-label={`${copy.viewPdf}: ${title}`}
+                          className="inline-flex items-center justify-center rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300">
+                          {copy.viewPdf}
+                        </a>
+                        <a href={card.href} download={`geofield-gps-manual-${lang}.pdf`}
+                          aria-label={`${copy.downloadLabel}: ${title}`}
+                          className="inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+                          {copy.downloadLabel}
+                        </a>
+                      </div>
+                    </div>
+                  ) : card.available ? (
                     <Link
                       to={card.href || "/"}
                       className="mt-5 inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 dark:border-emerald-400 dark:bg-emerald-500 dark:hover:bg-emerald-400"
