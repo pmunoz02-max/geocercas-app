@@ -128,6 +128,7 @@ describe('InvitarTracker gate rendering and tracker cap', () => {
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it.each([
@@ -228,6 +229,7 @@ describe('InvitarTracker gate rendering and tracker cap', () => {
     expect(screen.queryByRole('button', { name: /Enviar invitación/i })).not.toBeInTheDocument();
 
     cleanup();
+    vi.unstubAllGlobals();
     unmount();
   });
 
@@ -275,6 +277,7 @@ describe('InvitarTracker gate rendering and tracker cap', () => {
     expect(screen.queryByRole('button', { name: /Enviar invitación/i })).not.toBeInTheDocument();
 
     cleanup();
+    vi.unstubAllGlobals();
     unmount();
   });
 
@@ -354,5 +357,28 @@ describe('InvitarTracker gate rendering and tracker cap', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
     unmount();
+  });
+  it('sends once for repeated submissions and permits retry after failure', async () => {
+    mockUseOrgEntitlements.mockReturnValue({ entitlements: {max_trackers:2,plan_code:'free',plan_status:'free'},loading:false,error:null,canInviteTrackers:true });
+    configureSupabase({trackerCount:0,people:[{id:'person-1',org_id:'org-123',nombre:'Ana',email:'ana@example.com',user_id:'user-1'}],assignments:[{id:'assignment-1',org_id:'org-123',personal_id:'person-1',user_id:'user-1',status:'active',estado:'activa',is_deleted:false}]});
+    const pending = createDeferred();
+    const fetchMock = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue({ok:true,json:async()=>({invite_url:'https://example.invalid/invite'})});
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MemoryRouter><InvitarTracker /></MemoryRouter>);
+    fireEvent.change(await screen.findByRole('combobox'), {target:{value:'person-1'}});
+    const button = await screen.findByRole('button',{name:/Enviar invitación/i});
+    await waitFor(()=>expect(button).not.toBeDisabled());
+    const form=button.closest('form');
+    fireEvent.submit(form);
+    fireEvent.submit(form);
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(1));
+    pending.resolve({ok:false,json:async()=>({error:'temporary_failure'})});
+    await waitFor(()=>expect(button).not.toBeDisabled());
+    fireEvent.submit(form);
+    await waitFor(()=>expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(()=>expect(button).toHaveTextContent('Invitación creada correctamente.'));
+    expect(button).toBeDisabled();
+    fireEvent.submit(form);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

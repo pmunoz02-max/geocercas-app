@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabaseClient";
@@ -51,6 +51,9 @@ export default function InvitarTracker() {
     canInviteTrackers,
   } = useOrgEntitlements();
 
+  const inviteInFlight = useRef(false);
+  const sentRecipients = useRef(new Set());
+  const [sentRecipient, setSentRecipient] = useState(null);
   const [busy, setBusy] = useState(false);
   const [loadingPeople, setLoadingPeople] = useState(true);
   const [people, setPeople] = useState([]);
@@ -562,8 +565,12 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
     }
   }
 
+  const recipientKey = JSON.stringify([orgId, normalizeEmail(emailInput)]);
+
   async function onSendInvite(event) {
     event?.preventDefault?.();
+    if (inviteInFlight.current || sentRecipients.current.has(recipientKey)) return;
+    inviteInFlight.current = true;
 
     setBusy(true);
     setOkMsg(null);
@@ -715,6 +722,8 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
 
       const inviteUrl = String(result?.invite_url || result?.inviteUrl || result?.url || "");
 
+      sentRecipients.current.add(recipientKey);
+      setSentRecipient(recipientKey);
       setInviteLink(inviteUrl);
       setInviteMeta({
         invite_id: result?.invite_id || result?.inviteId || "",
@@ -731,11 +740,13 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
       console.error("[invite-tracker] send invite error", error);
       setErrMsg(String(error?.message || error));
     } finally {
+      inviteInFlight.current = false;
       setBusy(false);
     }
   }
 
   const isSubmitDisabled =
+    sentRecipients.current.has(recipientKey) ||
     busy ||
     loadingPeople ||
     loadingTrackerCount ||
@@ -1197,7 +1208,7 @@ Cuando ya hayas ingresado, me avisas y te envío la invitación para entrar como
           >
             {busy
               ? t("common.sending", { defaultValue: "Enviando..." })
-              : t("inviteTracker.sendInvite", { defaultValue: "Enviar invitación" })}
+              : sentRecipient === recipientKey ? t("inviteTracker.success.inviteCreated", { defaultValue: "Invitación creada correctamente." }) : t("inviteTracker.sendInvite", { defaultValue: "Enviar invitación" })}
           </button>
         </form>
       </div>
