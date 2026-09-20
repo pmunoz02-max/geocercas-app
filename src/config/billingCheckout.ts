@@ -1,7 +1,7 @@
 import { PRICING, type PlanCode } from "./pricing";
 import { getPaddleEnv } from "./paddleEnv";
 
-export type CheckoutPlanCode = Extract<PlanCode, "pro" | "enterprise">;
+export type CheckoutPlanCode = Exclude<PlanCode, "free">;
 
 export type CheckoutProvider = "paddle" | "dodo" | "external_checkout" | "disabled";
 
@@ -11,6 +11,7 @@ function cleanCheckoutUrl(value: unknown, fallback: string): string {
 }
 
 const CHECKOUT_URLS: Record<CheckoutPlanCode, string> = {
+  enterprise_100: cleanCheckoutUrl(import.meta.env.VITE_CHECKOUT_ENTERPRISE_100_URL, ""),
   pro: cleanCheckoutUrl(
     import.meta.env.VITE_CHECKOUT_PRO_URL,
     "https://test.checkout.dodopayments.com/buy/pdt_0NhoMPN43aLOXnHSZhrTk?quantity=1",
@@ -40,6 +41,7 @@ export function getCheckoutUrl(plan: CheckoutPlanCode): string {
 }
 
 export function isCheckoutConfigured(plan: CheckoutPlanCode): boolean {
+  if (plan === "enterprise_100" && import.meta.env.VITE_ENTERPRISE_100_CHECKOUT_ENABLED !== "true") return false;
   if (BILLING_CHECKOUT_PROVIDER === "paddle" || BILLING_CHECKOUT_PROVIDER === "dodo") {
     return true;
   }

@@ -1,19 +1,16 @@
+import { useTranslation } from "react-i18next";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "@/lib/supabaseClient.js";
 import { getCheckoutSafetyLabel } from "@/config/billingCheckout";
-import { PRICING, formatPlanPrice } from "@/config/pricing";
+import { PRICING, PLAN_RANK, formatPlanPrice } from "@/config/pricing";
 
-const PLAN_RANK = {
-  free: 0,
-  pro: 1,
-  enterprise: 2,
-};
 
 function normalizePlanCode(value) {
   const code = String(value || "free").toLowerCase().trim();
+  if (code === "enterprise_100") return "enterprise_100";
   if (code === "enterprise") return "enterprise";
   if (code === "pro") return "pro";
   return "free";
@@ -61,8 +58,8 @@ function PlanAction({
   currentPeriodEnd,
   highlighted,
 }) {
-  const buttonLabel = plan === "enterprise" ? "Suscribirse a Enterprise" : "Suscribirse a PRO";
-  const currentPlanLabel = currentPlanCode === "enterprise" ? "Enterprise" : currentPlanCode === "pro" ? "PRO" : "Free";
+  const buttonLabel = `Suscribirse a ${PRICING[plan].label}`;
+  const currentPlanLabel = PRICING[currentPlanCode]?.label || "Free";
   const billingButtonClass = highlighted
     ? "mt-3 inline-flex w-full items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-100"
     : "mt-3 inline-flex w-full items-center justify-center rounded-xl border border-emerald-300 bg-white px-6 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-50";
@@ -136,7 +133,8 @@ function PlanCard({
   currentOrgId,
   currentPeriodEnd,
 }) {
-  const price = formatPlanPrice(plan);
+  const { t, i18n } = useTranslation();
+  const price = formatPlanPrice(plan, i18n.language);
   const isCurrentPlan = hasActivePaidPlan && currentPlanCode === plan;
 
   return (
@@ -178,7 +176,7 @@ function PlanCard({
         {features.map((feature) => (
           <li key={feature} className={`flex gap-3 text-sm ${highlighted ? "text-emerald-50" : "text-emerald-800"}`}>
             <span aria-hidden="true" className={highlighted ? "text-emerald-200" : "text-emerald-700"}>✓</span>
-            <span>{feature}</span>
+            <span>{plan === "enterprise_100" && feature === "Hasta 100 trackers y 250 geocercas" ? t("plans100.limits") : feature}</span>
           </li>
         ))}
       </ul>
@@ -199,6 +197,7 @@ function PlanCard({
 }
 
 export default function PublicPricing() {
+  const { t } = useTranslation();
   const { authenticated, currentOrgId } = useAuth();
   const [billing, setBilling] = useState(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -246,7 +245,7 @@ export default function PublicPricing() {
 
   const currentPlanStatus = normalizePlanStatus(billing?.plan_status);
   const hasActivePaidPlan = isActivePaidStatus(currentPlanStatus) && currentPlanCode !== "free";
-  const currentPlanLabel = currentPlanCode === "enterprise" ? "Enterprise" : currentPlanCode === "pro" ? "PRO" : "Free";
+  const currentPlanLabel = PRICING[currentPlanCode]?.label || "Free";
   const currentPeriodEnd = billing?.current_period_end || null;
 
   return (
@@ -284,7 +283,7 @@ export default function PublicPricing() {
           </div>
         </div>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-2">
+        <div className="mt-10 grid gap-6 lg:grid-cols-3">
           <PlanCard
             plan="pro"
             title="Geocercas GPS PRO"
@@ -322,6 +321,18 @@ export default function PublicPricing() {
               "Reportes y seguimiento para administración",
               "Base preparada para soporte comercial y acuerdos especiales",
             ]}
+          />
+          <PlanCard
+            plan="enterprise_100"
+            title="ENTERPRISE 100"
+            subtitle={t("plans100.description")}
+            description={t("plans100.limits")}
+            currentPlanCode={currentPlanCode}
+            hasActivePaidPlan={hasActivePaidPlan}
+            authenticated={authenticated}
+            currentOrgId={currentOrgId}
+            currentPeriodEnd={currentPeriodEnd}
+            features={[t("plans100.limits")]}
           />
         </div>
 

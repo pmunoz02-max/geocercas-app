@@ -1,3 +1,4 @@
+import { getAdminClient } from "../_shared/supabaseAdmin.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { HttpError, requireOrgAdmin } from "../_shared/authz.ts";
 
@@ -37,6 +38,8 @@ function getPaddlePriceId(plan: unknown) {
       env === "live"
         ? Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE")
         : Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX");
+  } else if (normalizedPlan === "enterprise_100") {
+    priceId = env === "live" ? Deno.env.get("PADDLE_ENTERPRISE_100_PRICE_ID_LIVE") : Deno.env.get("PADDLE_ENTERPRISE_100_PRICE_ID_SANDBOX");
   } else if (normalizedPlan === "enterprise") {
     priceId =
       env === "live"
@@ -110,6 +113,15 @@ serve(async (req) => {
     }
 
     await requireOrgAdmin(req, String(orgId));
+    const { data: billing, error: billingError } = await getAdminClient()
+      .from("org_billing").select("plan_status, subscribed_plan_code, plan_code, billing_provider")
+      .eq("org_id", String(orgId)).maybeSingle();
+    if (billingError) return json(503, { ok: false, error: "billing_lookup_failed" });
+    const billingStatus = String(billing?.plan_status || "").toLowerCase();
+    const existingPlan = String(billing?.subscribed_plan_code || billing?.plan_code || "free").toLowerCase();
+    if (["active", "trialing", "past_due", "paused"].includes(billingStatus) && existingPlan !== "free") {
+      return json(409, { ok: false, error: "existing_subscription_requires_plan_change" });
+    }
 
     console.log("[paddle-create-checkout] BODY:", body);
     console.log("[paddle-create-checkout] ORG ID:", orgId);
@@ -143,7 +155,7 @@ serve(async (req) => {
           ok: false,
           error: "unsupported_plan",
           plan,
-          allowed: ["pro", "enterprise"],
+          allowed: ["pro", "enterprise", "enterprise_100"],
         });
       }
       throw error;
@@ -224,24 +236,39 @@ serve(async (req) => {
 
 
     if (!paddleResponse.ok) {
-      // If Paddle returns a controlled 4xx error, forward the status and a clean message
-      if (paddleResponse.status >= 400 && paddleResponse.status < 500) {
-        let cleanMsg = "Paddle request failed";
-        if (paddleJson?.error?.message) {
-          cleanMsg = paddleJson.error.message;
-        } else if (paddleJson?.error) {
-          cleanMsg = typeof paddleJson.error === "string" ? paddleJson.error : JSON.stringify(paddleJson.error);
-        }
-        return json(paddleResponse.status, {
-          error: "paddle_request_failed",
-          message: cleanMsg,
-          status: paddleResponse.status,
-        });
-      }
-      // For other errors, keep as 500
-      return json(500, {
-        error: "paddle_request_failed",
+      const paddleError = paddleJson?.error;
+      const paddleCode =
+        typeof paddleError?.code === "string" ? paddleError.code : null;
+      const paddleDetail =
+        typeof paddleError?.detail === "string"
+          ? paddleError.detail
+          : typeof paddleError?.message === "string"
+            ? paddleError.message
+            : "Paddle request failed";
+      const paddleRequestId =
+        typeof paddleJson?.meta?.request_id === "string"
+          ? paddleJson.meta.request_id
+          : null;
+
+      console.error("[paddle-create-checkout] Paddle request failed", {
         status: paddleResponse.status,
+        code: paddleCode,
+        detail: paddleDetail,
+        requestId: paddleRequestId,
+      });
+
+      const responseStatus =
+        paddleResponse.status >= 400 && paddleResponse.status < 500
+          ? paddleResponse.status
+          : 500;
+
+      return json(responseStatus, {
+        error: "paddle_request_failed",
+        message: paddleDetail,
+        status: paddleResponse.status,
+        code: paddleCode,
+        detail: paddleDetail,
+        request_id: paddleRequestId,
       });
     }
 

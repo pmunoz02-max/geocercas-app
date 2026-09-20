@@ -14,6 +14,15 @@ export const PRICING = {
     label: "Enterprise",
     monthlyUsd: 99,
   },
+  enterprise_100: { code: "enterprise_100", label: "ENTERPRISE 100", monthlyUsd: 169 },
+} as const;
+
+export const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, enterprise: 2, enterprise_100: 3 };
+export const PLAN_LIMITS = {
+  free: { max_geocercas: 1, max_trackers: 2 },
+  pro: { max_geocercas: 25, max_trackers: 10 },
+  enterprise: { max_geocercas: 250, max_trackers: 50 },
+  enterprise_100: { max_geocercas: 250, max_trackers: 100 },
 } as const;
 
 export type PlanCode = keyof typeof PRICING;

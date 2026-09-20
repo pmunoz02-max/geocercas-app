@@ -3,7 +3,7 @@ import { HttpError, requireOrgAdmin } from "../_shared/authz.ts";
 import { getAdminClient } from "../_shared/supabaseAdmin.ts";
 
 type BillingProvider = "stripe" | "paddle" | "dodo";
-type PlanCode = "pro" | "enterprise";
+type PlanCode = "pro" | "enterprise" | "enterprise_100";
 type PlanStatus = "active" | "trialing" | "past_due" | "inactive" | "canceled";
 
 type OrgBillingRow = {
@@ -214,13 +214,15 @@ function getPaddlePriceIds(env: "sandbox" | "live") {
   const enterprise = env === "live"
     ? Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_LIVE")
     : Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_SANDBOX");
-  return { pro: pro ?? null, enterprise: enterprise ?? null };
+  const enterprise100 = Deno.env.get(env === "live" ? "PADDLE_ENTERPRISE_100_PRICE_ID_LIVE" : "PADDLE_ENTERPRISE_100_PRICE_ID_SANDBOX");
+  return { pro: pro ?? null, enterprise: enterprise ?? null, enterprise_100: enterprise100 ?? null };
 }
 
 function toPlanCodeByPaddlePrice(priceId: string | null): PlanCode | null {
   if (!priceId) return null;
   const env = getPaddleEnv();
   const ids = getPaddlePriceIds(env);
+  if (ids.enterprise_100 && priceId === ids.enterprise_100) return "enterprise_100";
   if (ids.pro && priceId === ids.pro) return "pro";
   if (ids.enterprise && priceId === ids.enterprise) return "enterprise";
   return null;
@@ -240,6 +242,7 @@ function getDodoEnvValue(baseName: string, env: "test" | "live", fallback?: stri
 
 function dodoProductIdForPlan(plan: PlanCode): string {
   const env = getDodoEnv();
+  if (plan === "enterprise_100") return getDodoEnvValue("DODO_PRODUCT_ID_ENTERPRISE_100", env);
   return plan === "pro"
     ? getDodoEnvValue("DODO_PRODUCT_ID_PRO", env)
     : getDodoEnvValue("DODO_PRODUCT_ID_ENTERPRISE", env);
@@ -250,6 +253,8 @@ function toPlanCodeByDodoProduct(productId: string | null): PlanCode | null {
   const env = getDodoEnv();
   const pro = getDodoEnvValue("DODO_PRODUCT_ID_PRO", env);
   const enterprise = getDodoEnvValue("DODO_PRODUCT_ID_ENTERPRISE", env);
+  const enterprise100 = Deno.env.get(`DODO_PRODUCT_ID_ENTERPRISE_100_${env === "live" ? "LIVE" : "TEST"}`);
+  if (enterprise100 && productId === enterprise100) return "enterprise_100";
   if (productId === pro) return "pro";
   if (productId === enterprise) return "enterprise";
   return null;
@@ -354,12 +359,13 @@ function isServerToServerRequest(req: Request): boolean {
 function normalizePlanCode(value: unknown): PlanCode | null {
   const v = cleanLower(value);
   if (v === "pro") return "pro";
+  if (v === "enterprise_100") return "enterprise_100";
   if (v === "enterprise") return "enterprise";
   return null;
 }
 
 function planRank(value: PlanCode): number {
-  return value === "enterprise" ? 2 : 1;
+  return value === "enterprise_100" ? 3 : value === "enterprise" ? 2 : 1;
 }
 
 function providerSubscriptionIdFromRow(row: OrgBillingRow, provider: BillingProvider): string | null {

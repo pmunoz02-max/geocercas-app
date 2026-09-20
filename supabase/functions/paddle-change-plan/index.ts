@@ -48,11 +48,11 @@ function normalizePaddleEnv(): "sandbox" | "live" {
   return value;
 }
 
-function getEnterprisePriceId(paddleEnv: "sandbox" | "live"): string {
+function getEnterprisePriceId(paddleEnv: "sandbox" | "live", plan: string): string {
   return requireEnv(
     paddleEnv === "live"
-      ? "PADDLE_ENTERPRISE_PRICE_ID_LIVE"
-      : "PADDLE_ENTERPRISE_PRICE_ID_SANDBOX",
+      ? `PADDLE_${plan.toUpperCase()}_PRICE_ID_LIVE`
+      : `PADDLE_${plan.toUpperCase()}_PRICE_ID_SANDBOX`,
   );
 }
 
@@ -101,10 +101,10 @@ serve(async (req) => {
       return jsonResponse(400, { error: "org_id_required" });
     }
 
-    if (targetPlan !== "enterprise") {
+    if (!["enterprise", "enterprise_100"].includes(targetPlan)) {
       return jsonResponse(400, {
         error: "unsupported_target_plan",
-        allowed: ["enterprise"],
+        allowed: ["enterprise", "enterprise_100"],
       });
     }
 
@@ -152,7 +152,7 @@ serve(async (req) => {
     const scheduledAction = cleanString(billingRow.scheduled_change_action);
 
     if (
-      currentPlan === "enterprise" &&
+      currentPlan === targetPlan &&
       ACTIVE_PLAN_STATUSES.has(planStatus) &&
       billingProvider === "paddle"
     ) {
@@ -160,7 +160,7 @@ serve(async (req) => {
         success: true,
         already_active: true,
         org_id: orgId,
-        plan_code: "enterprise",
+        plan_code: targetPlan,
         plan_status: planStatus,
       });
     }
@@ -175,7 +175,7 @@ serve(async (req) => {
     }
 
     if (
-      currentPlan !== "pro" ||
+      !(["pro", "enterprise"].includes(currentPlan) && (currentPlan === "pro" || targetPlan === "enterprise_100")) ||
       !ACTIVE_PLAN_STATUSES.has(planStatus) ||
       !subscriptionId
     ) {
@@ -201,7 +201,7 @@ serve(async (req) => {
 
     const paddleEnv = normalizePaddleEnv();
     const paddleApiKey = getPaddleApiKey(paddleEnv);
-    const enterprisePriceId = getEnterprisePriceId(paddleEnv);
+    const enterprisePriceId = getEnterprisePriceId(paddleEnv, targetPlan);
     const paddleBaseUrl =
       paddleEnv === "live"
         ? "https://api.paddle.com"
@@ -211,7 +211,7 @@ serve(async (req) => {
       return jsonResponse(409, {
         error: "billing_webhook_sync_pending",
         plan_code: currentPlan,
-        target_plan: "enterprise",
+        target_plan: targetPlan,
       });
     }
 
@@ -220,7 +220,7 @@ serve(async (req) => {
       userId: user.id,
       paddleEnv,
       subscriptionId,
-      targetPlan: "enterprise",
+      targetPlan,
     });
 
     const paddleResponse = await fetch(
@@ -288,8 +288,8 @@ serve(async (req) => {
       success: true,
       pending_webhook: true,
       org_id: orgId,
-      previous_plan: "pro",
-      target_plan: "enterprise",
+      previous_plan: currentPlan,
+      target_plan: targetPlan,
       subscription_id: subscriptionId,
       paddle_env: paddleEnv,
     });

@@ -29,6 +29,7 @@ function pickPersonalLabel(row) {
 function normalizePlanLabel(planCode) {
   const value = String(planCode || "").trim().toLowerCase();
   if (value === "pro") return "PRO";
+  if (value === "enterprise_100") return "ENTERPRISE 100";
   if (value === "enterprise") return "ENTERPRISE";
   if (value === "elite_plus") return "ELITE PLUS";
   if (value === "elite") return "ELITE";

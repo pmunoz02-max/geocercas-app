@@ -288,6 +288,7 @@ export default function Landing() {
       price: formatPlanPrice("enterprise", currentLang),
       detail: tr("landing.planEnterpriseDetail"),
     },
+    { name: "ENTERPRISE 100", description: t("plans100.description"), price: formatPlanPrice("enterprise_100", currentLang), detail: t("plans100.limits") },
   ];
 
   const features = [
@@ -497,7 +498,7 @@ export default function Landing() {
             <p className="mt-4 text-base text-slate-300">{tr("landing.pricingSubtitle")}</p>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             {plans.map((plan) => (
               <article
                 key={plan.name}

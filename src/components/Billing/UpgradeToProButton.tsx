@@ -1,3 +1,4 @@
+import { PRICING, PLAN_RANK } from "@/config/pricing";
 import React, { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -56,17 +57,17 @@ function buildLoginUrl(language: string | undefined): string {
   return `/login?${params.toString()}`;
 }
 
-function buildBillingUrl(language: string | undefined): string {
+function buildBillingUrl(language: string | undefined, plan: string): string {
   const params = new URLSearchParams();
   params.set("lang", language || "es");
-  params.set("upgrade", "enterprise");
+  params.set("upgrade", plan);
   params.set("billing_refresh", String(Date.now()));
   params.set("source", "paddle_change_plan");
   return `/billing?${params.toString()}`;
 }
 
-function forceBillingReload(language: string | undefined): void {
-  const url = buildBillingUrl(language);
+function forceBillingReload(language: string | undefined, plan: string): void {
+  const url = buildBillingUrl(language, plan);
 
   // Use a hard navigation instead of React-only routing so Billing reloads
   // org_billing after Paddle emits the subscription update webhook.
@@ -122,17 +123,17 @@ async function readBillingSnapshot(orgId: string): Promise<BillingSnapshot | nul
   }
 }
 
-async function hasEnterpriseActiveBilling(orgId: string): Promise<boolean> {
+async function hasEnterpriseActiveBilling(orgId: string, plan: string): Promise<boolean> {
   const snapshot = await readBillingSnapshot(orgId);
 
   if (!snapshot) return false;
 
-  return snapshot.planCode === "enterprise" && isActivePaidStatus(snapshot.planStatus);
+  return snapshot.planCode === plan && isActivePaidStatus(snapshot.planStatus);
 }
 
-async function waitForEnterpriseActiveBilling(orgId: string, attempts = 10): Promise<boolean> {
+async function waitForEnterpriseActiveBilling(orgId: string, plan: string, attempts = 10): Promise<boolean> {
   for (let i = 0; i < attempts; i += 1) {
-    if (await hasEnterpriseActiveBilling(orgId)) return true;
+    if (await hasEnterpriseActiveBilling(orgId, plan)) return true;
     await delay(i < 3 ? 800 : 1200);
   }
 
@@ -171,7 +172,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
   const buttonLabel =
     label ||
-    (checkoutPlan === "enterprise"
+    (checkoutPlan === "enterprise_100" ? t("plans100.subscribe") : checkoutPlan === "enterprise"
       ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
       : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" }));
 
@@ -179,15 +180,15 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
     "inline-flex w-full items-center justify-center rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
 
   async function redirectToBillingAfterUpgrade() {
-    forceBillingReload(i18n?.language);
+    forceBillingReload(i18n?.language, checkoutPlan);
   }
 
   async function finishEnterpriseChangePlan() {
     if (effectiveOrgId) {
-      await waitForEnterpriseActiveBilling(effectiveOrgId, 14);
+      await waitForEnterpriseActiveBilling(effectiveOrgId, checkoutPlan, 14);
     }
 
-    forceBillingReload(i18n?.language);
+    forceBillingReload(i18n?.language, checkoutPlan);
   }
 
   async function runCheckout({ confirmedPlanChange = false }: { confirmedPlanChange?: boolean } = {}) {
@@ -227,9 +228,9 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       const billingSnapshot = await readBillingSnapshot(effectiveOrgId);
 
-      if (isActiveEnterpriseBilling(billingSnapshot)) {
+      if (billingSnapshot && isActivePaidStatus(billingSnapshot.planStatus) && (PLAN_RANK[billingSnapshot.planCode] || 0) >= PLAN_RANK[checkoutPlan]) {
         throw new Error(
-          t("billing.checkout.enterpriseAlreadyActive", {
+          t("plans100.alreadyActive", {
             defaultValue: "This organization already has an active Enterprise plan.",
           }),
         );
@@ -243,8 +244,8 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
         );
       }
 
-      if (checkoutPlan === "enterprise" && isActiveProBilling(billingSnapshot)) {
-        if (billingSnapshot?.billingProvider !== "paddle") {
+      if (billingSnapshot && isActivePaidStatus(billingSnapshot.planStatus) && (PLAN_RANK[billingSnapshot.planCode] || 0) > 0 && PLAN_RANK[checkoutPlan] > PLAN_RANK[billingSnapshot.planCode]) {
+        if (!["paddle", "dodo"].includes(billingSnapshot?.billingProvider || "") || billingSnapshot?.billingProvider !== BILLING_CHECKOUT_PROVIDER) {
           throw new Error(
             t("billing.checkout.otherProviderManaged", {
               defaultValue:
@@ -271,9 +272,8 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       }
 
       const isPaddlePlanChange =
-        checkoutPlan === "enterprise" &&
         confirmedPlanChange &&
-        isActiveProBilling(billingSnapshot) &&
+        Boolean(billingSnapshot && PLAN_RANK[checkoutPlan] > PLAN_RANK[billingSnapshot.planCode]) &&
         billingSnapshot?.billingProvider === "paddle";
 
       const usePaddleCheckout = BILLING_CHECKOUT_PROVIDER === "paddle";
@@ -296,7 +296,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       const functionBody = useDodoCheckout
         ? { org_id: effectiveOrgId, plan: checkoutPlan, lang: i18n?.language || "es" }
         : isPaddlePlanChange && usePaddleCheckout
-          ? { org_id: effectiveOrgId, plan_code: "enterprise" }
+          ? { org_id: effectiveOrgId, plan_code: checkoutPlan }
           : { org_id: effectiveOrgId, plan: checkoutPlan, lang: i18n?.language || "es" };
 
       const { data, error } = await supabase.functions.invoke(functionName, {
@@ -310,7 +310,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
       const checkoutUrl = cleanId(response?.checkout_url);
 
       if (error) {
-        if (isPaddlePlanChange && (await waitForEnterpriseActiveBilling(effectiveOrgId))) {
+        if (isPaddlePlanChange && (await waitForEnterpriseActiveBilling(effectiveOrgId, checkoutPlan))) {
           await redirectToBillingAfterUpgrade();
           return;
         }
@@ -331,6 +331,11 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
               defaultValue: "Could not open secure checkout. Please try again.",
             }),
         );
+      }
+
+      if (useDodoCheckout && response?.ok && (response as any).change_plan_completed) {
+        window.location.assign((response as any).redirect_url);
+        return;
       }
 
       if (!response?.ok || !checkoutUrl) {
@@ -391,6 +396,8 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
           : buttonLabel}
       </button>
 
+      {!configured ? <p className="mt-2 text-xs text-slate-500">{t("billing.checkout.notConfigured", { defaultValue: "Secure checkout is not configured yet. Please contact support." })}</p> : null}
+
       {BILLING_CHECKOUT_MODE === "test" ? (
         <p className="mt-2 text-xs text-slate-500">
           {getCheckoutSafetyLabel()}:{" "}
@@ -417,13 +424,13 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
             </div>
 
             <h2 id="enterprise-upgrade-confirm-title" className="mt-4 text-xl font-bold text-slate-950">
-              {t("billing.checkout.confirmEnterpriseTitle", {
+              {t("plans100.confirmTitle", { plan: PRICING[checkoutPlan].label,
                 defaultValue: "Confirm change to Enterprise",
               })}
             </h2>
 
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              {t("billing.checkout.confirmEnterpriseBody", {
+              {t("plans100.confirmBody", { plan: PRICING[checkoutPlan].label,
                 defaultValue:
                   "Your organization will change from PRO to Enterprise. Paddle will use the payment method associated with your current subscription. No second subscription will be created.",
               })}
@@ -434,13 +441,13 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
                 <span className="font-semibold">
                   {t("billing.checkout.confirmEnterprisePlanLabel", { defaultValue: "New plan" })}
                 </span>
-                <span className="font-bold text-slate-950">Enterprise</span>
+                <span className="font-bold text-slate-950">{PRICING[checkoutPlan].label}</span>
               </div>
               <div className="mt-3 flex items-center justify-between gap-4">
                 <span className="font-semibold">
                   {t("billing.checkout.confirmEnterprisePriceLabel", { defaultValue: "Price" })}
                 </span>
-                <span className="font-bold text-slate-950">USD 99 / month</span>
+                <span className="font-bold text-slate-950">USD {PRICING[checkoutPlan].monthlyUsd} / month</span>
               </div>
             </div>
 

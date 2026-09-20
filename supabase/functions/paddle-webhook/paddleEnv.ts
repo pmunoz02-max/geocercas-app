@@ -12,6 +12,8 @@ export function getPaddlePriceId(plan) {
       return env === "live"
         ? Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE")
         : Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX");
+    } else if (plan === "enterprise_100") {
+      return env === "live" ? Deno.env.get("PADDLE_ENTERPRISE_100_PRICE_ID_LIVE") : Deno.env.get("PADDLE_ENTERPRISE_100_PRICE_ID_SANDBOX");
     } else if (plan === "enterprise") {
       return env === "live"
         ? Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_LIVE")

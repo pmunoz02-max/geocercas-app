@@ -2907,5 +2907,15 @@
       "title": "Benchmarking opérationnel",
       "exportedAt": "Date d’exportation"
     }
+  },
+  "plans100": {
+    "subscribe": "Souscrire à ENTERPRISE 100",
+    "upgrade": "Passer à ENTERPRISE 100",
+    "maximum": "Votre organisation dispose déjà du forfait maximal (ENTERPRISE 100).",
+    "description": "Pour les opérations avec jusqu’à 100 trackers.",
+    "limits": "Jusqu’à 100 trackers et 250 géofences",
+    "confirmTitle": "Confirmer le passage à {{plan}}",
+    "confirmBody": "Votre abonnement actuel passera à {{plan}}. Le fournisseur appliquera le prorata avec votre moyen de paiement existant. Aucun second abonnement ne sera créé.",
+    "alreadyActive": "Votre organisation dispose déjà de ce forfait ou d’un forfait supérieur."
   }
 }

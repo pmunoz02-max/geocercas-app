@@ -48,6 +48,20 @@ describe('useOrgEntitlements permission gate', () => {
     });
   });
 
+  it('ENTERPRISE 100 retains catalog limits and preserves zero overrides', async () => {
+    for (const override of [null, 0, 75]) {
+      mockEntitlementsResponse({ billingRow: { org_id: 'org-123', plan_code: 'enterprise_100', plan_status: 'active', tracker_limit_override: override } });
+      const { result, unmount } = renderHook(() => useOrgEntitlements());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.planCode).toBe('enterprise_100');
+      expect(result.current.maxTrackers).toBe(override ?? 100);
+      expect(result.current.maxGeocercas).toBe(250);
+      expect(result.current.isEnterprise).toBe(true);
+      expect(result.current.canInviteTrackers).toBe(override !== 0);
+      unmount();
+    }
+  });
+
   it('FREE allows 0 and 1 tracker and blocks 2', async () => {
     const cases = [
       { maxTrackers: 0, expected: false },

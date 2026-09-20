@@ -555,7 +555,7 @@ function PlanSection({ currentOrgId }) {
   ).toLowerCase();
 
   const planLabel =
-    currentPlan === "enterprise"
+    currentPlan === "enterprise_100" ? "ENTERPRISE 100" : currentPlan === "enterprise"
       ? t("dashboard.planEnterprise", { defaultValue: "Enterprise" })
       : currentPlan === "pro"
       ? t("dashboard.planPro", { defaultValue: "Pro" })
@@ -563,8 +563,8 @@ function PlanSection({ currentOrgId }) {
       ? t("dashboard.planStarter", { defaultValue: "Starter" })
       : t("dashboard.planFree", { defaultValue: "Free" });
 
-  const nextPlan = currentPlan === "pro" ? "enterprise" : "pro";
-  const canUpgrade = currentPlan !== "enterprise";
+  const nextPlan = currentPlan === "enterprise" ? "enterprise_100" : currentPlan === "pro" ? "enterprise" : "pro";
+  const canUpgrade = currentPlan !== "enterprise_100";
 
   if (entitlementsLoading) {
     return (
@@ -589,14 +589,14 @@ function PlanSection({ currentOrgId }) {
           plan={nextPlan}
           className="w-full rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-700"
           label={
-            nextPlan === "enterprise"
+            nextPlan === "enterprise_100" ? t("plans100.subscribe") : nextPlan === "enterprise"
               ? t("dashboard.subscribeEnterprise", { defaultValue: "Subscribe to Enterprise" })
               : t("dashboard.subscribePro", { defaultValue: "Subscribe to PRO" })
           }
         />
       ) : (
         <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
-          {t("dashboard.maxPlanEnterprise", {
+          {t("plans100.maximum", {
             defaultValue: "Your organization already has the maximum plan (Enterprise).",
           })}
         </div>

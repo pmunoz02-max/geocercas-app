@@ -9,7 +9,7 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
-type PlanCode = "pro" | "enterprise";
+type PlanCode = "pro" | "enterprise" | "enterprise_100";
 type CheckoutIntent = "new_subscription" | "upgrade_to_enterprise";
 
 type OrgBillingState = {
@@ -39,6 +39,7 @@ function getEnv(name: string, fallback?: string): string {
 function normalizePlan(input: unknown): PlanCode | null {
   const value = String(input ?? "").trim().toLowerCase();
   if (value === "pro") return "pro";
+  if (value === "enterprise_100") return "enterprise_100";
   if (value === "enterprise") return "enterprise";
   return null;
 }
@@ -92,6 +93,7 @@ function getDodoEnvValue(baseName: string, env: DodoEnvironment, fallback?: stri
 }
 
 function productIdForPlan(plan: PlanCode, env: DodoEnvironment): string {
+  if (plan === "enterprise_100") return getDodoEnvValue("DODO_PRODUCT_ID_ENTERPRISE_100", env);
   if (plan === "pro") return getDodoEnvValue("DODO_PRODUCT_ID_PRO", env);
   return getDodoEnvValue("DODO_PRODUCT_ID_ENTERPRISE", env);
 }
@@ -221,7 +223,7 @@ async function syncOrgBillingAfterDodoChangePlan(params: {
 function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) {
   const currentPlan = effectiveOrgPlan(billing);
   const currentStatus = normalizeText(billing?.plan_status || "free", "free");
-  const hasPaidAccess = activePaidStatus(currentStatus) && ["pro", "enterprise"].includes(currentPlan);
+  const hasPaidAccess = activePaidStatus(currentStatus) && ["pro", "enterprise", "enterprise_100"].includes(currentPlan);
 
   if (!hasPaidAccess) {
     return {
@@ -232,7 +234,7 @@ function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) 
     };
   }
 
-  if (currentPlan === "enterprise") {
+  if (({ free: 0, pro: 1, enterprise: 2, enterprise_100: 3 }[currentPlan] || 0) >= ({ pro: 1, enterprise: 2, enterprise_100: 3 }[plan])) {
     return {
       ok: false as const,
       status: 409,
@@ -254,7 +256,7 @@ function resolveCheckoutIntent(plan: PlanCode, billing: OrgBillingState | null) 
     };
   }
 
-  if (currentPlan === "pro" && plan === "enterprise") {
+  if (["pro", "enterprise"].includes(currentPlan) && ["enterprise", "enterprise_100"].includes(plan)) {
     return {
       ok: true as const,
       checkoutIntent: "upgrade_to_enterprise" as CheckoutIntent,
@@ -312,7 +314,7 @@ serve(async (req) => {
     }
 
     if (!plan) {
-      return json(400, { ok: false, error: "invalid_plan", allowed: ["pro", "enterprise"] });
+      return json(400, { ok: false, error: "invalid_plan", allowed: ["pro", "enterprise", "enterprise_100"] });
     }
 
     const { user, role } = await requireOrgAdmin(req, orgId);
@@ -328,7 +330,7 @@ serve(async (req) => {
         current_plan_status: checkoutAccess.currentStatus,
         requested_plan_code: plan,
         allowed_next_plan_codes:
-          checkoutAccess.currentPlan === "pro" ? ["enterprise"] : [],
+          checkoutAccess.currentPlan === "pro" ? ["enterprise", "enterprise_100"] : checkoutAccess.currentPlan === "enterprise" ? ["enterprise_100"] : [],
       });
     }
 
@@ -454,7 +456,7 @@ serve(async (req) => {
         plan,
       });
 
-      const redirectUrl = `${appBaseUrl}/billing?lang=${lang}&upgrade=enterprise&change_plan=completed&billing_refresh=${Date.now()}`;
+      const redirectUrl = `${appBaseUrl}/billing?lang=${lang}&upgrade=${plan}&change_plan=completed&billing_refresh=${Date.now()}`;
 
       return json(200, {
         ok: true,

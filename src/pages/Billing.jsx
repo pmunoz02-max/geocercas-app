@@ -180,6 +180,7 @@ function labelPlan(planCode, tr) {
     return "PRO";
   }
 
+  if (code === "enterprise_100") return "ENTERPRISE 100";
   if (code === "enterprise") {
     return "Enterprise";
   }
@@ -435,7 +436,7 @@ export default function Billing() {
     normalizedPlanStatusForUpgrade
   );
   const canUpgradeToEnterprise =
-    normalizedPlanCodeForUpgrade === "pro" && paidStatusForUpgrade;
+    ["pro", "enterprise"].includes(normalizedPlanCodeForUpgrade) && paidStatusForUpgrade;
 
   if (loading || !ready) return null;
 
@@ -524,7 +525,7 @@ export default function Billing() {
           const normalizedPlanCode = String(effectivePlanCode || "").toLowerCase();
           const normalizedPlanStatus = String(effectivePlanStatus || "").toLowerCase();
           const hasPaidPlanAccess =
-            ["pro", "enterprise"].includes(normalizedPlanCode) &&
+            ["pro", "enterprise", "enterprise_100"].includes(normalizedPlanCode) &&
             ["active", "trialing", "past_due", "paused"].includes(normalizedPlanStatus);
           const showUpgradeCta =
             !hasPaidPlanAccess && ["free", "trialing", "over_limit"].includes(ctaVariant);
@@ -554,9 +555,9 @@ export default function Billing() {
                   {canUpgradeToEnterprise ? (
                     <UpgradeToProButton
                       orgId={currentOrgId}
-                      plan="enterprise"
+                      plan={normalizedPlanCodeForUpgrade === "enterprise" ? "enterprise_100" : "enterprise"}
                       label={tr(
-                        "billing.actions.upgradeToEnterprise",
+                        normalizedPlanCodeForUpgrade === "enterprise" ? "plans100.upgrade" : "billing.actions.upgradeToEnterprise",
                         billingCopy("Subir a Enterprise", "Upgrade to Enterprise", "Passer à Enterprise")
                       )}
                       className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"
@@ -842,9 +843,9 @@ export default function Billing() {
               {canUpgradeToEnterprise ? (
                 <UpgradeToProButton
                   orgId={currentOrgId}
-                  plan="enterprise"
+                  plan={normalizedPlanCodeForUpgrade === "enterprise" ? "enterprise_100" : "enterprise"}
                   label={tr(
-                        "billing.actions.upgradeToEnterprise",
+                        normalizedPlanCodeForUpgrade === "enterprise" ? "plans100.upgrade" : "billing.actions.upgradeToEnterprise",
                         billingCopy("Subir a Enterprise", "Upgrade to Enterprise", "Passer à Enterprise")
                       )}
                   className="inline-flex items-center justify-center rounded-xl bg-emerald-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-900"

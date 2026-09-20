@@ -421,3 +421,8 @@ Frontend solo consulta estado interno
 No activar planes desde rutas públicas de retorno ni desde query params. La activación futura debe depender de eventos server-side verificados, idempotentes y mapeados a planes internos.
 
 Estado actualizado: acceso técnico por CLI recuperado. Preview usa `mujwsfhkocsuuahlrssn`; Producción usa `wpaixkvokdkudymgjoua`. El dashboard web sigue pendiente de membresía. No implementar SQL ni Edge Functions hasta completar auditoría real y recibir autorización explícita para modificar Preview.
+
+
+## ENTERPRISE 100 — Preview (2026-09-20)
+
+El catálogo oficial agrega `enterprise_100`: 250 geocercas, 100 trackers y USD 169/mes, compatible con Free, Pro y Enterprise. Fuente de límites: `public.plans`; fuente comercial: `org_billing.plan_code`. Implementación, auditoría, pruebas y estado de pagos: [ENTERPRISE 100](./2026-09-20-enterprise-100-preview.md). Solo Preview; no implica cambios en Producción.

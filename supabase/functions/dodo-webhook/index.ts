@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 type JsonObject = Record<string, unknown>;
-type PlanCode = "pro" | "enterprise";
+type PlanCode = "pro" | "enterprise" | "enterprise_100";
 
 type DodoExtractedEvent = {
   eventId: string;
@@ -82,6 +82,7 @@ function numberOrNull(value: unknown): number | null {
 function normalizePlan(value: unknown): PlanCode | null {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "pro") return "pro";
+  if (normalized === "enterprise_100") return "enterprise_100";
   if (normalized === "enterprise") return "enterprise";
   return null;
 }
@@ -108,12 +109,14 @@ function getOptionalDodoEnvVar(baseName: string): string | null {
 }
 
 function productIdForPlan(plan: PlanCode): string {
+  if (plan === "enterprise_100") return getDodoEnvVar("DODO_PRODUCT_ID_ENTERPRISE_100");
   if (plan === "pro") return getDodoEnvVar("DODO_PRODUCT_ID_PRO");
   return getDodoEnvVar("DODO_PRODUCT_ID_ENTERPRISE");
 }
 
 function planFromProductId(productId: string | null): PlanCode | null {
   if (!productId) return null;
+  if (productId === getOptionalDodoEnvVar("DODO_PRODUCT_ID_ENTERPRISE_100")) return "enterprise_100";
   if (productId === getOptionalDodoEnvVar("DODO_PRODUCT_ID_PRO")) return "pro";
   if (productId === getOptionalDodoEnvVar("DODO_PRODUCT_ID_ENTERPRISE")) return "enterprise";
   return null;

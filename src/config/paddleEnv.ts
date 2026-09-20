@@ -24,13 +24,15 @@ export function getPaddleApiKey() {
   return undefined;
 }
 
-export function getPaddlePriceId(plan: "pro" | "enterprise") {
+export function getPaddlePriceId(plan: "pro" | "enterprise" | "enterprise_100") {
   const env = getPaddleEnv();
   if (typeof Deno !== "undefined") {
     if (plan === "pro") {
       return env === "live"
         ? Deno.env.get("PADDLE_PRO_PRICE_ID_LIVE")
         : Deno.env.get("PADDLE_PRO_PRICE_ID_SANDBOX");
+    } else if (plan === "enterprise_100") {
+      return env === "live" ? Deno.env.get("PADDLE_ENTERPRISE_100_PRICE_ID_LIVE") : Deno.env.get("PADDLE_ENTERPRISE_100_PRICE_ID_SANDBOX");
     } else if (plan === "enterprise") {
       return env === "live"
         ? Deno.env.get("PADDLE_ENTERPRISE_PRICE_ID_LIVE")

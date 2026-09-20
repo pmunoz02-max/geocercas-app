@@ -2935,5 +2935,15 @@
       "title": "Benchmarking operativo",
       "exportedAt": "Fecha de exportación"
     }
+  },
+  "plans100": {
+    "subscribe": "Suscribirse a ENTERPRISE 100",
+    "upgrade": "Subir a ENTERPRISE 100",
+    "maximum": "Tu organización ya tiene el plan máximo (ENTERPRISE 100).",
+    "description": "Para operaciones con hasta 100 trackers.",
+    "limits": "Hasta 100 trackers y 250 geocercas",
+    "confirmTitle": "Confirmar cambio a {{plan}}",
+    "confirmBody": "Tu suscripción actual cambiará al plan {{plan}}. El proveedor aplicará el prorrateo correspondiente con el método de pago existente. No se creará una segunda suscripción.",
+    "alreadyActive": "Tu organización ya tiene este plan o uno superior."
   }
 }

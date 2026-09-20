@@ -166,6 +166,7 @@ function buildTrackerSearchText(item) {
 function normalizePlanLabel(planCode) {
   const v = String(planCode || "").toLowerCase();
   if (v === "pro") return "PRO";
+  if (v === "enterprise_100") return "ENTERPRISE 100";
   if (v === "enterprise") return "ENTERPRISE";
   if (v === "elite_plus") return "ELITE PLUS";
   if (v === "elite") return "ELITE";

@@ -1,34 +1,10 @@
+import { PLAN_LIMITS } from "@/config/pricing";
 // src/hooks/useOrgEntitlements.js
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient.js";
 import { useAuth } from "@/context/auth.js";
 
-const FALLBACK_LIMITS_BY_PLAN = {
-  free: {
-    max_geocercas: 1,
-    max_trackers: 2,
-  },
-  starter: {
-    max_geocercas: 10,
-    max_trackers: 3,
-  },
-  pro: {
-    max_geocercas: 25,
-    max_trackers: 10,
-  },
-  enterprise: {
-    max_geocercas: 250,
-    max_trackers: 50,
-  },
-  elite: {
-    max_geocercas: 9999,
-    max_trackers: 9999,
-  },
-  elite_plus: {
-    max_geocercas: 9999,
-    max_trackers: 9999,
-  },
-};
+const FALLBACK_LIMITS_BY_PLAN = PLAN_LIMITS;
 
 function normalizeNumber(value, fallback = 0) {
   const n = Number(value);
@@ -281,7 +257,7 @@ export default function useOrgEntitlements() {
   const isStarter = planCode === "starter" && isActive;
   // Keep PRO enabled while plan_status is active, even if cancellation is scheduled.
   const isPro = planCode === "pro" && isActive;
-  const isEnterprise = planCode === "enterprise" && isActive;
+  const isEnterprise = ["enterprise", "enterprise_100"].includes(planCode) && isActive;
   const isElite = planCode === "elite" && isActive;
   const isElitePlus = planCode === "elite_plus" && isActive;
 

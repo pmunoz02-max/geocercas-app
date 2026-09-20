@@ -2939,5 +2939,15 @@
       "title": "Operational benchmarking",
       "exportedAt": "Export date"
     }
+  },
+  "plans100": {
+    "subscribe": "Subscribe to ENTERPRISE 100",
+    "upgrade": "Upgrade to ENTERPRISE 100",
+    "maximum": "Your organization already has the highest plan (ENTERPRISE 100).",
+    "description": "For operations with up to 100 trackers.",
+    "limits": "Up to 100 trackers and 250 geofences",
+    "confirmTitle": "Confirm change to {{plan}}",
+    "confirmBody": "Your existing subscription will change to {{plan}}. The provider will apply proration using your existing payment method. No second subscription will be created.",
+    "alreadyActive": "Your organization already has this plan or a higher plan."
   }
 }

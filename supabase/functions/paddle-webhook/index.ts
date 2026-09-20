@@ -186,10 +186,12 @@ function pickCustomerId(data: any): string | null {
 }
 
 function resolvePlanByPriceId(priceId: string): {
-  planCode: "pro" | "enterprise";
+  planCode: "pro" | "enterprise" | "enterprise_100";
 } | null {
   const proPriceId = getPaddleProPriceId();
   const enterprisePriceId = getPaddleEnterprisePriceId();
+  const enterprise100PriceId = Deno.env.get(getPaddleEnv() === "live" ? "PADDLE_ENTERPRISE_100_PRICE_ID_LIVE" : "PADDLE_ENTERPRISE_100_PRICE_ID_SANDBOX");
+  if (enterprise100PriceId && priceId === enterprise100PriceId) return { planCode: "enterprise_100" };
 
   if (priceId === proPriceId) {
     return { planCode: "pro" };
@@ -281,7 +283,7 @@ async function resolveOrgIdForSubscription({
 async function getExistingBillingRow(supabase: any, orgId: string) {
   const { data, error } = await supabase
     .from("org_billing")
-    .select("paddle_subscription_id, paddle_customer_id, paddle_price_id")
+    .select("paddle_subscription_id, paddle_customer_id, paddle_price_id, tracker_limit_override")
     .eq("org_id", orgId)
     .maybeSingle();
 
@@ -578,16 +580,16 @@ serve(async (req) => {
       const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
-      // Only update if this event is newer than last_paddle_event_occurred_at
+      // Only update if this event is newer than last_paddle_event_at
       const { data: currentBilling } = await supabase
         .from("org_billing")
-        .select("last_paddle_event_occurred_at")
+        .select("last_paddle_event_at")
         .eq("org_id", orgId)
         .maybeSingle();
 
       if (
-        currentBilling?.last_paddle_event_occurred_at &&
-        new Date(currentBilling.last_paddle_event_occurred_at) >=
+        currentBilling?.last_paddle_event_at &&
+        new Date(currentBilling.last_paddle_event_at) >=
           new Date(occurredAtIso)
       ) {
         console.log(
@@ -648,12 +650,9 @@ serve(async (req) => {
         plan_code: resolvedPlan.planCode,
         subscribed_plan_code: resolvedPlan.planCode,
         plan_status: "active",
-        tracker_limit_override: null,
+        tracker_limit_override: existingBilling?.tracker_limit_override ?? null,
         updated_at: now,
         last_paddle_event_at: occurredAtIso,
-        last_paddle_event_id: eventId,
-        last_paddle_event_type: type,
-        last_paddle_event_occurred_at: occurredAtIso,
         ...buildPaddleFields({
           existingBilling,
           paddleSubscriptionId,
@@ -926,16 +925,16 @@ serve(async (req) => {
       const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
-      // Only update if this event is newer than last_paddle_event_occurred_at
+      // Only update if this event is newer than last_paddle_event_at
       const { data: currentBilling } = await supabase
         .from("org_billing")
-        .select("last_paddle_event_occurred_at")
+        .select("last_paddle_event_at")
         .eq("org_id", orgId)
         .maybeSingle();
 
       if (
-        currentBilling?.last_paddle_event_occurred_at &&
-        new Date(currentBilling.last_paddle_event_occurred_at) >=
+        currentBilling?.last_paddle_event_at &&
+        new Date(currentBilling.last_paddle_event_at) >=
           new Date(occurredAtIso)
       ) {
         console.log(
@@ -1002,12 +1001,9 @@ serve(async (req) => {
         plan_code: resolvedPlan.planCode,
         subscribed_plan_code: resolvedPlan.planCode,
         plan_status: resolvedPlanStatus,
-        tracker_limit_override: null,
+        tracker_limit_override: existingBilling?.tracker_limit_override ?? null,
         updated_at: now,
         last_paddle_event_at: occurredAtIso,
-        last_paddle_event_id: eventId,
-        last_paddle_event_type: type,
-        last_paddle_event_occurred_at: occurredAtIso,
         cancel_at_period_end: cancelAtPeriodEnd,
         scheduled_change_action,
         scheduled_change_effective_at,
@@ -1162,16 +1158,16 @@ serve(async (req) => {
       const existingBilling = await getExistingBillingRow(supabase, orgId);
       const now = new Date().toISOString();
 
-      // Only update if this event is newer than last_paddle_event_occurred_at
+      // Only update if this event is newer than last_paddle_event_at
       const { data: currentBilling } = await supabase
         .from("org_billing")
-        .select("last_paddle_event_occurred_at")
+        .select("last_paddle_event_at")
         .eq("org_id", orgId)
         .maybeSingle();
 
       if (
-        currentBilling?.last_paddle_event_occurred_at &&
-        new Date(currentBilling.last_paddle_event_occurred_at) >=
+        currentBilling?.last_paddle_event_at &&
+        new Date(currentBilling.last_paddle_event_at) >=
           new Date(occurredAtIso)
       ) {
         console.log(
@@ -1234,9 +1230,6 @@ serve(async (req) => {
         scheduled_change_effective_at: null,
         updated_at: now,
         last_paddle_event_at: occurredAtIso,
-        last_paddle_event_id: eventId,
-        last_paddle_event_type: type,
-        last_paddle_event_occurred_at: occurredAtIso,
         ...buildPaddleFields({
           existingBilling,
           paddleSubscriptionId: subscriptionId,

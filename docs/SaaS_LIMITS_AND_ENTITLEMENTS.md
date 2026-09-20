@@ -60,39 +60,19 @@ Admins	number of organization administrators
 
 These limits protect system stability and enable tiered pricing.
 
-4. SaaS Plans (Example)
+4. Official Plans — Preview, 2026-09-20
 
-The platform may support multiple subscription tiers.
+| Plan | Geofences | Trackers | USD/month |
+|---|---:|---:|---:|
+| free | 1 | 2 | 0 |
+| pro | 25 | 10 | 29 |
+| enterprise | 250 | 50 | 99 |
+| enterprise_100 | 250 | 100 | 169 |
 
-Plan	Target
-Basic	small teams
-Professional	medium organizations
-Enterprise	large deployments
-5. Example Plan Limits
-Basic Plan
-Feature	Limit
-Trackers	10
-Geofences	20
-Tracking frequency	2–5 minutes
-Position retention	30 days
-Event retention	90 days
-Admins	2
-Professional Plan
-Feature	Limit
-Trackers	100
-Geofences	200
-Tracking frequency	30–60 seconds
-Position retention	90 days
-Event retention	180 days
-Admins	10
-Enterprise Plan
-Feature	Limit
-Trackers	unlimited
-Geofences	unlimited
-Tracking frequency	configurable
-Position retention	365+ days
-Event retention	unlimited
-Admins	unlimited
+5. Authoritative limits
+
+Operational limits come from public.plans through org_entitlements; org_billing.tracker_limit_override remains authoritative when present, including zero. Legacy get_plan_entitlements now reads quota fields from this same view. Other example policy sections below are illustrative, not additional promises for ENTERPRISE 100. See [implementation and tests](./2026-09-20-enterprise-100-preview.md).
+
 6. Tracker Limits
 
 Trackers represent the primary cost driver in tracking systems.
