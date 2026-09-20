@@ -1551,12 +1551,8 @@
       "subtitle": "Planifiez les travaux par géofence, comparez l’exécution réelle au budget opérationnel et détectez les écarts avec des feux, des filtres et une exportation de gestion."
     },
     "badges": {
-      "preview": "Preview sécurisé",
-      "previewShort": "Preview",
-      "planVsReal": "Plan vs Réel",
-      "csv": "CSV exécutif",
       "localDemo": "Données démo locales",
-      "realPreview": "Données réelles Preview"
+      "organizationData": "Données de l’organisation sélectionnée"
     },
     "periods": {
       "week": "Semaine",
@@ -1586,6 +1582,7 @@
     },
     "actions": {
       "exportCsv": "Exporter CSV exécutif",
+      "exportEmptyHint": "L’export est disponible lorsque la vue filtrée contient des planifications.",
       "clearFilters": "Effacer les filtres",
       "cancel": "Annuler",
       "saving": "Enregistrement...",
@@ -1634,7 +1631,7 @@
       "newTitle": "Nouvelle planification opérationnelle",
       "editTitle": "Modifier la planification opérationnelle",
       "newSubtitle": "Enregistrez une planification opérationnelle pour la comparer ensuite à l’exécution réelle.",
-      "editSubtitle": "Mettez à jour une planification active sans dupliquer les enregistrements. Le changement reste limité à Preview.",
+      "editSubtitle": "Modifiez la planification de l’organisation sélectionnée sans créer de doublons.",
       "selectGeofence": "Sélectionner une géofence",
       "selectActivity": "Sélectionner une activité",
       "startDate": "Date de début",
@@ -1646,8 +1643,8 @@
       "notesPlaceholder": "Notes opérationnelles",
       "autoCostHint": "Calculé automatiquement selon le tarif de l’activité et les heures{{currency}}.",
       "manualCostHint": "Aucun tarif horaire{{currency}}. Saisissez le coût manuellement.",
-      "editSaveHint": "L’enregistrement met à jour la planification active dans Preview.",
-      "newSaveHint": "L’enregistrement insère dans Preview et recharge la liste."
+      "editSaveHint": "L’enregistrement met à jour cette planification dans l’organisation sélectionnée.",
+      "newSaveHint": "L’enregistrement crée la planification dans l’organisation sélectionnée et actualise la liste."
     },
     "status": {
       "draft": "En attente",

@@ -1588,12 +1588,8 @@
       "subtitle": "Plan work by geofence, compare actual execution against the operating budget, and detect deviations with traffic lights, filters, and management export."
     },
     "badges": {
-      "preview": "Safe Preview",
-      "previewShort": "Preview",
-      "planVsReal": "Plan vs Actual",
-      "csv": "Executive CSV",
       "localDemo": "Local demo data",
-      "realPreview": "Real Preview data"
+      "organizationData": "Data for the selected organization"
     },
     "periods": {
       "week": "Week",
@@ -1623,6 +1619,7 @@
     },
     "actions": {
       "exportCsv": "Export executive CSV",
+      "exportEmptyHint": "Export becomes available when the filtered view contains planning records.",
       "clearFilters": "Clear filters",
       "cancel": "Cancel",
       "saving": "Saving...",
@@ -1671,7 +1668,7 @@
       "newTitle": "New operational planning",
       "editTitle": "Edit operational planning",
       "newSubtitle": "Register operational planning to compare later against actual execution.",
-      "editSubtitle": "Update an active planning record without duplicating records. The change remains limited to Preview.",
+      "editSubtitle": "Update the selected organization’s planning record without creating duplicates.",
       "selectGeofence": "Select geofence",
       "selectActivity": "Select activity",
       "startDate": "Start date",
@@ -1683,8 +1680,8 @@
       "notesPlaceholder": "Operational notes",
       "autoCostHint": "Calculated automatically using activity rate and hours{{currency}}.",
       "manualCostHint": "No hourly rate{{currency}}. Enter the cost manually.",
-      "editSaveHint": "Saving updates the active planning record in Preview.",
-      "newSaveHint": "Saving inserts into Preview and reloads the list."
+      "editSaveHint": "Saving updates this planning record in the selected organization.",
+      "newSaveHint": "Saving creates the planning record in the selected organization and refreshes the list."
     },
     "status": {
       "draft": "Pending",

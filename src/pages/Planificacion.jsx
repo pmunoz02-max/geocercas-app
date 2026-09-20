@@ -1216,19 +1216,7 @@ export default function Planificacion() {
               </p>
             </div>
           </div>
-          <div className="w-full rounded-3xl border border-white/15 bg-white/10 p-2 shadow-lg shadow-emerald-950/10 backdrop-blur-sm lg:w-auto">
-            <div className="flex flex-wrap gap-2">
-              <span className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-emerald-900 shadow-sm">
-                {t("planning.badges.preview", { defaultValue: "Preview seguro" })}
-              </span>
-              <span className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-emerald-900 shadow-sm">
-                {t("planning.badges.planVsReal", { defaultValue: "Plan vs Real" })}
-              </span>
-              <span className="rounded-2xl bg-white px-3 py-2 text-xs font-semibold text-emerald-900 shadow-sm">
-                {t("planning.badges.csv", { defaultValue: "CSV ejecutivo" })}
-              </span>
-            </div>
-          </div>
+
         </div>
       </section>
 
@@ -1313,6 +1301,7 @@ export default function Planificacion() {
               <button
                 type="button"
                 onClick={handleExportarCsvPlanificacion}
+                aria-describedby={tareasFiltradas.length === 0 ? "planning-export-empty" : undefined}
                 disabled={tareasFiltradas.length === 0}
                 className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-emerald-900/20 transition hover:-translate-y-0.5 hover:bg-emerald-800 hover:shadow-md disabled:cursor-not-allowed disabled:bg-emerald-300"
               >
@@ -1328,6 +1317,12 @@ export default function Planificacion() {
               </button>
             </div>
           </div>
+
+          {tareasFiltradas.length === 0 ? (
+            <p id="planning-export-empty" className="mb-3 text-sm text-gray-600">
+              {t("planning.actions.exportEmptyHint", { defaultValue: "La exportación se habilita cuando hay planificaciones en la vista filtrada." })}
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <label className="flex flex-col text-xs font-medium uppercase tracking-wide text-gray-600">
@@ -1566,11 +1561,10 @@ export default function Planificacion() {
                   ? t("planning.form.editTitle", { defaultValue: "Editar planificación operativa" })
                   : t("planning.form.newTitle", { defaultValue: "Nueva planificación operativa" })}
               </h2>
-              <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800">{t("planning.badges.previewShort", { defaultValue: "Preview" })}</span>
             </div>
             <p className="mb-4 text-sm text-gray-600">
               {editingPlanningId
-                ? t("planning.form.editSubtitle", { defaultValue: "Actualiza una planificación activa sin duplicar registros. El cambio queda limitado a Preview." })
+                ? t("planning.form.editSubtitle", { defaultValue: "Actualiza la planificación de la organización seleccionada sin duplicar registros." })
                 : t("planning.form.newSubtitle", { defaultValue: "Registra una planificación operativa para comparar luego contra la ejecución real." })}
             </p>
             {intentoGuardarVisual && !formularioVisualValido ? (
@@ -1753,8 +1747,8 @@ export default function Planificacion() {
               </button>
               <span className="text-xs text-gray-600">
                 {editingPlanningId
-                  ? t("planning.form.editSaveHint", { defaultValue: "Al guardar, se actualiza la planificación activa en Preview." })
-                  : t("planning.form.newSaveHint", { defaultValue: "Al guardar, se inserta en Preview y se recarga la lista." })}
+                  ? t("planning.form.editSaveHint", { defaultValue: "Al guardar, se actualiza esta planificación en la organización seleccionada." })
+                  : t("planning.form.newSaveHint", { defaultValue: "Al guardar, se crea la planificación en la organización seleccionada y se actualiza la lista." })}
               </span>
             </div>
           </section>
@@ -1779,7 +1773,7 @@ export default function Planificacion() {
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-gray-600">
                 {mostrandoDemo
                   ? t("planning.badges.localDemo", { defaultValue: "Datos demo locales" })
-                  : t("planning.badges.realPreview", { defaultValue: "Datos reales Preview" })}
+                  : t("planning.badges.organizationData", { defaultValue: "Datos de la organización seleccionada" })}
               </span>
               <button
                 type="button"

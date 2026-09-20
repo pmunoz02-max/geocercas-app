@@ -1590,12 +1590,8 @@
       "subtitle": "Planifica trabajos por geocerca, compara ejecución real contra presupuesto operativo y detecta desviaciones con semáforos, filtros y exportación gerencial."
     },
     "badges": {
-      "preview": "Preview seguro",
-      "previewShort": "Preview",
-      "planVsReal": "Plan vs Real",
-      "csv": "CSV ejecutivo",
       "localDemo": "Datos demo locales",
-      "realPreview": "Datos reales Preview"
+      "organizationData": "Datos de la organización seleccionada"
     },
     "periods": {
       "week": "Semana",
@@ -1625,6 +1621,7 @@
     },
     "actions": {
       "exportCsv": "Exportar CSV ejecutivo",
+      "exportEmptyHint": "La exportación se habilita cuando hay planificaciones en la vista filtrada.",
       "clearFilters": "Limpiar filtros",
       "cancel": "Cancelar",
       "saving": "Guardando...",
@@ -1673,7 +1670,7 @@
       "newTitle": "Nueva planificación operativa",
       "editTitle": "Editar planificación operativa",
       "newSubtitle": "Registra una planificación operativa para comparar luego contra la ejecución real.",
-      "editSubtitle": "Actualiza una planificación activa sin duplicar registros. El cambio queda limitado a Preview.",
+      "editSubtitle": "Actualiza la planificación de la organización seleccionada sin duplicar registros.",
       "selectGeofence": "Seleccionar geocerca",
       "selectActivity": "Seleccionar actividad",
       "startDate": "Fecha inicio",
@@ -1685,8 +1682,8 @@
       "notesPlaceholder": "Notas operativas",
       "autoCostHint": "Se calcula automáticamente según tarifa de actividad y horas{{currency}}.",
       "manualCostHint": "Sin tarifa por hora{{currency}}. Ingresa el costo manualmente.",
-      "editSaveHint": "Al guardar, se actualiza la planificación activa en Preview.",
-      "newSaveHint": "Al guardar, se inserta en Preview y se recarga la lista."
+      "editSaveHint": "Al guardar, se actualiza esta planificación en la organización seleccionada.",
+      "newSaveHint": "Al guardar, se crea la planificación en la organización seleccionada y se actualiza la lista."
     },
     "status": {
       "draft": "Pendiente",
