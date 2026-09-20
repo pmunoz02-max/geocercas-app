@@ -2909,6 +2909,7 @@
     }
   },
   "plans100": {
+    "catalogLimits": "Jusqu’à {{trackers}} trackers et {{geofences}} géofences",
     "subscribe": "Souscrire à ENTERPRISE 100",
     "upgrade": "Passer à ENTERPRISE 100",
     "maximum": "Votre organisation dispose déjà du forfait maximal (ENTERPRISE 100).",

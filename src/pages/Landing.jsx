@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useAuth } from "../context/AuthContext";
-import { formatPlanPrice } from "../config/pricing";
+import { formatPlanPrice, PRICING, PLAN_LIMITS } from "../config/pricing";
 
 const FALLBACKS = {
   "app.brand": {
@@ -268,27 +268,29 @@ export default function Landing() {
     return t(key, { defaultValue: fallback });
   };
 
+  const planLimits = (code) => t("plans100.catalogLimits", { trackers: PLAN_LIMITS[code].max_trackers, geofences: PLAN_LIMITS[code].max_geocercas });
+
   const plans = [
     {
-      name: tr("landing.planBasicTitle"),
+      name: PRICING.free.label,
       description: tr("landing.planBasicDesc"),
       price: tr("landing.planBasicPrice"),
-      detail: tr("landing.planBasicDetail"),
+      detail: planLimits("free"),
     },
     {
-      name: tr("landing.planProTitle"),
+      name: PRICING.pro.label,
       description: tr("landing.planProDesc"),
       price: formatPlanPrice("pro", currentLang),
-      detail: tr("landing.planProDetail"),
+      detail: planLimits("pro"),
       featured: true,
     },
     {
-      name: tr("landing.planEnterpriseTitle"),
+      name: PRICING.enterprise.label,
       description: tr("landing.planEnterpriseDesc"),
       price: formatPlanPrice("enterprise", currentLang),
-      detail: tr("landing.planEnterpriseDetail"),
+      detail: planLimits("enterprise"),
     },
-    { name: "ENTERPRISE 100", description: t("plans100.description"), price: formatPlanPrice("enterprise_100", currentLang), detail: t("plans100.limits") },
+    { name: "ENTERPRISE 100", description: t("plans100.description"), price: formatPlanPrice("enterprise_100", currentLang), detail: planLimits("enterprise_100") },
   ];
 
   const features = [

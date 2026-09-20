@@ -2937,6 +2937,7 @@
     }
   },
   "plans100": {
+    "catalogLimits": "Hasta {{trackers}} trackers y {{geofences}} geocercas",
     "subscribe": "Suscribirse a ENTERPRISE 100",
     "upgrade": "Subir a ENTERPRISE 100",
     "maximum": "Tu organización ya tiene el plan máximo (ENTERPRISE 100).",

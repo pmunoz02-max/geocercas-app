@@ -67,3 +67,9 @@ Pendiente de validación comercial: completar checkout Sandbox desde una organiz
 Solo `preview`; no push a `main`, Promote to Production, migraciones de Producción ni ejecución/traslado de DEMO. Mantener separados los IDs Sandbox/Live. Para pausar nuevas ventas, deshabilitar el flag de checkout en Vercel Preview y redesplegar Preview; conservar enum y catálogo si ya existen suscripciones. No eliminar valores enum ni cambiar organizaciones automáticamente.
 
 Para revisar con Copilot, abrir este archivo y usar el prompt corto: «Contrasta este documento con el diff de enterprise_100. Corrige solo inconsistencias verificables de documentación; no modifiques código, SQL ni entornos».
+
+## Revisión del despliegue Preview
+
+El despliegue del commit `71c0270` quedó READY en Vercel Preview. La revisión visual detectó textos heredados de límites en la portada; ahora los cuatro planes muestran los valores de `PLAN_LIMITS`, con una plantilla traducida ES/EN/FR y los nombres oficiales. Se mantiene pendiente la compra completa Sandbox descrita arriba.
+
+La migración adicional 20260920224410 cierra el caso sin fila de entitlements: los límites ausentes son 0, nunca NULL (ilimitado para consumidores legacy). Verificado en Preview con una organización inexistente: 0 trackers y 0 geocercas. Los cuatro planes conservan sus límites oficiales.
