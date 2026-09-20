@@ -11,8 +11,6 @@ const LOCAL_COPY = {
     downloadLabel: "Descargar",
     viewPdf: "Ver PDF",
     pdfDetails: "Español · 4 páginas · Septiembre 2026",
-    watchLabel: "Ver video",
-    comingSoon: "Próximamente",
     openGuide: "Abrir guía",
     backHome: "Volver al inicio",
     cards: {
@@ -20,26 +18,6 @@ const LOCAL_COPY = {
         title: "Manual rápido GeoField GPS (PDF)",
         description:
           "Resumen operativo para instalación, login y verificación de envío de posición.",
-      },
-      pptx: {
-        title: "Presentación de entrenamiento (PPTX)",
-        description:
-          "Diapositivas para formar equipos de campo y estandarizar el flujo de uso.",
-      },
-      video: {
-        title: "Vídeo tutorial de puesta en marcha",
-        description:
-          "Guía visual para onboarding inicial del tracker y validación de telemetría.",
-      },
-      trackerGuide: {
-        title: "Guía tracker",
-        description:
-          "Paso a paso para login, permisos y flujo operativo en GeoField GPS.",
-      },
-      geofences: {
-        title: "Guía de geocercas",
-        description:
-          "Buenas prácticas para crear geocercas estables y reducir falsos positivos.",
       },
       reports: {
         title: "Guía de reportes",
@@ -56,8 +34,6 @@ const LOCAL_COPY = {
     downloadLabel: "Download",
     viewPdf: "View PDF",
     pdfDetails: "English · 4 pages · September 2026",
-    watchLabel: "Watch video",
-    comingSoon: "Coming soon",
     openGuide: "Open guide",
     backHome: "Back to home",
     cards: {
@@ -65,26 +41,6 @@ const LOCAL_COPY = {
         title: "GeoField GPS Quick Manual (PDF)",
         description:
           "Operational summary for installation, login, and position delivery checks.",
-      },
-      pptx: {
-        title: "Training deck (PPTX)",
-        description:
-          "Slides to train field teams and standardize usage flow.",
-      },
-      video: {
-        title: "Getting started video tutorial",
-        description:
-          "Visual onboarding guide for tracker setup and telemetry verification.",
-      },
-      trackerGuide: {
-        title: "Tracker guide",
-        description:
-          "Step-by-step instructions for login, permissions, and daily runtime flow.",
-      },
-      geofences: {
-        title: "Geofences guide",
-        description:
-          "Best practices to create robust boundaries and reduce false positives.",
       },
       reports: {
         title: "Reports guide",
@@ -101,8 +57,6 @@ const LOCAL_COPY = {
     downloadLabel: "Télécharger",
     viewPdf: "Voir le PDF",
     pdfDetails: "Français · 4 pages · Septembre 2026",
-    watchLabel: "Voir la vidéo",
-    comingSoon: "Bientôt disponible",
     openGuide: "Ouvrir le guide",
     backHome: "Retour à l'accueil",
     cards: {
@@ -110,26 +64,6 @@ const LOCAL_COPY = {
         title: "Guide rapide GeoField GPS (PDF)",
         description:
           "Résumé opérationnel pour installation, connexion et vérification des positions.",
-      },
-      pptx: {
-        title: "Présentation de formation (PPTX)",
-        description:
-          "Diapositives pour former les équipes terrain et standardiser l'utilisation.",
-      },
-      video: {
-        title: "Tutoriel vidéo de démarrage",
-        description:
-          "Guide visuel d'onboarding initial pour tracker et validation de télémétrie.",
-      },
-      trackerGuide: {
-        title: "Guide tracker",
-        description:
-          "Étapes pour connexion, permissions et usage quotidien de GeoField GPS.",
-      },
-      geofences: {
-        title: "Guide des géofences",
-        description:
-          "Bonnes pratiques pour créer des périmètres fiables.",
       },
       reports: {
         title: "Guide des rapports",
@@ -158,37 +92,11 @@ export default function ResourcesPage() {
       {
         key: "pdf",
         format: "PDF",
-        available: true,
         href: `/resources/geofield-gps-manual-${lang}.pdf`,
-      },
-      {
-        key: "pptx",
-        format: "PPTX",
-        available: false,
-        href: "",
-      },
-      {
-        key: "video",
-        format: "VIDEO",
-        available: false,
-        href: "",
-      },
-      {
-        key: "trackerGuide",
-        format: "GUIDE",
-        available: false,
-        href: "",
-      },
-      {
-        key: "geofences",
-        format: "GEOFENCES",
-        available: false,
-        href: "",
       },
       {
         key: "reports",
         format: "REPORTS",
-        available: true,
         href: "/help/reports",
       },
     ],
@@ -220,7 +128,7 @@ export default function ResourcesPage() {
             {t("resources.subtitle", { defaultValue: copy.subtitle })}
           </p>
 
-          <div className="mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-7 grid gap-4 sm:grid-cols-2">
             {cards.map((card) => {
               const cardCopy = copy.cards[card.key] || { title: "", description: "" };
               const title = t(`resources.cards.${card.key}.title`, {
@@ -263,21 +171,13 @@ export default function ResourcesPage() {
                         </a>
                       </div>
                     </div>
-                  ) : card.available ? (
+                  ) : (
                     <Link
-                      to={card.href || "/"}
+                      to={card.href}
                       className="mt-5 inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 dark:border-emerald-400 dark:bg-emerald-500 dark:hover:bg-emerald-400"
                     >
                       {copy.openGuide}
                     </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="mt-5 inline-flex cursor-not-allowed items-center justify-center rounded-lg border border-slate-300 bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-500 opacity-80 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
-                    >
-                      {t("resources.comingSoon", { defaultValue: copy.comingSoon })}
-                    </button>
                   )}
                 </article>
               );

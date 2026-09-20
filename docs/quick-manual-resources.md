@@ -16,7 +16,11 @@ Actualizar la edición y la metadata de ResourcesPage al revisar el contenido.
 
 Fuentes funcionales revisadas: InvitarTracker.jsx, TrackerInviteStart.jsx,
 TrackerInstall.jsx, TrackerGpsPage.jsx y la guía de instrucciones existente.
-Las otras tarjetas pendientes conservan su estado actual. No cambia auth, planes,
+Recursos conserva solo Manual PDF y Guía de reportes. Se retiran la presentación,
+el vídeo y la guía tracker por solapamiento con el manual y falta de contenido;
+la guía de geocercas se retira porque aún no existe. El contenido futuro se podrá
+incorporar cuando aporte una función distinta y esté disponible. La cuadrícula usa
+dos columnas en escritorio y una en móvil. No cambia auth, planes,
 tracking ni base de datos. Producción requiere Promote explícito desde Preview.
 
 Control editorial: doce páginas renderizadas e inspeccionadas; sin solapamientos.
