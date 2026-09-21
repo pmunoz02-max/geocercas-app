@@ -179,3 +179,6 @@ El flujo completo de invitaciÃ³n de tracker, onboarding Android GeoField GPS y
 ## ENTERPRISE 100 — Preview (2026-09-20)
 
 El catálogo oficial agrega `enterprise_100`: 250 geocercas, 100 trackers y USD 169/mes, compatible con Free, Pro y Enterprise. Fuente de límites: `public.plans`; fuente comercial: `org_billing.plan_code`. Implementación, auditoría, pruebas y estado de pagos: [ENTERPRISE 100](./2026-09-20-enterprise-100-preview.md). Solo Preview; no implica cambios en Producción.
+
+## ENTERPRISE 100 en Producción — 2026-09-21
+Implementación autorizada en Supabase Producción y Paddle Live. Ver [auditoría, arquitectura y validación](2026-09-21-enterprise-100-production.md). No reutilizar migraciones ni webhook de Preview sin comparar esquemas.
