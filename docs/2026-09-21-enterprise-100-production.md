@@ -27,7 +27,7 @@ El enum se confirmó en una transacción separada antes de insertar el plan. No 
 - Producto: `pro_01m313mrc72sw0ew1wwc47ba15`, nombre ENTERPRISE 100.
 - Precio: `pri_01m313pj87wrkye7anyf2q98tm`, USD 169 recurrente mensual.
 - Sin trial; cantidad mínima/máxima 1. Impuestos según configuración de cuenta.
-- Categoría: Standard digital goods, igual que los productos existentes de Live. No se modificaron sus categorías ni precios.
+- Categoría: SaaS, elegida explícitamente por el usuario (opción 3). Se actualizó el producto ENTERPRISE 100 en Paddle Live; los otros productos conservan sus categorías y precios.
 - Custom data del producto/precio: `plan_code=enterprise_100`.
 - Supabase Producción: `PADDLE_ENTERPRISE_100_PRICE_ID_LIVE` configurado. Se verificó por huella que `PADDLE_ENV` corresponde a `live`.
 - Vercel Production: `VITE_ENTERPRISE_100_CHECKOUT_ENABLED=true`.
@@ -61,3 +61,4 @@ Para revisión con Copilot, abrir este documento: «Contrasta el documento con e
 
 ## Resultado de publicación
 Deployment Production READY: geocercas-app-v3-fpiofgdfv-pietros-projects-338208c7.vercel.app, commit 45e92b2375f6ccc79c8dbb9be7a7b92d2b60aa87. Verificación visual en https://app.tugeocercas.com/pricing: Live checkout, ENTERPRISE 100 USD 169, 100 trackers y 250 geocercas, botón habilitado. La sesión existente conserva Enterprise como plan actual. No se pulsó confirmación de pago ni se alteró su suscripción.
+
