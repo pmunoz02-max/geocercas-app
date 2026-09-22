@@ -1,4 +1,4 @@
-﻿import {
+import {
   AREA_UNIT_OPTIONS,
   getStoredAreaUnit,
   setStoredAreaUnit,
@@ -55,6 +55,12 @@ function Banner({ banner, onClose }) {
 
 function CursorPosLive({ setCursorLatLng, setMapZoom, setMapScale }) {
   const map = useMapEvents({
+    "pm:globaleditmodetoggled": (e) => {
+      if (e.enabled) e.target.pm.disableGlobalDragMode();
+    },
+    "pm:globaldragmodetoggled": (e) => {
+      if (e.enabled) e.target.pm.disableGlobalEditMode();
+    },
     mousemove: (e) => setCursorLatLng(e.latlng),
     mouseout: () => setCursorLatLng(null),
     zoomend: (e) => {
@@ -359,6 +365,7 @@ export default function NuevaGeocerca() {
 
   const mapRef = useRef(null);
   const featureGroupRef = useRef(null);
+  const draftLayerRef = useRef(null);
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
 
@@ -746,7 +753,7 @@ export default function NuevaGeocerca() {
       let fc = null;
 
       if (draftFeature) {
-        fc = { type: "FeatureCollection", features: [draftFeature] };
+        fc = draftLayerRef.current?.toGeoJSON() || { type: "FeatureCollection", features: [draftFeature] };
       } else {
         const map = mapRef.current;
         const layerToSave = selectedLayerRef.current || lastCreatedLayerRef.current || getLastGeomanLayer(map);
@@ -1203,9 +1210,10 @@ export default function NuevaGeocerca() {
             {dataset && <GeoJSON data={dataset} {...pointStyle} />}
             <CursorPosLive setCursorLatLng={setCursorLatLng} setMapZoom={setMapZoom} setMapScale={setMapScale} />
 
-            <Pane name="draftPane" style={{ zIndex: 650 }}>
+            <Pane name="draftPane" style={{ zIndex: 450 }}>
               {draftFeature && (
                 <GeoJSON
+                  ref={draftLayerRef}
                   key={`draft-${draftId}`}
                   data={draftFeature}
                   style={() => ({ color: "#22c55e", weight: 3, fillColor: "#22c55e", fillOpacity: 0.35 })}
@@ -1213,7 +1221,7 @@ export default function NuevaGeocerca() {
               )}
             </Pane>
 
-            <Pane name="viewPane" style={{ zIndex: 640 }}>
+            <Pane name="viewPane" style={{ zIndex: 440 }}>
               {viewFeature && (
                 <>
                   <GeoJSON
@@ -1225,7 +1233,9 @@ export default function NuevaGeocerca() {
                     <GeoJSON
                       key={`view-marker-${viewId}`}
                       data={viewCentroid}
-                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1 })}
+                      pmIgnore={true}
+                      snapIgnore={true}
+                      pointToLayer={(_f, latlng) => L.circleMarker(latlng, { radius: 7, weight: 2, fillOpacity: 1, pmIgnore: true, snapIgnore: true })}
                     />
                   )}
                 </>
