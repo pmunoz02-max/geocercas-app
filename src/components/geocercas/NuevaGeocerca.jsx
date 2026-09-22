@@ -633,6 +633,18 @@ export default function NuevaGeocerca() {
     showOk(t("geocercas.coordsReady", { defaultValue: "Shape created from coordinates." }));
   }, [coordText, clearCanvas, t, showErr, showOk, scheduleFitToGeo]);
 
+  const handleDrawByVertices = useCallback(() => {
+    const map = mapRef.current;
+    if (!map?.pm || entitlementsLoading || !currentOrg?.id || !canCreateGeofence) return;
+    map.pm.disableDraw();
+    map.pm.disableGlobalEditMode();
+    map.pm.disableGlobalDragMode();
+    map.pm.enableDraw("Polygon", { continueDrawing: false });
+    showOk(t("geocercas.vertexInstructions", {
+      defaultValue: "Haz clic para añadir cada vértice (mínimo 3). Cierra la figura pulsando el primer punto; después escribe un nombre y guarda. Esc cancela el dibujo.",
+    }));
+  }, [entitlementsLoading, currentOrg?.id, canCreateGeofence, showOk, t]);
+
   const handleDrawCircleByRadius = useCallback(() => {
     const map = mapRef.current;
     if (!map) {
@@ -1039,7 +1051,15 @@ export default function NuevaGeocerca() {
               onChange={(e) => setGeofenceName(e.target.value)}
             />
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <button
+                onClick={handleDrawByVertices}
+                disabled={entitlementsLoading || !canCreateGeofence}
+                className="pointer-events-auto rounded-xl border border-cyan-500/50 bg-cyan-950/60 px-3 py-2.5 text-sm font-semibold text-cyan-100 hover:bg-cyan-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+              >
+                {t("geocercas.buttonDrawByVertices", { defaultValue: "Dibujar por vértices" })}
+              </button>
               <button
                 onClick={() => {
                   setCoordText("");
@@ -1249,7 +1269,8 @@ export default function NuevaGeocerca() {
                   drawCircle: false,
                   editMode: true,
                   dragMode: true,
-                  removalMode: true,
+                  cutPolygon: false,
+                  removalMode: false,
                 }}
                 globalOptions={{ continueDrawing: false, editable: true }}
                 onCreate={(e) => {
