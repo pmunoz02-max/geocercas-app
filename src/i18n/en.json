@@ -2051,6 +2051,8 @@
       "browserSubtitle": "Your session is ready. This browser cannot start Android tracking.",
       "browserBadge": "Tracking stopped",
       "browserHelp": "This test requires the Android version configured for Preview. Open the invitation there. Do not use this session in the production version.",
+      "sessionMissingTitle": "Tracking session unavailable",
+      "sessionMissingHelp": "Positions are not being sent. Open your current invitation to recover the session. If it was revoked or expired, ask your administrator for a new one.",
       "titleStarting": "Starting tracking",
       "subtitleActive": "Your location is being shared correctly.",
       "subtitleStarting": "We are preparing your session to start tracking.",

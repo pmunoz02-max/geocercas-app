@@ -2024,6 +2024,8 @@
       "browserSubtitle": "Votre session est prête. Ce navigateur ne peut pas démarrer le suivi Android.",
       "browserBadge": "Suivi arrêté",
       "browserHelp": "Ce test nécessite la version Android configurée pour Preview. Ouvrez le lien dans cette version. Ne transférez pas cette session en production.",
+      "sessionMissingTitle": "Session de suivi indisponible",
+      "sessionMissingHelp": "Les positions ne sont pas envoyées. Ouvrez votre invitation en cours pour récupérer la session. Si elle a été révoquée ou a expiré, demandez-en une nouvelle à votre administrateur.",
       "titleStarting": "Démarrage du suivi",
       "subtitleActive": "Votre position est partagée correctement.",
       "subtitleStarting": "Nous préparons votre session pour commencer le suivi.",

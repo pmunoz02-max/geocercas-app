@@ -160,6 +160,7 @@ export default function TrackerGpsPage() {
 
   const [msg, setMsg] = useState(() => t("tracker.gps.messageStarting"));
   const [nativeBridgeReady, setNativeBridgeReady] = useState(null);
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
 
   const [debugInfo, setDebugInfo] = useState({
     hasRuntimeToken: false,
@@ -176,7 +177,7 @@ export default function TrackerGpsPage() {
   const permissionRequestedRef = useRef(false);
 
   const ready = useMemo(() => {
-    return Boolean(runtimeSession.runtimeToken && runtimeSession.orgId);
+    return Boolean(runtimeSession.runtimeToken && runtimeSession.trackerUserId && runtimeSession.orgId);
   }, [runtimeSession]);
 
   const trackingActive = ready && nativeBridgeReady === true;
@@ -282,28 +283,38 @@ export default function TrackerGpsPage() {
     if (ready) return;
 
     let cancelled = false;
+    const startedAt = Date.now();
 
     const poll = () => {
       if (cancelled || disposedRef.current) return;
 
       const stored = readRuntimeSessionFromStorage();
-      const hasSession = Boolean(stored.runtimeToken && stored.orgId);
+      const hasSession = Boolean(stored.runtimeToken && stored.trackerUserId && stored.orgId);
 
       if (hasSession) {
         console.log("[TRACKER_POLL] runtime session detected");
+        setSessionUnavailable(false);
         syncRuntimeSession(stored);
         setRuntimeSession(stored);
         setMsg(t("tracker.gps.messagePreparing"));
         return;
       }
 
-      console.log("[TRACKER_POLL] waiting for runtime session...");
+      if (Date.now() - startedAt >= 12000) {
+        setSessionUnavailable(true);
+      }
       pollTimerRef.current = window.setTimeout(poll, 1000);
     };
 
+    window.addEventListener("geocercas-native-session-ready", checkNativeSession);
+    function checkNativeSession() {
+      if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current);
+      poll();
+    }
     poll();
 
     return () => {
+      window.removeEventListener("geocercas-native-session-ready", checkNativeSession);
       cancelled = true;
       if (pollTimerRef.current) {
         window.clearTimeout(pollTimerRef.current);
@@ -408,24 +419,24 @@ export default function TrackerGpsPage() {
         <div style={titleStyle}>
           {trackingActive
             ? t("tracker.gps.titleActive")
-            : needsNativeApp ? t("tracker.gps.browserTitle") : t("tracker.gps.titleStarting")}
+            : sessionUnavailable ? t("tracker.gps.sessionMissingTitle") : needsNativeApp ? t("tracker.gps.browserTitle") : t("tracker.gps.titleStarting")}
         </div>
 
         <div style={subtitleStyle}>
           {trackingActive
             ? t("tracker.gps.subtitleActive")
-            : needsNativeApp ? t("tracker.gps.browserSubtitle") : t("tracker.gps.subtitleStarting")}
+            : sessionUnavailable ? t("tracker.gps.sessionMissingHelp") : needsNativeApp ? t("tracker.gps.browserSubtitle") : t("tracker.gps.subtitleStarting")}
         </div>
 
         <div style={badgeStyle(trackingActive)}>
           <span>
             {trackingActive
               ? t("tracker.gps.badgeActive")
-              : needsNativeApp ? t("tracker.gps.browserBadge") : t("tracker.gps.badgeInitializing")}
+              : sessionUnavailable ? t("tracker.gps.browserBadge") : needsNativeApp ? t("tracker.gps.browserBadge") : t("tracker.gps.badgeInitializing")}
           </span>
         </div>
 
-        {!!msg && (
+        {!!msg && !sessionUnavailable && (
           <div style={noteStyle}>
             {msg}
           </div>
