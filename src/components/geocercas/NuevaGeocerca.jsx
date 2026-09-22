@@ -53,14 +53,8 @@ function Banner({ banner, onClose }) {
 }
 
 
-function CursorPosLive({ setCursorLatLng, setMapZoom, setMapScale }) {
+export function CursorPosLive({ setCursorLatLng, setMapZoom, setMapScale }) {
   const map = useMapEvents({
-    "pm:globaleditmodetoggled": (e) => {
-      if (e.enabled) e.target.pm.disableGlobalDragMode();
-    },
-    "pm:globaldragmodetoggled": (e) => {
-      if (e.enabled) e.target.pm.disableGlobalEditMode();
-    },
     mousemove: (e) => setCursorLatLng(e.latlng),
     mouseout: () => setCursorLatLng(null),
     zoomend: (e) => {
