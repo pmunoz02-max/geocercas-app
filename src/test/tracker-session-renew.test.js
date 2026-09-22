@@ -1,0 +1,12 @@
+import {it,expect,vi,afterEach} from 'vitest';
+import handler from '../../api/tracker-session-renew.js';
+const org='5500b0ab-fa37-4232-89ae-31d70ccc56a9',user='cc13f10e-5f8b-4911-96c1-4ae3dec81940';
+afterEach(()=>{vi.unstubAllGlobals();vi.unstubAllEnvs();});
+async function run(body,reply){vi.stubEnv('SUPABASE_URL','https://example.invalid');vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY','test');vi.stubGlobal('fetch',vi.fn().mockResolvedValue(reply));const res={setHeader:vi.fn(),status:vi.fn().mockReturnThis(),json:vi.fn()};await handler({method:'POST',headers:{authorization:'Bearer existing'},body},res);return res;}
+it('rotates access using only hashed proofs and returns no refresh secret',async()=>{const r=await run({refresh_token:'b'.repeat(64),org_id:org,tracker_user_id:user,request_id:org},{ok:true,json:async()=>({ok:true,org_id:org,tracker_user_id:user,expires_in:86400})});expect(r.status).toHaveBeenCalledWith(200);expect(r.json.mock.calls[0][0].access_token).toMatch(/^[a-f0-9]{64}$/);expect(r.json.mock.calls[0][0].refresh_token).toBeUndefined();const payload=JSON.parse(fetch.mock.calls[0][1].body);expect(payload.p_refresh_hash).not.toBe('b'.repeat(64));expect(payload.p_access_hash).not.toBe('existing');});
+it('fails closed on revocation',async()=>{const r=await run({refresh_token:'b'.repeat(64),org_id:org,tracker_user_id:user,request_id:org},{ok:true,json:async()=>({ok:false})});expect(r.status).toHaveBeenCalledWith(403);});
+it('network failure preserves retry semantics',async()=>{const r=await run({refresh_token:'b'.repeat(64),org_id:org,tracker_user_id:user,request_id:org},{ok:false});expect(r.status).toHaveBeenCalledWith(503);});
+it('rejects malformed credentials before lookup',async()=>{const r=await run({refresh_token:'bad',org_id:org,tracker_user_id:user,request_id:org},{});expect(r.status).toHaveBeenCalledWith(400);expect(fetch).not.toHaveBeenCalled();});
+it('rejects mismatched RPC identity',async()=>{const r=await run({refresh_token:'b'.repeat(64),org_id:org,tracker_user_id:user,request_id:org},{ok:true,json:async()=>({ok:true,org_id:user,tracker_user_id:org})});expect(r.status).toHaveBeenCalledWith(503);});
+
+it('permits a fresh request id when a pending request expired offline',async()=>{const r=await run({refresh_token:'b'.repeat(64),org_id:org,tracker_user_id:user,request_id:org},{ok:true,json:async()=>({ok:false,error:'request_expired'})});expect(r.status).toHaveBeenCalledWith(409);});

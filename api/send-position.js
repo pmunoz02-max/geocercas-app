@@ -63,6 +63,9 @@ async function resolveRuntimeSession(token) {
 
     if (Array.isArray(rows) && rows.length > 0) {
       const session = rows[0];
+      if (session.revoked_at || !Number.isFinite(Date.parse(session.expires_at)) || Date.parse(session.expires_at) <= Date.now()) return null;
+      const membership = await fetchSupabaseRows(`memberships?select=user_id&org_id=eq.${session.org_id}&user_id=eq.${session.tracker_user_id}&role=eq.tracker&revoked_at=is.null&limit=1`, "runtime_membership");
+      if (!membership.length) return null;
 
       const patchUrl = `${baseUrl}/rest/v1/tracker_runtime_sessions?id=eq.${session.id}`;
       await fetch(patchUrl, {

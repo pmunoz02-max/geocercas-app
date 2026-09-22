@@ -1,0 +1,50 @@
+diff --git a/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt b/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt
+index a9ac200d..44cf045d 100644
+--- a/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt
++++ b/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt
+@@ -1203,9 +1203,8 @@ class ForegroundLocationService : Service() {
+             }
+ 
+             if (expired) {
+-                Log.e(TAG, "[TRACKING_BLOCKED] JWT expired: exp=$jwtExp now=$nowSec. Clearing session and aborting send.")
+-                clearTrackerSession("jwt_expired")
+-                return
++                Log.e(TAG, "[TRACKING_BLOCKED] JWT expired: exp=$jwtExp now=$nowSec. Waiting for runtime renewal.")
++                if (trackerPrefs.getString("runtime_refresh_token", null).isNullOrBlank()) return
+             }
+         } else {
+             Log.d(TAG, "[TRACKING_ALLOWED] opaque runtime token with tracker_user_id=$trackerUserId org_id=$orgId")
+@@ -1247,6 +1246,7 @@ class ForegroundLocationService : Service() {
+     }
+ 
+     private fun getAccessTokenCandidate(): TokenCandidate? {
++        if (!RuntimeSessionRenewal.renewIfNeeded(this, REQUEST_URL)) return null
+         preloadRuntimeSessionFromPrefs()
+         return validateTrackerTokenCandidate(
+             token = runtimeAccessToken,
+@@ -1258,7 +1258,7 @@ class ForegroundLocationService : Service() {
+ 
+     private fun replaceTrackerSessionFromIntent(intent: Intent?): Boolean {
+         try {
+-            val tokenFromIntent = intent?.getStringExtra(EXTRA_ACCESS_TOKEN)?.trim()?.takeIf { it.isNotEmpty() }
++            var tokenFromIntent = intent?.getStringExtra(EXTRA_ACCESS_TOKEN)?.trim()?.takeIf { it.isNotEmpty() }
+             val trackerUserIdFromIntent = intent?.getStringExtra(EXTRA_TRACKER_USER_ID)?.trim()?.takeIf { it.isNotEmpty() }
+             val orgIdFromIntent = intent?.getStringExtra("org_id")?.trim()?.takeIf { it.isNotEmpty() }
+ 
+@@ -1266,13 +1266,15 @@ class ForegroundLocationService : Service() {
+                 return false
+             }
+ 
++            if (orgIdFromIntent.isNullOrBlank()) return false
++            tokenFromIntent = RuntimeSessionRenewal.adoptIncoming(this, tokenFromIntent, trackerUserIdFromIntent, orgIdFromIntent)
+             val candidate = validateTrackerTokenCandidate(
+                 token = tokenFromIntent,
+                 trackerUserId = trackerUserIdFromIntent,
+                 source = "intent_update_tracker_session",
+                 clearOnFailure = false,
+             ) ?: run {
+-                clearTrackerSession("invalid_intent_update_tracker_session")
++                Log.w(TAG, "Rejected invalid incoming session; preserving existing session")
+                 return false
+             }
+ 

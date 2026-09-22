@@ -1,0 +1,39 @@
+diff --git a/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java b/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
+index 4f444257..56939110 100644
+--- a/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
++++ b/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
+@@ -779,6 +779,12 @@ public class WebViewActivity extends AppCompatActivity {
+         String userId = prefs.getString(KEY_TRACKER_USER_ID, null);
+         String orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+ 
++        // An incomplete bootstrap is not a logout. Do not erase the service session.
++        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(userId) || TextUtils.isEmpty(orgId)) {
++            Log.w(TAG, "Native session sync skipped: incomplete session");
++            return;
++        }
++
+         Log.i(TAG, "injectSessionIntoNativeStorage token=" + (!TextUtils.isEmpty(token))
+                 + " token_prefix=" + tokenPrefix(token)
+                 + " userId=" + userId + " orgId=" + orgId);
+@@ -841,6 +847,12 @@ public class WebViewActivity extends AppCompatActivity {
+             return;
+         }
+ 
++        // Do not erase WebView credentials during an incomplete native bootstrap.
++        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(userId) || TextUtils.isEmpty(orgId)) {
++            Log.w(TAG, "Web session sync skipped: incomplete session");
++            return;
++        }
++
+         final String js = buildSessionInjectionJs(token, userId, orgId);
+         webView.evaluateJavascript(js, new ValueCallback<String>() {
+             @Override
+@@ -1336,6 +1348,8 @@ public class WebViewActivity extends AppCompatActivity {
+             return false;
+         }
+ 
++        if (TextUtils.isEmpty(cleanOrgId)) return false;
++        cleanToken = RuntimeSessionRenewal.adoptIncoming(this, cleanToken, cleanTrackerUserId, cleanOrgId);
+         SharedPreferences.Editor editor = prefs.edit();
+         editor.putString(KEY_TRACKER_TOKEN, cleanToken);
+         editor.putString("access_token", cleanToken);
