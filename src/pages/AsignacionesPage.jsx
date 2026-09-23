@@ -305,7 +305,7 @@ export default function AsignacionesPage() {
     }
 
     const parsedFreqMin = Number(freqMin);
-    if (!Number.isFinite(parsedFreqMin) || parsedFreqMin <= 0) {
+    if (!Number.isFinite(parsedFreqMin) || parsedFreqMin < 5) {
       console.log("[Asignaciones] validation fail: invalid frequency", { form: {
         selectedPersonId,
         selectedGeocercaId,
@@ -637,7 +637,7 @@ export default function AsignacionesPage() {
               </label>
               <input
                 type="number"
-                min="1"
+                min="5"
                 className="w-full rounded-xl border border-emerald-100 bg-white px-3.5 py-2.5 text-gray-900 shadow-sm shadow-emerald-900/5"
                 value={freqMin}
                 onChange={(e) => setFreqMin(e.target.value)}

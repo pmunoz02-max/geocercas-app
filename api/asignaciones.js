@@ -414,6 +414,19 @@ export default async function handler(req, res) {
       });
     }
 
+    // Validate supplied frequencies before writing; omitted PATCH fields stay unchanged.
+    if (method === "POST" || method === "PATCH") {
+      const incoming = req.body || {};
+      for (const [field, minimum] of [["frequency_minutes", 5], ["frecuencia_envio_sec", 300]]) {
+        if (!Object.prototype.hasOwnProperty.call(incoming, field)) continue;
+        const raw = incoming[field];
+        const value = typeof raw === "number" || typeof raw === "string" ? Number(raw) : NaN;
+        if (!Number.isFinite(value) || value < minimum) {
+          return send(res, 400, { ok: false, error: "invalid_frequency", minimum_minutes: 5 });
+        }
+      }
+    }
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false },

@@ -136,7 +136,7 @@
     "error": {
       "delete": "Impossible de supprimer l'affectation.",
       "endBeforeStart": "La date/heure de fin ne peut pas être antérieure à la date/heure de début.",
-      "invalidFrequency": "La fréquence doit être supérieure à 0.",
+      "invalidFrequency": "La fréquence doit être d’au moins 5 minutes.",
       "invalidPerson": "Vous devez sélectionner une personne valide.",
       "load": "Erreur lors du chargement des affectations.",
       "missingActivity": "Vous devez sélectionner une activité.",

@@ -172,7 +172,7 @@
     "error": {
       "delete": "Could not delete the assignment.",
       "endBeforeStart": "The end date/time cannot be earlier than the start date/time.",
-      "invalidFrequency": "Frequency must be greater than 0.",
+      "invalidFrequency": "Frequency must be at least 5 minutes.",
       "invalidPerson": "You must select a valid person.",
       "load": "Error loading assignments.",
       "missingActivity": "You must select an activity.",
