@@ -620,7 +620,7 @@ export default async function handler(req, res) {
           org_id,
           user_id,
           geojson: normalizedGeojson,
-          active: clean.active ?? true,
+          ...(!clean.id ? { active: clean.active ?? true } : {}),
           is_default: clean.is_default ?? false,
           updated_at: now,
           updated_by: user_id,

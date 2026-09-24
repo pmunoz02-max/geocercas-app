@@ -360,6 +360,8 @@ export default function NuevaGeocerca() {
   const mapRef = useRef(null);
   const featureGroupRef = useRef(null);
   const draftLayerRef = useRef(null);
+  const viewLayerRef = useRef(null);
+  const [editingGeofence, setEditingGeofence] = useState(null);
   const selectedLayerRef = useRef(null);
   const lastCreatedLayerRef = useRef(null);
 
@@ -418,6 +420,7 @@ export default function NuevaGeocerca() {
   }, []);
 
   const clearCanvas = useCallback(() => {
+    setEditingGeofence(null);
     const fg = featureGroupRef.current;
     if (fg && fg.clearLayers) {
       try {
@@ -747,7 +750,7 @@ export default function NuevaGeocerca() {
         return;
       }
 
-      if (hasFiniteGeofenceLimit && !canCreateGeofence) {
+      if (hasFiniteGeofenceLimit && !canCreateGeofence && !editingGeofence) {
         showWarn(
           t("geocercas.plan.limitReached", {
             defaultValue: "You have reached the geofence limit of your current plan. Upgrade to PRO to continue.",
@@ -756,9 +759,17 @@ export default function NuevaGeocerca() {
         return;
       }
 
+      if (editingGeofence && editingGeofence.org_id !== orgId) return;
+      if (viewFeature && !editingGeofence && !draftFeature) {
+        showErr(t("geocercas.editOne", { defaultValue: "Selecciona y muestra una sola geocerca para editarla." }));
+        return;
+      }
       let fc = null;
 
-      if (draftFeature) {
+      if (editingGeofence) {
+        fc = viewLayerRef.current?.toGeoJSON();
+        if (!fc) throw new Error("Missing editable geometry");
+      } else if (draftFeature) {
         fc = draftLayerRef.current?.toGeoJSON() || { type: "FeatureCollection", features: [draftFeature] };
       } else {
         const map = mapRef.current;
@@ -776,7 +787,7 @@ export default function NuevaGeocerca() {
         fc = { type: "FeatureCollection", features: [layerToSave.toGeoJSON()] };
       }
 
-      setGeofenceList((prev) => {
+      if (!editingGeofence) setGeofenceList((prev) => {
         const optimistic = { id: `optim-${Date.now()}`, name: nm, _optimistic: true };
         const next = [optimistic, ...(prev || [])];
         const seen = new Set();
@@ -794,7 +805,9 @@ export default function NuevaGeocerca() {
 
       const radiusMetersToSave = Number(fc?.features?.[0]?.properties?.radius_m || 0);
 
-      await upsertGeofence({
+      const saved = await upsertGeofence({
+        ...(editingGeofence ? { id: editingGeofence.id } : {}),
+        org_id: orgId,
         name: nm,
         polygon_geojson: fc,
         geojson: fc,
@@ -803,13 +816,14 @@ export default function NuevaGeocerca() {
 
       clearCanvas();
       setDraftFeature(null);
+      setEditingGeofence(saved?.id ? { ...saved, org_id: orgId } : null);
 
       setViewFeature(fc);
       setViewCentroid(centroidFeatureFromGeojson(fc));
       setViewId((x) => x + 1);
 
       await Promise.allSettled([refreshGeofenceList(), refreshEntitlements()]);
-      setGeofenceName("");
+      setGeofenceName(nm);
       showOk(t("geocercas.savedOk", { defaultValue: "Geofence saved successfully." }));
 
       scheduleFitToGeo(fc);
@@ -834,6 +848,8 @@ export default function NuevaGeocerca() {
       } catch {}
     }
   }, [
+    editingGeofence,
+    viewFeature,
     geofenceName,
     currentOrg?.id,
     draftFeature,
@@ -910,13 +926,14 @@ export default function NuevaGeocerca() {
       if (!items.length) return;
 
       const geos = [];
+      const loadedRows = [];
       for (const item of items) {
         if (!orgId || !item.id || String(item.id).startsWith("optim-")) continue;
 
         const row = await getGeofence({ id: item.id, orgId });
         const geo = normalizeGeojson(row?.polygon_geojson || row?.geojson || row?.geometry);
 
-        if (geo) geos.push(geo);
+        if (geo) { geos.push(geo); loadedRows.push(row); }
       }
 
       const combined = combineFeatureCollections(geos);
@@ -928,6 +945,8 @@ export default function NuevaGeocerca() {
       clearCanvas();
       setDraftFeature(null);
 
+      setEditingGeofence(loadedRows.length === 1 ? { ...loadedRows[0], org_id: orgId } : null);
+      setGeofenceName(loadedRows.length === 1 ? loadedRows[0].name || "" : "");
       setViewFeature(combined);
       setViewCentroid(centroidFeatureFromGeojson(combined));
       setViewId((x) => x + 1);
@@ -1086,9 +1105,9 @@ export default function NuevaGeocerca() {
 
               <button
                 onClick={handleSave}
-                disabled={entitlementsLoading || !canCreateGeofence}
+                disabled={entitlementsLoading || (!editingGeofence && !canCreateGeofence)}
                 className={`pointer-events-auto rounded-xl px-3 py-2.5 text-sm font-semibold ${
-                  entitlementsLoading || !canCreateGeofence
+                  entitlementsLoading || (!editingGeofence && !canCreateGeofence)
                     ? "cursor-not-allowed bg-slate-700 text-slate-300"
                     : "bg-emerald-600 text-white hover:bg-emerald-500"
                 }`}
@@ -1239,6 +1258,7 @@ export default function NuevaGeocerca() {
               {viewFeature && (
                 <>
                   <GeoJSON
+                    ref={viewLayerRef}
                     key={`view-${viewId}`}
                     data={viewFeature}
                     style={() => ({ color: "#38bdf8", weight: 3, fillColor: "#38bdf8", fillOpacity: 0.15 })}
@@ -1274,6 +1294,7 @@ export default function NuevaGeocerca() {
                 }}
                 globalOptions={{ continueDrawing: false, editable: true }}
                 onCreate={(e) => {
+                  setEditingGeofence(null);
                   selectedLayerRef.current = e.layer;
                   lastCreatedLayerRef.current = e.layer;
                   setDraftFeature(null);
