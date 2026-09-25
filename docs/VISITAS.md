@@ -91,3 +91,8 @@ No se activaron organizaciones automaticamente ni se modificaron roles o trackin
 Esta verificacion cubre estructura, RPC y ruta HTTP; no acredita una carga real de
 foto desde una sesion de usuario ni el selector de la app Android de Produccion.
 La nueva version Android con selector y transporte nativo sigue pendiente.
+
+## Accesos desde Inicio y Recursos
+Inicio incluye una tarjeta breve con enlace a /visitas y activacion voluntaria.
+Recursos incluye una tarjeta de uso con pasos y condiciones de la foto. Ambas
+tarjetas estan disponibles en ES/EN/FR y no activan el modulo al abrirlo.

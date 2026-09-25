@@ -1,3 +1,4 @@
+import VisitsInfoCard from "../components/VisitsInfoCard";
 ﻿// src/pages/Inicio.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -513,6 +514,8 @@ export default function Inicio() {
           </p>
         </InfoPanel>
       </div>
+
+      <VisitsInfoCard />
 
       <section>
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

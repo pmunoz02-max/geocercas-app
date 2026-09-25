@@ -1,3 +1,4 @@
+import VisitsInfoCard from "../components/VisitsInfoCard";
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -129,6 +130,7 @@ export default function ResourcesPage() {
           </p>
 
           <div className="mt-7 grid gap-4 sm:grid-cols-2">
+            <VisitsInfoCard detailed />
             {cards.map((card) => {
               const cardCopy = copy.cards[card.key] || { title: "", description: "" };
               const title = t(`resources.cards.${card.key}.title`, {
