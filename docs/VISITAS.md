@@ -61,3 +61,12 @@ a Preview mujwsfhkocsuuahlrssn. Ninguna organizaci√≥n queda activada por la migr
 Antes de Promote se deben aplicar y verificar migraciones en Producci√≥n con autorizaci√≥n
 y preparar el transporte nativo para el host de Producci√≥n en una nueva entrega Android.
 No promover solo el frontend y dar por completo el despliegue.
+
+## CorrecciÛn del despliegue (25 septiembre 2026)
+Vercel rechazÛ b888610 por superar las 12 funciones del plan Hobby (13).
+La URL /api/visits se conserva mediante una ruta explÌcita anterior a /api/*;
+api/auth/index.js carga server/visits/index.js, que mantiene su propia autenticaciÛn.
+El punto de entrada compartido admite cuerpos de hasta 3 MB para la foto.
+El cÛdigo de Visitas vive fuera de api/ y el despliegue vuelve a 12 funciones.
+No cambia la base de datos ni requiere modificar Android.
+Validaci√≥n de la correcci√≥n: 16 pruebas aprobadas, incluidas ruta de Visitas, delegaci√≥n de credenciales/cuerpo, sesi√≥n existente y rechazo de rutas desconocidas.

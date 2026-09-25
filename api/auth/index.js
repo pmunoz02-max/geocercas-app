@@ -4,7 +4,10 @@
 // - Lazy-load por route (evita 500 por imports que fallen)
 // - Extensión .js explícita (ESM estable en Vercel)
 
+export const config = { api: { bodyParser: { sizeLimit: "3mb" } } };
+
 const ROUTES = new Set([
+  "visits",
   "bootstrap",
   "ensure-context",
   "magic",
@@ -15,6 +18,8 @@ const ROUTES = new Set([
 
 async function loadHandler(route) {
   switch (route) {
+    case "visits":
+      return (await import("../../server/visits/index.js")).default;
     case "bootstrap":
       return (await import("../../server/auth/_bootstrap.js")).default;
     case "ensure-context":

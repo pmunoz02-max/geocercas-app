@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { uuid, normalizeVisit, identifyVisitActor } from '../server/api-lib/visits.js';
-import { isActiveAssignment } from '../server/api-lib/assignment-eligibility.js';
-export const config={api:{bodyParser:{sizeLimit:'3mb'}}};
+import { uuid, normalizeVisit, identifyVisitActor } from '../api-lib/visits.js';
+import { isActiveAssignment } from '../api-lib/assignment-eligibility.js';
 export default async function handler(req,res) {
  res.setHeader('Cache-Control','no-store');
  if(!['GET','POST'].includes(req.method)) return res.status(405).json({error:'method_not_allowed'});
