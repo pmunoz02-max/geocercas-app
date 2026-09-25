@@ -1,3 +1,4 @@
+import VisitsPanel from "../components/VisitsPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -435,6 +436,8 @@ export default function TrackerGpsPage() {
               : sessionUnavailable ? t("tracker.gps.browserBadge") : needsNativeApp ? t("tracker.gps.browserBadge") : t("tracker.gps.badgeInitializing")}
           </span>
         </div>
+
+        {ready && <VisitsPanel key={runtimeSession.orgId+runtimeSession.trackerUserId} orgId={runtimeSession.orgId} runtime={runtimeSession} />}
 
         {!!msg && !sessionUnavailable && (
           <div style={noteStyle}>

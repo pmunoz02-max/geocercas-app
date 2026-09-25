@@ -35,6 +35,7 @@ import TrackerInstall from "./pages/TrackerInstall.jsx";
 import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 // App pages
+import VisitsPage from "./pages/VisitsPage.jsx";
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/Geocercas.jsx";
 import NuevaGeocerca from "./pages/NuevaGeocerca.jsx";
@@ -304,6 +305,7 @@ function MainAppRoutes() {
           }
         />
         <Route path="/account" element={<Account />} />
+        <Route path="/visitas" element={<RequireOrg><VisitsPage /></RequireOrg>} />
 
         <Route
           path="/settings/delete-account"

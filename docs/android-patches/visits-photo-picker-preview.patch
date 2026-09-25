@@ -1,0 +1,45 @@
+--- a/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
++++ b/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
+@@ -1585,7 +1585,42 @@
+         return host.equals("preview.tugeocercas.com");
+     }
+ 
++    private static final int VISIT_PHOTO_REQUEST = 4831;
++    private ValueCallback<Uri[]> visitPhotoCallback;
++
++    @Override
++    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
++        super.onActivityResult(requestCode, resultCode, data);
++        if (requestCode == VISIT_PHOTO_REQUEST && visitPhotoCallback != null) {
++            ValueCallback<Uri[]> callback = visitPhotoCallback;
++            visitPhotoCallback = null;
++            Uri uri = resultCode == RESULT_OK && data != null ? data.getData() : null;
++            callback.onReceiveValue(uri != null ? new Uri[]{uri} : null);
++        }
++    }
++
+     private class AppChromeClient extends WebChromeClient {
++        @Override
++        public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
++            Uri page = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
++            if (!"https".equals(page.getScheme()) || !"preview.tugeocercas.com".equals(page.getHost())) {
++                callback.onReceiveValue(null);
++                return true;
++            }
++            if (visitPhotoCallback != null) visitPhotoCallback.onReceiveValue(null);
++            visitPhotoCallback = callback;
++            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
++            pick.addCategory(Intent.CATEGORY_OPENABLE);
++            pick.setType("image/*");
++            pick.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/jpeg", "image/png"});
++            try { startActivityForResult(pick, VISIT_PHOTO_REQUEST); }
++            catch (android.content.ActivityNotFoundException error) {
++                visitPhotoCallback = null;
++                callback.onReceiveValue(null);
++            }
++            return true;
++        }
++
+         @Override
+         public void onPermissionRequest(final PermissionRequest request) {
+             WebViewActivity.this.runOnUiThread(new Runnable() {

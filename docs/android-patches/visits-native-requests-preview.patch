@@ -1,0 +1,65 @@
+--- a/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
++++ b/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
+@@ -1403,7 +1403,62 @@
+         loadUrlSafely(releaseUrl);
+     }
+ 
++    private boolean isVisitsOrigin() {
++        Uri page = Uri.parse(webView.getUrl() == null ? "" : webView.getUrl());
++        return "https".equals(page.getScheme()) && "preview.tugeocercas.com".equals(page.getHost());
++    }
++
+     private class AndroidBridge {
++        // The credential stays native. Only this fixed Preview endpoint is callable.
++        @JavascriptInterface
++        public void visitRequest(String requestId, String requestJson) {
++            if (requestId == null || !requestId.matches("[a-zA-Z0-9-]{1,64}") || requestJson == null || requestJson.length() > 3000000) return;
++            runOnUiThread(() -> {
++                if (webView == null || !isVisitsOrigin()) return;
++                new Thread(() -> {
++                    int status = 503;
++                    String response = "{\"error\":\"visits_unavailable\"}";
++                    java.net.HttpURLConnection connection = null;
++                    try {
++                        JSONObject request = new JSONObject(requestJson);
++                        SharedPreferences stored = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
++                        String org = stored.getString("org_id", "");
++                        String user = stored.getString("tracker_user_id", "");
++                        if (!org.equals(request.optString("org_id")) || !user.equals(request.optString("user_id"))) throw new IllegalArgumentException("Session changed");
++                        RuntimeSessionRenewal.INSTANCE.renewIfNeeded(WebViewActivity.this, "https://preview.tugeocercas.com/api/send-position");
++                        if (!org.equals(stored.getString("org_id", "")) || !user.equals(stored.getString("tracker_user_id", ""))) throw new IllegalArgumentException("Session changed");
++                        JSONObject body = request.optJSONObject("body");
++                        String target = "https://preview.tugeocercas.com/api/visits" + (body == null ? "?org_id=" + java.net.URLEncoder.encode(org, "UTF-8") : "");
++                        connection = (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
++                        connection.setInstanceFollowRedirects(false);
++                        connection.setConnectTimeout(15000); connection.setReadTimeout(20000);
++                        connection.setRequestMethod(body == null ? "GET" : "POST");
++                        connection.setRequestProperty("Authorization", "Bearer " + stored.getString("access_token", ""));
++                        connection.setRequestProperty("x-tracker-runtime", "1");
++                        if (body != null) {
++                            body.put("org_id", org);
++                            connection.setRequestProperty("Content-Type", "application/json");
++                            connection.setDoOutput(true);
++                            try (java.io.OutputStream out = connection.getOutputStream()) { out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
++                        }
++                        status = connection.getResponseCode();
++                        java.io.InputStream stream = status < 400 ? connection.getInputStream() : connection.getErrorStream();
++                        if (stream != null) try (java.util.Scanner scanner = new java.util.Scanner(stream, "UTF-8").useDelimiter("\\A")) { response = scanner.hasNext() ? scanner.next() : "{}"; }
++                    } catch (Exception ignored) { /* No credential or response logging. */ }
++                    finally { if (connection != null) connection.disconnect(); }
++                    final int resultStatus = status;
++                    final String resultBody = response;
++                    runOnUiThread(() -> {
++                        if (webView == null || !isVisitsOrigin()) return;
++                        try {
++                            JSONObject detail = new JSONObject().put("id", requestId).put("status", resultStatus).put("body", resultBody);
++                            webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('geofield-visits-response',{detail:" + detail.toString() + "}));", null);
++                        } catch (Exception ignored) { }
++                    });
++                }, "VisitsRequest").start();
++            });
++        }
++
+         @JavascriptInterface
+         public String saveTrackerSession(final String token, final String trackerUserId, final String orgId) {
+             Log.i(TAG, "AndroidBridge.saveTrackerSession called token_prefix=" + tokenPrefix(token)

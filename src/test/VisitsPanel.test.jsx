@@ -1,0 +1,16 @@
+import React from 'react';
+import {it,expect,vi,beforeEach,afterEach} from 'vitest';
+import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
+import VisitsPanel from '../components/VisitsPanel';
+import {authFetch} from '../lib/authFetch';
+import {visitDrafts,putVisitDraft,acknowledgeVisit} from '../lib/visitDrafts';
+vi.mock('../lib/authFetch',()=>({authFetch:vi.fn()}));
+vi.mock('../lib/visitDrafts',()=>({visitDrafts:vi.fn(),putVisitDraft:vi.fn(),acknowledgeVisit:vi.fn(),deviceLocation:vi.fn(async()=>null),prepareVisitPhoto:vi.fn(async()=>({base64:'photo',type:'image/png',location:null,attached_at:'2026-09-25T10:00:00Z'})),csvCell:String}));
+vi.mock('react-i18next',()=>({useTranslation:()=>({i18n:{language:'es'}})}));
+const initial={enabled:false,manager:true,user_id:'user',visits:[],geofences:[{id:'zone',name:'AAA'}],people:[],assignments:[]};
+let state,queued;
+beforeEach(()=>{vi.clearAllMocks();localStorage.clear();state=structuredClone(initial);queued=[];visitDrafts.mockImplementation(async()=>queued);putVisitDraft.mockImplementation(async(scope,body)=>{queued=[{scope,key:scope+body.id,revision:'1',body}];});acknowledgeVisit.mockImplementation(async()=>{queued=[];});authFetch.mockImplementation(async(url,options)=>{if(options?.body){const body=JSON.parse(options.body);if(body.action==='configure')state.enabled=body.enabled;}return {ok:true,json:async()=>structuredClone(state)};});});
+afterEach(cleanup);
+it('starts disabled and requires an explicit organization activation',async()=>{render(<VisitsPanel orgId="org" identityUser="user"/>);await screen.findByText('Visitas está desactivado para esta organización.');expect(screen.queryByText('Iniciar visita')).toBeNull();fireEvent.click(screen.getByText('Activar visitas para esta organización'));await screen.findByText('Iniciar visita');expect(authFetch.mock.calls.some(c=>c[1]?.body&&JSON.parse(c[1].body).enabled===true)).toBe(true);});
+it('does not expose configuration controls to a tracker',async()=>{state.manager=false;render(<VisitsPanel orgId="org" identityUser="user"/>);await screen.findByText('Visitas está desactivado para esta organización.');expect(screen.queryByText('Activar visitas para esta organización')).toBeNull();});
+it('retains a photo with unavailable location as a pending draft when offline',async()=>{state.enabled=true;render(<VisitsPanel orgId="org" identityUser="user"/>);await screen.findByText('Iniciar visita');fireEvent.change(screen.getByLabelText('Geocerca'),{target:{value:'zone'}});fireEvent.change(screen.getByLabelText('Motivo de la visita'),{target:{value:'Inspección'}});fireEvent.click(screen.getByText('Iniciar visita'));await screen.findByText('Guardar avances');authFetch.mockRejectedValue(new Error('offline'));fireEvent.change(screen.getByLabelText('Adjuntar foto (JPG o PNG, máximo 2 MB)'),{target:{files:[new File(['x'],'visit.png',{type:'image/png'})]}});await waitFor(()=>expect(putVisitDraft.mock.calls.at(-1)[1].photo).toMatchObject({location:null,base64:'photo'}));expect(queued).toHaveLength(1);});

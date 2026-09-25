@@ -53,6 +53,10 @@ import es from "./es.json";
 import en from "./en.json";
 import fr from "./fr.json";
 
+es.app.tabs.visitas = "Visitas";
+en.app.tabs.visitas = "Visits";
+fr.app.tabs.visitas = "Visites";
+
 const SUPPORTED = ["es", "en", "fr"];
 
 function normalizeLang(value) {

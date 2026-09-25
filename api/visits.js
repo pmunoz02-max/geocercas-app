@@ -1,0 +1,47 @@
+import { createClient } from '@supabase/supabase-js';
+import { uuid, normalizeVisit, identifyVisitActor } from '../server/api-lib/visits.js';
+import { isActiveAssignment } from '../server/api-lib/assignment-eligibility.js';
+export const config={api:{bodyParser:{sizeLimit:'3mb'}}};
+export default async function handler(req,res) {
+ res.setHeader('Cache-Control','no-store');
+ if(!['GET','POST'].includes(req.method)) return res.status(405).json({error:'method_not_allowed'});
+ try {
+  const body=typeof req.body==='string'?JSON.parse(req.body):req.body||{};
+  const org=req.method==='GET'?req.query?.org_id:body.org_id;
+  if(!uuid(org)) return res.status(400).json({error:'invalid_org'});
+  const token=(req.headers?.authorization||'').replace(/^Bearer /,'');
+  if(!token) return res.status(401).json({error:'authentication_required'});
+  const db=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});
+  const actor=await identifyVisitActor(db,token,org,req.headers?.['x-tracker-runtime']==='1');
+  if(!actor) return res.status(403).json({error:'forbidden'});
+  const check=result=>{if(result.error) throw new Error('database_unavailable');return result.data;};
+  if(req.method==='GET') {
+   const settings=check(await db.from('org_visit_settings').select('enabled').eq('org_id',org).maybeSingle());
+   let query=db.from('field_visits').select('*').eq('org_id',org).order('started_at',{ascending:false}).limit(200);
+   if(!actor.manager) query=query.eq('user_id',actor.userId);
+   const visits=check(await query);
+   for(const visit of visits) if(visit.document?.photo) {
+    const signed=await db.storage.from('visit-evidence').createSignedUrl(`${org}/${visit.user_id}/${visit.id}/${visit.document.photo.hash}`,300);
+    visit.photo_url=signed.data?.signedUrl||null;
+   }
+   const geofences=check(await db.from('geofences').select('id,name').eq('org_id',org).eq('active',true));
+   const personal=check(await db.from('personal').select('id,user_id,nombre,apellido').eq('org_id',org).eq('is_deleted',false));
+   const assignments=check(await db.from('asignaciones').select('id,user_id,personal_id,geofence_id,start_time,end_time,status,estado,is_deleted,start_date,end_date').eq('org_id',org).eq('is_deleted',false));
+   const own=assignments.filter(a=>isActiveAssignment(a)&&(a.user_id===actor.userId||personal.some(p=>p.id===a.personal_id&&p.user_id===actor.userId)));
+   return res.status(200).json({enabled:settings?.enabled===true,manager:actor.manager,user_id:actor.userId,visits,geofences:actor.manager?geofences:geofences.filter(g=>own.some(a=>a.geofence_id===g.id)),assignments:own,people:actor.manager?personal:personal.filter(p=>p.user_id===actor.userId)});
+  }
+  if(body.action==='configure'&&!actor.manager) return res.status(403).json({error:'forbidden'});
+  const parsed=body.action==='configure'?{data:{enabled:body.enabled}}:normalizeVisit(body);
+  if(body.action!=='configure'&&!parsed.photo){const existing=check(await db.from('field_visits').select('document').eq('id',body.id).eq('org_id',org).eq('user_id',actor.userId).maybeSingle());if(existing?.document?.photo)parsed.data.document.photo=existing.document.photo;}
+  const result=check(await db.rpc('save_field_visit',{p_org:org,p_user:actor.userId,p_action:body.action==='configure'?'configure':'save',p_data:parsed.data}));
+  if(result.error) return res.status(409).json(result);
+  if(parsed.photo) {
+   const saved=await db.storage.from('visit-evidence').upload(`${org}/${actor.userId}/${body.id}/${parsed.data.document.photo.hash}`,parsed.photo,{contentType:parsed.data.document.photo.type,upsert:true});
+   if(saved.error) return res.status(503).json({error:'photo_pending'});
+  }
+  return res.status(200).json(result);
+ } catch(error) {
+  const invalid=['invalid_request','invalid_location','invalid_photo','purpose_required','text_too_long'].includes(error.message)||error instanceof SyntaxError;
+  return res.status(invalid?400:503).json({error:invalid?error.message:'visits_unavailable'});
+ }
+}
