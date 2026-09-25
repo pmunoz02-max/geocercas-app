@@ -76,3 +76,18 @@ La foto opcional puede elegirse antes de iniciar la visita y durante su registro
 El formulario explica que admite imágenes del sitio, presentes o documentos y muestra
 una vista previa. La imagen inicial se incorpora al borrador al pulsar Iniciar visita.
 Se mantienen JPG/PNG, 2 MB, almacenamiento privado y ubicación al adjuntar.
+
+## Instalacion en Produccion tras Promote (25 septiembre 2026)
+El Promote de la web no transporto la estructura Supabase. Se confirmo que faltaban
+org_visit_settings, field_visits, save_field_visit y el bucket visit-evidence en
+wpaixkvokdkudymgjoua. Bajo la solicitud de corregir Produccion se aplicaron las dos
+migraciones existentes optional_visits_module y harden_visit_id_conflicts.
+Las pruebas transactional.sql pasaron con ROLLBACK; comprobacion posterior:
+0 visitas y 0 ajustes persistidos, bucket privado, RPC denegada a anon/authenticated
+y permitida a service_role. Advisors solo informa RLS sin politicas para estas tablas,
+intencional al ser acceso exclusivamente desde backend.
+La ruta publica /api/visits responde 401 authentication_required sin credenciales.
+No se activaron organizaciones automaticamente ni se modificaron roles o tracking.
+Esta verificacion cubre estructura, RPC y ruta HTTP; no acredita una carga real de
+foto desde una sesion de usuario ni el selector de la app Android de Produccion.
+La nueva version Android con selector y transporte nativo sigue pendiente.
