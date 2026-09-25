@@ -19,3 +19,27 @@ function dbFor(session,role='tracker') {const db={from:vi.fn(table=>{const q={se
 it('rejects runtime tokens for another organization',async()=>{expect(await identifyVisitActor(dbFor({org_id:'other',expires_at:'2099-01-01'}),'token',id,true)).toBeNull();});
 it('rejects expired or revoked runtime sessions',async()=>{for(const s of [{expires_at:'2020-01-01'},{expires_at:'2099-01-01',revoked_at:'2026-01-01'}])expect(await identifyVisitActor(dbFor({org_id:id,...s}),'token',id,true)).toBeNull();});
 it('runtime sessions never acquire administrative privileges',async()=>{expect(await identifyVisitActor(dbFor({org_id:id,tracker_user_id:id,expires_at:'2099-01-01'},'owner'),'token',id,true)).toBeNull();});
+
+const png={type:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10]).toString('base64'),attached_at:'2026-09-25T12:00:00Z',location:null};
+it('accepts five photos and rejects six on the server',()=>{
+ expect(normalizeVisit({...base,photos:Array(5).fill(png)}).data.document.photos).toHaveLength(5);
+ expect(()=>normalizeVisit({...base,photos:Array(6).fill(png)})).toThrow('photo_limit');
+});
+it('rejects combined oversized uploads',()=>{
+ const bytes=Buffer.alloc(1100000);Buffer.from([137,80,78,71,13,10,26,10]).copy(bytes);
+ expect(()=>normalizeVisit({...base,photos:Array(2).fill({...png,base64:bytes.toString('base64')})})).toThrow('photo_total_size');
+});
+it('only accepts photo references belonging to this visit',()=>{
+ const saved=normalizeVisit({...base,photos:[png]}).data.document;
+ expect(normalizeVisit({...base,photos:[{hash:saved.photos[0].hash}]},saved).data.document.photos).toEqual(saved.photos);
+ expect(()=>normalizeVisit({...base,photos:[{hash:'other'}]},saved)).toThrow('invalid_photo');
+});
+it('preserves legacy photo and supports explicit removal',()=>{
+ const saved=normalizeVisit({...base,photo:png}).data.document;
+ expect(normalizeVisit(base,saved).data.document).toEqual(saved);
+ expect(normalizeVisit({...base,photos:[]},saved).data.document.photos).toEqual([]);
+});
+it('retrying the same images preserves saved metadata',()=>{
+ const saved=normalizeVisit({...base,photos:[png]}).data.document;
+ expect(normalizeVisit({...base,photos:[{...png,attached_at:'2026-09-26T12:00:00Z'}]},saved).data.document).toEqual(saved);
+});

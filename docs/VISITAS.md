@@ -96,3 +96,15 @@ La nueva version Android con selector y transporte nativo sigue pendiente.
 Inicio incluye una tarjeta breve con enlace a /visitas y activacion voluntaria.
 Recursos incluye una tarjeta de uso con pasos y condiciones de la foto. Ambas
 tarjetas estan disponibles en ES/EN/FR y no activan el modulo al abrirlo.
+
+## Hasta cinco fotos por visita
+La version nueva admite de cero a cinco fotos JPG/PNG, con contador, seleccion
+multiple, vista previa y retirada antes del cierre. Maximo combinado: 2 MB para
+mantener la peticion base64 bajo 3 MB (web y transporte Android de Preview).
+Cada foto conserva su ubicacion y hora al adjuntarla. La API valida el limite,
+el tamano combinado y las referencias: solo admite fotos de esa misma visita.
+Los documentos JSON usan photos; se sigue leyendo photo para registros anteriores.
+No requiere migraciones de esquema. Las fotos retiradas del registro dejan de
+recibir enlaces firmados, pero no se eliminan fisicamente del bucket en este cambio.
+La carga Android multiple puede hacerse una imagen a la vez con el selector existente.
+24 pruebas de regresion aprobadas antes de la comprobacion final del build.

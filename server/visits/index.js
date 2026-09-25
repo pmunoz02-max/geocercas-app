@@ -19,9 +19,14 @@ export default async function handler(req,res) {
    let query=db.from('field_visits').select('*').eq('org_id',org).order('started_at',{ascending:false}).limit(200);
    if(!actor.manager) query=query.eq('user_id',actor.userId);
    const visits=check(await query);
-   for(const visit of visits) if(visit.document?.photo) {
-    const signed=await db.storage.from('visit-evidence').createSignedUrl(`${org}/${visit.user_id}/${visit.id}/${visit.document.photo.hash}`,300);
-    visit.photo_url=signed.data?.signedUrl||null;
+   for(const visit of visits) {
+    visit.photo_urls={}; visit.photo_sizes={};
+    for(const photo of visit.document?.photos || (visit.document?.photo?[visit.document.photo]:[])) {
+     if(photo.size==null){const info=await db.storage.from('visit-evidence').info(`${org}/${visit.user_id}/${visit.id}/${photo.hash}`);if(Number.isFinite(info.data?.size))visit.photo_sizes[photo.hash]=info.data.size;}
+     const signed=await db.storage.from('visit-evidence').createSignedUrl(`${org}/${visit.user_id}/${visit.id}/${photo.hash}`,300);
+     visit.photo_urls[photo.hash]=signed.data?.signedUrl||null;
+    }
+    visit.photo_url=visit.photo_urls[visit.document?.photo?.hash]||null;
    }
    const geofences=check(await db.from('geofences').select('id,name').eq('org_id',org).eq('active',true));
    const personal=check(await db.from('personal').select('id,user_id,nombre,apellido').eq('org_id',org).eq('is_deleted',false));
@@ -30,17 +35,19 @@ export default async function handler(req,res) {
    return res.status(200).json({enabled:settings?.enabled===true,manager:actor.manager,user_id:actor.userId,visits,geofences:actor.manager?geofences:geofences.filter(g=>own.some(a=>a.geofence_id===g.id)),assignments:own,people:actor.manager?personal:personal.filter(p=>p.user_id===actor.userId)});
   }
   if(body.action==='configure'&&!actor.manager) return res.status(403).json({error:'forbidden'});
-  const parsed=body.action==='configure'?{data:{enabled:body.enabled}}:normalizeVisit(body);
-  if(body.action!=='configure'&&!parsed.photo){const existing=check(await db.from('field_visits').select('document').eq('id',body.id).eq('org_id',org).eq('user_id',actor.userId).maybeSingle());if(existing?.document?.photo)parsed.data.document.photo=existing.document.photo;}
+  const existing=body.action==='configure'?null:check(await db.from('field_visits').select('document').eq('id',body.id).eq('org_id',org).eq('user_id',actor.userId).maybeSingle());
+  const existingSizes={};
+  if(Array.isArray(body.photos))for(const photo of existing?.document?.photos||(existing?.document?.photo?[existing.document.photo]:[])){if(photo.size==null){const info=await db.storage.from('visit-evidence').info(`${org}/${actor.userId}/${body.id}/${photo.hash}`);if(Number.isFinite(info.data?.size))existingSizes[photo.hash]=info.data.size;}}
+  const parsed=body.action==='configure'?{data:{enabled:body.enabled}}:normalizeVisit(body,existing?.document,existingSizes);
   const result=check(await db.rpc('save_field_visit',{p_org:org,p_user:actor.userId,p_action:body.action==='configure'?'configure':'save',p_data:parsed.data}));
   if(result.error) return res.status(409).json(result);
-  if(parsed.photo) {
-   const saved=await db.storage.from('visit-evidence').upload(`${org}/${actor.userId}/${body.id}/${parsed.data.document.photo.hash}`,parsed.photo,{contentType:parsed.data.document.photo.type,upsert:true});
+  for(const upload of parsed.uploads||[]) {
+   const saved=await db.storage.from('visit-evidence').upload(`${org}/${actor.userId}/${body.id}/${upload.metadata.hash}`,upload.bytes,{contentType:upload.metadata.type,upsert:true});
    if(saved.error) return res.status(503).json({error:'photo_pending'});
   }
   return res.status(200).json(result);
  } catch(error) {
-  const invalid=['invalid_request','invalid_location','invalid_photo','purpose_required','text_too_long'].includes(error.message)||error instanceof SyntaxError;
+  const invalid=['photo_limit','photo_total_size','invalid_request','invalid_location','invalid_photo','purpose_required','text_too_long'].includes(error.message)||error instanceof SyntaxError;
   return res.status(invalid?400:503).json({error:invalid?error.message:'visits_unavailable'});
  }
 }
