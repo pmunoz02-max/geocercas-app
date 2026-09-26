@@ -47,3 +47,20 @@ it('rejects a batch of six before preparing any photo',async()=>{
  await screen.findByText('Puedes adjuntar hasta 5 fotos por visita.');
  expect(screen.queryAllByRole('img')).toHaveLength(0);
 });
+
+it('hides reporting controls for trackers while keeping visit entry available',async()=>{
+ state.enabled=true;state.manager=false;
+ render(<VisitsPanel orgId="org" identityUser="user"/>);
+ await screen.findByText('Iniciar visita');
+ expect(screen.queryByText('Exportar CSV')).toBeNull();
+ expect(screen.queryByText(/Historial/)).toBeNull();
+ expect(screen.queryByPlaceholderText('Filtrar por persona o geocerca')).toBeNull();
+ expect(screen.queryByText('Desde')).toBeNull();
+ expect(screen.queryByText('Hasta')).toBeNull();
+ expect(screen.getByLabelText('Adjuntar fotos (hasta 5; 2 MB por foto)')).toBeTruthy();
+});
+it('keeps reporting controls for managers',async()=>{
+ state.enabled=true;render(<VisitsPanel orgId="org" identityUser="user"/>);
+ await screen.findByText('Exportar CSV');
+ expect(screen.getByText(/Historial/)).toBeTruthy();
+});
