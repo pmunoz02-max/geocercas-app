@@ -89,32 +89,32 @@ export default function TopTabs({ tabs = [] }) {
 
   const wrapCls = "w-full text-slate-900";
   const panelCls =
-    "bg-white border border-slate-200 rounded-2xl px-3 py-2 shadow-sm text-slate-900";
+    "bg-gradient-to-r from-emerald-50 via-white to-teal-50 border border-emerald-200 rounded-2xl px-3 py-3 shadow-md shadow-emerald-900/5 text-slate-900";
 
   const baseCls =
-    "no-underline inline-flex items-center justify-center px-4 py-2 rounded-full " +
-    "text-sm font-semibold whitespace-nowrap border transition-all duration-150 " +
-    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2 " +
+    "no-underline inline-flex items-center justify-center min-h-[44px] px-5 py-3 rounded-xl " +
+    "text-[15px] font-bold whitespace-nowrap border-2 transition-colors duration-150 " +
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2 " +
     "focus-visible:ring-offset-white";
 
-  const activeCls = "bg-slate-900 border-slate-900 !text-white shadow-sm";
+  const activeCls = "bg-emerald-700 border-emerald-800 !text-white shadow-md shadow-emerald-900/20";
 
   const inactiveCls =
-    "bg-white border-slate-200 !text-slate-900 " +
-    "hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm";
+    "bg-white border-emerald-200 !text-slate-800 shadow-sm " +
+    "hover:bg-emerald-100 hover:border-emerald-500 hover:!text-emerald-950";
 
   return (
-    <div className={wrapCls} data-top-tabs="v11">
+    <div className={wrapCls} data-top-tabs="v12">
       <div className={panelCls}>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {!flags.noorg ? (
             <div className="shrink-0">
               <OrgSelector />
             </div>
           ) : null}
 
-          <nav className="flex-1 overflow-x-auto scrollbar-hide">
-            <div className="flex gap-2 min-w-max items-center">
+          <nav className="min-w-0 basis-full md:basis-auto md:flex-1 overflow-x-auto">
+            <div className="flex gap-2.5 min-w-max items-center p-1 pb-2">
               {items.map((tab, idx) => {
                 const path = safeText(tab?.path).trim();
                 if (!path) return null;
@@ -133,7 +133,7 @@ export default function TopTabs({ tabs = [] }) {
                     <span className="relative">
                       {label}
                       {on ? (
-                        <span className="absolute left-0 -bottom-1 h-[2px] w-full rounded-full bg-emerald-400/80" />
+                        <span className="absolute left-0 -bottom-1 h-[2px] w-full rounded-full bg-white" />
                       ) : null}
                     </span>
                   </NavLink>
