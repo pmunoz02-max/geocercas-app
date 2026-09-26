@@ -28,7 +28,7 @@ export function normalizeVisit(body, existingDocument = {}, existingSizes = {}) 
   const metadata=existingPhotos.find(p=>p.hash===hash)||{hash,type:item.type,size:bytes.length,attached_at:item.attached_at,location:location(item.location),source:'attachment_location_not_verified_capture'};
   uploads.push({bytes,metadata});return metadata;
  });
- if(total>2097152)throw new Error('photo_total_size');
+ if(total>5*2097152)throw new Error('photo_total_size');
  // Keep legacy documents identical for closed-visit retries from older clients.
  if(!explicit && !existingDocument.photos){if(photos.length)document.photo=photos[0];}
  else document.photos=photos;
@@ -48,4 +48,19 @@ export async function identifyVisitActor(db,token,orgId,runtime=false) {
  const {data,error}=await db.from('memberships').select('role').eq('org_id',orgId).eq('user_id',userId).is('revoked_at',null).maybeSingle();
  if(error||!data||(runtime && data.role!=='tracker')) return null;
  return {userId,manager:!runtime&&['owner','admin'].includes(data.role)};
+}
+
+export function photoReceipt(metadata, scope, secret) {
+ const value=Buffer.from(JSON.stringify({metadata,scope,expires:Date.now()+86400000})).toString('base64url');
+ return value+'.'+crypto.createHmac('sha256',secret).update(value).digest('base64url');
+}
+export function readPhotoReceipt(receipt, scope, secret) {
+ if(typeof receipt!=='string'||receipt.length>4096)throw new Error('invalid_photo');
+ const [value,signature]=receipt.split('.');
+ const expected=crypto.createHmac('sha256',secret).update(value).digest();
+ const actual=Buffer.from(signature||'','base64url');
+ if(actual.length!==expected.length||!crypto.timingSafeEqual(actual,expected))throw new Error('invalid_photo');
+ const parsed=JSON.parse(Buffer.from(value,'base64url').toString());
+ if(parsed.scope!==scope||parsed.expires<Date.now())throw new Error('invalid_photo');
+ return parsed.metadata;
 }

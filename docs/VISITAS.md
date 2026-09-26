@@ -108,3 +108,15 @@ No requiere migraciones de esquema. Las fotos retiradas del registro dejan de
 recibir enlaces firmados, pero no se eliminan fisicamente del bucket en este cambio.
 La carga Android multiple puede hacerse una imagen a la vez con el selector existente.
 24 pruebas de regresion aprobadas antes de la comprobacion final del build.
+
+## Correccion: 2 MB por foto (26 septiembre 2026)
+Sustituye el limite combinado anterior: cinco fotos de 2 MB cada una, hasta 10 MB
+por visita. Cada imagen se sube en una peticion independiente a la misma API.
+El servidor devuelve un comprobante HMAC con caducidad de 24 horas, vinculado a
+organizacion, usuario y visita. El guardado final acepta solo referencias existentes
+o comprobantes validos y mantiene el maximo de cinco fotos. No emite URLs publicas.
+El borrador conserva las imagenes hasta completar el guardado final; si una subida
+falla no se cierra la visita. El reintento vuelve a subir al mismo hash (idempotente).
+Una subida completada sin guardado final puede dejar un objeto privado sin referencia;
+no se borra automaticamente en este cambio. No requiere migracion ni nuevas funciones
+Vercel. El transporte Android Preview conserva el limite de 3 MB por peticion.

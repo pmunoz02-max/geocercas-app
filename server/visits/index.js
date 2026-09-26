@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { uuid, normalizeVisit, identifyVisitActor } from '../api-lib/visits.js';
+import { uuid, normalizeVisit, identifyVisitActor, photoReceipt, readPhotoReceipt } from '../api-lib/visits.js';
 import { isActiveAssignment } from '../api-lib/assignment-eligibility.js';
 export default async function handler(req,res) {
  res.setHeader('Cache-Control','no-store');
@@ -36,9 +36,28 @@ export default async function handler(req,res) {
   }
   if(body.action==='configure'&&!actor.manager) return res.status(403).json({error:'forbidden'});
   const existing=body.action==='configure'?null:check(await db.from('field_visits').select('document').eq('id',body.id).eq('org_id',org).eq('user_id',actor.userId).maybeSingle());
-  const existingSizes={};
-  if(Array.isArray(body.photos))for(const photo of existing?.document?.photos||(existing?.document?.photo?[existing.document.photo]:[])){if(photo.size==null){const info=await db.storage.from('visit-evidence').info(`${org}/${actor.userId}/${body.id}/${photo.hash}`);if(Number.isFinite(info.data?.size))existingSizes[photo.hash]=info.data.size;}}
-  const parsed=body.action==='configure'?{data:{enabled:body.enabled}}:normalizeVisit(body,existing?.document,existingSizes);
+  const receiptScope=`${org}:${actor.userId}:${body.id}`;
+  const secret=process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if(body.action==='upload_photo') {
+   if(!body.photo||body.photos) return res.status(400).json({error:'invalid_photo'});
+   const normalized=normalizeVisit(body,existing?.document);
+   const organization=check(await db.from('organizations').select('active,suspended').eq('id',org).maybeSingle());
+   const setting=check(await db.from('org_visit_settings').select('enabled').eq('org_id',org).maybeSingle());
+   if(!organization?.active||organization.suspended||(!setting?.enabled&&!existing))return res.status(403).json({error:'forbidden'});
+   const upload=normalized.uploads[0];
+   const saved=await db.storage.from('visit-evidence').upload(`${org}/${actor.userId}/${body.id}/${upload.metadata.hash}`,upload.bytes,{contentType:upload.metadata.type,upsert:true});
+   if(saved.error)return res.status(503).json({error:'photo_pending'});
+   return res.status(200).json({receipt:photoReceipt(upload.metadata,receiptScope,secret)});
+  }
+  const trusted=[...(existing?.document?.photos||(existing?.document?.photo?[existing.document.photo]:[]))];
+  if(Array.isArray(body.photos))body.photos=body.photos.map(photo=>{
+   if(!photo.receipt)return photo;
+   const metadata=readPhotoReceipt(photo.receipt,receiptScope,secret);
+   if(!trusted.some(p=>p.hash===metadata.hash))trusted.push(metadata);
+   return {hash:metadata.hash};
+  });
+  const document=existing?.document||{};
+  const parsed=body.action==='configure'?{data:{enabled:body.enabled}}:normalizeVisit(body,body.photos?{...document,photos:trusted}:document);
   const result=check(await db.rpc('save_field_visit',{p_org:org,p_user:actor.userId,p_action:body.action==='configure'?'configure':'save',p_data:parsed.data}));
   if(result.error) return res.status(409).json(result);
   for(const upload of parsed.uploads||[]) {

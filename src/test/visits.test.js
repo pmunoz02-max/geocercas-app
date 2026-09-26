@@ -25,9 +25,9 @@ it('accepts five photos and rejects six on the server',()=>{
  expect(normalizeVisit({...base,photos:Array(5).fill(png)}).data.document.photos).toHaveLength(5);
  expect(()=>normalizeVisit({...base,photos:Array(6).fill(png)})).toThrow('photo_limit');
 });
-it('rejects combined oversized uploads',()=>{
+it('accepts combined size above 2 MB when each photo is within 2 MB',()=>{
  const bytes=Buffer.alloc(1100000);Buffer.from([137,80,78,71,13,10,26,10]).copy(bytes);
- expect(()=>normalizeVisit({...base,photos:Array(2).fill({...png,base64:bytes.toString('base64')})})).toThrow('photo_total_size');
+ expect(normalizeVisit({...base,photos:Array(5).fill({...png,base64:bytes.toString('base64')})}).data.document.photos).toHaveLength(5);
 });
 it('only accepts photo references belonging to this visit',()=>{
  const saved=normalizeVisit({...base,photos:[png]}).data.document;
