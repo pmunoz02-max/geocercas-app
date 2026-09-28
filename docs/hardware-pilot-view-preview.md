@@ -1,6 +1,6 @@
 # Vista del piloto hardware en Preview
 
-Implementada localmente en /hardware-piloto, dentro de AuthGuard, TrackerRoleGuard y RequireOrg. Acceso de la cuenta indicada por el usuario configurado en Preview. Pendientes publicación web y revisión visual autenticada.
+Publicada en Preview en /hardware-piloto, dentro de AuthGuard, TrackerRoleGuard y RequireOrg. Acceso de la cuenta indicada por el usuario configurado en Preview. Publicación y revisión visual autenticada completadas; ver registro final.
 
 La página solo carga datos con hostname Preview/localhost/vercel y Supabase Preview exacto. En Producción muestra un mensaje sin consultas hardware. Usa la sesión del navegador y RLS, nunca service_role. Selecciona la organización actual, filtra trackers simulados y consulta las últimas 24 horas, máximo 500 observaciones (501 para detectar truncamiento). Solo fixes válidos van al mapa; tiempos del dispositivo y recepción se muestran separados. No afirma estado online. Cancela solicitudes al cambiar organización o selección y oculta resultados anteriores durante la carga.
 
@@ -19,3 +19,11 @@ Acceso concedido a la cuenta Preview indicada por el usuario (detalle de verific
 Se añadió a la cuenta indicada por el usuario como admin activo únicamente de SIM GPS/GNSS Preview. No se cambió el propietario ficticio ni la organización predeterminada. Se comprobaron dentro de la transacción las membresías, org_members y app_user_roles de esa cuenta en otras organizaciones: sin cambios. Los bridges existentes sincronizaron el nuevo rol.
 
 Verificación con SET LOCAL ROLE authenticated y auth.uid de la cuenta: admin_verified=true, 2 trackers y 26 observaciones visibles. Es una prueba de RLS en base de datos, no una sesión web autenticada ni una revisión del mapa en navegador. Producción no se consultó ni modificó. La vista /hardware-piloto sigue local, pendiente publicación.
+
+## Publicación verificada — 2026-09-28
+
+Commit de implementación 289008a4, push únicamente a origin/preview. Vercel dpl_9EmmqCXAanHNhsrZfAuZhzVApDeB: READY, target preview, alias preview.tugeocercas.com. No se promovió a Producción.
+
+35 pruebas de cuatro archivos aprobadas antes de publicar. Verificación en Chrome con sesión existente de la cuenta autorizada: selección de la organización ficticia, SIM GPS 1 y SIM GPS 2 con 13 posiciones cada uno, recorrido y marcador visibles, cambio de dispositivo, botón Actualizar y tabla de observaciones operativos. Mosaicos cargados (imágenes de 256 px); coordenadas cercanas a 0,0 son ficticias.
+
+URL: https://preview.tugeocercas.com/hardware-piloto . Organización del piloto: 28b86cea-e91d-4926-8770-755fbc31a5d1 (el selector actual muestra UUID). Se dejó esa organización seleccionada en la sesión del navegador. Los cambios anteriores de Android/traducciones permanecieron fuera del commit. No se cambió main ni Producción.
