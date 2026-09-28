@@ -10,3 +10,13 @@ function mockData(error=false){from.mockImplementation(table=>{const q={};for(co
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 it('renders read-only route under permitted organization',async()=>{mockData();render(<HardwarePilotPage/>);await waitFor(()=>expect(screen.getByText(/1 posiciones válidas/)).toBeTruthy());expect(screen.getByText('Preview · Datos simulados')).toBeTruthy();expect(from).toHaveBeenCalledWith('hardware_observations');});
 it('fails visibly without exposing server errors',async()=>{mockData(true);render(<HardwarePilotPage/>);await waitFor(()=>expect(screen.getByRole('alert')).toBeTruthy());expect(screen.queryByText('secret server error')).toBeNull();});
+it('uses received-time communication independently from the valid route',async()=>{
+ from.mockImplementation(table=>{
+  let columns='';const q={select:vi.fn(value=>{columns=value;return q;})};
+  for(const name of ['eq','order','gte','limit'])q[name]=vi.fn(()=>q);
+  q.abortSignal=vi.fn(async()=>({data:table==='trackers'?[{id:'t1',name:'Simulado 1'}]:columns==='recorded_at,received_at,fix_valid'?[{recorded_at:new Date().toISOString(),received_at:new Date().toISOString(),fix_valid:false}]:[{device_id:'d1',event_id:'p1',recorded_at:new Date().toISOString(),received_at:new Date().toISOString(),fix_valid:true,latitude:0,longitude:0}],error:null}));return q;
+ });
+ render(<HardwarePilotPage/>);
+ await waitFor(()=>expect(screen.getByText('Sin señal GPS')).toBeTruthy());
+ expect(screen.getByText(/1 posiciones válidas/)).toBeTruthy();
+});

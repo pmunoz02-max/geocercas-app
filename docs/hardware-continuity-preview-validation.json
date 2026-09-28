@@ -1,0 +1,36 @@
+{
+  "project_ref": "mujwsfhkocsuuahlrssn",
+  "run": "continuity-68dd18f0-1073-47b0-bc88-7abffd402569",
+  "simulated": true,
+  "pause_seconds": 185,
+  "duplicate_preserves_receipt": true,
+  "checks": [
+    {
+      "expected": "online",
+      "actual": "online",
+      "at": "2026-09-28T13:50:09.233Z"
+    },
+    {
+      "expected": "no_fix",
+      "actual": "no_fix",
+      "at": "2026-09-28T13:50:11.615Z"
+    },
+    {
+      "expected": "offline",
+      "actual": "offline",
+      "at": "2026-09-28T13:53:17.428Z"
+    },
+    {
+      "expected": "delayed",
+      "actual": "delayed",
+      "at": "2026-09-28T13:53:17.809Z"
+    },
+    {
+      "expected": "online",
+      "actual": "online",
+      "at": "2026-09-28T13:53:18.223Z"
+    }
+  ],
+  "passed": true,
+  "ended_at": "2026-09-28T13:53:18.224Z"
+}
