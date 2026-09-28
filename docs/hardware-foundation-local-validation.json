@@ -1,0 +1,60 @@
+{
+  "scope": "local-only",
+  "fixture": "minimal organizations/memberships/auth.uid; not Supabase clone",
+  "migration": "20260927125126_hardware_tracker_foundation_preview.sql",
+  "checks": [
+    {
+      "name": "atomic migration and missing-marker rejection",
+      "passed": true
+    },
+    {
+      "name": "existing transactional suite: quota 0/1/2, bindings, RLS, rollback",
+      "passed": true
+    },
+    {
+      "name": "service_role can use all guards without direct private-function grants",
+      "passed": true
+    },
+    {
+      "name": "revoked non-owner admin loses all four table reads",
+      "passed": true
+    },
+    {
+      "name": "unsafe isolation fails closed",
+      "passed": true
+    },
+    {
+      "name": "missing hardware entitlement rejects tracker",
+      "passed": true
+    },
+    {
+      "name": "last-slot commit (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "last-slot rollback (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "reactivation last slot (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "quota decrease vs activation (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "same device bound twice (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "deactivation vs binding (two connections, lock observed)",
+      "passed": true
+    }
+  ],
+  "postgres_version": "PostgreSQL 17.11 on x86_64-windows, compiled by msvc-19.44.35228, 64-bit",
+  "passed": true,
+  "server_stopped": true,
+  "temporary_data_removed": true,
+  "migration_sha256": "2ff7fb89ee4e595477f2e0f8e91f8104a77190db4e6db29e5a27dc135400b470"
+}

@@ -1,0 +1,25 @@
+{
+  "project_ref": "mujwsfhkocsuuahlrssn",
+  "mode": "transactional_rollback",
+  "migration": "20260928025917_hardware_observations_preview.sql",
+  "sha256": "7f3ed4e03d2c2bf0e0a39efc3938b6a5aeb42815e3b21646befd42abaa5355aa",
+  "result": [
+    {
+      "result": "PASS",
+      "rollback_completed": true
+    }
+  ],
+  "independent_postcheck": [
+    {
+      "observations_absent": true,
+      "retention_absent": true,
+      "rpc_absent": true,
+      "migration_rows": 0,
+      "pilot_trackers": 2
+    }
+  ],
+  "javascript_tests_passed": 30,
+  "local_database_groups_passed": 19,
+  "permanently_installed": false,
+  "production_touched": false
+}

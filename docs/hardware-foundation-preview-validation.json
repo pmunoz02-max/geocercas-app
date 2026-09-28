@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-27",
+  "scope": "Supabase Preview only; single transaction rolled back",
+  "project_id": "mujwsfhkocsuuahlrssn",
+  "postgres_version": "17.6",
+  "migration_file": "20260927125126_hardware_tracker_foundation_preview.sql",
+  "validation": {
+    "result": "PASS",
+    "project": "mujwsfhkocsuuahlrssn",
+    "migration_sha256": "2ff7fb89ee4e595477f2e0f8e91f8104a77190db4e6db29e5a27dc135400b470",
+    "rollback_completed": true,
+    "fixture_orgs_absent": true,
+    "fixture_users_absent": true,
+    "hardware_objects_absent": true
+  },
+  "independent_cleanup_check": {
+    "fixture_orgs": 0,
+    "fixture_users": 0,
+    "fixture_billing": 0,
+    "hardware_tables": 0,
+    "fixture_app_roles": 0,
+    "fixture_memberships": 0,
+    "fixture_org_members": 0,
+    "private_schema_absent": true,
+    "migration_history_rows": 0
+  },
+  "concurrency": "Six two-connection scenarios previously passed locally; not repeated on Supabase because fixtures and schema were uncommitted.",
+  "not_tested": [
+    "PostgREST endpoints",
+    "Android regression",
+    "position ingestion and retention",
+    "physical GPS protocol/connectivity"
+  ]
+}

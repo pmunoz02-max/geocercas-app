@@ -1,0 +1,26 @@
+{
+  "project_ref": "mujwsfhkocsuuahlrssn",
+  "observations_migration": "20260928030944",
+  "cron_extension_migration": "20260928031007",
+  "observations_sha256": "7f3ed4e03d2c2bf0e0a39efc3938b6a5aeb42815e3b21646befd42abaa5355aa",
+  "verification": {
+    "job": {
+      "name": "hardware-pilot-retention-preview",
+      "jobid": 1,
+      "active": true,
+      "schedule": "*/15 * * * *"
+    },
+    "run": {
+      "end": "2026-09-28T03:12:00.12902+00:00",
+      "start": "2026-09-28T03:12:00.117226+00:00",
+      "status": "succeeded"
+    },
+    "points": 2,
+    "retention_days": 30,
+    "anon_ingest_denied": true,
+    "service_ingest_allowed": true,
+    "purge_watermark_present": true,
+    "authenticated_ingest_denied": true
+  },
+  "production_touched": false
+}

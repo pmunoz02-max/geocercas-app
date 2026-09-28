@@ -1,0 +1,21 @@
+{
+  "project_ref": "mujwsfhkocsuuahlrssn",
+  "transport": "HTTPS PostgREST RPC",
+  "results": [
+    {
+      "device_id": "fe0bb5fb-d262-458e-8305-2c15b46c4920",
+      "event_id": "http-1790565067752",
+      "first": "stored",
+      "retry": "duplicate",
+      "receipt_unchanged": true
+    },
+    {
+      "device_id": "fa80a1e1-d24b-4a49-9343-63f762a9e0f9",
+      "event_id": "http-1790565067752",
+      "first": "stored",
+      "retry": "duplicate",
+      "receipt_unchanged": true
+    }
+  ],
+  "simulated_coordinates": true
+}

@@ -1,0 +1,42 @@
+{
+  "project_ref": "mujwsfhkocsuuahlrssn",
+  "date": "2026-09-27",
+  "migration_version": "20260927174712",
+  "migration_sha256": "2ff7fb89ee4e595477f2e0f8e91f8104a77190db4e6db29e5a27dc135400b470",
+  "pilot": {
+    "org_id": "28b86cea-e91d-4926-8770-755fbc31a5d1",
+    "owner_id": "fcdead74-9c11-4a0b-9dd1-70155c10e121",
+    "slug": "geofield-hardware-simulator-preview",
+    "enabled": true,
+    "max_hardware_trackers": 2,
+    "retention_days": 30,
+    "simulation_only": true,
+    "inventory": [
+      {
+        "name": "SIM GPS 1",
+        "device_id": "fe0bb5fb-d262-458e-8305-2c15b46c4920",
+        "binding_id": "6c139c9d-7117-46d2-8382-9f77642cfcee",
+        "tracker_id": "2ab17991-5e31-4e2b-9116-096002058fff"
+      },
+      {
+        "name": "SIM GPS 2",
+        "device_id": "fa80a1e1-d24b-4a49-9343-63f762a9e0f9",
+        "binding_id": "029ced85-0445-4486-acd8-f3bb886c6a47",
+        "tracker_id": "4e7bba4e-61b7-417b-a772-6ba7904a89d3"
+      }
+    ]
+  },
+  "verification": {
+    "two_active_trackers": true,
+    "two_simulated_devices": true,
+    "two_open_bindings": true,
+    "owner_membership": true,
+    "owner_bridge": true,
+    "owner_app_role": true,
+    "fixture_without_credentials": true,
+    "migration_version": "20260927174712"
+  },
+  "third_active_tracker_rejected": true,
+  "positions_ingestion_implemented": false,
+  "production_touched": false
+}

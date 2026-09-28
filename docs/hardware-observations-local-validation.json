@@ -1,0 +1,89 @@
+{
+  "scope": "local-only",
+  "fixture": "minimal organizations/memberships/auth.uid; not Supabase clone",
+  "migration": "20260927174712_hardware_tracker_foundation_preview.sql",
+  "checks": [
+    {
+      "name": "atomic migration and missing-marker rejection",
+      "passed": true
+    },
+    {
+      "name": "existing transactional suite: quota 0/1/2, bindings, RLS, rollback",
+      "passed": true
+    },
+    {
+      "name": "service_role can use all guards without direct private-function grants",
+      "passed": true
+    },
+    {
+      "name": "revoked non-owner admin loses all four table reads",
+      "passed": true
+    },
+    {
+      "name": "unsafe isolation fails closed",
+      "passed": true
+    },
+    {
+      "name": "missing hardware entitlement rejects tracker",
+      "passed": true
+    },
+    {
+      "name": "last-slot commit (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "last-slot rollback (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "reactivation last slot (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "quota decrease vs activation (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "same device bound twice (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "deactivation vs binding (two connections, lock observed)",
+      "passed": true
+    },
+    {
+      "name": "observations migration applied atomically locally",
+      "passed": true
+    },
+    {
+      "name": "service role ingestion, duplicate receipt stable, conflict, late point and no-fix ordering",
+      "passed": true
+    },
+    {
+      "name": "invalid inputs, unbound device, expired/future data and restricted grants",
+      "passed": true
+    },
+    {
+      "name": "owner read, cross-organization isolation and revoked membership",
+      "passed": true
+    },
+    {
+      "name": "unsupported retention mode, device revocation and closed historical binding",
+      "passed": true
+    },
+    {
+      "name": "same-packet concurrency: A commit and A rollback, B lock observed, one row",
+      "passed": true
+    },
+    {
+      "name": "retention hidden before purge, bounded deletion, monotonic replay floor and latest preserved",
+      "passed": true
+    }
+  ],
+  "work_dir": "C:\\Users\\pmuno\\AppData\\Local\\Temp\\geofield-pg17-validation\\runs\\hardware-test-a8han7s3",
+  "postgres_version": "PostgreSQL 17.11 on x86_64-windows, compiled by msvc-19.44.35228, 64-bit",
+  "observations_migration_sha256": "7f3ed4e03d2c2bf0e0a39efc3938b6a5aeb42815e3b21646befd42abaa5355aa",
+  "passed": true,
+  "server_stopped": true,
+  "temporary_data_removed": true
+}
