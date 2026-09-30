@@ -29,3 +29,5 @@ La prueba HTTP normalizada anterior terminó con24h+1.229s,2880 observaciones ú
 
 ## Resultado real — 2026-09-30
 Ocho pruebas locales aprobadas, incluyendo IO variable, identidad independiente de agrupacion y recuperacion de lote parcialmente guardado. Ensayo TCP real por loopback contra Supabase Preview aprobado: stored seguido de duplicate, ambos con ACK correcto. Quedo una posicion sintetica en el primer dispositivo del piloto. No se habilito receptor publico. Los puntos de pruebas adicionales citados arriba quedan pendientes solo donde no esten cubiertos por estas ocho pruebas.
+
+Preparacion del servicio permanente VPS: ver hardware-public-receiver-preview.md. No desplegado; recepcion fisica permanece bloqueada.

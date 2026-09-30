@@ -1,0 +1,35 @@
+services:
+  gateway:
+    build:
+      context: ../..
+      dockerfile: deploy/hardware-preview/Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1.0
+    stop_grace_period: 25s
+    ports: ["5027:5027/tcp"]
+    secrets: [gateway_config, supabase_key, tls_key, tls_cert, client_ca]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8080').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+secrets:
+  gateway_config:
+    file: /etc/geofield-hardware-preview/config.json
+  supabase_key:
+    file: /etc/geofield-hardware-preview/supabase-key
+  tls_key:
+    file: /etc/geofield-hardware-preview/server.key
+  tls_cert:
+    file: /etc/geofield-hardware-preview/server.crt
+  client_ca:
+    file: /etc/geofield-hardware-preview/client-ca.crt
