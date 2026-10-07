@@ -120,9 +120,15 @@ export async function getGeofence({ id, orgId = null } = {}) {
 }
 
 export async function upsertGeofence(payload = {}) {
+  const orgId = payload?.org_id ?? payload?.orgId;
+  if (orgId === undefined || orgId === null || String(orgId).trim() === "") {
+    throw new Error("orgId requerido");
+  }
+
   const clean = stripComputedFields(payload);
   const data = await requestJson(`/api/geofences`, {
     method: "POST",
+    headers: { "x-org-id": String(orgId) },
     body: { action: "upsert", ...clean },
   });
   if (data?.item) return data.item;
