@@ -96,6 +96,17 @@ function getNativeBridge() {
   return window.AndroidBridge || window.Android || null;
 }
 
+const PREVIEW_HOSTNAME = "preview.tugeocercas.com";
+
+function openPreviewApp(session) {
+  const params = new URLSearchParams({
+    tracker_runtime_token: session.runtimeToken || "",
+    tracker_user_id: session.trackerUserId || "",
+    org_id: session.orgId || "",
+  });
+  window.location.href = `geocercas-preview://tracker?${params.toString()}`;
+}
+
 function callNativeBridge(bridge, session) {
   if (!bridge || !session?.runtimeToken || !session?.orgId) return false;
 
@@ -251,7 +262,7 @@ export default function TrackerGpsPage() {
 
       setNativeBridgeReady(bridgeReady);
 
-      setMsg(bridgeReady ? t("tracker.gps.messageActive") : t("tracker.gps.browserHelp"));
+      setMsg(bridgeReady ? t("tracker.gps.messageActive") : t(window.location.hostname === "preview.tugeocercas.com" ? "tracker.gps.browserHelpPreview" : "tracker.gps.browserHelp"));
 
       setDebugInfo((prev) => ({
         ...prev,
@@ -443,6 +454,16 @@ export default function TrackerGpsPage() {
           <div style={noteStyle}>
             {msg}
           </div>
+        )}
+
+        {needsNativeApp && window.location.hostname === PREVIEW_HOSTNAME && (
+          <button
+            type="button"
+            style={{ ...permissionButtonStyle, marginTop: 16 }}
+            onClick={() => openPreviewApp(runtimeSession)}
+          >
+            {t("tracker.gps.openPreviewApp")}
+          </button>
         )}
 
         {/* Critical tracker permissions panel */}

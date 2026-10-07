@@ -7,3 +7,21 @@ Inspección del árbol local geocercas-twa: AndroidManifest.xml registra HTTPS a
 Pendiente para apertura real: disponer de una variante Android Preview con origen/API y enlaces verificados de Preview, instalarla y comprobar el enlace desde Gmail/Chrome. Este commit web no resuelve ese requisito nativo ni demuestra que el servicio GPS arrancó en un dispositivo.
 
 Validación: 2 pruebas de UI aprobadas (sin puente; puente sin método de inicio), build Vite correcto. Solo commit/push web a preview, sin cambios Android ni producción.
+
+## Botón de apertura en Preview
+
+2026-10-07. TrackerGpsPage muestra el botón "Abrir GeoField GPS Preview" únicamente cuando needsNativeApp es true y window.location.hostname es preview.tugeocercas.com. En app.tugeocercas.com y cualquier otro host el botón no se renderiza, así que el flujo de Producción no cambia.
+
+Al pulsarlo se navega a geocercas-preview://tracker con estos tres parámetros, codificados con URLSearchParams y tomados de runtimeSession:
+
+- tracker_runtime_token (runtimeSession.runtimeToken)
+- tracker_user_id (runtimeSession.trackerUserId)
+- org_id (runtimeSession.orgId)
+
+Formato (valores de ejemplo, no reales): geocercas-preview://tracker?tracker_runtime_token=<token>&tracker_user_id=<uuid>&org_id=<uuid>
+
+La sesión no se borra ni se modifica al pulsar el botón. Textos i18n en ES/EN/FR bajo la clave tracker.gps.openPreviewApp.
+
+Lado Android (variante Preview en geocercas-twa): buildType preview con applicationIdSuffix .preview, manifestPlaceholders appHost=preview.tugeocercas.com y trackerLinkScheme=geocercas-preview, y BuildConfig.BASE_URL/APP_HOST/TRACKER_LINK_SCHEME apuntando a Preview.
+
+Pendiente: la prueba en dispositivo no se ha realizado. Falta instalar la variante Preview y comprobar que el botón abre la app, que WebViewActivity consume tracker_runtime_token, tracker_user_id y org_id desde geocercas-preview://tracker, y que el servicio GPS arranca. Hasta entonces esta funcionalidad no está validada de extremo a extremo.
