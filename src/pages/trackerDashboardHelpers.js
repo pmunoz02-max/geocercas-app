@@ -175,12 +175,12 @@ export function isProbablyZeroZeroBounds(b) {
   }
 }
 
-export function shouldFitToBounds(map, bounds) {
+export function shouldFitToBounds(map, bounds, { userInteracted = false } = {}) {
   try {
-    if (!map || !bounds?.isValid?.()) return false;
+    if (userInteracted || !map || !bounds?.isValid?.()) return false;
     const view = map.getBounds?.();
     if (!view?.isValid?.()) return true;
-    return !view.intersects(bounds.pad(0.05));
+    return !view.contains(bounds);
   } catch {
     return true;
   }
