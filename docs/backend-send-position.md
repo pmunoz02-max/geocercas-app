@@ -1,5 +1,7 @@
 
 # Flujo backend: send_position
+> Nota vigente para Preview (2026-10-09): este documento describe un flujo histórico. El endpoint Vercel actual escribe en `tracker_positions` y no actualiza `tracker_latest`. El contrato de speed/heading está documentado en [telemetría opcional](2026-10-09-send-position-telemetry-preview.md).
+
 
 Este documento describe el flujo técnico del endpoint `send_position` en el backend, usando exclusivamente el token de acceso runtime del tracker (`tracker_access_token`). No se utiliza JWT de usuario ni autenticación web.
 

@@ -445,6 +445,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "invalid_coordinates" });
     }
 
+    // Optional telemetry: preserve absence, including explicit null, as SQL NULL.
+    const speed = body.speed ?? null;
+    const heading = body.heading ?? null;
+    if (speed !== null && (typeof speed !== "number" || !Number.isFinite(speed) || speed < 0)) {
+      return res.status(400).json({ ok: false, error: "invalid_speed" });
+    }
+    if (heading !== null && (typeof heading !== "number" || !Number.isFinite(heading) || heading < 0 || heading >= 360)) {
+      return res.status(400).json({ ok: false, error: "invalid_heading" });
+    }
+
     const geofenceGate = await assertPositionInsideAssignedGeofence({
       orgId,
       userId,
@@ -474,6 +484,8 @@ export default async function handler(req, res) {
       lat: Number(lat),
       lng: Number(lng),
       accuracy: body.accuracy == null ? null : Number(body.accuracy),
+      speed,
+      heading,
       recorded_at:
         body.recorded_at ||
         body.recordedAt ||
