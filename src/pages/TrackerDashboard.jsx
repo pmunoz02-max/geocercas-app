@@ -26,6 +26,7 @@ import {
   isValidLatLng,
   mapTrackerLatestRow,
   shouldFitToBounds,
+  observeManualMapView,
 } from "./trackerDashboardHelpers";
 
 import {
@@ -201,6 +202,18 @@ function logLiveMetric() {
 function FitIfOutOfView({ layerItems, markerPoints, fitSignal, onBoundsComputed, onViewportComputed, isDemoOrg }) {
   const map = useMap();
   const lastFitSignalRef = useRef(0);
+  const userInteractedRef = useRef(false);
+
+  const manualViewObserverRef = useRef(null);
+
+  useEffect(() => {
+    const observer = observeManualMapView(map, () => { userInteractedRef.current = true; });
+    manualViewObserverRef.current = observer;
+    return () => {
+      observer.dispose();
+      manualViewObserverRef.current = null;
+    };
+  }, [map]);
 
   const bounds = useMemo(() => {
     try {
@@ -249,11 +262,12 @@ function FitIfOutOfView({ layerItems, markerPoints, fitSignal, onBoundsComputed,
 
     try {
       const force = fitSignal > lastFitSignalRef.current;
-      const doFit = force ? true : shouldFitToBounds(map, bounds);
+      const doFit = force || shouldFitToBounds(map, bounds, { userInteracted: userInteractedRef.current });
 
       if (doFit) {
-        map.fitBounds(bounds, { padding: [24, 24], maxZoom: isDemoOrg ? 18 : undefined });
+        manualViewObserverRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: isDemoOrg ? 18 : undefined });
         lastFitSignalRef.current = fitSignal;
+        if (force) userInteractedRef.current = false;
       }
     } catch {}
   }, [map, bounds, fitSignal, onBoundsComputed, onViewportComputed]);
@@ -1221,7 +1235,6 @@ export default function TrackerDashboard() {
       );
     }
 
-    setFitSignal((x) => x + 1);
   }, [t, tOr]);
 
 

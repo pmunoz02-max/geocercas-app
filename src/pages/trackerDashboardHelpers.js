@@ -186,6 +186,33 @@ export function shouldFitToBounds(map, bounds, { userInteracted = false } = {}) 
   }
 }
 
+// Observe completed zoom changes, not clicks or attempted wheel/key gestures.
+export function observeManualMapView(map, onManualView) {
+  let lastZoom = map.getZoom();
+  let fitting = false;
+  const onDrag = () => onManualView();
+  const onZoom = () => {
+    const zoom = map.getZoom();
+    if (zoom !== lastZoom && !fitting) onManualView();
+    lastZoom = zoom;
+  };
+  map.on("dragstart", onDrag);
+  map.on("zoomend", onZoom);
+  return {
+    fitBounds(bounds, options) {
+      fitting = true;
+      try {
+        // Synchronous fitting keeps our own zoom events separate from user zoom.
+        return map.fitBounds(bounds, { ...options, animate: false });
+      } finally { fitting = false; }
+    },
+    dispose() {
+      map.off("dragstart", onDrag);
+      map.off("zoomend", onZoom);
+    },
+  };
+}
+
 function pickGeometry(row) {
   return row?.geojson ?? row?.polygon ?? row?.geometry ?? null;
 }
