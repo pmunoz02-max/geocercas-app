@@ -1,3 +1,5 @@
+import AnimatedTrackerDot from "../components/AnimatedTrackerDot";
+import { filterTrackerRows, validTrackerCoordinates, chooseTrackerLabels, visibleRoutePositions } from "../lib/trackerMapPresentation";
 import { summarizeTrackerRows } from "../lib/trackerRowSummary";
 // Nombre amigable de tracker según prioridad estricta
 function getFriendlyTrackerName(tracker) {
@@ -32,7 +34,6 @@ import {
 import {
   MapContainer,
   TileLayer,
-  CircleMarker,
   Polyline,
   Tooltip,
   Polygon,
@@ -51,20 +52,7 @@ const TIME_WINDOWS = [
   { id: "24h", labelKey: "trackerDashboard.timeWindows.24h", fallback: "24 hours", ms: 24 * 60 * 60 * 1000 },
 ];
 
-const TRACKER_ANIMATION_MS = 2600;
-const LARGE_JUMP_METERS = 250;
 const MAX_HISTORY_PER_TRACKER = 40;
-
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
-}
-
-function distanceMeters(a, b) {
-  if (!Array.isArray(a) || !Array.isArray(b)) return Infinity;
-  const p1 = L.latLng(Number(a[0]), Number(a[1]));
-  const p2 = L.latLng(Number(b[0]), Number(b[1]));
-  return p1.distanceTo(p2);
-}
 
 const TRACKER_COLORS = ["#2563eb", "#16a34a", "#f97316", "#dc2626", "#7c3aed", "#0d9488"];
 
@@ -141,7 +129,7 @@ function getTrackerStatusPriority(status) {
 }
 
 function normalizeSearchText(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 }
 
 function buildTrackerSearchText(item) {
@@ -161,7 +149,7 @@ function buildTrackerSearchText(item) {
     item?.latest?.name,
   ]
     .filter(Boolean)
-    .map((v) => String(v).trim().toLowerCase())
+    .map(normalizeSearchText)
     .join(" ");
 }
 
@@ -579,100 +567,6 @@ function MultiGeofenceSelect({ geofences, selectedIds, setSelectedIds, disabled 
   );
 }
 
-function AnimatedTrackerDot({
-  center,
-  color,
-  radius = 7,
-  duration = TRACKER_ANIMATION_MS,
-  fillOpacity = 0.9,
-  strokeOpacity = 1,
-  children,
-}) {
-  const markerRef = useRef(null);
-  const frameRef = useRef(null);
-  const lastCenterRef = useRef(center);
-
-  useEffect(() => {
-    const layer = markerRef.current?.instance || markerRef.current;
-    if (!layer || typeof layer.setLatLng !== "function") return;
-    if (!Array.isArray(center) || center.length !== 2) return;
-
-    const next = [Number(center[0]), Number(center[1])];
-    if (!Number.isFinite(next[0]) || !Number.isFinite(next[1])) return;
-
-    const previous =
-      Array.isArray(lastCenterRef.current) && lastCenterRef.current.length === 2
-        ? [Number(lastCenterRef.current[0]), Number(lastCenterRef.current[1])]
-        : next;
-
-    if (!Number.isFinite(previous[0]) || !Number.isFinite(previous[1])) {
-      layer.setLatLng(next);
-      lastCenterRef.current = next;
-      return;
-    }
-
-    const jumpMeters = distanceMeters(previous, next);
-    const samePoint = previous[0] === next[0] && previous[1] === next[1];
-
-    if (samePoint || !Number.isFinite(jumpMeters) || jumpMeters > LARGE_JUMP_METERS) {
-      layer.setLatLng(next);
-      lastCenterRef.current = next;
-      return;
-    }
-
-    if (frameRef.current) {
-      cancelAnimationFrame(frameRef.current);
-      frameRef.current = null;
-    }
-
-    const startTime = performance.now();
-
-    const animate = (now) => {
-      const rawT = Math.min(1, (now - startTime) / duration);
-      const t = easeOutCubic(rawT);
-
-      const lat = previous[0] + (next[0] - previous[0]) * t;
-      const lng = previous[1] + (next[1] - previous[1]) * t;
-
-      layer.setLatLng([lat, lng]);
-
-      if (rawT < 1) {
-        frameRef.current = requestAnimationFrame(animate);
-      } else {
-        frameRef.current = null;
-        lastCenterRef.current = next;
-      }
-    };
-
-    frameRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (frameRef.current) {
-        cancelAnimationFrame(frameRef.current);
-        frameRef.current = null;
-      }
-    };
-  }, [center, duration]);
-
-  useEffect(() => {
-    return () => {
-      if (frameRef.current) {
-        cancelAnimationFrame(frameRef.current);
-      }
-    };
-  }, []);
-
-  return (
-    <CircleMarker
-      ref={markerRef}
-      center={center}
-      radius={radius}
-      pathOptions={{ color, fillColor: color, fillOpacity, opacity: strokeOpacity, weight: 2 }}
-    >
-      {children}
-    </CircleMarker>
-  );
-}
 
 const GeofenceLayers = React.memo(function GeofenceLayers({ layerItems, t }) {
   return (
@@ -723,16 +617,14 @@ const TrackerLayers = React.memo(function TrackerLayers({
   tOr,
   selectedTrackerId,
 }) {
-  const getMarkerStyleByStatus = (status, baseColor) => {
-    if (status === "offline") {
-      return { color: "#6b7280", radius: 6, fillOpacity: 0.45, strokeOpacity: 0.65 };
-    }
-    if (status === "stale") {
-      return { color: baseColor, radius: 6, fillOpacity: 0.65, strokeOpacity: 0.8 };
-    }
-    return { color: baseColor, radius: 7, fillOpacity: 0.9, strokeOpacity: 1 };
-  };
-
+  const map = useMap();
+  const [viewRevision, setViewRevision] = useState(0);
+  useEffect(() => {
+    const update = () => setViewRevision(value => value + 1);
+    map.on("moveend zoomend resize", update);
+    return () => map.off("moveend zoomend resize", update);
+  }, [map]);
+  const labelKeys=useMemo(()=>chooseTrackerLabels(allTrackerMarkers||[],point=>map.latLngToContainerPoint(point),map.getSize(),getFriendlyTrackerName),[allTrackerMarkers,map,viewRevision]);
   const renderTrackerTooltip = (item, latest, latestLat, latestLng, live) => {
     const latestLatText = Number.isFinite(latestLat) ? latestLat.toFixed(6) : "—";
     const latestLngText = Number.isFinite(latestLng) ? latestLng.toFixed(6) : "—";
@@ -755,7 +647,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
     const status = String(live?.status || "offline");
     const ageText = formatAgeShort(live?.ageSec ?? null);
 
-    const trackerName = getFriendlyTrackerName(item);
     return (
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div className="text-xs">
@@ -810,16 +701,14 @@ const TrackerLayers = React.memo(function TrackerLayers({
           if (!item?.hasValidCoords || !isValidLatLng(latestLat, latestLng)) return null;
 
           const live = item?.live || { status: "offline", ageSec: null };
-          const markerStyle = getMarkerStyleByStatus(live.status, item.color);
 
           return (
             <AnimatedTrackerDot
               key={item.key}
               center={[latestLat, latestLng]}
-              color={markerStyle.color}
-              radius={markerStyle.radius}
-              fillOpacity={markerStyle.fillOpacity}
-              strokeOpacity={markerStyle.strokeOpacity}
+              name={getFriendlyTrackerName(item)}
+              status={live.status}
+              showName={labelKeys.has(item.key)}
             >
               {renderTrackerTooltip(item, latest, latestLat, latestLng, live)}
             </AnimatedTrackerDot>
@@ -835,7 +724,7 @@ const TrackerLayers = React.memo(function TrackerLayers({
   const trackerId = getTrackerKey(latest);
   const latestLat = Number(latest?.lat);
   const latestLng = Number(latest?.lng);
-  if (!isValidLatLng(latestLat, latestLng)) return null;
+  if (!validTrackerCoordinates(latest?.lat, latest?.lng)) return null;
 
   const personalId = latest.personal_id || null;
   const person = personalId ? personalById.get(String(personalId)) : null;
@@ -851,17 +740,16 @@ const TrackerLayers = React.memo(function TrackerLayers({
     });
   const latlngs = Array.isArray(selectedTrackerPath?.latlngs) ? selectedTrackerPath.latlngs : [];
   const live = selectedTrackerPath?.live || getTrackerLiveStatus(latest);
-  const markerStyle = getMarkerStyleByStatus(live.status, TRACKER_COLORS[0]);
 
   return (
     <>
       {latlngs.length > 1 && <Polyline positions={latlngs} pathOptions={{ color: TRACKER_COLORS[0], weight: 4, opacity: 0.95 }} smoothFactor={0} noClip={false} />}
       <AnimatedTrackerDot
         center={[latestLat, latestLng]}
-        color={markerStyle.color}
-        radius={markerStyle.radius}
-        fillOpacity={markerStyle.fillOpacity}
-        strokeOpacity={markerStyle.strokeOpacity}
+        key={selectedTrackerId}
+        name={trackerLabel}
+        status={live.status}
+        showName
       >
         {renderTrackerTooltip(
           {
@@ -2234,7 +2122,8 @@ export default function TrackerDashboard() {
 
       const positions = trackerPositions.slice(-MAX_HISTORY_PER_TRACKER);
       const latlngs = positions
-        .map((p) => [Number(p?.lat), Number(p?.lng)])
+        .filter(p => validTrackerCoordinates(p?.lat, p?.lng))
+      .map((p) => [Number(p?.lat), Number(p?.lng)])
         .filter(([lat, lng]) => isValidLatLng(lat, lng));
 
       const entry = {
@@ -2249,17 +2138,19 @@ export default function TrackerDashboard() {
     return sorted;
   }, [visiblePositions]);
 
+  const visibleTrackerRows = useMemo(() => filterTrackerRows(trackersUi, {selectedTrackerId, statusFilter, search: trackerSearch}), [trackersUi, selectedTrackerId, statusFilter, trackerSearch]);
+
   const allTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return [];
 
-    const rows = Array.isArray(trackersUi) ? trackersUi : [];
+    const rows = visibleTrackerRows;
 
     const markers = rows.reduce((acc, item, idx) => {
       const latest = item?.latest || null;
       const lat = Number(latest?.lat ?? item?.lat);
       const lng = Number(latest?.lng ?? item?.lng);
 
-      if (!isValidLatLng(lat, lng)) return acc;
+      if (!validTrackerCoordinates(latest?.lat ?? item?.lat, latest?.lng ?? item?.lng)) return acc;
 
       acc.push({
         key: item?.tracker_key || item?.user_id || item?.key || `tracker-${idx}`,
@@ -2286,7 +2177,7 @@ export default function TrackerDashboard() {
           item?.trackerLabel ||
           item?.tracker_key ||
           item?.user_id,
-        color: TRACKER_COLORS[idx % TRACKER_COLORS.length],
+        color: TRACKER_COLORS[Math.max(0, trackersUi.indexOf(item)) % TRACKER_COLORS.length],
         live: item?.live || getTrackerLiveStatus(latest),
         hasValidCoords: true,
       });
@@ -2303,7 +2194,7 @@ export default function TrackerDashboard() {
     });
 
     return markers;
-  }, [selectedTrackerId, trackersUi]);
+  }, [selectedTrackerId, visibleTrackerRows, trackersUi]);
 
   const filteredAllTrackerMarkers = useMemo(() => {
     if (selectedTrackerId !== "all") return allTrackerMarkers;
@@ -2336,19 +2227,20 @@ export default function TrackerDashboard() {
       });
     });
 
-    // Do not discard if no visibleMarkerByKey.size
+    // Historical routes follow visible tracker pins.
     const groups = new Map();
 
-    (routePositions || []).forEach((p) => {
+    visibleRoutePositions(routePositions, new Set(visibleMarkerByKey.keys()), getTrackerKey).forEach((p) => {
       const trackerId = getTrackerKey(p);
       if (!trackerId) return;
 
       const key = String(trackerId);
       const marker = visibleMarkerByKey.get(key) || null;
+      if (!marker) return;
 
       const lat = Number(p?.lat);
       const lng = Number(p?.lng);
-      if (!isValidLatLng(lat, lng)) return;
+      if (!validTrackerCoordinates(p?.lat, p?.lng)) return;
 
       if (!groups.has(key)) {
         groups.set(key, {
@@ -2383,35 +2275,34 @@ export default function TrackerDashboard() {
   }, [filteredAllTrackerMarkers, routePositions, selectedTrackerId]);
 
   const trackerStatusSummary = useMemo(
-    () => summarizeTrackerRows(trackersUi),
-    [trackersUi],
+    () => summarizeTrackerRows(visibleTrackerRows),
+    [visibleTrackerRows],
   );
 
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;
+    const visibleRow=visibleTrackerRows.find(row=>String(row.tracker_key||row.user_id||row.key)===String(selectedTrackerId));
+    if (!visibleRow) return null;
 
     const trackerRoutePositions = (Array.isArray(routePositions) ? routePositions : [])
       .filter((p) => getTrackerKey(p) === selectedTrackerId)
       .sort((a, b) => getPositionTs(a) - getPositionTs(b));
 
     const latlngs = trackerRoutePositions
+      .filter(p => validTrackerCoordinates(p?.lat, p?.lng))
       .map((p) => [Number(p?.lat), Number(p?.lng)])
       .filter(([lat, lng]) => isValidLatLng(lat, lng));
 
-    const latestFromMarkers = (Array.isArray(positions) ? positions : [])
-      .filter((p) => getTrackerKey(p) === selectedTrackerId)
-      .slice()
-      .sort((a, b) => getPositionTs(b) - getPositionTs(a))[0];
-
-    const latest = latestFromMarkers || trackerRoutePositions[trackerRoutePositions.length - 1] || null;
+    const candidate=visibleRow.latest || null;
+    const latest=candidate ? {...candidate, display_name:getFriendlyTrackerName(visibleRow)} : null;
 
     return {
       positions: trackerRoutePositions,
       latlngs,
       latest,
-      live: getTrackerLiveStatus(latest),
+      live: visibleRow.live || getTrackerLiveStatus(latest),
     };
-  }, [selectedTrackerId, routePositions, positions]);
+  }, [selectedTrackerId, routePositions, visibleTrackerRows]);
 
   const mapFitPoints = useMemo(() => {
     if (selectedTrackerId === "all") {
@@ -2708,7 +2599,7 @@ export default function TrackerDashboard() {
                                focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    disabled={!orgId || selectedTrackerId !== "all"}
+                    disabled={!orgId}
                   >
                     <option value="all">{tOr("trackerDashboard.labels.all", "All")}</option>
                     <option value="online">{tOr("trackerDashboard.status.online", "Online")}</option>
@@ -2865,13 +2756,13 @@ export default function TrackerDashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(trackersUi || []).map((t) => {
+                      {(visibleTrackerRows || []).map((t) => {
                         const latestRow = t?.latest || null;
                         const live = t?.live || getTrackerLiveStatus(latestRow || t);
 
                         const rawLat = latestRow?.lat;
                         const rawLng = latestRow?.lng;
-                        const hasCoords = isValidLatLng(Number(rawLat), Number(rawLng));
+                        const hasCoords = validTrackerCoordinates(rawLat, rawLng);
 
                         const lat = hasCoords ? Number(rawLat) : null;
                         const lng = hasCoords ? Number(rawLng) : null;
