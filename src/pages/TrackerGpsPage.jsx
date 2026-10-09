@@ -1,3 +1,4 @@
+import { selectRuntimeSession, readStoredRuntimeSession } from "../lib/runtimeSessionSelection";
 import VisitsPanel from "../components/VisitsPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -43,20 +44,11 @@ function setStorageItem(key, value) {
 }
 
 function readRuntimeSessionFromStorage() {
-  return {
-    runtimeToken:
-      getStorageItem("tracker_runtime_token") ||
-      getStorageItem("tracker_access_token") ||
-      "",
-    trackerUserId:
-      getStorageItem("tracker_user_id") ||
-      getStorageItem("user_id") ||
-      "",
-    orgId:
-      getStorageItem("tracker_org_id") ||
-      getStorageItem("org_id") ||
-      "",
-  };
+  try {
+    return selectRuntimeSession({}, readStoredRuntimeSession(window.localStorage) || readStoredRuntimeSession(window.sessionStorage));
+  } catch {
+    return selectRuntimeSession({}, null);
+  }
 }
 
 function syncRuntimeSession(session) {
@@ -201,11 +193,7 @@ export default function TrackerGpsPage() {
     const fromUrl = readRuntimeSessionFromUrl();
     const fromStorage = readRuntimeSessionFromStorage();
 
-    const merged = {
-      runtimeToken: fromUrl.runtimeToken || fromStorage.runtimeToken || "",
-      trackerUserId: fromUrl.trackerUserId || fromStorage.trackerUserId || "",
-      orgId: fromUrl.orgId || fromStorage.orgId || "",
-    };
+    const merged = selectRuntimeSession(fromUrl, fromStorage);
 
     if (fromUrl.inviteToken && !permissionRequestedRef.current) {
       permissionRequestedRef.current = true;

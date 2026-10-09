@@ -1,0 +1,60 @@
+package com.fenice.geofieldgps;
+import android.app.Instrumentation;
+import android.content.Context;
+import android.content.ContextWrapper;
+import android.content.SharedPreferences;
+import android.os.Bundle;
+public class RuntimeIdentityCheck extends Instrumentation {
+ private static void check(boolean b,String msg){if(!b)throw new AssertionError(msg);}
+ private Bundle args;
+ public void onCreate(Bundle b){super.onCreate(b);args=b;start();}
+ public void onStart(){
+  Bundle result=new Bundle();
+  if(args!=null && "true".equals(args.getString("recover"))){recover(result);return;}
+  Context isolated=new ContextWrapper(getTargetContext()){
+   public SharedPreferences getSharedPreferences(String name,int mode){return super.getSharedPreferences("identity_check_"+name,mode);}
+  };
+  SharedPreferences p=isolated.getSharedPreferences("tracker_prefs",0);
+  try{
+   p.edit().clear().commit();
+   check(RuntimeSessionRenewal.adoptIncoming(isolated,"original","userA","orgA").equals("original"),"initial");
+   p.edit().putString("runtime_refresh_token","proofA").putString("runtime_renewed_access","renewed")
+    .putString("access_token","renewed").putString("runtime_enrolled_access_hash",sha("original")).commit();
+   check(RuntimeSessionRenewal.adoptIncoming(isolated,"original","userA","orgA").equals("renewed"),"preserve renewed token");
+   check(RuntimeSessionRenewal.adoptIncoming(isolated,"original","userA","orgB")==null,"reject relabel");
+   check(p.getString("org_id","").equals("orgA"),"org untouched on reject");
+   check(RuntimeSessionRenewal.adoptIncoming(isolated,"newCredential","userB","orgB").equals("newCredential"),"new handoff");
+   check(!p.contains("runtime_refresh_token"),"old proof cleared");
+   check(RuntimeSessionRenewal.adoptIncoming(isolated,"partial","","orgA")==null,"partial rejected");
+   check(p.getString("org_id","").equals("orgB"),"partial leaves identity");
+   result.putString("result","PASS: 8 identity assertions; isolated preferences only");finish(-1,result);
+  }catch(Throwable t){result.putString("result","FAIL: "+t);finish(0,result);}
+  finally{p.edit().clear().commit();}
+ }
+
+ private void recover(Bundle result){
+  try{
+   Context c=getTargetContext();SharedPreferences p=c.getSharedPreferences("tracker_prefs",0);
+   String access=p.getString("runtime_renewed_access",null),proof=p.getString("runtime_refresh_token",null);
+   String org=args.getString("org"),user=args.getString("user");
+   if(access==null||proof==null)throw new IllegalStateException("missing recovery proof");
+   java.net.HttpURLConnection conn=(java.net.HttpURLConnection)new java.net.URL("https://preview.tugeocercas.com/api/tracker-session-renew").openConnection();
+   conn.setRequestMethod("POST");conn.setConnectTimeout(15000);conn.setReadTimeout(15000);conn.setDoOutput(true);
+   conn.setRequestProperty("Content-Type","application/json");conn.setRequestProperty("Authorization","Bearer "+access);
+   String body=new org.json.JSONObject().put("refresh_token",proof).put("org_id",org).put("tracker_user_id",user).put("request_id",java.util.UUID.randomUUID().toString()).toString();
+   try(java.io.OutputStream out=conn.getOutputStream()){out.write(body.getBytes("UTF-8"));}
+   if(conn.getResponseCode()!=200)throw new IllegalStateException("server rejected recovery: "+conn.getResponseCode());
+   StringBuilder response=new StringBuilder();try(java.io.BufferedReader r=new java.io.BufferedReader(new java.io.InputStreamReader(conn.getInputStream()))){String l;while((l=r.readLine())!=null)response.append(l);}
+   org.json.JSONObject data=new org.json.JSONObject(response.toString());String token=data.optString("access_token");
+   if(!data.optBoolean("ok")||!data.optString("org_id").equals(org)||!data.optString("tracker_user_id").equals(user)||!token.matches("[0-9a-f]{64}"))throw new IllegalStateException("invalid server identity");
+   if(!proof.equals(p.getString("runtime_refresh_token",null)))throw new IllegalStateException("session changed");
+   boolean saved=p.edit().putString("access_token",token).putString("tracker_access_token",token).putString("tracker_runtime_token",token)
+    .putString("org_id",org).putString("tracker_user_id",user).putString("runtime_bound_org",org).putString("runtime_bound_user",user)
+    .putString("runtime_renewed_access",token).putString("runtime_enrolled_access_hash",sha(token))
+    .putLong("runtime_access_expires_at",System.currentTimeMillis()+data.getLong("expires_in")*1000).putLong("runtime_renew_retry_at",0).remove("runtime_renew_request_id").commit();
+   if(!saved)throw new IllegalStateException("storage failed");
+   result.putString("result","RECOVERED: identity validated by Preview renewal endpoint; no SQL mutation");finish(-1,result);
+  }catch(Throwable t){result.putString("result","RECOVERY FAILED: "+t.getClass().getSimpleName()+": "+t.getMessage());finish(0,result);}
+ }
+ private static String sha(String s)throws Exception{byte[] bytes=java.security.MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8"));StringBuilder b=new StringBuilder();for(byte v:bytes)b.append(String.format("%02x",v));return b.toString();}
+}

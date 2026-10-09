@@ -1,0 +1,1705 @@
+package com.fenice.geofieldgps;
+
+import android.Manifest;
+import android.annotation.SuppressLint;
+import android.app.ActivityManager;
+import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import android.text.TextUtils;
+import android.util.Base64;
+import android.util.Log;
+import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Toast;
+
+import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class WebViewActivity extends AppCompatActivity {
+    private String lastBootstrapUrl = null;
+    private long lastBootstrapAt = 0L;
+    private static final long BOOTSTRAP_DEDUPE_WINDOW_MS = 4000L;
+
+    private String lastPageFinishedUrl = null;
+    private long lastPageFinishedAt = 0L;
+    private static final long PAGE_FINISHED_DEDUPE_WINDOW_MS = 1500L;
+
+    private String lastLoadedUrl = null;
+    private long lastDeepLinkHandledAt = 0L;
+    private static final long DEEP_LINK_DEDUPE_WINDOW_MS = 2500L;
+    private static final String TAG = "WebViewActivity";
+
+    private static final String PREFS_NAME = "tracker_prefs";
+    private static final String KEY_TRACKER_TOKEN = "tracker_access_token";
+    private static final String KEY_TRACKER_USER_ID = "tracker_user_id";
+    private static final String KEY_TRACKER_ORG_ID = "org_id";
+    private static final String KEY_PENDING_TRACKER_URL = "pendingTrackerUrl";
+    private static final String KEY_BOOTSTRAP_IN_PROGRESS = "trackerBootstrapInProgress";
+    private static final String KEY_LAST_URL = "last_webview_url";
+    private static final String KEY_LAST_PROCESSED_DEEP_LINK = "lastProcessedDeepLink";
+    private static final String KEY_BASE_URL = "base_url";
+
+    private static final int RC_LOCATION = 1101;
+    private static final int RC_NOTIFICATION = 1102;
+
+    private GeolocationPermissions.Callback pendingGeolocationCallback;
+    private String pendingGeolocationOrigin;
+    private boolean locationDisclosureDialogShowing = false;
+
+    private static final String DEFAULT_HOME_URL = "https://preview.tugeocercas.com/";
+    private static final String TRACKER_PATH = "/tracker-gps";
+    private static final long BOOTSTRAP_TIMEOUT_MS = 12000L;
+
+    private WebView webView;
+    private SharedPreferences prefs;
+    private Handler mainHandler;
+
+    private boolean trackerBootstrapInProgress = false;
+    private String pendingTrackerUrl = null;
+    private String lastProcessedDeepLink = null;
+    private String initialUrl = DEFAULT_HOME_URL;
+    private String activeBaseUrl = DEFAULT_HOME_URL;
+
+    private final Runnable bootstrapTimeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!trackerBootstrapInProgress) {
+                return;
+            }
+            Log.w(TAG, "Bootstrap timeout reached. Releasing tracker page.");
+            trackerBootstrapInProgress = false;
+            persistBootstrapState();
+
+            final String releaseUrl = !TextUtils.isEmpty(pendingTrackerUrl)
+                    ? buildTrackerGpsReleaseUrl(pendingTrackerUrl)
+                    : buildTrackerGpsReleaseUrl(null);
+
+            pendingTrackerUrl = null;
+            persistPendingTrackerUrl();
+            loadUrlSafely(releaseUrl);
+        }
+    };
+
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        Log.i(TAG, "TRACE onCreate intent=" + (getIntent() != null ? getIntent().getDataString() : "null"));
+        setContentView(R.layout.activity_webview);
+
+        prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        mainHandler = new Handler(Looper.getMainLooper());
+        webView = findViewById(R.id.webView);
+
+        restoreSavedState();
+        configureWebView();
+        configureBackNavigation();
+        updateActiveBaseUrlFromIntent(getIntent());
+
+        Intent intent = getIntent();
+
+        if (processTrackerAcceptDeepLink(intent, "onCreate")) {
+            return;
+        }
+
+        String url = normalizeTrackerDeepLink(resolveLaunchUrl(intent));
+        Log.i(TAG, "onCreate resolved url=" + url);
+
+        // Persist userId from tracker deep links before bootstrap
+        captureTrackerSessionFromUrl(url);
+        injectSessionIntoNativeStorage();
+
+        if (shouldInterceptTrackerUrl(url)) {
+            beginTrackerBootstrap(url);
+        } else {
+            loadUrlSafely(url);
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        Log.i(TAG, "TRACE onNewIntent intent=" + (intent != null ? intent.getDataString() : "null"));
+        setIntent(intent);
+
+        updateActiveBaseUrlFromIntent(intent);
+
+        Uri data = intent != null ? intent.getData() : null;
+        String incomingDeepLink = normalizeTrackerDeepLink(data != null ? data.toString() : resolveLaunchUrl(intent));
+        long now = System.currentTimeMillis();
+
+        if (!TextUtils.isEmpty(incomingDeepLink)
+                && incomingDeepLink.equals(lastProcessedDeepLink)
+                && (now - lastDeepLinkHandledAt) < DEEP_LINK_DEDUPE_WINDOW_MS) {
+            Log.i(TAG, "Ignoring duplicate deep link in onNewIntent: " + incomingDeepLink);
+            return;
+        }
+
+        if (processTrackerAcceptDeepLink(intent, "onNewIntent")) {
+            return;
+        }
+
+        final String url = normalizeTrackerDeepLink(resolveLaunchUrl(intent));
+        if (TextUtils.isEmpty(url)) {
+            return;
+        }
+
+        // Persist userId from tracker deep links before bootstrap
+        captureTrackerSessionFromUrl(url);
+        injectSessionIntoNativeStorage();
+
+        lastProcessedDeepLink = url;
+        lastDeepLinkHandledAt = now;
+        persistLastProcessedDeepLink();
+
+        Log.i(TAG, "onNewIntent url=" + url);
+        if (shouldInterceptTrackerUrl(url) && !trackerBootstrapInProgress) {
+            beginTrackerBootstrap(url);
+        } else {
+            loadUrlSafely(url);
+        }
+    }
+
+    private String normalizeTrackerDeepLink(@Nullable String url) {
+        if (TextUtils.isEmpty(url)) {
+            return url;
+        }
+
+        Uri uri = Uri.parse(url);
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+
+        if (!"geocercas-preview".equalsIgnoreCase(scheme) || !"tracker".equalsIgnoreCase(host)) {
+            return url;
+        }
+
+        Uri.Builder builder = Uri.parse("https://preview.tugeocercas.com/tracker-open").buildUpon();
+
+        String rawToken = uri.getQueryParameter("token");
+        String runtimeToken = getRuntimeTokenFromUri(uri);
+        String inviteToken = getInviteTokenFromUri(uri);
+        String selectedTokenSource;
+
+        // Native geocercas-preview://tracker links are created after /tracker-open has already
+        // exchanged the invite token for a runtime token. Therefore, an explicit
+        // tracker_runtime_token/runtimeToken wins. If only token= is present in the
+        // native scheme, it is treated as a runtime-token fallback, not as an invite.
+        if (!TextUtils.isEmpty(runtimeToken)) {
+            selectedTokenSource = "runtime_token";
+            builder.appendQueryParameter("tracker_runtime_token", runtimeToken);
+            builder.appendQueryParameter("runtimeToken", runtimeToken);
+        } else if (!TextUtils.isEmpty(rawToken)) {
+            selectedTokenSource = "raw_token_as_runtime_for_native_intent";
+            builder.appendQueryParameter("tracker_runtime_token", rawToken);
+            builder.appendQueryParameter("runtimeToken", rawToken);
+        } else if (!TextUtils.isEmpty(inviteToken)) {
+            selectedTokenSource = "invite_token";
+            builder.appendQueryParameter("invite_token", inviteToken);
+        } else {
+            selectedTokenSource = "none";
+        }
+
+        String orgId = firstNonEmpty(
+                uri.getQueryParameter("org_id"),
+                uri.getQueryParameter("organization_id"),
+                uri.getQueryParameter("orgId")
+        );
+
+        String userId = firstNonEmpty(
+                uri.getQueryParameter("userId"),
+                uri.getQueryParameter("tracker_user_id"),
+                uri.getQueryParameter("user_id")
+        );
+
+        if (!TextUtils.isEmpty(orgId)) {
+            builder.appendQueryParameter("org_id", orgId);
+        }
+        if (!TextUtils.isEmpty(userId)) {
+            builder.appendQueryParameter("userId", userId);
+            builder.appendQueryParameter("tracker_user_id", userId);
+        }
+
+        String normalized = builder.build().toString();
+
+        Log.i(TAG, "DEEP_LINK_RAW=" + url);
+        Log.i(TAG, "DEEP_LINK_NORMALIZED=" + normalized);
+        Log.i(TAG, "token_prefixes raw_token_prefix=" + tokenPrefix(rawToken)
+                + " runtime_token_prefix=" + tokenPrefix(runtimeToken)
+                + " invite_token_prefix=" + tokenPrefix(inviteToken)
+                + " selected_token_source=" + selectedTokenSource);
+
+        return normalized;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) {
+            webView.onResume();
+        }
+        injectSessionIntoWebView(false);
+        maybeAutoStartTrackingFromWebView("onResume");
+    }
+
+    @Override
+    protected void onPause() {
+        if (webView != null) {
+            webView.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        mainHandler.removeCallbacks(bootstrapTimeoutRunnable);
+        if (webView != null) {
+            webView.removeJavascriptInterface("Android");
+            webView.removeJavascriptInterface("AndroidBridge");
+            webView.setWebChromeClient(null);
+            webView.setWebViewClient(null);
+            webView.destroy();
+        }
+        super.onDestroy();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == RC_LOCATION) {
+            boolean granted = false;
+            if (grantResults != null && grantResults.length > 0) {
+                for (int res : grantResults) {
+                    if (res == PackageManager.PERMISSION_GRANTED) {
+                        granted = true;
+                        break;
+                    }
+                }
+            }
+            if (granted) {
+                Log.i(TAG, "Location permission granted, restarting tracking");
+                grantPendingWebViewGeolocationIfAny();
+                startTrackingService();
+            } else {
+                Log.w(TAG, "Location permission denied");
+                denyPendingWebViewGeolocationIfAny();
+            }
+            injectSessionIntoWebView(true);
+            maybeAutoStartTrackingFromWebView("permissionsResult");
+        } else if (requestCode == RC_NOTIFICATION) {
+            injectSessionIntoWebView(true);
+            maybeAutoStartTrackingFromWebView("permissionsResult");
+        }
+    }
+
+    private void updateActiveBaseUrlFromIntent(@Nullable Intent intent) {
+        if (prefs == null) {
+            return;
+        }
+
+        Uri data = intent != null ? intent.getData() : null;
+        if (data != null
+                && ("http".equalsIgnoreCase(data.getScheme()) || "https".equalsIgnoreCase(data.getScheme()))
+                && !TextUtils.isEmpty(data.getHost())) {
+            String baseUrl = data.getScheme() + "://" + data.getHost();
+            activeBaseUrl = baseUrl;
+            persistBaseUrl(baseUrl);
+            Log.i(TAG, "Active base URL updated from intent: " + baseUrl);
+            return;
+        }
+
+        String savedBaseUrl = prefs.getString(KEY_BASE_URL, null);
+        if (!TextUtils.isEmpty(savedBaseUrl)) {
+            activeBaseUrl = savedBaseUrl;
+        }
+    }
+
+    private void restoreSavedState() {
+        trackerBootstrapInProgress = prefs.getBoolean(KEY_BOOTSTRAP_IN_PROGRESS, false);
+        pendingTrackerUrl = prefs.getString(KEY_PENDING_TRACKER_URL, null);
+        lastProcessedDeepLink = prefs.getString(KEY_LAST_PROCESSED_DEEP_LINK, null);
+
+        String savedBaseUrl = prefs.getString(KEY_BASE_URL, null);
+        if (!TextUtils.isEmpty(savedBaseUrl)) {
+            activeBaseUrl = savedBaseUrl;
+        }
+    }
+
+    private void persistBootstrapState() {
+        prefs.edit().putBoolean(KEY_BOOTSTRAP_IN_PROGRESS, trackerBootstrapInProgress).apply();
+    }
+
+    private void persistPendingTrackerUrl() {
+        prefs.edit().putString(KEY_PENDING_TRACKER_URL, pendingTrackerUrl).apply();
+    }
+
+    private void persistLastProcessedDeepLink() {
+        prefs.edit().putString(KEY_LAST_PROCESSED_DEEP_LINK, lastProcessedDeepLink).apply();
+    }
+
+    private void configureBackNavigation() {
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (webView != null && webView.canGoBack()) {
+                    webView.goBack();
+                } else {
+                    finish();
+                }
+            }
+        });
+    }
+
+    @SuppressLint({"SetJavaScriptEnabled", "JavascriptInterface"})
+    private void configureWebView() {
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setLoadsImagesAutomatically(true);
+        settings.setGeolocationEnabled(true);
+        settings.setSupportMultipleWindows(false);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        webView.clearCache(true);
+        settings.setUserAgentString(settings.getUserAgentString() + " GeocercasAndroidWebView/1.0");
+
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        cookieManager.setAcceptThirdPartyCookies(webView, true);
+
+        AndroidBridge bridge = new AndroidBridge();
+        webView.addJavascriptInterface(bridge, "AndroidBridge");
+        webView.addJavascriptInterface(bridge, "Android");
+        webView.setWebChromeClient(new AppChromeClient());
+        webView.setWebViewClient(new AppWebViewClient());
+    }
+
+    private String resolveLaunchUrl(@Nullable Intent intent) {
+        if (intent == null) {
+            return prefs.getString(KEY_LAST_URL, getBaseUrl());
+        }
+
+        String url = intent.getStringExtra("url");
+        if (!TextUtils.isEmpty(url)) {
+            return url;
+        }
+
+        Uri data = intent.getData();
+        if (data != null) {
+            return data.toString();
+        }
+
+        return prefs.getString(KEY_LAST_URL, getBaseUrl());
+    }
+
+    private boolean processTrackerAcceptDeepLink(@Nullable Intent intent, @NonNull String source) {
+        Uri data = intent != null ? intent.getData() : null;
+        if (data == null) {
+            return false;
+        }
+
+        String path = data.getPath();
+        if (!"/tracker-accept".equals(path) && !"/accept-invite".equals(path)) {
+            return false;
+        }
+
+        String deepLink = data.toString();
+        long now = System.currentTimeMillis();
+
+        String orgId = firstNonEmpty(
+                data.getQueryParameter("org_id"),
+                data.getQueryParameter("organization_id"),
+                data.getQueryParameter("orgId")
+        );
+
+        String baseUrl = getBaseUrlFromUri(data);
+        persistBaseUrl(baseUrl);
+        activeBaseUrl = baseUrl;
+
+        if (!TextUtils.isEmpty(orgId)) {
+            prefs.edit().putString(KEY_TRACKER_ORG_ID, orgId).apply();
+        }
+
+        boolean sameDeepLinkRecently =
+                deepLink.equals(lastProcessedDeepLink)
+                        && (now - lastDeepLinkHandledAt) < DEEP_LINK_DEDUPE_WINDOW_MS;
+
+        if (sameDeepLinkRecently) {
+            Log.i(TAG, "Ignoring duplicate tracker-accept deep link in " + source + ": " + deepLink);
+            return true;
+        }
+
+        lastProcessedDeepLink = deepLink;
+        lastDeepLinkHandledAt = now;
+        persistLastProcessedDeepLink();
+
+        trackerBootstrapInProgress = false;
+        persistBootstrapState();
+        pendingTrackerUrl = null;
+        persistPendingTrackerUrl();
+        mainHandler.removeCallbacks(bootstrapTimeoutRunnable);
+
+        Log.i(TAG, "TRACE processTrackerAcceptDeepLink source=" + source + " deepLink=" + deepLink);
+        Log.i(TAG, "Loading tracker accept consent page in WebView: " + deepLink);
+        loadUrlSafely(deepLink);
+        return true;
+    }
+
+    private boolean shouldInterceptTrackerUrl(@Nullable String url) {
+        if (TextUtils.isEmpty(url)) {
+            return false;
+        }
+
+        Uri uri = Uri.parse(url);
+        String path = uri.getPath();
+
+        boolean matchesTrackerPath = path != null && (
+                path.contains("/tracker-open")
+                        || path.contains(TRACKER_PATH)
+                        || path.contains("/tracker-accept")
+                        || path.contains("/accept-invite")
+        );
+
+        if (!matchesTrackerPath) {
+            return false;
+        }
+
+        String runtimeToken = getRuntimeTokenFromUri(uri);
+        String rawToken = uri.getQueryParameter("token");
+        String inviteToken = getInviteTokenFromUri(uri);
+        boolean trackerOpen = isTrackerOpenUrl(uri);
+        boolean trackerOpenInviteOnly = trackerOpen
+                && TextUtils.isEmpty(runtimeToken)
+                && (!TextUtils.isEmpty(rawToken) || !TextUtils.isEmpty(inviteToken));
+
+        Log.i(TAG, "shouldInterceptTrackerUrl: path=" + path
+                + " trackerOpen=" + trackerOpen
+                + " raw_token_prefix=" + tokenPrefix(rawToken)
+                + " runtime_token_prefix=" + tokenPrefix(runtimeToken)
+                + " invite_token_prefix=" + tokenPrefix(inviteToken)
+                + " tracker_open_invite_only=" + trackerOpenInviteOnly);
+
+        // Critical guard: /tracker-open?token=... is an invite-token page.
+        // It must be loaded by the WebView so the frontend can call
+        // /api/accept-tracker-invite and only then hand the runtime token to Android.
+        if (trackerOpenInviteOnly) {
+            Log.i(TAG, "Skipping native bootstrap for tracker-open invite token. Loading web accept flow only.");
+            return false;
+        }
+
+        String selectedRuntimeToken = getRuntimeTokenForNativeSession(uri);
+        if (TextUtils.isEmpty(selectedRuntimeToken)) {
+            Log.i(TAG, "Skipping intercept: tracker url without runtime token â†’ " + url);
+            return false;
+        }
+
+        if (url.equals(lastBootstrapUrl)) {
+            Log.i(TAG, "Skipping intercept: already bootstrapped â†’ " + url);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void beginTrackerBootstrap(@NonNull String trackerUrl) {
+        Uri uri = Uri.parse(trackerUrl);
+
+        if (isTrackerOpenInviteOnly(uri)) {
+            Log.i(TAG, "Blocked native bootstrap for tracker-open invite token. url=" + trackerUrl);
+            loadUrlSafely(trackerUrl);
+            return;
+        }
+
+        String token = getRuntimeTokenForNativeSession(uri);
+
+        if (TextUtils.isEmpty(token)) {
+            Log.w(TAG, "Blocked bootstrap: no runtime token in url â†’ " + trackerUrl);
+            return;
+        }
+
+        Log.i(TAG, "TRACE beginTrackerBootstrap trackerUrl=" + trackerUrl
+                + " selected_runtime_prefix=" + tokenPrefix(token));
+        long now = System.currentTimeMillis();
+
+        if (!TextUtils.isEmpty(lastBootstrapUrl)
+                && lastBootstrapUrl.equals(trackerUrl)
+                && (now - lastBootstrapAt) < BOOTSTRAP_DEDUPE_WINDOW_MS) {
+            Log.w(TAG, "Skipping duplicate beginTrackerBootstrap for url=" + trackerUrl);
+            return;
+        }
+
+        lastBootstrapUrl = trackerUrl;
+        lastBootstrapAt = now;
+
+        if (!trackerBootstrapInProgress && !TextUtils.isEmpty(prefs.getString(KEY_TRACKER_TOKEN, null))) {
+            Log.i(TAG, "Skipping bootstrap, session already exists for url=" + trackerUrl);
+            loadUrlSafely(buildTrackerGpsReleaseUrl(trackerUrl));
+            return;
+        }
+
+        Log.i(TAG, "TRACKER_BOOTSTRAP_START url=" + trackerUrl);
+        Log.i(TAG, "beginTrackerBootstrap trackerUrl=" + trackerUrl);
+
+        String baseUrl = getBaseUrlFromUri(Uri.parse(trackerUrl));
+        activeBaseUrl = baseUrl;
+        persistBaseUrl(baseUrl);
+
+        pendingTrackerUrl = trackerUrl;
+        trackerBootstrapInProgress = true;
+        persistPendingTrackerUrl();
+        persistBootstrapState();
+
+        captureTrackerSessionFromUrl(trackerUrl);
+        injectSessionIntoNativeStorage();
+
+        mainHandler.removeCallbacks(bootstrapTimeoutRunnable);
+        mainHandler.postDelayed(bootstrapTimeoutRunnable, BOOTSTRAP_TIMEOUT_MS);
+
+        loadUrlSafely(baseUrl + "/");
+
+        mainHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                completeTrackerBootstrapIfReady();
+            }
+        }, 600L);
+    }
+
+    private void completeTrackerBootstrapIfReady() {
+        Log.i(TAG, "TRACE completeTrackerBootstrapIfReady pending=" + pendingTrackerUrl);
+        if (!trackerBootstrapInProgress) {
+            Log.d(TAG, "completeTrackerBootstrapIfReady skipped because bootstrap is not in progress");
+            return;
+        }
+
+        final String token = prefs.getString(KEY_TRACKER_TOKEN, null);
+        final String orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+        final String userId = prefs.getString(KEY_TRACKER_USER_ID, null);
+
+        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(userId)) {
+            Log.w(TAG, "Tracker bootstrap still waiting for token/userId");
+            return;
+        }
+
+        String releaseUrl = !TextUtils.isEmpty(pendingTrackerUrl)
+                ? buildTrackerGpsReleaseUrl(pendingTrackerUrl)
+                : buildTrackerGpsReleaseUrl(null);
+
+        String currentUrl = webView != null ? webView.getUrl() : null;
+
+        trackerBootstrapInProgress = false;
+        persistBootstrapState();
+        mainHandler.removeCallbacks(bootstrapTimeoutRunnable);
+
+        Log.i(TAG, "Releasing pending tracker url=" + releaseUrl + " currentUrl=" + currentUrl);
+
+        pendingTrackerUrl = null;
+        persistPendingTrackerUrl();
+
+        injectSessionIntoWebView(true);
+        maybeAutoStartTrackingFromWebView("bootstrapComplete");
+
+        if (!TextUtils.isEmpty(currentUrl) && currentUrl.equals(releaseUrl)) {
+            Log.i(TAG, "Release skipped because WebView already has target url");
+            return;
+        }
+
+        loadUrlSafely(releaseUrl);
+    }
+
+    private String buildTrackerGpsReleaseUrl(@Nullable String sourceUrl) {
+        String baseUrl = getBaseUrl();
+
+        Uri sourceUri = null;
+        if (!TextUtils.isEmpty(sourceUrl)) {
+            try {
+                sourceUri = Uri.parse(sourceUrl);
+                String sourceBaseUrl = getBaseUrlFromUri(sourceUri);
+                if (!TextUtils.isEmpty(sourceBaseUrl)) {
+                    baseUrl = sourceBaseUrl;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Could not parse tracker release url source=" + sourceUrl, t);
+            }
+        }
+
+        Uri.Builder builder = Uri.parse(baseUrl + TRACKER_PATH).buildUpon();
+
+        String orgId = firstNonEmpty(
+                sourceUri != null ? sourceUri.getQueryParameter("org_id") : null,
+                sourceUri != null ? sourceUri.getQueryParameter("organization_id") : null,
+                sourceUri != null ? sourceUri.getQueryParameter("orgId") : null,
+                prefs != null ? prefs.getString(KEY_TRACKER_ORG_ID, null) : null
+        );
+
+        String userId = firstNonEmpty(
+                sourceUri != null ? sourceUri.getQueryParameter("userId") : null,
+                sourceUri != null ? sourceUri.getQueryParameter("tracker_user_id") : null,
+                sourceUri != null ? sourceUri.getQueryParameter("user_id") : null,
+                prefs != null ? prefs.getString(KEY_TRACKER_USER_ID, null) : null
+        );
+
+        if (!TextUtils.isEmpty(orgId)) {
+            builder.appendQueryParameter("org_id", orgId);
+        }
+        if (!TextUtils.isEmpty(userId)) {
+            builder.appendQueryParameter("userId", userId);
+        }
+
+        String releaseUrl = builder.build().toString();
+        Log.i(TAG, "TRACKER_BOOTSTRAP_TO=" + releaseUrl);
+        return releaseUrl;
+    }
+
+    private String sanitizeTrackerUrl(@NonNull String url) {
+        Uri uri = Uri.parse(url);
+        Uri.Builder builder = uri.buildUpon().clearQuery();
+
+        Set<String> preserved = new HashSet<>();
+        for (String name : uri.getQueryParameterNames()) {
+            if ("token".equals(name)
+                    || "t".equals(name)
+                    || "access_token".equals(name)
+                    || "tracker_access_token".equals(name)
+                    || "tracker_runtime_token".equals(name)
+                    || "invite_token".equals(name)
+                    || "inviteToken".equals(name)) {
+                continue;
+            }
+            if (!preserved.add(name)) {
+                continue;
+            }
+            List<String> values = uri.getQueryParameters(name);
+            for (String value : values) {
+                builder.appendQueryParameter(name, value);
+            }
+        }
+        return builder.build().toString();
+    }
+
+    private void captureTrackerSessionFromUrl(@NonNull String url) {
+        Uri uri = Uri.parse(url);
+
+        String runtimeToken = getRuntimeTokenForNativeSession(uri);
+        String rawToken = uri.getQueryParameter("token");
+        String inviteToken = getInviteTokenFromUri(uri);
+        boolean trackerOpenInviteOnly = isTrackerOpenInviteOnly(uri);
+
+        String orgId = firstNonEmpty(
+                uri.getQueryParameter("org_id"),
+                uri.getQueryParameter("organization_id"),
+                uri.getQueryParameter("orgId")
+        );
+
+        String userId = firstNonEmpty(
+                uri.getQueryParameter("userId"),
+                uri.getQueryParameter("tracker_user_id"),
+                uri.getQueryParameter("user_id")
+        );
+
+        Log.i(TAG, "captureTrackerSessionFromUrl tracker_open_invite_only=" + trackerOpenInviteOnly
+                + " raw_token_prefix=" + tokenPrefix(rawToken)
+                + " runtime_token_prefix=" + tokenPrefix(runtimeToken)
+                + " invite_token_prefix=" + tokenPrefix(inviteToken));
+
+        SharedPreferences.Editor editor = prefs.edit();
+
+        // Critical guard: never persist the invite token from /tracker-open?token=...
+        // as tracker_access_token. It is only for /api/accept-tracker-invite in the web page.
+        if (trackerOpenInviteOnly) {
+            editor.remove(KEY_TRACKER_TOKEN);
+            editor.remove("access_token");
+            editor.remove("tracker_access_token");
+            editor.remove("tracker_runtime_token");
+            Log.i(TAG, "Cleared native runtime token while loading tracker-open invite flow");
+        } else if (!TextUtils.isEmpty(runtimeToken)) {
+            editor.putString(KEY_TRACKER_TOKEN, runtimeToken);
+            editor.putString("access_token", runtimeToken);
+            editor.putString("tracker_access_token", runtimeToken);
+            editor.putString("tracker_runtime_token", runtimeToken);
+            Log.i(TAG, "Stored runtime token from URL prefix=" + tokenPrefix(runtimeToken));
+        } else {
+            Log.i(TAG, "No runtime token stored from URL");
+        }
+
+        if (!TextUtils.isEmpty(orgId)) {
+            editor.putString(KEY_TRACKER_ORG_ID, orgId);
+            Log.i(TAG, "Stored orgId from URL=" + orgId);
+        }
+        if (!TextUtils.isEmpty(userId)) {
+            editor.putString(KEY_TRACKER_USER_ID, userId);
+            editor.putString("user_id", userId);
+            editor.putString("userId", userId);
+            Log.i(TAG, "Stored tracker userId from URL=" + userId);
+        }
+
+        editor.apply();
+    }
+
+    private void injectSessionIntoNativeStorage() {
+        String token = prefs.getString(KEY_TRACKER_TOKEN, null);
+        String userId = prefs.getString(KEY_TRACKER_USER_ID, null);
+        String orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+
+        // An incomplete bootstrap is not a logout. Do not erase the service session.
+        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(userId) || TextUtils.isEmpty(orgId)) {
+            Log.w(TAG, "Native session sync skipped: incomplete session");
+            return;
+        }
+
+        Log.i(TAG, "injectSessionIntoNativeStorage token=" + (!TextUtils.isEmpty(token))
+                + " token_prefix=" + tokenPrefix(token)
+                + " userId=" + userId + " orgId=" + orgId);
+
+        SharedPreferences.Editor editor = prefs.edit();
+        if (!TextUtils.isEmpty(token)) {
+            editor.putString(KEY_TRACKER_TOKEN, token);
+            editor.putString("access_token", token);
+            editor.putString("tracker_access_token", token);
+            editor.putString("tracker_runtime_token", token);
+        } else {
+            editor.remove(KEY_TRACKER_TOKEN);
+            editor.remove("access_token");
+            editor.remove("tracker_access_token");
+            editor.remove("tracker_runtime_token");
+        }
+        if (!TextUtils.isEmpty(userId)) {
+            editor.putString(KEY_TRACKER_USER_ID, userId);
+        }
+        if (!TextUtils.isEmpty(orgId)) {
+            editor.putString(KEY_TRACKER_ORG_ID, orgId);
+        }
+        editor.apply();
+
+        SharedPreferences trackerPrefs = getSharedPreferences("tracker_prefs", Context.MODE_PRIVATE);
+        SharedPreferences.Editor trackerEditor = trackerPrefs.edit();
+
+        if (!TextUtils.isEmpty(token)) {
+            trackerEditor.putString("access_token", token);
+            trackerEditor.putString("tracker_access_token", token);
+            trackerEditor.putString("tracker_runtime_token", token);
+        } else {
+            trackerEditor.remove("access_token");
+            trackerEditor.remove("tracker_access_token");
+            trackerEditor.remove("tracker_runtime_token");
+        }
+        if (!TextUtils.isEmpty(userId)) {
+            trackerEditor.putString("tracker_user_id", userId);
+            trackerEditor.putString("user_id", userId);
+            trackerEditor.putString("userId", userId);
+        }
+        if (!TextUtils.isEmpty(orgId)) {
+            trackerEditor.putString("org_id", orgId);
+        }
+        trackerEditor.putBoolean("tracker_enabled", true);
+        trackerEditor.putBoolean("tracker_bridge_ready", true);
+        trackerEditor.apply();
+    }
+
+    private void injectSessionIntoWebView(boolean force) {
+        if (webView == null) {
+            return;
+        }
+
+        final String token = prefs.getString(KEY_TRACKER_TOKEN, null);
+        final String userId = prefs.getString(KEY_TRACKER_USER_ID, null);
+        final String orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+
+        if (!force && TextUtils.isEmpty(token) && TextUtils.isEmpty(userId) && TextUtils.isEmpty(orgId)) {
+            return;
+        }
+
+        // Do not erase WebView credentials during an incomplete native bootstrap.
+        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(userId) || TextUtils.isEmpty(orgId)) {
+            Log.w(TAG, "Web session sync skipped: incomplete session");
+            return;
+        }
+
+        final String js = buildSessionInjectionJs(token, userId, orgId);
+        webView.evaluateJavascript(js, new ValueCallback<String>() {
+            @Override
+            public void onReceiveValue(String value) {
+                Log.d(TAG, "injectSessionIntoWebView result=" + value);
+                completeTrackerBootstrapIfReady();
+            }
+        });
+
+        syncCookieSession(token, orgId);
+    }
+
+    private void syncCookieSession(@Nullable String token, @Nullable String orgId) {
+        CookieManager cookieManager = CookieManager.getInstance();
+        String baseUrl = getBaseUrl();
+
+        if (!TextUtils.isEmpty(token)) {
+            cookieManager.setCookie(baseUrl, "tracker_access_token=" + safeCookieValue(token) + "; Path=/; Secure; SameSite=None");
+        } else {
+            cookieManager.setCookie(baseUrl, "tracker_access_token=; Path=/; Max-Age=0; Secure; SameSite=None");
+        }
+        if (!TextUtils.isEmpty(orgId)) {
+            cookieManager.setCookie(baseUrl, "org_id=" + safeCookieValue(orgId) + "; Path=/; Secure; SameSite=None");
+        }
+        cookieManager.flush();
+    }
+
+    private String buildSessionInjectionJs(@Nullable String token, @Nullable String userId, @Nullable String orgId) {
+        return "(function(){"
+            + "try {"
+            + putLocalStorageJs("tracker_access_token", token)
+            + putLocalStorageJs("access_token", token)
+            + putLocalStorageJs("tracker_runtime_token", token)
+            + putLocalStorageJs("tracker_user_id", userId)
+            + putLocalStorageJs("user_id", userId)
+            + putLocalStorageJs("userId", userId)
+            + putLocalStorageJs("org_id", orgId)
+            + putLocalStorageJs("tracker_org_id", orgId)
+            + "window.__GEOCERCAS_NATIVE__ = window.__GEOCERCAS_NATIVE__ || {};"
+            + "window.__GEOCERCAS_NATIVE__.tracker_access_token = " + jsString(token) + ";"
+            + "window.__GEOCERCAS_NATIVE__.tracker_runtime_token = " + jsString(token) + ";"
+            + "window.__GEOCERCAS_NATIVE__.tracker_user_id = " + jsString(userId) + ";"
+            + "window.__GEOCERCAS_NATIVE__.org_id = " + jsString(orgId) + ";"
+            + "window.dispatchEvent(new CustomEvent('geocercas-native-session-ready', { detail: {"
+            + "tracker_access_token: " + jsString(token) + ","
+            + "tracker_runtime_token: " + jsString(token) + ","
+            + "tracker_user_id: " + jsString(userId) + ","
+            + "org_id: " + jsString(orgId)
+            + "}}));"
+                + "'ok';"
+                + "} catch (e) { 'err:' + (e && e.message ? e.message : e); }"
+                + "})();";
+    }
+
+    private String putLocalStorageJs(String key, @Nullable String value) {
+        if (TextUtils.isEmpty(value)) {
+            return "try{localStorage.removeItem('" + escapeJsLiteral(key) + "');}catch(e){}";
+        }
+        return "try{localStorage.setItem('" + escapeJsLiteral(key) + "'," + jsString(value) + ");}catch(e){}";
+    }
+
+    private void maybeAutoStartTrackingFromWebView(@NonNull String source) {
+        String currentUrl = webView != null ? webView.getUrl() : null;
+        if (TextUtils.isEmpty(currentUrl) || !currentUrl.contains(TRACKER_PATH)) {
+            Log.i(TAG, "Skipping auto start outside tracker page. source=" + source + " url=" + currentUrl);
+            return;
+        }
+
+        String token = prefs.getString(KEY_TRACKER_TOKEN, null);
+        String orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+        String trackerUserId = prefs.getString(KEY_TRACKER_USER_ID, null);
+
+        // Si token estÃ¡ vacÃ­o pero la URL trae tracker_runtime_token o runtimeToken, capturarlo
+        if (TextUtils.isEmpty(token) && currentUrl != null && (currentUrl.contains("tracker_runtime_token=") || currentUrl.contains("runtimeToken="))) {
+            Log.i(TAG, "maybeAutoStartTrackingFromWebView: capturing session from URL");
+            captureTrackerSessionFromUrl(currentUrl);
+            // Recargar valores despuÃ©s de capturar
+            token = prefs.getString(KEY_TRACKER_TOKEN, null);
+            orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+            trackerUserId = prefs.getString(KEY_TRACKER_USER_ID, null);
+        }
+
+        boolean hasLocation = hasLocationPermissions();
+        boolean notificationsOk = hasNotificationPermissionIfNeeded();
+        boolean serviceRunning = isTrackingServiceRunning();
+
+        Log.i(TAG, "maybeAutoStartTrackingFromWebView source=" + source
+                + " token=" + (!TextUtils.isEmpty(token))
+                + " trackerUserId=" + trackerUserId
+                + " orgId=" + orgId
+                + " hasLocation=" + hasLocation
+                + " notificationsOk=" + notificationsOk
+                + " serviceRunning=" + serviceRunning
+                + " currentUrl=" + currentUrl);
+
+        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(trackerUserId)) {
+            return;
+        }
+
+        if (!hasLocation) {
+            requestLocationPermissions();
+            return;
+        }
+
+        if (!notificationsOk) {
+            requestNotificationPermissionIfNeeded();
+            return;
+        }
+
+        if (!serviceRunning) {
+            startTrackingService();
+        }
+    }
+
+    private boolean isTrackingServiceRunning() {
+        try {
+            ActivityManager manager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (manager == null) {
+                return false;
+            }
+
+            for (ActivityManager.RunningServiceInfo service : manager.getRunningServices(Integer.MAX_VALUE)) {
+                if (ForegroundLocationService.class.getName().equals(service.service.getClassName())) {
+                    return true;
+                }
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Could not determine tracking service state", t);
+        }
+        return false;
+    }
+
+    private void startTrackingService() {
+                // Verifica permisos de ubicaciÃ³n antes de arrancar el servicio
+                if (!hasLocationPermissions()) {
+                    Log.w(TAG, "startTrackingService: missing location permission, requesting...");
+                    requestLocationPermissions();
+                    return;
+                }
+        String token = prefs.getString(KEY_TRACKER_TOKEN, null);
+        String trackerUserId = prefs.getString(KEY_TRACKER_USER_ID, null);
+        String orgId = prefs.getString(KEY_TRACKER_ORG_ID, null);
+
+        if (TextUtils.isEmpty(token) || TextUtils.isEmpty(trackerUserId)) {
+            Log.w(TAG, "startTrackingService skipped: missing token or trackerUserId");
+            return;
+        }
+
+        Log.i(TAG, "startTrackingService token=" + (!TextUtils.isEmpty(token))
+                + " token_prefix=" + tokenPrefix(token)
+                + " trackerUserId=" + trackerUserId
+                + " orgId=" + orgId);
+
+        SharedPreferences trackerPrefs = getSharedPreferences("tracker_prefs", Context.MODE_PRIVATE);
+        trackerPrefs.edit()
+                .putBoolean("tracker_enabled", true)
+                .putBoolean("tracker_bridge_ready", true)
+                .apply();
+
+        Intent serviceIntent = new Intent(this, ForegroundLocationService.class);
+        serviceIntent.setAction(ForegroundLocationService.ACTION_UPDATE_TRACKER_SESSION);
+        serviceIntent.putExtra(ForegroundLocationService.EXTRA_ACCESS_TOKEN, token);
+        serviceIntent.putExtra(ForegroundLocationService.EXTRA_TRACKER_USER_ID, trackerUserId);
+        serviceIntent.putExtra("org_id", orgId);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(this, serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+    }
+
+        private boolean hasLocationPermissions() {
+        boolean hasFine = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED;
+
+        boolean hasCoarse = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED;
+
+        return hasFine || hasCoarse;
+        }
+
+    private void requestLocationPermissions() {
+        if (hasLocationPermissions()) {
+            grantPendingWebViewGeolocationIfAny();
+            return;
+        }
+
+        if (locationDisclosureDialogShowing) {
+            Log.i(TAG, "Location disclosure dialog is already showing");
+            return;
+        }
+
+        locationDisclosureDialogShowing = true;
+
+        new AlertDialog.Builder(this)
+                .setTitle("Location permission")
+                .setMessage(
+                        "GeoField GPS collects, uses, and shares your precise location during authorized tracking sessions.\n\n"
+                                + "Location is used to start tracking, validate routes, geofences, and operational reports, including when the app is in the background, closed, or not in use.\n\n"
+                                + "Your location may be shared with the organization that invited you. You can stop tracking or revoke location permission from device settings.\n\n"
+                                + "You must accept this disclosure before continuing to the Android location permission."
+                )
+                .setPositiveButton("Accept and continue", (dialog, which) -> {
+                    locationDisclosureDialogShowing = false;
+                    ActivityCompat.requestPermissions(
+                            this,
+                            new String[]{
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                            },
+                            RC_LOCATION
+                    );
+                })
+                .setNegativeButton("Cancel", (dialog, which) -> {
+                    locationDisclosureDialogShowing = false;
+                    Log.i(TAG, "Location disclosure declined by user");
+                    denyPendingWebViewGeolocationIfAny();
+                    dialog.dismiss();
+                })
+                .setOnCancelListener(dialog -> {
+                    locationDisclosureDialogShowing = false;
+                    Log.i(TAG, "Location disclosure cancelled by user");
+                    denyPendingWebViewGeolocationIfAny();
+                })
+                .setCancelable(false)
+                .show();
+    }
+
+    private void grantPendingWebViewGeolocationIfAny() {
+        if (pendingGeolocationCallback != null && !TextUtils.isEmpty(pendingGeolocationOrigin)) {
+            Log.i(TAG, "Granting pending WebView geolocation for origin=" + pendingGeolocationOrigin);
+            pendingGeolocationCallback.invoke(pendingGeolocationOrigin, true, false);
+            pendingGeolocationCallback = null;
+            pendingGeolocationOrigin = null;
+        }
+    }
+
+    private void denyPendingWebViewGeolocationIfAny() {
+        if (pendingGeolocationCallback != null && !TextUtils.isEmpty(pendingGeolocationOrigin)) {
+            Log.i(TAG, "Denying pending WebView geolocation for origin=" + pendingGeolocationOrigin);
+            pendingGeolocationCallback.invoke(pendingGeolocationOrigin, false, false);
+            pendingGeolocationCallback = null;
+            pendingGeolocationOrigin = null;
+        }
+    }
+
+    private boolean hasNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return true;
+        }
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.POST_NOTIFICATIONS}, RC_NOTIFICATION);
+        }
+    }
+
+    private void loadUrlSafely(@NonNull String url) {
+        if (!"https".equalsIgnoreCase(Uri.parse(url).getScheme()) || !"preview.tugeocercas.com".equalsIgnoreCase(Uri.parse(url).getHost())) { Log.w(TAG, "Blocked non-Preview navigation"); return; }
+        String safeUrl = withTrackerReviewCacheBuster(url);
+
+        if (!TextUtils.isEmpty(lastLoadedUrl) && lastLoadedUrl.equals(safeUrl)) {
+            Log.i(TAG, "Skipping duplicate loadUrlSafely: " + safeUrl);
+            return;
+        }
+
+        String currentUrl = webView != null ? webView.getUrl() : null;
+        if (!TextUtils.isEmpty(currentUrl) && currentUrl.equals(safeUrl)) {
+            Log.i(TAG, "Skipping load because WebView already has url: " + safeUrl);
+            lastLoadedUrl = safeUrl;
+            prefs.edit().putString(KEY_LAST_URL, safeUrl).apply();
+            return;
+        }
+
+        lastLoadedUrl = safeUrl;
+        prefs.edit().putString(KEY_LAST_URL, safeUrl).apply();
+        Log.i(TAG, "Loading url=" + safeUrl);
+        webView.loadUrl(safeUrl);
+    }
+
+    private String withTrackerReviewCacheBuster(@NonNull String url) {
+        try {
+            Uri uri = Uri.parse(url);
+            String path = uri.getPath();
+
+            boolean isTrackerRoute = path != null && (
+                    path.contains("/tracker-accept")
+                            || path.contains("/accept-invite")
+                            || path.contains("/tracker-open")
+                            || path.contains("/tracker-gps")
+            );
+
+            if (!isTrackerRoute) {
+                return url;
+            }
+
+            String currentValue = uri.getQueryParameter("gp_review_v");
+            if ("13".equals(currentValue)) {
+                return url;
+            }
+
+            return uri.buildUpon()
+                    .appendQueryParameter("gp_review_v", "13")
+                    .build()
+                    .toString();
+        } catch (Throwable t) {
+            Log.w(TAG, "Could not append tracker review cache buster", t);
+            return url;
+        }
+    }
+
+    private void persistBaseUrl(@NonNull String baseUrl) {
+        prefs.edit().putString(KEY_BASE_URL, baseUrl).apply();
+    }
+
+    private String getBaseUrl() { return "https://preview.tugeocercas.com";
+    }
+
+    private String getBaseUrlFromUri(@NonNull Uri uri) { return getBaseUrl();
+    }
+
+    private boolean isTrackerOpenUrl(@NonNull Uri uri) {
+        String path = uri.getPath();
+        return path != null && path.contains("/tracker-open");
+    }
+
+    private boolean isTrackerOpenInviteOnly(@NonNull Uri uri) {
+        if (!isTrackerOpenUrl(uri)) {
+            return false;
+        }
+        String runtimeToken = getRuntimeTokenFromUri(uri);
+        String rawToken = uri.getQueryParameter("token");
+        String inviteToken = getInviteTokenFromUri(uri);
+        return TextUtils.isEmpty(runtimeToken)
+                && (!TextUtils.isEmpty(rawToken) || !TextUtils.isEmpty(inviteToken));
+    }
+
+    @Nullable
+    private String getRuntimeTokenFromUri(@NonNull Uri uri) {
+        return firstNonEmpty(
+                uri.getQueryParameter("tracker_runtime_token"),
+                uri.getQueryParameter("runtimeToken"),
+                uri.getQueryParameter("runtime_token"),
+                uri.getQueryParameter("tracker_access_token"),
+                uri.getQueryParameter("access_token")
+        );
+    }
+
+    @Nullable
+    private String getInviteTokenFromUri(@NonNull Uri uri) {
+        return firstNonEmpty(
+                uri.getQueryParameter("invite_token"),
+                uri.getQueryParameter("inviteToken"),
+                uri.getQueryParameter("t")
+        );
+    }
+
+    @Nullable
+    private String getRuntimeTokenForNativeSession(@NonNull Uri uri) {
+        String runtimeToken = getRuntimeTokenFromUri(uri);
+        if (!TextUtils.isEmpty(runtimeToken)) {
+            return runtimeToken;
+        }
+
+        // token= from /tracker-open is the invite token. Never use it as runtime.
+        if (isTrackerOpenUrl(uri)) {
+            return null;
+        }
+
+        // token= from geocercas-preview://tracker or /tracker-gps is allowed as a fallback
+        // because those links are generated after the invite exchange.
+        return uri.getQueryParameter("token");
+    }
+
+    private String tokenPrefix(@Nullable String token) {
+        if (TextUtils.isEmpty(token)) {
+            return "null";
+        }
+        int visible = Math.min(8, token.length());
+        return token.substring(0, visible) + "â€¦len:" + token.length();
+    }
+
+    private String firstNonEmpty(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (!TextUtils.isEmpty(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private String decodeJwtSub(@Nullable String token) {
+        if (TextUtils.isEmpty(token)) {
+            return null;
+        }
+
+        String[] parts = token.split("\\.");
+        if (parts.length < 2) {
+            return null;
+        }
+
+        try {
+            byte[] decoded = Base64.decode(parts[1], Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+            String payload = new String(decoded, StandardCharsets.UTF_8);
+            JSONObject json = new JSONObject(payload);
+            return json.optString("sub", null);
+        } catch (IllegalArgumentException | JSONException e) {
+            Log.w(TAG, "Failed to decode JWT sub", e);
+            return null;
+        }
+    }
+
+    private String safeCookieValue(@NonNull String value) {
+        try {
+            return URLEncoder.encode(value, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            return value;
+        }
+    }
+
+    private String jsString(@Nullable String value) {
+        if (value == null) {
+            return "null";
+        }
+        return "'" + escapeJsLiteral(value) + "'";
+    }
+
+    private String escapeJsLiteral(@NonNull String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("</", "<\\/");
+    }
+
+    private boolean saveNativeRuntimeSession(
+            @Nullable String token,
+            @Nullable String trackerUserId,
+            @Nullable String orgId,
+            @NonNull String source
+    ) {
+        String cleanToken = token != null ? token.trim() : null;
+        String cleanTrackerUserId = firstNonEmpty(
+                trackerUserId != null ? trackerUserId.trim() : null,
+                prefs != null ? prefs.getString(KEY_TRACKER_USER_ID, null) : null
+        );
+        String cleanOrgId = firstNonEmpty(
+                orgId != null ? orgId.trim() : null,
+                prefs != null ? prefs.getString(KEY_TRACKER_ORG_ID, null) : null
+        );
+
+        Log.i(TAG, source + " saveNativeRuntimeSession token_prefix=" + tokenPrefix(cleanToken)
+                + " trackerUserId=" + cleanTrackerUserId
+                + " orgId=" + cleanOrgId);
+
+        if (TextUtils.isEmpty(cleanToken)) {
+            Log.w(TAG, source + " ignored: missing runtime token");
+            return false;
+        }
+        if (TextUtils.isEmpty(cleanTrackerUserId)) {
+            Log.w(TAG, source + " ignored: missing trackerUserId");
+            return false;
+        }
+        if (isCurrentTrackerOpenInviteToken(cleanToken)) {
+            Log.w(TAG, source + " rejected: token matches current tracker-open invite token prefix=" + tokenPrefix(cleanToken));
+            return false;
+        }
+
+        if (TextUtils.isEmpty(cleanOrgId)) return false;
+        cleanToken = RuntimeSessionRenewal.adoptIncoming(this, cleanToken, cleanTrackerUserId, cleanOrgId);
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putString(KEY_TRACKER_TOKEN, cleanToken);
+        editor.putString("access_token", cleanToken);
+        editor.putString("tracker_access_token", cleanToken);
+        editor.putString("tracker_runtime_token", cleanToken);
+        editor.putString(KEY_TRACKER_USER_ID, cleanTrackerUserId);
+        editor.putString("tracker_user_id", cleanTrackerUserId);
+        editor.putString("user_id", cleanTrackerUserId);
+        editor.putString("userId", cleanTrackerUserId);
+        if (!TextUtils.isEmpty(cleanOrgId)) {
+            editor.putString(KEY_TRACKER_ORG_ID, cleanOrgId);
+            editor.putString("org_id", cleanOrgId);
+        }
+        editor.putBoolean("tracker_enabled", true);
+        editor.putBoolean("tracker_bridge_ready", true);
+        editor.apply();
+
+        trackerBootstrapInProgress = false;
+        pendingTrackerUrl = null;
+        persistBootstrapState();
+        persistPendingTrackerUrl();
+        mainHandler.removeCallbacks(bootstrapTimeoutRunnable);
+
+        injectSessionIntoNativeStorage();
+        injectSessionIntoWebView(true);
+        syncCookieSession(cleanToken, cleanOrgId);
+
+        Log.i(TAG, source + " stored runtime session token_prefix=" + tokenPrefix(cleanToken)
+                + " trackerUserId=" + cleanTrackerUserId
+                + " orgId=" + cleanOrgId);
+        return true;
+    }
+
+    private boolean isCurrentTrackerOpenInviteToken(@Nullable String token) {
+        if (TextUtils.isEmpty(token) || webView == null) {
+            return false;
+        }
+        String currentUrl = webView.getUrl();
+        if (TextUtils.isEmpty(currentUrl)) {
+            return false;
+        }
+        try {
+            Uri uri = Uri.parse(currentUrl);
+            if (!isTrackerOpenInviteOnly(uri)) {
+                return false;
+            }
+            String rawToken = uri.getQueryParameter("token");
+            String inviteToken = getInviteTokenFromUri(uri);
+            return token.equals(rawToken) || token.equals(inviteToken);
+        } catch (Throwable t) {
+            Log.w(TAG, "Could not validate current tracker-open invite token", t);
+            return false;
+        }
+    }
+
+    private void navigateToTrackerGpsIfNeeded(@NonNull String source) {
+        if (webView == null) {
+            return;
+        }
+        String currentUrl = webView.getUrl();
+        if (!TextUtils.isEmpty(currentUrl) && currentUrl.contains(TRACKER_PATH)) {
+            return;
+        }
+        String releaseUrl = buildTrackerGpsReleaseUrl(null);
+        Log.i(TAG, source + " navigating to tracker gps url=" + releaseUrl + " currentUrl=" + currentUrl);
+        loadUrlSafely(releaseUrl);
+    }
+
+    private boolean isVisitsOrigin() {
+        Uri page = Uri.parse(webView.getUrl() == null ? "" : webView.getUrl());
+        return "https".equals(page.getScheme()) && "preview.tugeocercas.com".equals(page.getHost());
+    }
+
+    private class AndroidBridge {
+        // The credential stays native. Only this fixed Preview endpoint is callable.
+        @JavascriptInterface
+        public void visitRequest(String requestId, String requestJson) {
+            if (requestId == null || !requestId.matches("[a-zA-Z0-9-]{1,64}") || requestJson == null || requestJson.length() > 3000000) return;
+            runOnUiThread(() -> {
+                if (webView == null || !isVisitsOrigin()) return;
+                new Thread(() -> {
+                    int status = 503;
+                    String response = "{\"error\":\"visits_unavailable\"}";
+                    java.net.HttpURLConnection connection = null;
+                    try {
+                        JSONObject request = new JSONObject(requestJson);
+                        SharedPreferences stored = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+                        String org = stored.getString("org_id", "");
+                        String user = stored.getString("tracker_user_id", "");
+                        if (!org.equals(request.optString("org_id")) || !user.equals(request.optString("user_id"))) throw new IllegalArgumentException("Session changed");
+                        RuntimeSessionRenewal.INSTANCE.renewIfNeeded(WebViewActivity.this, "https://preview.tugeocercas.com/api/send-position");
+                        if (!org.equals(stored.getString("org_id", "")) || !user.equals(stored.getString("tracker_user_id", ""))) throw new IllegalArgumentException("Session changed");
+                        JSONObject body = request.optJSONObject("body");
+                        String target = "https://preview.tugeocercas.com/api/visits" + (body == null ? "?org_id=" + java.net.URLEncoder.encode(org, "UTF-8") : "");
+                        connection = (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
+                        connection.setInstanceFollowRedirects(false);
+                        connection.setConnectTimeout(15000); connection.setReadTimeout(20000);
+                        connection.setRequestMethod(body == null ? "GET" : "POST");
+                        connection.setRequestProperty("Authorization", "Bearer " + stored.getString("access_token", ""));
+                        connection.setRequestProperty("x-tracker-runtime", "1");
+                        if (body != null) {
+                            body.put("org_id", org);
+                            connection.setRequestProperty("Content-Type", "application/json");
+                            connection.setDoOutput(true);
+                            try (java.io.OutputStream out = connection.getOutputStream()) { out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
+                        }
+                        status = connection.getResponseCode();
+                        java.io.InputStream stream = status < 400 ? connection.getInputStream() : connection.getErrorStream();
+                        if (stream != null) try (java.util.Scanner scanner = new java.util.Scanner(stream, "UTF-8").useDelimiter("\\A")) { response = scanner.hasNext() ? scanner.next() : "{}"; }
+                    } catch (Exception ignored) { /* No credential or response logging. */ }
+                    finally { if (connection != null) connection.disconnect(); }
+                    final int resultStatus = status;
+                    final String resultBody = response;
+                    runOnUiThread(() -> {
+                        if (webView == null || !isVisitsOrigin()) return;
+                        try {
+                            JSONObject detail = new JSONObject().put("id", requestId).put("status", resultStatus).put("body", resultBody);
+                            webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('geofield-visits-response',{detail:" + detail.toString() + "}));", null);
+                        } catch (Exception ignored) { }
+                    });
+                }, "VisitsRequest").start();
+            });
+        }
+
+        @JavascriptInterface
+        public String saveTrackerSession(final String token, final String trackerUserId, final String orgId) {
+            Log.i(TAG, "AndroidBridge.saveTrackerSession called token_prefix=" + tokenPrefix(token)
+                    + " trackerUserId=" + trackerUserId
+                    + " orgId=" + orgId);
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    saveNativeRuntimeSession(token, trackerUserId, orgId, "AndroidBridge.saveTrackerSession");
+                }
+            });
+            return "queued";
+        }
+
+        @JavascriptInterface
+        public String startTracking(final String token, final String trackerUserId, final String orgId) {
+            Log.i(TAG, "AndroidBridge.startTracking called token_prefix=" + tokenPrefix(token)
+                    + " trackerUserId=" + trackerUserId
+                    + " orgId=" + orgId);
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    boolean saved = saveNativeRuntimeSession(token, trackerUserId, orgId, "AndroidBridge.startTracking");
+                    if (!saved) {
+                        Log.w(TAG, "AndroidBridge.startTracking skipped: session was not saved");
+                        return;
+                    }
+
+                    if (!hasLocationPermissions()) {
+                        Log.w(TAG, "AndroidBridge.startTracking missing location permission; requesting");
+                        requestLocationPermissions();
+                        return;
+                    }
+
+                    if (!hasNotificationPermissionIfNeeded()) {
+                        Log.w(TAG, "AndroidBridge.startTracking missing notification permission; requesting");
+                        requestNotificationPermissionIfNeeded();
+                        return;
+                    }
+
+                    startTrackingService();
+                    navigateToTrackerGpsIfNeeded("AndroidBridge.startTracking");
+                }
+            });
+            return "queued";
+        }
+
+        @JavascriptInterface
+        public String saveTrackerSession(String token) {
+            return saveTrackerSession(token, null, null);
+        }
+
+        @JavascriptInterface
+        public String startTracking(String token) {
+            return startTracking(token, null, null);
+        }
+
+        @JavascriptInterface
+        public String isReady() {
+            return "true";
+        }
+    }
+
+    private class AppWebViewClient extends WebViewClient {
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            Uri uri = request.getUrl();
+            String url = uri.toString();
+            String currentUrl = view.getUrl();
+            Log.i(TAG, "TRACE shouldOverrideUrlLoading url=" + url + " current=" + currentUrl);
+            String host = uri.getHost();
+            String scheme = uri.getScheme();
+            String path = uri.getPath();
+
+            if (!TextUtils.isEmpty(currentUrl) && currentUrl.equals(url)) {
+                Log.i(TAG, "Blocked duplicate WebView navigation: " + url);
+                return true;
+            }
+
+            if (scheme != null && (
+                    scheme.equalsIgnoreCase("mailto")
+                            || scheme.equalsIgnoreCase("tel")
+                            || scheme.equalsIgnoreCase("sms")
+                            || scheme.equalsIgnoreCase("geo")
+                            || scheme.equalsIgnoreCase("whatsapp")
+            )) {
+                try {
+                    WebViewActivity.this.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                } catch (ActivityNotFoundException e) {
+                    Log.w(TAG, "No activity found for uri=" + uri, e);
+                }
+                return true;
+            }
+
+            if (host != null && isTugeocercasHost(host)
+                    && ("/tracker-accept".equals(path) || "/accept-invite".equals(path))) {
+                return false;
+            }
+
+            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
+                if (shouldInterceptTrackerUrl(url)) {
+                    if (!trackerBootstrapInProgress) {
+                        beginTrackerBootstrap(url);
+                    }
+                    return true;
+                }
+            }
+
+            if (host != null && isTugeocercasHost(host)) {
+                return false;
+            }
+
+            try {
+                WebViewActivity.this.startActivity(new Intent(Intent.ACTION_VIEW, uri));
+            } catch (ActivityNotFoundException e) {
+                Log.w(TAG, "No activity found for uri=" + uri, e);
+            }
+            return true;
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
+
+            long now = System.currentTimeMillis();
+            boolean duplicateFinish =
+                    !TextUtils.isEmpty(lastPageFinishedUrl)
+                            && lastPageFinishedUrl.equals(url)
+                            && (now - lastPageFinishedAt) < PAGE_FINISHED_DEDUPE_WINDOW_MS;
+
+            lastPageFinishedUrl = url;
+            lastPageFinishedAt = now;
+
+            Log.d(TAG, "onPageFinished url=" + url + " duplicate=" + duplicateFinish);
+            // Log full URL including query params
+            try {
+                String fullUrl = view.getUrl();
+                Log.i(TAG, "FULL_WEBVIEW_URL: " + (fullUrl != null ? fullUrl : url));
+            } catch (Exception e) {
+                Log.w(TAG, "Could not log full WebView URL", e);
+            }
+
+            if (duplicateFinish) {
+                return;
+            }
+
+            if (!isTrackerPageUrl(url)) {
+                Log.d(TAG, "onPageFinished ignored outside tracker page url=" + url);
+                return;
+            }
+
+            injectSessionIntoWebView(false);
+            maybeAutoStartTrackingFromWebView("onPageFinished");
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            super.onReceivedError(view, request, error);
+            if (request != null && request.isForMainFrame()) {
+                Log.e(TAG, "Main frame error code=" + error.getErrorCode() + " desc=" + error.getDescription());
+                Toast.makeText(WebViewActivity.this, "No se pudo cargar la pÃ¡gina", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private boolean isTrackerPageUrl(String url) {
+        boolean result = url != null && !url.isEmpty() && (
+            url.contains("/tracker")
+                || url.contains("/tracker-gps")
+                || url.contains("/tracker-accept")
+        );
+
+        Log.d(TAG, "[TRACKER_PAGE_DETECT] url=" + url + " isTrackerPageUrl=" + result);
+        return result;
+    }
+
+    private boolean isTugeocercasHost(@NonNull String host) {
+        // Solo permitir preview.tugeocercas.com como host en producciÃ³n
+        return host.equals("preview.tugeocercas.com");
+    }
+
+    private static final int VISIT_PHOTO_REQUEST = 4831;
+    private ValueCallback<Uri[]> visitPhotoCallback;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == VISIT_PHOTO_REQUEST && visitPhotoCallback != null) {
+            ValueCallback<Uri[]> callback = visitPhotoCallback;
+            visitPhotoCallback = null;
+            Uri uri = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            callback.onReceiveValue(uri != null ? new Uri[]{uri} : null);
+        }
+    }
+
+    private class AppChromeClient extends WebChromeClient {
+        @Override
+        public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
+            Uri page = Uri.parse(view.getUrl() == null ? "" : view.getUrl());
+            if (!"https".equals(page.getScheme()) || !"preview.tugeocercas.com".equals(page.getHost())) {
+                callback.onReceiveValue(null);
+                return true;
+            }
+            if (visitPhotoCallback != null) visitPhotoCallback.onReceiveValue(null);
+            visitPhotoCallback = callback;
+            Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            pick.addCategory(Intent.CATEGORY_OPENABLE);
+            pick.setType("image/*");
+            pick.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/jpeg", "image/png"});
+            try { startActivityForResult(pick, VISIT_PHOTO_REQUEST); }
+            catch (android.content.ActivityNotFoundException error) {
+                visitPhotoCallback = null;
+                callback.onReceiveValue(null);
+            }
+            return true;
+        }
+
+        @Override
+        public void onPermissionRequest(final PermissionRequest request) {
+            WebViewActivity.this.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    request.grant(request.getResources());
+                }
+            });
+        }
+
+        @Override
+        public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+            if (hasLocationPermissions()) {
+                Log.i(TAG, "WebView geolocation granted for origin=" + origin);
+                callback.invoke(origin, true, false);
+                return;
+            }
+
+            Log.i(TAG, "WebView geolocation requested before Android location permission for origin=" + origin);
+            pendingGeolocationOrigin = origin;
+            pendingGeolocationCallback = callback;
+            requestLocationPermissions();
+        }
+    }
+
+    // ...existing code...
+}
