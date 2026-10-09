@@ -926,6 +926,22 @@ export default function TrackerDashboard() {
     selectedGeofences: 0,
   });
 
+  const handleMapInstance = useCallback((map) => {
+    mapRef.current = map;
+    if (!map) return;
+    try {
+      const size = map.getSize();
+      setDiag((d) => ({
+        ...d,
+        mapCreated: true,
+        w: size?.x ?? null,
+        h: size?.y ?? null,
+        zoom: map.getZoom(),
+      }));
+      map.invalidateSize();
+    } catch {}
+  }, []);
+
   const [timeWindowId, setTimeWindowId] = useState("6h");
   const [isHistoryRequested, setIsHistoryRequested] = useState(false);
   const [selectedTrackerId, setSelectedTrackerId] = useState("all");
@@ -2773,20 +2789,7 @@ export default function TrackerDashboard() {
                   zoom={mapZoom}
                   style={{ height: "100%", width: "100%" }}
                   scrollWheelZoom
-                  whenCreated={(map) => {
-                    mapRef.current = map;
-                    try {
-                      const size = map?.getSize?.();
-                      setDiag((d) => ({
-                        ...d,
-                        mapCreated: true,
-                        w: size?.x ?? null,
-                        h: size?.y ?? null,
-                        zoom: map?.getZoom?.() ?? null,
-                      }));
-                      map.invalidateSize();
-                    } catch {}
-                  }}
+                  ref={handleMapInstance}
                 >
                   <FitIfOutOfView
                     layerItems={layerItems}
