@@ -56,3 +56,9 @@ con asignación vigente y registro geocercas activo. La sesión Android v15 reno
 contactaba el backend. Tras reactivar exclusivamente esa geocerca, se confirmó una
 posición nueva el 24/09 a las 17:59:25. No hay auditoría que demuestre qué acción
 original desactivó AAA; el defecto de identidad al guardar es un hallazgo separado.
+
+## Eliminación en la organización seleccionada (2026-10-09)
+
+El cliente envía x-org-id también al eliminar. El servidor lee el cuerpo POST una sola vez antes de resolver la membresía y admite orgId/org_id, además de la cabecera y consulta existentes. Una organización explícita sin membresía activa devuelve 403; no se sustituye por la organización predeterminada.
+
+Se conserva el comportamiento de desactivación cuando hay referencias, evitando borrar el historial. No requiere migración. Pruebas de regresión: src/lib/geofences-handler.test.js (organización distinta de la predeterminada, cuerpo JSON serializado, membresía ausente y referencias existentes).

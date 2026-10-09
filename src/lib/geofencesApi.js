@@ -140,7 +140,11 @@ export async function deleteGeofence({ orgId = null, id = null } = {}) {
   if (!id) throw new Error("deleteGeofence: requiere id");
   const payload = { action: "delete", id: String(id) };
   if (orgId) payload.orgId = String(orgId);
-  const data = await requestJson(`/api/geofences`, { method: "POST", body: payload });
+  const data = await requestJson(`/api/geofences`, {
+    method: "POST",
+    headers: orgId ? { "x-org-id": String(orgId) } : {},
+    body: payload,
+  });
   return {
     ok: data?.ok === true,
     mode: data?.mode || null,

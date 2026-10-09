@@ -354,6 +354,7 @@ async function resolveMembership(sbClient, userId, orgId) {
       .maybeSingle();
 
     if (!error && data?.org_id) return data;
+    return null; // An explicit organization must never fall back to another membership.
   }
 
   const { data, error } = await sbClient
@@ -520,7 +521,8 @@ export default async function handler(req, res) {
     }
 
     const q = getQuery(req);
-    const requestedOrgId = q.org_id || q.orgId || null;
+    const rawPayload = req.method === "POST" ? await readBody(req) : {};
+    const requestedOrgId = q.org_id || q.orgId || req?.headers?.["x-org-id"] || rawPayload.org_id || rawPayload.orgId || null;
     const ctxRes = await resolveContext(req, { requestedOrgId });
 
     if (!ctxRes.ok) {
@@ -579,7 +581,6 @@ export default async function handler(req, res) {
     }
 
     if (req.method === "POST") {
-      const rawPayload = await readBody(req);
       const action = String(rawPayload?.action || "upsert").toLowerCase();
       const payload = stripServerOwned(rawPayload);
 
