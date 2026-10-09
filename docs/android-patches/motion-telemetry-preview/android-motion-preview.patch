@@ -1,0 +1,120 @@
+diff --git a/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt b/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt
+index 1b7283fc..4493a8d5 100644
+--- a/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt
++++ b/app/src/main/java/com/fenice/geofieldgps/ForegroundLocationService.kt
+@@ -50,6 +50,18 @@ import java.net.HttpURLConnection
+ import java.net.URL
+ import java.security.MessageDigest
+ 
++// Location bearing is direction of travel, not device orientation.
++internal fun writeLocationMotionTelemetry(payload: JSONObject, location: Location) {
++    val speed = if (location.hasSpeed()) location.speed.takeIf { it.isFinite() && it >= 0f } else null
++    val heading = if (location.hasBearing()) location.bearing.takeIf { it.isFinite() && it >= 0f && it < 360f } else null
++    payload.put("speed", speed?.toDouble() ?: JSONObject.NULL)
++    payload.put("heading", heading?.toDouble() ?: JSONObject.NULL)
++}
++
++// Allow a missed interval plus watchdog scheduling jitter before recovery.
++internal fun locationRecoveryTimeoutMs(intervalMs: Long): Long =
++    intervalMs.coerceAtLeast(60_000L) * 2L + 30_000L
++
+ class ForegroundLocationService : Service() {
+ 
+     @Volatile
+@@ -103,7 +115,7 @@ class ForegroundLocationService : Service() {
+                     if (!locationUpdatesStarted) {
+                         Log.w(TAG, "[WATCHDOG] location updates not started, trying recovery")
+                         maybeRecoverLocationUpdates(now)
+-                    } else if (lastLocationUpdateAt <= 0L || staleForMs >= LOCATION_STALE_MS) {
++                    } else if (lastLocationUpdateAt <= 0L || staleForMs >= locationRecoveryTimeoutMs(getTrackingIntervalMs())) {
+                         Log.w(TAG, "[WATCHDOG] stale updates detected staleForMs=$staleForMs, trying recovery")
+                         maybeRecoverLocationUpdates(now)
+                     } else {
+@@ -159,7 +171,6 @@ class ForegroundLocationService : Service() {
+         private const val ACCURACY_IMPROVEMENT_METERS = 5f
+         private const val BRIDGE_READY_KEY = "tracker_bridge_ready"
+         private const val ASSIGNMENT_RESOLVED_KEY = "tracker_assignment_resolved"
+-        private const val LOCATION_STALE_MS = 60_000L
+         private const val LOCATION_RECOVERY_COOLDOWN_MS = 30_000L
+ 
+         @Volatile
+@@ -218,7 +229,15 @@ class ForegroundLocationService : Service() {
+                 for (location in locationResult.locations) {
+                     Log.d(TAG, "ForegroundLocationService: LOCATION lat=${location.latitude} lng=${location.longitude}")
+                     Log.d(TAG, "[LOCATION_RECEIVED] lat=${location.latitude} lng=${location.longitude} accuracy=${location.accuracy}")
+-                    sendPositionToBackend(location.latitude, location.longitude, location.accuracy)
++                    if (BuildConfig.DEBUG) {
++                        val capturedElapsedNs = location.elapsedRealtimeNanos
++                        val nowElapsedNs = android.os.SystemClock.elapsedRealtimeNanos()
++                        val ageMs = if (capturedElapsedNs > 0L && capturedElapsedNs <= nowElapsedNs) {
++                            (nowElapsedNs - capturedElapsedNs) / 1_000_000L
++                        } else null
++                        Log.d(TAG, "[LOCATION_DIAGNOSTIC] provider=${location.provider} age_ms=${ageMs ?: "unknown"} has_accuracy=${location.hasAccuracy()} accuracy_m=${if (location.hasAccuracy()) location.accuracy else "unavailable"} has_speed=${location.hasSpeed()} speed_mps=${if (location.hasSpeed()) location.speed else "unavailable"} has_bearing=${location.hasBearing()} bearing_deg=${if (location.hasBearing()) location.bearing else "unavailable"}")
++                    }
++                    sendPositionToBackend(location)
+                 }
+             }
+         }
+@@ -452,7 +471,8 @@ class ForegroundLocationService : Service() {
+         return LocationRequest.Builder(intervalMs)
+             .setMinUpdateIntervalMillis(minIntervalMs)
+             .setMaxUpdateDelayMillis(0L)
+-            .setMinUpdateDistanceMeters(10f)
++            // Stationary callbacks keep the watchdog independent of movement.
++            .setMinUpdateDistanceMeters(0f)
+             .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+             .build()
+     }
+@@ -474,7 +494,7 @@ class ForegroundLocationService : Service() {
+         }
+ 
+         val staleForMs = now - lastLocationUpdateAt
+-        if (locationUpdatesStarted && lastLocationUpdateAt > 0L && staleForMs < LOCATION_STALE_MS) {
++        if (locationUpdatesStarted && lastLocationUpdateAt > 0L && staleForMs < locationRecoveryTimeoutMs(getTrackingIntervalMs())) {
+             Log.d(TAG, "[RECOVER] updates still fresh staleForMs=$staleForMs")
+             return
+         }
+@@ -1182,7 +1202,10 @@ class ForegroundLocationService : Service() {
+         }
+     }
+ 
+-    private fun sendPositionToBackend(lat: Double, lng: Double, accuracy: Float?) {
++    private fun sendPositionToBackend(location: Location) {
++        val lat = location.latitude
++        val lng = location.longitude
++        val accuracy: Float? = location.accuracy
+         val trackerPrefs = getSharedPreferences(TRACKER_PREFS, Context.MODE_PRIVATE)
+         val accessToken = trackerPrefs.getString("access_token", null)?.trim()?.takeIf { it.isNotEmpty() }
+         val trackerUserId = trackerPrefs.getString("tracker_user_id", null)?.trim()?.takeIf { it.isNotEmpty() }
+@@ -1240,6 +1263,7 @@ class ForegroundLocationService : Service() {
+             put("lng", lng)
+ 
+             if (accuracy != null) put("accuracy", accuracy)
++            writeLocationMotionTelemetry(this, location)
+ 
+             put("recorded_at", nowIso)
+             put("device_recorded_at", nowIso)
+diff --git a/app/build.gradle b/app/build.gradle
+index 3093bb2c..fc637e37 100644
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -67,6 +67,10 @@ android {
+     buildConfigField "String", "SUPABASE_ANON_KEY", "\"${supabaseAnonKeyEscaped}\""
+   }
+ 
++  testOptions {
++    unitTests.includeAndroidResources = true
++  }
++
+   buildFeatures {
+     buildConfig true
+   }
+@@ -125,6 +129,8 @@ android {
+ }
+ 
+ dependencies {
++  testImplementation "junit:junit:4.13.2"
++  testImplementation "org.robolectric:robolectric:4.17"
+     // Google Play Install Referrer
+     implementation 'com.android.installreferrer:installreferrer:2.2'
+   implementation 'androidx.work:work-runtime-ktx:2.10.3'
