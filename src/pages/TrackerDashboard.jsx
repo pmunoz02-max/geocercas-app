@@ -1,3 +1,4 @@
+import { summarizeTrackerRows } from "../lib/trackerRowSummary";
 // Nombre amigable de tracker según prioridad estricta
 function getFriendlyTrackerName(tracker) {
   return (
@@ -226,6 +227,7 @@ function FitIfOutOfView({ layerItems, markerPoints, fitSignal, onBoundsComputed,
       const geofenceValid = !!(geofenceBounds?.isValid?.() && !isProbablyZeroZeroBounds(geofenceBounds));
       const markerValid = !!(markerBounds?.isValid?.());
 
+      if (geofenceValid && markerValid) return geofenceBounds.extend(markerBounds);
       if (geofenceValid) return geofenceBounds;
       if (markerValid) return markerBounds;
       return null;
@@ -2351,32 +2353,10 @@ export default function TrackerDashboard() {
       .filter((route) => route.latlngs.length > 1);
   }, [filteredAllTrackerMarkers, routePositions, selectedTrackerId]);
 
-  const trackerStatusSummary = useMemo(() => {
-    if (trackerCounts) {
-      return {
-        total: Number(trackerCounts.total_trackers || 0),
-        online: Number(trackerCounts.active_count || 0),
-        stale: Number(trackerCounts.stale_count || 0),
-        offline: Number(trackerCounts.offline_count || 0),
-      };
-    }
-
-    let total = 0;
-    let online = 0;
-    let stale = 0;
-    let offline = 0;
-
-    for (const item of allTrackerMarkers || []) {
-      total += 1;
-      const live = item?.live || getTrackerLiveStatus(item?.latest);
-
-      if (live.status === "online") online += 1;
-      else if (live.status === "stale") stale += 1;
-      else offline += 1;
-    }
-
-    return { total, online, stale, offline };
-  }, [allTrackerMarkers, trackerCounts]);
+  const trackerStatusSummary = useMemo(
+    () => summarizeTrackerRows(trackersUi),
+    [trackersUi],
+  );
 
   const selectedTrackerPath = useMemo(() => {
     if (selectedTrackerId === "all") return null;

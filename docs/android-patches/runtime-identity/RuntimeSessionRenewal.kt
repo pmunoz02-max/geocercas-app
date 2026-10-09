@@ -8,6 +8,8 @@ import java.security.SecureRandom
 
 /** Runtime-only renewal. Never uses the owner's Supabase Auth refresh token. */
 object RuntimeSessionRenewal {
+ @JvmStatic fun queuedIdentityMatches(payloadOrg:String,payloadUser:String,sessionOrg:String,sessionUser:String):Boolean =
+  payloadOrg.isNotBlank() && payloadUser.isNotBlank() && payloadOrg==sessionOrg && payloadUser==sessionUser
  private fun hash(value:String)=java.security.MessageDigest.getInstance("SHA-256").digest(value.toByteArray()).joinToString(""){"%02x".format(it)}
  @JvmStatic @Synchronized fun adoptIncoming(context:Context,token:String,user:String,org:String):String? {
   if(token.isBlank() || user.isBlank() || org.isBlank()) return null

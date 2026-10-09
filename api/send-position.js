@@ -433,6 +433,10 @@ export default async function handler(req, res) {
 
     const userId = session.tracker_user_id;
     const orgId = session.org_id;
+    if ((body.org_id != null && body.org_id !== orgId) ||
+        (body.user_id != null && body.user_id !== userId)) {
+      return res.status(409).json({ ok: false, error: "session_identity_mismatch" });
+    }
 
     const lat = body.lat ?? body.latitude;
     const lng = body.lng ?? body.longitude;

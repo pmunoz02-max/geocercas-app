@@ -991,6 +991,10 @@ class ForegroundLocationService : Service() {
         val payload = getQueueItemPayload(item) ?: return false
         val orgId = payload.optString("org_id", "")
         val token = tokenCandidate.token
+        val sessionPrefs = getSharedPreferences(TRACKER_PREFS, Context.MODE_PRIVATE)
+        if (sessionPrefs.getString("access_token", null) != token || !RuntimeSessionRenewal.queuedIdentityMatches(
+                orgId, payload.optString("user_id"), sessionPrefs.getString("org_id", "") ?: "", tokenCandidate.trackerUserId,
+            )) return false
         var conn: HttpURLConnection? = null
 
         Log.d(
@@ -1100,6 +1104,22 @@ class ForegroundLocationService : Service() {
                         break
                     }
 
+                    val queuedPayload = getQueueItemPayload(queuedItem)
+                    val sessionPrefs = getSharedPreferences(TRACKER_PREFS, Context.MODE_PRIVATE)
+                    if (queuedPayload == null || !RuntimeSessionRenewal.queuedIdentityMatches(
+                        queuedPayload.optString("org_id"), queuedPayload.optString("user_id"),
+                        sessionPrefs.getString("org_id", "") ?: "", tokenCandidate.trackerUserId,
+                    )) {
+                        // Preserve mismatched points separately; never replay them under another org's credential.
+                        synchronized(queueLock) {
+                            val held = try { JSONArray(sessionPrefs.getString("quarantined_position_queue", "[]")) } catch (_:Exception) { JSONArray() }
+                            held.put(queuedItem)
+                            if (!sessionPrefs.edit().putString("quarantined_position_queue", held.toString()).commit()) break
+                            removeQueuedPosition()
+                        }
+                        Log.w(TAG, "[QUEUE] quarantined mismatched identity; no HTTP send")
+                        continue
+                    }
                     val now = System.currentTimeMillis()
                     val nextAttemptAt = getQueuedPositionNextAttemptAt(queuedItem)
                     val diffMs = nextAttemptAt - now

@@ -27,7 +27,11 @@ public class RuntimeIdentityCheck extends Instrumentation {
    check(!p.contains("runtime_refresh_token"),"old proof cleared");
    check(RuntimeSessionRenewal.adoptIncoming(isolated,"partial","","orgA")==null,"partial rejected");
    check(p.getString("org_id","").equals("orgB"),"partial leaves identity");
-   result.putString("result","PASS: 8 identity assertions; isolated preferences only");finish(-1,result);
+   check(RuntimeSessionRenewal.queuedIdentityMatches("orgB","userB","orgB","userB"),"same queue identity accepted");
+   check(!RuntimeSessionRenewal.queuedIdentityMatches("orgA","userB","orgB","userB"),"cross-org queue rejected");
+   check(!RuntimeSessionRenewal.queuedIdentityMatches("orgB","userA","orgB","userB"),"cross-user queue rejected");
+   check(!RuntimeSessionRenewal.queuedIdentityMatches("","userB","orgB","userB"),"incomplete queue rejected");
+   result.putString("result","PASS: 12 identity assertions; isolated preferences only");finish(-1,result);
   }catch(Throwable t){result.putString("result","FAIL: "+t);finish(0,result);}
   finally{p.edit().clear().commit();}
  }
