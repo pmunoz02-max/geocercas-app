@@ -62,3 +62,10 @@ original desactivó AAA; el defecto de identidad al guardar es un hallazgo separ
 El cliente envía x-org-id también al eliminar. El servidor lee el cuerpo POST una sola vez antes de resolver la membresía y admite orgId/org_id, además de la cabecera y consulta existentes. Una organización explícita sin membresía activa devuelve 403; no se sustituye por la organización predeterminada.
 
 Se conserva el comportamiento de desactivación cuando hay referencias, evitando borrar el historial. No requiere migración. Pruebas de regresión: src/lib/geofences-handler.test.js (organización distinta de la predeterminada, cuerpo JSON serializado, membresía ausente y referencias existentes).
+
+## Cupo después de eliminar (2026-10-09)
+
+Migración: `20261009222613_geofence_quota_exclude_inactive.sql`.
+La función `enforce_geofence_limit_core` reconocía `is_active` pero no `active`, usado por `geofences`. Por ello una baja lógica liberaba el contador visual pero no el cupo de inserción. Ahora, si la tabla tiene `active`, cuenta únicamente `active = true`, manteniendo los demás filtros, permisos y límites existentes.
+
+Aplicada exclusivamente en Supabase Preview. Verificación con ROLLBACK: antes devolvía `next=2 > limit=1` con cero geocercas activas y una desactivada; después se insertó una geocerca de prueba, conservando la anterior, y el siguiente intento de cupo siguió bloqueado. No se conservaron datos de prueba. Producción requiere aplicar esta migración expresamente; Promote de Vercel no migra la base de datos.
