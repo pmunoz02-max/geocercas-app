@@ -798,13 +798,12 @@ export default async function handler(req, res) {
       try {
         const { data, error } = await supabase
           .from("geofences")
-          .select("id,name")
+          .select("id,name,active")
           .eq("org_id", requested_org_id)
-          .eq("active", true)
           .order("name", { ascending: true });
 
         if (!error && Array.isArray(data)) {
-          geofences = data.map((g) => ({ id: g.id, name: g.name || null }));
+          geofences = data.map((g) => ({ id: g.id, name: g.name || null, active: g.active === true }));
           geofencesCount = geofences.length;
         } else {
           geofencesError = error ? error.message : "Unknown error";
@@ -815,7 +814,7 @@ export default async function handler(req, res) {
 
       debug.queries.push({
         table: "geofences",
-        filters: { org_id: requested_org_id, active: true },
+        filters: { org_id: requested_org_id },
         count: geofencesCount,
         error: geofencesError,
       });

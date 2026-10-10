@@ -69,3 +69,6 @@ Migración: `20261009222613_geofence_quota_exclude_inactive.sql`.
 La función `enforce_geofence_limit_core` reconocía `is_active` pero no `active`, usado por `geofences`. Por ello una baja lógica liberaba el contador visual pero no el cupo de inserción. Ahora, si la tabla tiene `active`, cuenta únicamente `active = true`, manteniendo los demás filtros, permisos y límites existentes.
 
 Aplicada exclusivamente en Supabase Preview. Verificación con ROLLBACK: antes devolvía `next=2 > limit=1` con cero geocercas activas y una desactivada; después se insertó una geocerca de prueba, conservando la anterior, y el siguiente intento de cupo siguió bloqueado. No se conservaron datos de prueba. Producción requiere aplicar esta migración expresamente; Promote de Vercel no migra la base de datos.
+
+## Nombres históricos en Asignaciones (2026-10-09)
+El catálogo de /api/asignaciones incluye id/name/active de todas las geocercas de la organización. La tabla puede resolver nombres de geocercas desactivadas sin mostrar su UUID; el selector de nuevas asignaciones conserva solo las activas. No se reasignan registros a una geocerca nueva por coincidencia de nombre. Sin migración.

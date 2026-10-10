@@ -188,6 +188,7 @@ export default function AsignacionesPage() {
 
   const geofenceOptions = useMemo(() => {
     return geocercas
+      .filter((g) => g.active !== false)
       .map((g) => ({
         value: g?.id ?? null,
         label: g?.name || `Geocerca ${g?.id ?? ""}`,

@@ -30,3 +30,6 @@ Esta sección es inventario de cambios encontrados, no afirmación de que todos 
 ## Registro de ejecución
 
 Todavía no se ha realizado ninguna acción en Producción como parte de este registro. Para cada publicación futura anotar fecha, commit/deployment, migraciones exactas, versión Android si corresponde y resultado de verificación.
+
+## Asignaciones: nombres históricos (2026-10-09)
+- [ ] Corrección en Preview: cargar nombres de geocercas desactivadas para la tabla, manteniéndolas fuera del selector de nuevas asignaciones. Sin migración ni cambios de vínculos. El usuario confirma que en Producción su tabla ya muestra nombres; evaluar este caso de geocerca desactivada al revisar el próximo Promote, no tratarlo como incidente confirmado de Producción.
