@@ -38,6 +38,40 @@ function getSupabase(req) {
   );
 }
 
+async function getOrgMembership(supabase, userId, orgId) {
+  if (!userId || !orgId) {
+    return { allowed: false, reason: "missing_user_or_org" };
+  }
+
+  const { data, error } = await supabase
+    .from("org_members")
+    .select("role, is_active")
+    .eq("user_id", userId)
+    .eq("org_id", orgId)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      allowed: false,
+      reason: "membership_lookup_failed",
+      details: error?.message || null,
+    };
+  }
+
+  if (!data) {
+    return { allowed: false, reason: "membership_not_found" };
+  }
+
+  const isActive = data?.is_active === true;
+  if (!isActive) {
+    return { allowed: false, reason: "membership_inactive" };
+  }
+
+  const role = String(data?.role || "").trim().toLowerCase();
+
+  return { allowed: true, role };
+}
+
 async function resolveContext(req, supabase, requestedOrgId) {
   const cookieToken = getCookie(req, "tg_at");
   const bearerToken = getBearerToken(req);
@@ -85,7 +119,34 @@ async function resolveContext(req, supabase, requestedOrgId) {
     };
   }
 
-  return { orgId, user, errorResponse: null };
+  const membership = await getOrgMembership(supabase, user.id, orgId);
+
+  if (!membership.allowed) {
+    return {
+      errorResponse: {
+        status: membership.reason === "membership_lookup_failed" ? 500 : 403,
+        body: {
+          error: membership.reason || "forbidden",
+          details: membership.details || null,
+        },
+      },
+    };
+  }
+
+  const writeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+  if (writeMethods.has(String(req.method || "").toUpperCase())) {
+    const normalizedRole = String(membership.role || "").trim().toLowerCase();
+    if (!["owner", "admin"].includes(normalizedRole)) {
+      return {
+        errorResponse: {
+          status: 403,
+          body: { error: "owner_or_admin_required" },
+        },
+      };
+    }
+  }
+
+  return { orgId, user, errorResponse: null, membership };
 }
 
 async function findActivityByIdCompat(supabase, id, orgId) {
