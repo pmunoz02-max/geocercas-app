@@ -33,7 +33,10 @@ export default defineConfig(() => {
       globals: true,
       setupFiles: ["./src/test/setup.js"],
       css: false,
-      include: ["src/**/*.test.{js,jsx,ts,tsx}"],
+      include: [
+        "src/**/*.test.{js,jsx,ts,tsx}",
+        "api/**/*.test.js",
+      ],
     },
 
     // --- Build config: preview vs producción ---
