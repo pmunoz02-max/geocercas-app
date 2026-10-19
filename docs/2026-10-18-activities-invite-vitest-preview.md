@@ -8,13 +8,13 @@ This preview note documents the validation work carried out around three related
 
 - security checks for the activities endpoint
 - alignment of the invite-tracker mocks with the real Supabase queries
-- Vitest discovery/configuration for both `src` and `api` tests
+- Vitest discovery/configuration for the project test layout, including the migration of API tests under `src/test/api`
 
 This is a test and validation record only. No backend permissions were relaxed and no production behavior was changed.
 
 ## 1) Security tests for activities
 
-The file [api/actividades.test.js](../api/actividades.test.js) covers the authorization contract for the activities API.
+The file [src/test/api/actividades.test.js](../src/test/api/actividades.test.js) covers the authorization contract for the activities API.
 
 ### Verified scenarios
 
@@ -43,7 +43,7 @@ This is a regression guard against unauthorized reads/writes against the activit
 
 ## 2) Invite-tracker mock alignment
 
-The file [api/invite-tracker.test.js](../api/invite-tracker.test.js) initially mocked stale table names and query shapes that did not match the real handler implementation.
+The file [src/test/api/invite-tracker.test.js](../src/test/api/invite-tracker.test.js) initially mocked stale table names and query shapes that did not match the real handler implementation.
 
 ### Root mismatch
 
@@ -95,15 +95,35 @@ The `test` block includes:
 - `environment: "jsdom"`
 - `globals: true`
 - `setupFiles: ["./src/test/setup.js"]`
-- `include: ["src/**/*.test.{js,jsx,ts,tsx}", "api/**/*.test.js"]`
+- `include: ["src/**/*.test.{js,jsx,ts,tsx}"]`
 
-This ensures that both frontend tests and API tests are discovered in the same run.
+This means the project test layout is now keyed off the source-tree test folder, including the relocated API test files in `src/test/api`.
 
 ### Why this mattered
 
-Without this include list, Vitest would only pick up the default `src` tests, leaving the API tests undiscovered. That was part of the earlier suite mismatch and caused confusion during validation.
+The test migration was necessary because the repo-level `api/` folder is not a valid deploy target for the Vercel Hobby plan and the test files were being treated as deployment-noise rather than as project test assets. Keeping the executable API tests under `src/test/api` avoids the false impression of a deployable `api` test surface while preserving discovery and validation inside the project.
 
-## 4) Full-suite validation
+### Recursive count of deployable API test entries
+
+After the move, a recursive count under `api/` returns:
+
+```text
+api test files recursive: 0
+```
+
+That confirms there are no remaining `.test.js` entries under the deployable `api/` folder, and that the active API tests now live under `src/test/api`.
+
+## 4) Vercel Hobby compatibility note
+
+The earlier issue was not caused by the handler logic itself, but by the repository layout. The Vercel Hobby deployment model does not treat arbitrary files under the repository `api/` folder as a valid deployable application surface when they are test files rather than serverless endpoints. In practice, the presence of test files under `api/` can create confusion during deployment validation and runtime packaging, even when those files are not production handlers.
+
+The fix was therefore to move the test files into the project test tree and keep the deployable runtime surface clean:
+
+- `api/` remains reserved for deployable runtime assets, not test files
+- `src/test/api/` holds the API security and contract tests
+- Vitest still discovers and runs them normally through the configured file include pattern
+
+## 5) Full-suite validation
 
 Validated with:
 
@@ -134,7 +154,7 @@ This preview record confirms the following:
 
 - the activities authorization tests are enforcing the expected access model
 - the invite-tracker mocks now reflect the actual Supabase contract used by the handler
-- Vitest is correctly discovering both `src` and `api` tests
+- the project test layout is aligned with the app’s source tree and the Vercel Hobby constraints
 - the repository is in a green state for the current test suite
 
-No code paths were changed for production behavior beyond the test-only mock alignment required for accurate validation. The work stayed within preview/test scope and did not relax permissions.
+No code paths were changed for production behavior beyond the test-only mock alignment and the move of the API tests into the project test tree. The work stayed within preview/test scope and did not relax permissions.

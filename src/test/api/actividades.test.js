@@ -12,7 +12,7 @@ vi.mock('@supabase/supabase-js', () => ({
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
 
-const handler = (await import('./actividades.js')).default;
+const handler = (await import('../../../api/actividades.js')).default;
 
 function makeRes() {
   return {

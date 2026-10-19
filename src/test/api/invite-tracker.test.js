@@ -14,7 +14,7 @@ vi.mock('@supabase/supabase-js', () => ({
 
 vi.stubGlobal('fetch', mockFetch);
 
-const handler = (await import('./invite-tracker.js')).default;
+const handler = (await import('../../../api/invite-tracker.js')).default;
 
 function makeResponse() {
   return {

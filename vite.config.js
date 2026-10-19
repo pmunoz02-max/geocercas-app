@@ -35,7 +35,6 @@ export default defineConfig(() => {
       css: false,
       include: [
         "src/**/*.test.{js,jsx,ts,tsx}",
-        "api/**/*.test.js",
       ],
     },
 
