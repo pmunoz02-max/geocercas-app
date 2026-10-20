@@ -25,7 +25,12 @@ export default async function handler(req,res) {
    method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},
    body:JSON.stringify({p_access_hash:access?hash(access):null,p_refresh_hash:hash(refresh_token),p_new_access_hash:hash(access_token),p_org_id:org_id,p_tracker_user_id:tracker_user_id,p_request_id:request_id}),signal:AbortSignal.timeout(10000)});
   if(!response.ok) {
-   previewLog('rpc_http_error', { status_code: response.status, status_text: response.statusText });
+   let supabaseErrorCode = null;
+   try {
+    const errorBody = await response.clone().json();
+    supabaseErrorCode = typeof errorBody?.code === 'string' ? errorBody.code : null;
+   } catch {}
+   previewLog('rpc_http_error', { status_code: response.status, error_code: supabaseErrorCode });
    return res.status(503).json({ok:false,error:'renewal_unavailable'});
   }
   const data=await response.json();
