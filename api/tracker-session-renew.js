@@ -41,7 +41,12 @@ export default async function handler(req,res) {
   }
   const data=await response.json();
   if(data?.error==='request_expired') return res.status(409).json({ok:false,error:'renewal_request_expired'});
-  if(data?.ok!==true) return res.status(403).json({ok:false,error:'session_not_renewable'});
+  if(data?.ok!==true) {
+   const allowedRpcErrors = new Set(['invalid_request','session_not_renewable','membership_inactive','plan_inactive','plan_unavailable']);
+   const rpc_error_code = allowedRpcErrors.has(data?.error) ? data.error : 'unknown';
+   previewLog("rpc_rejected", { rpc_error_code });
+   return res.status(403).json({ok:false,error:'session_not_renewable'});
+  }
   if(data.org_id!==org_id||data.tracker_user_id!==tracker_user_id) {
    previewLog('response_incompatible', { data_ok: data?.ok === true, has_error: typeof data?.error === 'string', org_match: data?.org_id === org_id, tracker_match: data?.tracker_user_id === tracker_user_id });
    return res.status(503).json({ok:false,error:'renewal_unavailable'});
