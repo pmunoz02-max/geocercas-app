@@ -33,4 +33,46 @@ Las aserciones cubren:
 - actualización de una sesión legacy sin refresh mediante access vigente, sin alterar la sesión independiente que ya posee el refresh;
 - preservación de capacidad y denegación de ejecución de la RPC a `anon` y `authenticated`.
 
+## Diagnóstico interno de rechazos — 2026-10-22
+
+### Migración
+
+`20261022000100_tracker_runtime_renewal_diagnostics_preview.sql` reemplaza `public.renew_tracker_runtime_session` con `CREATE OR REPLACE` y conserva la lógica de la migración `20261020000100`. Solo añade un campo `reason` con un valor fijo a las respuestas `session_not_renewable`. Las validaciones, su orden, el resto de las respuestas (`invalid_request`, `membership_inactive`, `plan_inactive`, `plan_unavailable`, `request_expired` y las exitosas) y los permisos (`REVOKE` a `PUBLIC`, `anon` y `authenticated`; `GRANT` a `service_role`) no cambian. La migración original no se modificó.
+
+### Códigos `reason`
+
+`reason` es interno: sirve para el log del backend y no debe enviarse a clientes.
+
+| `reason` | Condición |
+|---|---|
+| `refresh_not_found` | Ninguna sesión posee el refresh y el fallback legacy no encuentra una fila elegible |
+| `identity_mismatch` | La sesión seleccionada tiene otra organización u otro tracker |
+| `access_mismatch_refresh_owner` | El dueño del refresh tiene un access distinto y el `request_id` no coincide |
+| `access_mismatch_legacy` | Definido en la RPC para una fila sin refresh con access distinto; no es alcanzable |
+| `session_inactive` | `active` es falso |
+| `session_revoked` | `revoked_at` no es nulo |
+| `refresh_expired` | El refresh está vencido o no tiene fecha de vencimiento |
+
+`access_mismatch_legacy` no puede producirse: el fallback legacy solo selecciona filas cuyo access ya coincide con el recibido. Por eso no tiene prueba ni figura en la lista permitida del endpoint.
+
+Las condiciones de sesión inactiva, revocada y refresh vencido comparten un único rechazo; el valor se elige en este orden: `session_inactive`, `session_revoked`, `refresh_expired`. Una sesión revocada con un access incorrecto se informa como `access_mismatch_refresh_owner`, porque esa comprobación se evalúa antes. El orden de las validaciones no cambió.
+
+### Log `rpc_reason` en Preview
+
+En la rama HTTP 403 de `api/tracker-session-renew.js`, el `previewLog("rpc_rejected", …)` incluye `rpc_error_code` y `rpc_reason`. Ambos se toman de listas permitidas; cualquier valor ausente o inesperado se registra como `unknown`. `rpc_reason` admite los seis valores alcanzables de la tabla anterior. El log solo se emite en entornos Preview y no incluye tokens, hashes ni identificadores de usuario u organización.
+
+La migración ya está aplicada en Supabase Preview, por lo que la RPC de Preview devuelve `reason`. Sin embargo, el endpoint con `rpc_reason` aún no se ha desplegado en Vercel: hasta entonces el despliegue actual no registra `rpc_reason`. En un entorno donde la RPC no tenga la migración, `rpc_reason` se registraría como `unknown`.
+
+### Respuesta pública y Android
+
+El endpoint no cambia sus respuestas. Todo rechazo `session_not_renewable` de la RPC, sin importar su `reason`, sigue produciendo HTTP 403 con `{"ok":false,"error":"session_not_renewable"}`. Android recibe el mismo HTTP 403 y el mismo cuerpo que antes; `reason` no se reenvía.
+
+### Pruebas SQL
+
+Se amplió `tests/sql/tracker-runtime-renewal/transactional.sql` con un bloque que comprueba `error = 'session_not_renewable'` y el valor exacto de `reason` para los seis códigos alcanzables, incluyendo organización y tracker distintos, y refresh vencido o sin fecha. También verifica que una sesión inactiva y revocada informa `session_inactive` y que `membership_inactive` no incluye `reason`. Las pruebas existentes se conservan y el archivo sigue terminando en `ROLLBACK`.
+
+Estado: la migración `20261022000100` se aplicó en Supabase Preview y `transactional.sql` se ejecutó allí correctamente; el resultado fue "Success. No rows returned". Las aserciones no produjeron errores y el `ROLLBACK` final no dejó datos de prueba. Estas pruebas requieren la migración aplicada, porque contra la función anterior fallarían al no devolver `reason`.
+
+Pendiente: desplegar en Vercel el endpoint con `rpc_reason` y verificar el log en Preview. Esta validación no cubre Production, donde no se aplicó la migración.
+
 Para comprobar la migración en Preview, aplicar primero la migración en el entorno aislado correspondiente y ejecutar el SQL transaccional allí. El `ROLLBACK` protege frente a la persistencia de los datos de prueba, pero no sustituye la revisión del destino ni autoriza aplicar cambios en Production.

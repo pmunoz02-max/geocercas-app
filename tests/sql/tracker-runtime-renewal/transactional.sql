@@ -131,4 +131,71 @@ ASSERT (SELECT access_token_hash FROM public.tracker_runtime_sessions WHERE id=s
 ASSERT (SELECT refresh_token_hash FROM public.tracker_runtime_sessions WHERE id=sid)=old_refresh,'request_expired modified refresh hash';
 ASSERT (SELECT token_version FROM public.tracker_runtime_sessions WHERE id=sid)=old_version,'request_expired modified token_version';
 END $$;
+-- Diagnostic reason values for session_not_renewable rejections (internal field, never sent to clients).
+-- access_mismatch_legacy is unreachable: the legacy fallback only selects rows whose access hash already matches.
+DO $$
+DECLARE own uuid:=gen_random_uuid(); u uuid:=gen_random_uuid(); o uuid; sid uuid; r jsonb; cur_access text; cur_refresh text; new_access text;
+BEGIN
+cur_access := encode(digest('reason-access-'||gen_random_uuid()::text,'sha256'),'hex');
+cur_refresh := encode(digest('reason-refresh-'||gen_random_uuid()::text,'sha256'),'hex');
+new_access := encode(digest('reason-new-access-'||gen_random_uuid()::text,'sha256'),'hex');
+INSERT INTO auth.users(id,email) VALUES(own,'reason-own-'||own||'@example.invalid'),(u,'reason-user-'||u||'@example.invalid');
+INSERT INTO public.organizations(name,owner_id) VALUES('CODEX renewal reasons',own) RETURNING id INTO o;
+UPDATE public.org_billing SET plan_code='free',plan_status='free',tracker_limit_override=1 WHERE org_id=o;
+INSERT INTO public.memberships(org_id,user_id,role) VALUES(o,u,'tracker');
+INSERT INTO public.tracker_runtime_sessions(org_id,tracker_user_id,access_token_hash,expires_at,refresh_token_hash,refresh_expires_at,issued_at)
+VALUES(o,u,cur_access,now()+interval '1 hour',cur_refresh,now()+interval '30 days',now()-interval '10 minutes') RETURNING id INTO sid;
+
+-- refresh_not_found: no refresh owner and no legacy row for the supplied access.
+r:=public.renew_tracker_runtime_session(encode(digest('reason-unknown-access-'||gen_random_uuid()::text,'sha256'),'hex'),encode(digest('reason-unknown-refresh-'||gen_random_uuid()::text,'sha256'),'hex'),new_access,o,u,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','unknown refresh should be session_not_renewable';
+ASSERT r->>'reason'='refresh_not_found','unknown refresh reason, got '||coalesce(r->>'reason','null');
+
+-- identity_mismatch: refresh owner exists but the organization differs.
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,gen_random_uuid(),u,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','org mismatch should be session_not_renewable';
+ASSERT r->>'reason'='identity_mismatch','org mismatch reason, got '||coalesce(r->>'reason','null');
+-- identity_mismatch: refresh owner exists but the tracker user differs.
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,own,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','user mismatch should be session_not_renewable';
+ASSERT r->>'reason'='identity_mismatch','user mismatch reason, got '||coalesce(r->>'reason','null');
+
+-- access_mismatch_refresh_owner: refresh owner exists, different request_id and access does not match.
+r:=public.renew_tracker_runtime_session(encode(digest('reason-other-access-'||gen_random_uuid()::text,'sha256'),'hex'),cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','access mismatch should be session_not_renewable';
+ASSERT r->>'reason'='access_mismatch_refresh_owner','access mismatch reason, got '||coalesce(r->>'reason','null');
+
+-- session_inactive: matching access, active=false.
+UPDATE public.tracker_runtime_sessions SET active=false WHERE id=sid;
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','inactive session should be session_not_renewable';
+ASSERT r->>'reason'='session_inactive','inactive session reason, got '||coalesce(r->>'reason','null');
+
+-- inactive takes precedence when the session is both inactive and revoked.
+UPDATE public.tracker_runtime_sessions SET active=false,revoked_at=now() WHERE id=sid;
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'reason'='session_inactive','inactive and revoked should report session_inactive, got '||coalesce(r->>'reason','null');
+
+-- session_revoked: matching access, active=true, revoked_at set.
+UPDATE public.tracker_runtime_sessions SET active=true,revoked_at=now() WHERE id=sid;
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','revoked session should be session_not_renewable';
+ASSERT r->>'reason'='session_revoked','revoked session reason, got '||coalesce(r->>'reason','null');
+
+-- refresh_expired: active, not revoked, refresh past its expiration.
+UPDATE public.tracker_runtime_sessions SET active=true,revoked_at=NULL,refresh_expires_at=now()-interval '1 second' WHERE id=sid;
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'ok'='false' AND r->>'error'='session_not_renewable','expired refresh should be session_not_renewable';
+ASSERT r->>'reason'='refresh_expired','expired refresh reason, got '||coalesce(r->>'reason','null');
+
+-- A rejection from another check carries no reason; a missing refresh expiration also reports refresh_expired.
+UPDATE public.tracker_runtime_sessions SET refresh_expires_at=NULL WHERE id=sid;
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'reason'='refresh_expired','null refresh expiration reason, got '||coalesce(r->>'reason','null');
+UPDATE public.tracker_runtime_sessions SET refresh_expires_at=now()+interval '30 days' WHERE id=sid;
+UPDATE public.memberships SET revoked_at=now() WHERE org_id=o AND user_id=u;
+r:=public.renew_tracker_runtime_session(cur_access,cur_refresh,new_access,o,u,gen_random_uuid());
+ASSERT r->>'error'='membership_inactive','revoked membership should stay membership_inactive';
+ASSERT NOT (r ? 'reason'),'membership_inactive must not carry reason';
+END $$;
 ROLLBACK;

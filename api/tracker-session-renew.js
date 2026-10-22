@@ -44,7 +44,9 @@ export default async function handler(req,res) {
   if(data?.ok!==true) {
    const allowedRpcErrors = new Set(['invalid_request','session_not_renewable','membership_inactive','plan_inactive','plan_unavailable']);
    const rpc_error_code = allowedRpcErrors.has(data?.error) ? data.error : 'unknown';
-   previewLog("rpc_rejected", { rpc_error_code });
+   const allowedRpcReasons = new Set(['refresh_not_found','identity_mismatch','access_mismatch_refresh_owner','session_inactive','session_revoked','refresh_expired']);
+   const rpc_reason = allowedRpcReasons.has(data?.reason) ? data.reason : 'unknown';
+   previewLog("rpc_rejected", { rpc_error_code, rpc_reason });
    return res.status(403).json({ok:false,error:'session_not_renewable'});
   }
   if(data.org_id!==org_id||data.tracker_user_id!==tracker_user_id) {
