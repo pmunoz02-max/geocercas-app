@@ -455,6 +455,33 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, error: "invalid_heading" });
     }
 
+    // v21: stable per-sample UUID; optional for Android v20 and older clients.
+    const clientPositionId = body.client_position_id ?? null;
+    if (clientPositionId !== null &&
+        (typeof clientPositionId !== "string" ||
+         !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientPositionId))) {
+      return res.status(400).json({ ok: false, error: "invalid_client_position_id" });
+    }
+
+    // Lookup is identity-scoped and occurs before the geofence gate so an
+    // already committed sample is acknowledged even if assignments changed.
+    // The database unique index (not this lookup) handles concurrent writes.
+    const findStoredPosition = async () => {
+      const params = new URLSearchParams({
+        select: "id",
+        org_id: `eq.${orgId}`,
+        user_id: `eq.${userId}`,
+        client_position_id: `eq.${clientPositionId}`,
+        limit: "1",
+      });
+      const rows = await fetchSupabaseRows(`tracker_positions?${params.toString()}`, "position_replay");
+      return rows[0]?.id || null;
+    };
+
+    if (clientPositionId && await findStoredPosition()) {
+      return res.status(200).json({ ok: true, stored: true, duplicate: true });
+    }
+
     const geofenceGate = await assertPositionInsideAssignedGeofence({
       orgId,
       userId,
@@ -493,6 +520,7 @@ export default async function handler(req, res) {
         new Date().toISOString(),
       source: body.source || "tracker-native-android",
       created_at: new Date().toISOString(),
+      ...(clientPositionId ? { client_position_id: clientPositionId } : {}),
     };
 
     const supabaseUrl = SUPABASE_URL.replace(/\/$/, "");
@@ -530,7 +558,21 @@ export default async function handler(req, res) {
     });
 
     if (insertResponse.ok && positionId) {
-      return res.status(200).json({ ok: true });
+      // Preserve the exact legacy response for clients without the new ID.
+      return res.status(200).json(clientPositionId
+        ? { ok: true, stored: true, duplicate: false }
+        : { ok: true });
+    }
+
+    // The partial unique index may return 23505 under parallel requests.
+    // A confirmed matching row is required; never acknowledge an unrelated
+    // constraint error or an unverified failed write.
+    if (clientPositionId && !insertResponse.ok &&
+        insertResponse.status === 409 && responseJson?.code === "23505") {
+      const existingId = await findStoredPosition();
+      if (existingId) {
+        return res.status(200).json({ ok: true, stored: true, duplicate: true });
+      }
     }
 
     // Log seguro de error
