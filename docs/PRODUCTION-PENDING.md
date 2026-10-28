@@ -33,3 +33,6 @@ Todavía no se ha realizado ninguna acción en Producción como parte de este re
 
 ## Asignaciones: nombres históricos (2026-10-09)
 - [ ] Corrección en Preview: cargar nombres de geocercas desactivadas para la tabla, manteniéndolas fuera del selector de nuevas asignaciones. Sin migración ni cambios de vínculos. El usuario confirma que en Producción su tabla ya muestra nombres; evaluar este caso de geocerca desactivada al revisar el próximo Promote, no tratarlo como incidente confirmado de Producción.
+
+## Ventana del tracker (2026-10-27)
+- [ ] Tooltip simplificado a Tracker, Status, Last seen, Hora, Lat, Lng y Acc, en ese orden. Se retiran Personal (UUID), Speed y Src solo de la presentación; Acc muestra — si no hay dato. Cambio web en Preview, sin migración ni modificación de telemetría.

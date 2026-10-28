@@ -638,12 +638,6 @@ const TrackerLayers = React.memo(function TrackerLayers({
         ? `${accuracyNum.toFixed(0)} m`
         : null;
 
-    const speedNum = Number(latest?.speed);
-    const speedText =
-      latest?.speed !== null && latest?.speed !== undefined && Number.isFinite(speedNum)
-        ? speedNum.toFixed(1)
-        : null;
-
     const status = String(live?.status || "offline");
     const ageText = formatAgeShort(live?.ageSec ?? null);
 
@@ -651,23 +645,12 @@ const TrackerLayers = React.memo(function TrackerLayers({
       <Tooltip direction="top" offset={[0, -8]} opacity={1}>
         <div className="text-xs">
           <div><b>{tOr("trackerDashboard.tooltip.tracker", "Tracker")}</b>: {getFriendlyTrackerName(item)}</div>
-          {item?.personalId && (
-            <div><b>{tOr("trackerDashboard.tooltip.personal", "Personal")}</b>: {String(item.personalId)}</div>
-          )}
           <div><b>{tOr("trackerDashboard.tooltip.status", "Status")}</b>: {status}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lastSeen", "Last seen")}</b>: {ageText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.time", "Time")}</b>: {latestTimeText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lat", "Lat")}</b>: {latestLatText}</div>
           <div><b>{tOr("trackerDashboard.tooltip.lng", "Lng")}</b>: {latestLngText}</div>
-          {accuracyText && (
-            <div><b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>: {accuracyText}</div>
-          )}
-          {speedText && (
-            <div><b>{tOr("trackerDashboard.tooltip.speed", "Speed")}</b>: {speedText}</div>
-          )}
-          {latest?.source && (
-            <div><b>{tOr("trackerDashboard.tooltip.source", "Src")}</b>: {String(latest.source)}</div>
-          )}
+          <div><b>{tOr("trackerDashboard.tooltip.accuracy", "Acc")}</b>: {accuracyText || "—"}</div>
         </div>
       </Tooltip>
     );
