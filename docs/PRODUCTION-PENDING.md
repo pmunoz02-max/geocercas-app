@@ -38,3 +38,6 @@ Todavía no se ha realizado ninguna acción en Producción como parte de este re
 - [x] Tooltip simplificado a Tracker, Status, Last seen, Hora, Lat, Lng y Acc, en ese orden. Se retiran Personal (UUID), Speed y Src solo de la presentación; Acc muestra — si no hay dato. Cambio web en Preview, sin migración ni modificación de telemetría.
 
 Publicación del tooltip completada el 2026-10-27: dpl_Gy7mzzjvkkNCDmWkBmX3TTBtzBMc, READY/production, app.tugeocercas.com verificado. Se aplicó exclusivamente el parche f794cdf6 sobre el paquete Production anterior (22 checksums verificados), recompilado con variables Production y promovido tras comprobar HTTP 200, destino Supabase Production y ausencia de clave privada en bundle. Campos Personal/Speed/Src ausentes del código servido. Sin migraciones ni cambios Android. Retorno web: dpl_Fcr2CRi4zG19Hnnussibg7iDTi9m. Los otros pendientes no se consideran publicados por esta operación.
+
+## Dashboard français (2026-10-28)
+- [ ] Corriger les traductions FR du dashboard, filtres, états, carte, tableau et en-tête. Le catalogue FR contenait des textes espagnols et des clés manquantes. Correction limitée aux traductions, sans migration ; sept champs du tooltip conservés. Publication Preview, validation utilisateur avant Promote.

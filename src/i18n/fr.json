@@ -66,21 +66,21 @@
   "app": {
     "brand": "GeoField GPS",
     "header": {
-      "goToPanel": "Ir al panel",
-      "loggedAs": "Sesión iniciada como",
+      "goToPanel": "Accéder au tableau de bord",
+      "loggedAs": "Connecté en tant que",
       "login": "Se connecter",
-      "loginMagic": "Link mágico",
-      "logout": "Salir",
-      "organizationAriaLabel": "Seleccionar organización",
-      "organizationLabel": "Organización",
-      "organizationNone": "Sin organización",
-      "roleAdmin": "Administrador",
-      "roleOwner": "Propietario",
+      "loginMagic": "Lien magique",
+      "logout": "Se déconnecter",
+      "organizationAriaLabel": "Sélectionner une organisation",
+      "organizationLabel": "Organisation",
+      "organizationNone": "Aucune organisation",
+      "roleAdmin": "Administrateur",
+      "roleOwner": "Propriétaire",
       "roleTracker": "Tracker"
     },
     "tabs": {
       "actividades": "Activités",
-      "admins": "Administrador",
+      "admins": "Administrateur",
       "asignaciones": "Affectations",
       "planificacion": "Planification",
       "dashboard": "Panel de costos",
@@ -1431,7 +1431,7 @@
     "passwordLogin": "Se connecter avec un mot de passe",
     "login": "Iniciar sesión",
     "loginButton": "Entrar",
-    "logout": "Salir",
+    "logout": "Se déconnecter",
     "magicEnter": "Iniciar sesión con enlace mágico",
     "magicLinkError": "No se pudo enviar el enlace. Inténtalo de nuevo.",
     "magicLinkSent": "Te enviamos un enlace de acceso. Revisa tu correo.",
@@ -2105,108 +2105,121 @@
     "title": "Tracker GPS"
   },
   "table": {
-    "name": "Nombre",
-    "status": "Estado",
-    "lastPosition": "Última posición",
-    "lastUpdate": "Última actualización"
+    "name": "Nom",
+    "status": "Statut",
+    "lastPosition": "Dernière position",
+    "lastUpdate": "Dernière mise à jour"
   },
   "status": {
-    "online": "En línea",
-    "stale": "Desactualizado",
-    "offline": "Sin conexión"
+    "online": "En ligne",
+    "stale": "Données anciennes",
+    "offline": "Hors ligne"
   },
   "map": {
-    "coordinates": "Coordenadas",
+    "coordinates": "Coordonnées",
     "lat": "Lat",
     "lng": "Lng",
-    "legend": "Leyenda"
+    "legend": "Légende"
   },
   "trackerDashboard": {
-    "title": "Panel de seguimiento",
+    "title": "Tableau de suivi",
     "timeWindows": {
-      "1h": "1 hora",
-      "6h": "6 horas",
-      "12h": "12 horas",
-      "24h": "24 horas"
+      "1h": "1 heure",
+      "6h": "6 heures",
+      "12h": "12 heures",
+      "24h": "24 heures"
     },
     "sections": {
-      "filters": "Filtros",
-      "diagnostics": "Diagnóstico",
-      "map": "Mapa"
+      "filters": "Filtres",
+      "diagnostics": "Diagnostic",
+      "map": "Carte"
     },
     "labels": {
-      "window": "Ventana",
+      "window": "Période",
       "tracker": "Tracker",
-      "geofences": "Geocercas",
-      "all": "Todos",
-      "activeOrg": "Org activa",
-      "activeOrgDebug": "Org (Activa)",
-      "detectedPlan": "Plan detectado"
+      "geofences": "Géofences",
+      "all": "Tous",
+      "activeOrg": "Organisation active",
+      "activeOrgDebug": "Organisation (active)",
+      "detectedPlan": "Forfait détecté",
+      "status": "Statut",
+      "total": "Total"
     },
     "actions": {
-      "resolveOrgAgain": "Re-resolver org (RPC)",
-      "refresh": "Actualizar",
-      "loading": "Cargando…",
-      "centerGeofence": "Centrar geocerca"
+      "resolveOrgAgain": "Recharger l’organisation",
+      "refresh": "Actualiser",
+      "loading": "Chargement…",
+      "centerGeofence": "Centrer la géofence",
+      "refreshSessionOrg": "Actualiser la session de l’organisation"
     },
     "states": {
-      "validatingPlan": "Validando plan de la organización...",
-      "planValidationFailed": "No se pudo validar el plan de la organización.",
-      "moduleUnavailable": "Este módulo no está disponible en el plan actual de la organización.",
+      "validatingPlan": "Vérification du forfait de l’organisation…",
+      "planValidationFailed": "Impossible de vérifier le forfait de l’organisation.",
+      "moduleUnavailable": "Ce module n’est pas disponible avec le forfait actuel de l’organisation.",
       "requiresPro": "Le tableau de suivi est indisponible pour cette organisation.",
       "upgradeHint": "Vérifiez le statut du forfait et le quota de trackers.",
       "upgradeOrgPrompt": "Gérez le forfait pour vérifier les permissions.",
-      "resolvingActiveOrg": "Resolviendo organización activa…"
+      "resolvingActiveOrg": "Recherche de l’organisation active…"
     },
     "messages": {
-      "loadAssignmentsError": "Error cargando asignaciones (tracker_assignments).",
-      "loadGeofencesError": "Error al cargar geocercas.",
-      "loadPositionsError": "Error al cargar posiciones.",
-      "noActiveAssignments": "No hay asignaciones activas (tracker_assignments). Mostrando todas las geocercas activas (la default queda preseleccionada).",
-      "noActiveGeofencesForAssignments": "Hay asignaciones, pero no hay geocercas activas para esas asignaciones en la org ({{orgId}}).",
-      "fallbackGeofenceShown": "No se encontraron geocercas activas; se mostró 1 geocerca activa como fallback para no dejar el panel vacío.",
-      "noActiveGeofencesForOrg": "No hay geocercas activas disponibles para esta org ({{orgId}}).",
-      "noVisibleGeofences": "No hay geocercas activas/visibles disponibles para esta org (o no tienes permiso de verlas).",
-      "orgResolveError": "Error resolviendo org"
+      "loadAssignmentsError": "Impossible de charger les affectations.",
+      "loadGeofencesError": "Impossible de charger les géofences.",
+      "loadPositionsError": "Impossible de charger les positions.",
+      "noActiveAssignments": "Aucune affectation active. Toutes les géofences actives sont affichées ; celle par défaut est présélectionnée.",
+      "noActiveGeofencesForAssignments": "Des affectations existent, mais aucune géofence active ne leur correspond dans l’organisation ({{orgId}}).",
+      "fallbackGeofenceShown": "Une géofence active a été affichée par défaut pour éviter un panneau vide.",
+      "noActiveGeofencesForOrg": "Aucune géofence active disponible pour cette organisation ({{orgId}}).",
+      "noVisibleGeofences": "Aucune géofence active et visible disponible pour cette organisation, ou vous ne disposez pas des droits nécessaires.",
+      "orgResolveError": "Impossible de déterminer l’organisation",
+      "invalidOrgInSession": "L’organisation active de la session est invalide."
     },
     "badges": {
-      "assignments": "assignments",
+      "assignments": "affectations",
       "trackers": "trackers",
-      "geofences": "geocercas",
-      "polys": "polys",
-      "circles": "circles",
-      "positions": "posiciones",
-      "source": "src",
-      "assignedIds": "assignedIds",
-      "selected": "selected",
-      "bounds": "bounds",
-      "viewport": "viewport",
-      "intersects": "intersects"
+      "geofences": "géofences",
+      "polys": "polygones",
+      "circles": "cercles",
+      "positions": "positions",
+      "source": "source",
+      "assignedIds": "identifiants affectés",
+      "selected": "sélection",
+      "bounds": "limites",
+      "viewport": "zone visible",
+      "intersects": "intersection"
     },
     "map": {
-      "initializing": "Inicializando mapa…",
-      "statusPrefix": "map",
-      "circleLabel": "{{name}} (círculo)"
+      "initializing": "Initialisation de la carte…",
+      "statusPrefix": "carte",
+      "circleLabel": "{{name}} (cercle)"
     },
     "tooltip": {
       "tracker": "Tracker",
-      "time": "Hora",
+      "time": "Heure",
       "lat": "Lat",
       "lng": "Lng",
-      "accuracy": "Acc",
-      "speed": "Vel",
-      "source": "Src"
+      "accuracy": "Précision",
+      "speed": "Vitesse",
+      "source": "Src",
+      "status": "Statut",
+      "lastSeen": "Dernier signal"
     },
     "multiGeofence": {
-      "labelBase": "Geocercas",
-      "labelNone": "Geocercas: Ninguna",
-      "labelAll": "Geocercas: Todas ({{count}})",
-      "labelSelected": "Geocercas: {{count}}",
-      "searchPlaceholder": "Buscar geocerca…",
-      "showAll": "Mostrar todas",
+      "labelBase": "Géofences",
+      "labelNone": "Géofences : aucune",
+      "labelAll": "Géofences : toutes ({{count}})",
+      "labelSelected": "Géofences : {{count}}",
+      "searchPlaceholder": "Rechercher une géofence…",
+      "showAll": "Tout afficher",
       "hideAll": "Tout masquer",
-      "noResults": "Sin resultados…",
-      "close": "Cerrar"
+      "noResults": "Aucun résultat…",
+      "close": "Fermer"
+    },
+    "heroEyebrow": "SUIVI",
+    "heroSubtitle": "Visualisez les positions, les filtres, les géofences et les données opérationnelles en temps réel.",
+    "status": {
+      "online": "En ligne",
+      "stale": "Données anciennes",
+      "offline": "Hors ligne"
     }
   },
   "trackerGps": {
