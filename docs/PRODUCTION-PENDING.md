@@ -58,3 +58,5 @@ Confirmación del usuario (2026-10-28): realizó Promote de la corrección franc
 - [ ] Ayuda ES/EN/FR actualizada para el alcance real. Interfaz/API siguen restringidas a Preview. Antes de Promote: prueba autenticada de fotos, pruebas físicas sin red y restauración, migraciones y configuración específicas de Producción.
 
 - Incidencias, prueba física 2026-11-04: creación offline con una foto confirmada en Preview desde Android21; Wi-Fi/datos restaurados. Ajustes adicionales de ancho móvil y mensaje de sincronización vacía pendientes de Producción. Mantener registro PRUEBA-PREVIEW exclusivamente en Preview.
+
+- Ayuda/Recursos actualizados tras prueba física (2026-11-04): tarjeta compartida anuncia fotos y cola offline; guía ES/EN/FR con acceso Android21+, activación, sesión/invitación vigente, cinco fotos de 2 MB, consulta privada, sincronización y límites. PDF de septiembre identificado como manual de GPS, sin presentarlo como manual actualizado de Incidencias. Solo Preview; revisar habilitación del módulo antes de Promote.

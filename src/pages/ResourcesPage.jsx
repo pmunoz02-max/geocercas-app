@@ -13,6 +13,7 @@ const LOCAL_COPY = {
     downloadLabel: "Descargar",
     viewPdf: "Ver PDF",
     pdfDetails: "Español · 4 páginas · Septiembre 2026",
+    pdfScope: "Este PDF cubre instalación y seguimiento GPS. Para fotos, uso sin conexión y Android de Incidencias, consulta la guía web de esta página.",
     openGuide: "Abrir guía",
     backHome: "Volver al inicio",
     cards: {
@@ -36,6 +37,7 @@ const LOCAL_COPY = {
     downloadLabel: "Download",
     viewPdf: "View PDF",
     pdfDetails: "English · 4 pages · September 2026",
+    pdfScope: "This PDF covers setup and GPS tracking. For incident photos, offline use and Android access, read the web guide on this page.",
     openGuide: "Open guide",
     backHome: "Back to home",
     cards: {
@@ -59,6 +61,7 @@ const LOCAL_COPY = {
     downloadLabel: "Télécharger",
     viewPdf: "Voir le PDF",
     pdfDetails: "Français · 4 pages · Septembre 2026",
+    pdfScope: "Ce PDF décrit l’installation et le suivi GPS. Pour les photos, l’usage hors connexion et l’accès Android aux incidents, consultez le guide web de cette page.",
     openGuide: "Ouvrir le guide",
     backHome: "Retour à l'accueil",
     cards: {
@@ -162,6 +165,7 @@ export default function ResourcesPage() {
                   {card.key === "pdf" ? (
                     <div className="mt-5">
                       <p className="mb-3 text-xs text-slate-500 dark:text-slate-300">{copy.pdfDetails}</p>
+                      <p className="mb-3 text-sm leading-6 text-slate-600 dark:text-slate-300">{copy.pdfScope}</p>
                       <div className="flex flex-wrap gap-2">
                         <a href={card.href} target="_blank" rel="noopener noreferrer"
                           aria-label={`${copy.viewPdf}: ${title}`}
