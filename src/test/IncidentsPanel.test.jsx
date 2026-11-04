@@ -1,0 +1,12 @@
+import React from 'react';
+import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
+import {it,expect,vi,afterEach} from 'vitest';
+vi.mock('react-i18next',()=>({useTranslation:()=>({i18n:{language:'es'}})}));
+vi.mock('@/context/auth.js',()=>({useAuthSafe:()=>({})}));
+vi.mock('../lib/authFetch',()=>({authFetch:vi.fn()}));
+import {IncidentPanel} from '../pages/IncidentsPage';
+afterEach(cleanup);
+const result={items:[],enabled:false,manager:true,geofences:[],next:null};
+const reply=data=>({ok:true,status:200,json:async()=>data});
+it('retries the same operation after an ambiguous network failure',async()=>{let posts=0;const request=vi.fn(async(url,options)=>{if(options?.method==='POST'){posts++;if(posts===1)throw Error('Network lost');return reply({ok:true});}return reply(result);});render(<IncidentPanel org="org" request={request}/>);fireEvent.click(await screen.findByText('Activar Incidencias'));fireEvent.click(await screen.findByText('Reintentar el mismo envío'));await waitFor(()=>expect(posts).toBe(2));const sent=request.mock.calls.filter(c=>c[1]?.method==='POST').map(c=>c[1].body);expect(sent[0]).toBe(sent[1]);});
+it('does not offer activation to a tracker or a create form when disabled',async()=>{render(<IncidentPanel org="org" request={async()=>reply({...result,manager:false})}/>);await screen.findByText('El módulo está desactivado. El historial sigue disponible.');expect(screen.queryByText('Activar Incidencias')).toBeNull();expect(screen.queryByText('Nueva incidencia')).toBeNull();});

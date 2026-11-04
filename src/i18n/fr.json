@@ -100,7 +100,8 @@
       "billing": "Facturation",
       "tracker": "Tracker",
       "resources": "Ressources",
-      "benchmarking": "Benchmarking"
+      "benchmarking": "Benchmarking",
+      "incidents": "Incidents"
     },
     "title": "GeoField GPS"
   },

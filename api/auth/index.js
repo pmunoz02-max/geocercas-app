@@ -7,6 +7,7 @@
 export const config = { api: { bodyParser: { sizeLimit: "3mb" } } };
 
 const ROUTES = new Set([
+  "incidents",
   "visits",
   "bootstrap",
   "ensure-context",
@@ -18,6 +19,8 @@ const ROUTES = new Set([
 
 async function loadHandler(route) {
   switch (route) {
+    case "incidents":
+      return (await import("../../server/incidents/index.js")).default;
     case "visits":
       return (await import("../../server/visits/index.js")).default;
     case "bootstrap":

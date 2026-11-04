@@ -129,7 +129,8 @@
       "billing": "Billing",
       "tracker": "Tracker",
       "resources": "Recursos",
-      "benchmarking": "Benchmarking"
+      "benchmarking": "Benchmarking",
+      "incidents": "Incidencias"
     },
     "title": "GeoField GPS"
   },

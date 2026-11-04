@@ -24,3 +24,15 @@ Verificación remota: seis tablas con RLS; anon/authenticated sin SELECT directo
 Prueba remota con ROLLBACK: read y configure para identidades inexistentes rechazados por insufficient_privilege; cero ajustes persistidos. La batería completa de creación, estados e idempotencia sigue siendo la ejecutada localmente, no una prueba end-to-end en Preview.
 Advisors: único tipo de aviso relativo a las tablas nuevas, INFO rls_enabled_no_policy; intencional para acceso exclusivamente por funciones backend con grants restringidos. Referencia: https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy . No se modificaron avisos previos ajenos al módulo.
 Pendientes: API autenticada, interfaz, fotos privadas, pruebas de concurrencia y Android/offline. El módulo continúa apagado para todas las organizaciones.
+
+## Primera interfaz y API — 2026-11-04
+
+Implementados /incidencias y /api/incidents (delegado por api/auth, sin nueva función Vercel). API disponible únicamente si VERCEL_ENV=preview; la navegación aparece en preview.tugeocercas.com. No se activa ninguna organización por desplegar.
+
+La API deriva identidad de Auth/runtime usando identifyVisitActor; runtime solo admite membresía tracker, sin heredar privilegios de otra organización. p_actor procede de ese verificador, nunca del cuerpo. Las lecturas/escrituras usan las RPC del núcleo; el catálogo devuelve parcelas de la organización y, para técnicos, asignaciones propias vigentes compatibles con las reglas SQL. Detalles no consultan catálogos adicionales. Los errores devueltos no exponen mensajes SQL internos.
+
+Pantalla ES/EN/FR: activación por administrador, registro GPS/parcela/categoría/afectación/notas, lista paginada, detalle, observaciones y cambios de estado con motivo/versión. Contexto se reinicia al cambiar organización/usuario. En caso de respuesta incierta se bloquea edición y se reintenta el mismo operation_id y cuerpo; no se regenera identidad tras timeout. Un error de validación/permisos/conflicto permite corregir/actualizar. No persiste borradores: advierte no recargar con datos pendientes.
+
+Fotos, mapa de incidencias, informe, persistencia offline y acceso desde sesión nativa Android siguen pendientes. La ruta web requiere sesión web; aceptar runtime en API no implementa por sí solo la navegación/transporte nativo. No se anunció recepción offline ni se modificó Visitas/GPS.
+
+Validación: 30 pruebas en cuatro archivos (incidents-api, IncidentsPanel, visits-routing y visits) aprobadas; Vite compila. Incluye identidad del servidor, denegación de permisos, bloqueo fuera de Preview, ruta compartida, errores sanitizados y mismo cuerpo/id al reintentar. Son pruebas con mocks; aún falta flujo autenticado real de crear/observar/cerrar en Preview y pruebas físicas. Ninguna prueba activó organizaciones ni insertó incidencias remotas.

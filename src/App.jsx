@@ -36,6 +36,7 @@ import TrackerGpsPage from "./pages/TrackerGpsPage.jsx";
 
 // App pages
 import VisitsPage from "./pages/VisitsPage.jsx";
+import IncidentsPage from "./pages/IncidentsPage.jsx";
 import HardwarePilotPage from "./pages/HardwarePilotPage.jsx";
 import Inicio from "./pages/Inicio.jsx";
 import GeocercasPage from "./pages/Geocercas.jsx";
@@ -307,6 +308,7 @@ function MainAppRoutes() {
         />
         <Route path="/account" element={<Account />} />
         <Route path="/hardware-piloto" element={<RequireOrg><HardwarePilotPage /></RequireOrg>} />
+        <Route path="/incidencias" element={<RequireOrg><IncidentsPage /></RequireOrg>} />
         <Route path="/visitas" element={<RequireOrg><VisitsPage /></RequireOrg>} />
 
         <Route

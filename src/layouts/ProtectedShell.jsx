@@ -22,13 +22,15 @@ function resolveResourcesPath(value) {
   return "/resources";
 }
 
+const incidentsPreview = typeof window !== "undefined" && window.location.hostname === "preview.tugeocercas.com";
+
 function buildTabs({ role, isAppRoot, isAdmin, resourcesPath }) {
   const r = String(role || "").toLowerCase();
 
   const isTrackerOnly = r === "tracker";
 
   if (isTrackerOnly) {
-    return [{ path: "/tracker-gps", labelKey: "app.tabs.tracker" }];
+    return [{ path: "/tracker-gps", labelKey: "app.tabs.tracker" }, ...(incidentsPreview ? [{path:"/incidencias",labelKey:"app.tabs.incidents"}] : [])];
   }
 
   const tabs = [
@@ -41,6 +43,7 @@ function buildTabs({ role, isAppRoot, isAdmin, resourcesPath }) {
     { path: "/actividades", labelKey: "app.tabs.actividades" },
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/visitas", labelKey: "app.tabs.visitas" },
+    ...(incidentsPreview ? [{path:"/incidencias",labelKey:"app.tabs.incidents"}] : []),
     { path: "/planificacion", labelKey: "app.tabs.planificacion" },
     { path: "/benchmarking", labelKey: "app.tabs.benchmarking" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
