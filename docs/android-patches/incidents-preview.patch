@@ -1,0 +1,69 @@
+--- a/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
++++ b/app/src/main/java/com/fenice/geofieldgps/WebViewActivity.java
+@@ -1419,6 +1419,66 @@
+             });
+         }
+ 
++
++        @JavascriptInterface
++        public void incidentRequest(String requestId, String requestJson) {
++            if (!BuildConfig.APPLICATION_ID.endsWith(".preview")) return;
++            if (requestId == null || !requestId.matches("[a-zA-Z0-9-]{1,64}") || requestJson == null || requestJson.length() > 3000000) return;
++            runOnUiThread(() -> {
++                if (webView == null || !isVisitsOrigin()) return;
++                new Thread(() -> {
++                    int status = 503;
++                    String response = "{\"error\":\"incidents_unavailable\"}";
++                    java.net.HttpURLConnection connection = null;
++                    try {
++                        JSONObject request = new JSONObject(requestJson);
++                        SharedPreferences stored = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
++                        String org = stored.getString("org_id", "");
++                        String user = stored.getString("tracker_user_id", "");
++                        if (!org.equals(request.optString("org_id")) || !user.equals(request.optString("user_id"))) throw new IllegalArgumentException("Session changed");
++                        RuntimeSessionRenewal.INSTANCE.renewIfNeeded(WebViewActivity.this, "https://preview.tugeocercas.com/api/send-position");
++                        if (!org.equals(stored.getString("org_id", "")) || !user.equals(stored.getString("tracker_user_id", ""))) throw new IllegalArgumentException("Session changed");
++                        JSONObject body = request.optJSONObject("body");
++                        String target = "https://preview.tugeocercas.com/api/incidents" + (body == null ? "?org_id=" + java.net.URLEncoder.encode(org, "UTF-8") : "");
++                        JSONObject query = request.optJSONObject("query");
++                        if (body == null && query != null) {
++                            for (String key : new String[]{"id", "before", "before_id"}) {
++                                if (query.has(key)) target += "&" + key + "=" + java.net.URLEncoder.encode(query.getString(key), "UTF-8");
++                            }
++                        }
++                        connection = (java.net.HttpURLConnection) new java.net.URL(target).openConnection();
++                        connection.setInstanceFollowRedirects(false);
++                        connection.setConnectTimeout(15000); connection.setReadTimeout(20000);
++                        connection.setRequestMethod(body == null ? "GET" : "POST");
++                        connection.setRequestProperty("Authorization", "Bearer " + stored.getString("access_token", ""));
++                        connection.setRequestProperty("x-tracker-runtime", "1");
++                        if (body != null) {
++                            body.put("org_id", org);
++                            connection.setRequestProperty("Content-Type", "application/json");
++                            connection.setDoOutput(true);
++                            try (java.io.OutputStream out = connection.getOutputStream()) { out.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8)); }
++                        }
++                        status = connection.getResponseCode();
++                        java.io.InputStream stream = status < 400 ? connection.getInputStream() : connection.getErrorStream();
++                        if (stream != null) try (java.util.Scanner scanner = new java.util.Scanner(stream, "UTF-8").useDelimiter("\\A")) { response = scanner.hasNext() ? scanner.next() : "{}"; }
++                    } catch (Exception ignored) { /* No credential or response logging. */ }
++                    finally { if (connection != null) connection.disconnect(); }
++                    final int resultStatus = status;
++                    final String resultBody = response;
++                    runOnUiThread(() -> {
++                        if (webView == null || !isVisitsOrigin()) return;
++                        try {
++                            JSONObject originalRequest = new JSONObject(requestJson);
++                            SharedPreferences currentSession = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
++                            if (!originalRequest.optString("org_id").equals(currentSession.getString("org_id", "")) || !originalRequest.optString("user_id").equals(currentSession.getString("tracker_user_id", ""))) return;
++                            JSONObject detail = new JSONObject().put("id", requestId).put("status", resultStatus).put("body", resultBody);
++                            webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('geofield-incidents-response',{detail:" + detail.toString() + "}));", null);
++                        } catch (Exception ignored) { }
++                    });
++                }, "IncidentsRequest").start();
++            });
++        }
++
+         @JavascriptInterface
+         public String saveTrackerSession(final String token, final String trackerUserId, final String orgId) {
+             Log.i(TAG, "AndroidBridge.saveTrackerSession called token_prefix=" + tokenPrefix(token)

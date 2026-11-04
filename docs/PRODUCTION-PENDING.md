@@ -50,3 +50,9 @@ Confirmación del usuario (2026-10-28): realizó Promote de la corrección franc
 
 ## Ayuda de Incidencias (2026-11-04)
 - [ ] Centro de ayuda de Inicio, guía de instrucciones y Recursos incluyen acceso a la guía de Incidencias en ES/EN/FR. Visible exclusivamente en preview.tugeocercas.com, igual que el módulo. Explica activación opcional, permisos, GPS, seguimiento y reintento; distingue fotos de Visitas de funcionalidades aún pendientes de Incidencias. PDF existente de septiembre no se presenta como guía del módulo nuevo. No requiere migración. Revisar disponibilidad antes de habilitar en Producción.
+
+## Incidencias con fotos y cola local (2026-11-04)
+- [ ] Fotos privadas, máximo 5 por incidencia y 2 MB por archivo; reserva y confirmación idempotentes. Nueva migración incident_evidence_preview aplicada SOLO en Preview; preparar revisión específica para Producción, sin db push general.
+- [ ] Cola persistente de registros/fotos por organización/usuario; no incluye arranque offline en frío ni sincronización con app cerrada. Pendientes se conservan al cerrar sesión; catálogo se limpia.
+- [ ] Android Preview 21 compilado, integración desde pantalla de seguimiento y puente nativo de endpoint fijo Preview. Falta instalar y probar físicamente. No distribuir este APK de Preview como Producción ni subirlo a la ficha de producción de Google Play.
+- [ ] Ayuda ES/EN/FR actualizada para el alcance real. Interfaz/API siguen restringidas a Preview. Antes de Promote: prueba autenticada de fotos, pruebas físicas sin red y restauración, migraciones y configuración específicas de Producción.

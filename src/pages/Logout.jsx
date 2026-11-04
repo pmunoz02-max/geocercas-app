@@ -1,3 +1,4 @@
+import {INCIDENT_DB,retainPendingIncidentsOnLogout} from '../lib/incidentQueue';
 import { useEffect } from "react";
 import { supabase } from "../lib/supabaseClient.js";
 
@@ -45,7 +46,14 @@ async function clearIndexedDb() {
         .map((db) => db?.name)
         .filter(Boolean);
 
-      await Promise.allSettled(names.map((name) => deleteIndexedDb(name)));
+      await Promise.allSettled(names.map(async (name) => {
+        if (name === INCIDENT_DB) {
+          // Keep unsent records isolated by organization/user, never credentials.
+          // If checking storage fails, preserve it rather than losing field work.
+          try { if (await retainPendingIncidentsOnLogout()) return; } catch { return; }
+        }
+        return deleteIndexedDb(name);
+      }));
     }
   } catch {
     // Best-effort cleanup only.

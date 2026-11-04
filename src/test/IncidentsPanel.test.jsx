@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto';
 import React from 'react';
 import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
 import {it,expect,vi,afterEach} from 'vitest';
@@ -10,3 +11,24 @@ const result={items:[],enabled:false,manager:true,geofences:[],next:null};
 const reply=data=>({ok:true,status:200,json:async()=>data});
 it('retries the same operation after an ambiguous network failure',async()=>{let posts=0;const request=vi.fn(async(url,options)=>{if(options?.method==='POST'){posts++;if(posts===1)throw Error('Network lost');return reply({ok:true});}return reply(result);});render(<IncidentPanel org="org" request={request}/>);fireEvent.click(await screen.findByText('Activar Incidencias'));fireEvent.click(await screen.findByText('Reintentar el mismo envío'));await waitFor(()=>expect(posts).toBe(2));const sent=request.mock.calls.filter(c=>c[1]?.method==='POST').map(c=>c[1].body);expect(sent[0]).toBe(sent[1]);});
 it('does not offer activation to a tracker or a create form when disabled',async()=>{render(<IncidentPanel org="org" request={async()=>reply({...result,manager:false})}/>);await screen.findByText('El módulo está desactivado. El historial sigue disponible.');expect(screen.queryByText('Activar Incidencias')).toBeNull();expect(screen.queryByText('Nueva incidencia')).toBeNull();});
+
+it('restores offline queued submissions after remount without sending as another user',async()=>{
+ const user=crypto.randomUUID(),org=crypto.randomUUID();let online=true;
+ Object.defineProperty(navigator,'onLine',{configurable:true,get:()=>online});
+ Object.defineProperty(navigator,'geolocation',{configurable:true,value:{getCurrentPosition:ok=>ok({coords:{latitude:1,longitude:2,accuracy:3},timestamp:Date.now()})}});
+ const request=vi.fn(async()=>{if(!online)throw Error('offline');return reply({...result,user_id:user,enabled:true,geofences:[{id:'plot',name:'Parcela A'}]});});
+ const first=render(<IncidentPanel org={org} identityUser={user} request={request}/>);
+ fireEvent.change(await screen.findByLabelText('Título'),{target:{value:'Sin internet'}});
+ fireEvent.change(screen.getByLabelText('Parcela'),{target:{value:'plot'}});
+ await waitFor(()=>expect(screen.getByLabelText('Título').closest('fieldset').disabled).toBe(false));
+ fireEvent.click(screen.getByText('Obtener ubicación GPS'));
+ await waitFor(()=>expect(screen.getByText('Registrar incidencia').disabled).toBe(false));
+ online=false;fireEvent.click(screen.getByText('Registrar incidencia'));
+ await screen.findByText(/Envíos pendientes: 1/);first.unmount();
+ const second=render(<IncidentPanel org={org} identityUser={user} request={request}/>);
+ await screen.findByText(/Envíos pendientes: 1/);await screen.findByLabelText('Título');second.unmount();
+ render(<IncidentPanel org={org} identityUser="different-user" request={request}/>);
+ await screen.findByText('No se pudo completar la solicitud. Comprueba tu conexión y permisos.');
+ expect(screen.queryByText(/Envíos pendientes: 1/)).toBeNull();expect(screen.queryByLabelText('Título')).toBeNull();
+ online=true;
+});

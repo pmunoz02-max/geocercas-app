@@ -16,3 +16,16 @@ it('returns conflicts without SQL details',async()=>{db.rpc.mockResolvedValue({e
 it('rejects malformed JSON and incomplete cursors',async()=>{for(const r of [req({method:'POST',body:'{'}),req({query:{org_id:org,before:'2026-11-04T00:00:00Z'}})]){const res=response();await handler(r,res);expect(res.status).toHaveBeenCalledWith(400);}expect(db.rpc).not.toHaveBeenCalled();});
 it('does not expose arbitrary database error text',async()=>{db.rpc.mockResolvedValue({error:{message:'database password internal'}});const res=response();await handler(req(),res);expect(res.json).toHaveBeenCalledWith({error:'request_failed'});});
 it('routes incidents before generic API without replacing visits',()=>{const {routes}=JSON.parse(fs.readFileSync('vercel.json','utf8'));expect(routes.find(r=>r.src&&new RegExp('^'+r.src+'$').test('/api/incidents')).dest).toBe('/api/auth?route=incidents');expect(routes.find(r=>r.src==='/api/visits').dest).toBe('/api/auth?route=visits');});
+
+it('reserves evidence before Storage and finalizes only after upload',async()=>{
+ const upload=vi.fn().mockResolvedValue({data:{}});db.storage={from:()=>({upload})};db.rpc.mockResolvedValue({data:{object_path:'private/slot',uploaded:false}});
+ const res=response();await handler(req({method:'POST',body:{org_id:org,action:'upload_photo',id,observation_id:id,evidence_id:id,photo:{type:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10]).toString('base64'),attached_at:new Date().toISOString()}}}),res);
+ expect(db.rpc.mock.calls.map(c=>c[0])).toEqual(['reserve_incident_evidence','finish_incident_evidence']);expect(upload).toHaveBeenCalledTimes(1);expect(res.status).toHaveBeenCalledWith(200);
+});
+it('never uploads an unauthorized reservation',async()=>{
+ db.rpc.mockResolvedValue({error:{code:'42501',message:'forbidden'}});db.storage={from:vi.fn()};const res=response();await handler(req({method:'POST',body:{org_id:org,action:'upload_photo',id,observation_id:id,evidence_id:id,photo:{type:'image/png',base64:Buffer.from([137,80,78,71,13,10,26,10]).toString('base64'),attached_at:new Date().toISOString()}}}),res);expect(res.status).toHaveBeenCalledWith(403);expect(db.storage.from).not.toHaveBeenCalled();
+});
+it('rejects disguised images and identity switches before writing',async()=>{
+ const res=response();await handler(req({method:'POST',body:{org_id:org,action:'upload_photo',id,observation_id:id,evidence_id:id,photo:{type:'image/png',base64:Buffer.from('<script>').toString('base64'),attached_at:new Date().toISOString()}}}),res);expect(res.status).toHaveBeenCalledWith(422);expect(db.rpc).not.toHaveBeenCalled();
+ const changed=response();await handler(req({headers:{authorization:'Bearer session','x-incident-user':id}}),changed);expect(changed.status).toHaveBeenCalledWith(403);
+});
