@@ -56,3 +56,5 @@ Confirmación del usuario (2026-10-28): realizó Promote de la corrección franc
 - [ ] Cola persistente de registros/fotos por organización/usuario; no incluye arranque offline en frío ni sincronización con app cerrada. Pendientes se conservan al cerrar sesión; catálogo se limpia.
 - [ ] Android Preview 21 compilado, integración desde pantalla de seguimiento y puente nativo de endpoint fijo Preview. Falta instalar y probar físicamente. No distribuir este APK de Preview como Producción ni subirlo a la ficha de producción de Google Play.
 - [ ] Ayuda ES/EN/FR actualizada para el alcance real. Interfaz/API siguen restringidas a Preview. Antes de Promote: prueba autenticada de fotos, pruebas físicas sin red y restauración, migraciones y configuración específicas de Producción.
+
+- Incidencias, prueba física 2026-11-04: creación offline con una foto confirmada en Preview desde Android21; Wi-Fi/datos restaurados. Ajustes adicionales de ancho móvil y mensaje de sincronización vacía pendientes de Producción. Mantener registro PRUEBA-PREVIEW exclusivamente en Preview.
