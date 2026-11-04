@@ -47,3 +47,6 @@ Confirmación del usuario (2026-10-28): realizó Promote de la corrección franc
 ## Incidencias (2026-11-04)
 - [ ] Núcleo SQL aplicado en Preview el 2026-11-04 con autorización explícita. Migración 20261104194644_incident_core_preview.sql verificada en estructura/permisos y rechazo de identidad inválida; pruebas completas del núcleo ejecutadas localmente. Cero organizaciones activadas. Pendiente de Producción. No habilitar ni promover el módulo como terminado: faltan API, fotos, interfaz y validación física offline. Ver INCIDENCIAS-CORE-PREVIEW.md.
 - [ ] Incidencias: primera API/pantalla web publicada solo en Preview; guardia VERCEL_ENV=preview. Requiere revisión integral antes de levantar esa guardia en Producción. Fotos, offline, mapa, informe e integración nativa aún pendientes; no promover como módulo completo.
+
+## Ayuda de Incidencias (2026-11-04)
+- [ ] Centro de ayuda de Inicio, guía de instrucciones y Recursos incluyen acceso a la guía de Incidencias en ES/EN/FR. Visible exclusivamente en preview.tugeocercas.com, igual que el módulo. Explica activación opcional, permisos, GPS, seguimiento y reintento; distingue fotos de Visitas de funcionalidades aún pendientes de Incidencias. PDF existente de septiembre no se presenta como guía del módulo nuevo. No requiere migración. Revisar disponibilidad antes de habilitar en Producción.

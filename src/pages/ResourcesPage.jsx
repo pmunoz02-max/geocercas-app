@@ -1,3 +1,4 @@
+import IncidentsHelp from "../components/IncidentsHelp";
 import VisitsInfoCard from "../components/VisitsInfoCard";
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
@@ -131,6 +132,7 @@ export default function ResourcesPage() {
 
           <div className="mt-7 grid gap-4 sm:grid-cols-2">
             <VisitsInfoCard detailed />
+            <IncidentsHelp />
             {cards.map((card) => {
               const cardCopy = copy.cards[card.key] || { title: "", description: "" };
               const title = t(`resources.cards.${card.key}.title`, {

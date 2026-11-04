@@ -1,10 +1,14 @@
-import React, { useMemo } from "react";
+import IncidentsHelp from "../../components/IncidentsHelp";
+import React, { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 export default function InstructionsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  useEffect(() => {
+    if (window.location.hash === "#incidencias") document.getElementById("incidencias")?.scrollIntoView();
+  }, []);
 
   const tocRaw = t("help.instructions.toc.items", { returnObjects: true });
   const stepsRaw = t("help.instructions.steps.items", { returnObjects: true });
@@ -72,6 +76,7 @@ export default function InstructionsPage() {
         </div>
       </section>
 
+      <IncidentsHelp detailed />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
             <div className="sticky top-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-lg shadow-emerald-950/5">

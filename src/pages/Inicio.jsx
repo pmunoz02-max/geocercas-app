@@ -1,3 +1,4 @@
+import IncidentsHelp from "../components/IncidentsHelp";
 import VisitsInfoCard from "../components/VisitsInfoCard";
 ﻿// src/pages/Inicio.jsx
 import React, { useEffect, useMemo, useState } from "react";
@@ -530,6 +531,7 @@ export default function Inicio() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <IncidentsHelp />
           {helpCards.map((card) => (
             <HelpCard
               key={card.to}
