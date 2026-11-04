@@ -1,0 +1,10 @@
+create role anon; create role authenticated; create role service_role;
+create schema auth; create schema extensions;
+create extension pgcrypto with schema extensions;
+create table auth.users(id uuid primary key);
+create table public.organizations(id uuid primary key,active boolean default true,suspended boolean default false);
+create table public.memberships(org_id uuid references public.organizations,user_id uuid references auth.users,role text,revoked_at timestamptz,primary key(org_id,user_id));
+create table public.geofences(id uuid primary key,org_id uuid not null references public.organizations,name text not null,active boolean default true);
+create table public.field_visits(id uuid primary key,org_id uuid not null references public.organizations,user_id uuid not null references auth.users,geofence_id uuid not null references public.geofences);
+create table public.personal(id uuid primary key,org_id uuid,user_id uuid);
+create table public.asignaciones(id uuid primary key,org_id uuid,geofence_id uuid,personal_id uuid,user_id uuid,is_deleted boolean,status text,estado text,start_time timestamptz,end_time timestamptz);

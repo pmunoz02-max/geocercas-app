@@ -43,3 +43,6 @@ Publicación del tooltip completada el 2026-10-27: dpl_Gy7mzzjvkkNCDmWkBmX3TTBtz
 - [x] Corriger les traductions FR du dashboard, filtres, états, carte, tableau et en-tête. Le catalogue FR contenait des textes espagnols et des clés manquantes. Correction limitée aux traductions, sans migration ; sept champs du tooltip conservés. Publication Preview, validation utilisateur avant Promote.
 
 Confirmación del usuario (2026-10-28): realizó Promote de la corrección francesa del dashboard (15aad98e) y confirmó «Todo ok». Estado: publicado y validado por el usuario. Esta anotación no implica verificación técnica independiente del deployment ni cierre de los otros pendientes.
+
+## Incidencias (2026-11-04)
+- [ ] Núcleo SQL aplicado en Preview el 2026-11-04 con autorización explícita. Migración 20261104194644_incident_core_preview.sql verificada en estructura/permisos y rechazo de identidad inválida; pruebas completas del núcleo ejecutadas localmente. Cero organizaciones activadas. Pendiente de Producción. No habilitar ni promover el módulo como terminado: faltan API, fotos, interfaz y validación física offline. Ver INCIDENCIAS-CORE-PREVIEW.md.
