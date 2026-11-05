@@ -60,3 +60,11 @@ Confirmación del usuario (2026-10-28): realizó Promote de la corrección franc
 - Incidencias, prueba física 2026-11-04: creación offline con una foto confirmada en Preview desde Android21; Wi-Fi/datos restaurados. Ajustes adicionales de ancho móvil y mensaje de sincronización vacía pendientes de Producción. Mantener registro PRUEBA-PREVIEW exclusivamente en Preview.
 
 - Ayuda/Recursos actualizados tras prueba física (2026-11-04): tarjeta compartida anuncia fotos y cola offline; guía ES/EN/FR con acceso Android21+, activación, sesión/invitación vigente, cinco fotos de 2 MB, consulta privada, sincronización y límites. PDF de septiembre identificado como manual de GPS, sin presentarlo como manual actualizado de Incidencias. Solo Preview; revisar habilitación del módulo antes de Promote.
+
+## Incidencias en Producción, 4 de noviembre de 2026
+
+Supabase de Producción registró el núcleo como 20261105020202 y las fotos privadas como 20261105020207. Verificación posterior: seis tablas con RLS y sin acceso directo para usuarios, cuatro funciones para el servidor, almacenamiento JPG/PNG privado de 2 MB por foto y cero organizaciones activadas.
+
+La API compara el entorno de Vercel con el proyecto Supabase esperado antes de atender solicitudes. El cliente Android de Producción usa un canal limitado al marco principal de https://app.tugeocercas.com y los endpoints fijos de ese dominio. El panel del tracker requiere un puente compatible. El parche reproducible está en android-patches/incidents-production.patch. La prueba física con una foto sin red corresponde a Android Preview 21. La distribución y la prueba del paquete de Producción se registran por separado.
+
+Deployment anterior de Producción: dpl_4BTnSrruUEpWL6V8vkabzbnSFnPr (15aad98e).

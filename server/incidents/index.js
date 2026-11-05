@@ -3,7 +3,11 @@ import {createClient} from '@supabase/supabase-js';
 import {identifyVisitActor,uuid} from '../api-lib/visits.js';
 const errors=new Set(['invalid_photo','photo_limit','photo_pending','forbidden','module_disabled','invalid_geofence','invalid_visit','assignment_required','invalid_request','invalid_id','invalid_time','gps_required','invalid_note','unsupported_fields','invalid_observation','incident_closed','invalid_transition','reason_required','invalid_cursor','operation_conflict','version_conflict']);
 export function incidentError(e){return {status:e?.code==='42501'?403:e?.code==='40001'||e?.code==='23505'?409:String(e?.code||'').startsWith('22')||['23514','23502'].includes(e?.code)?422:500,code:errors.has(e?.message)?e.message:'request_failed'};}
-export function createIncidentHandler({makeDb,identify=identifyVisitActor,preview=()=>process.env.VERCEL_ENV==='preview'}){
+export function createIncidentHandler({makeDb,identify=identifyVisitActor,preview=()=> {
+  const databases = {preview: "https://mujwsfhkocsuuahlrssn.supabase.co", production: "https://wpaixkvokdkudymgjoua.supabase.co"};
+  const expected = databases[process.env.VERCEL_ENV];
+  return Boolean(expected && process.env.SUPABASE_URL?.replace(/\/$/, "") === expected);
+ }}){
  return async(req,res)=>{
   res.setHeader('Cache-Control','no-store');
   if(!preview())return res.status(404).json({error:'not_available'});

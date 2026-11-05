@@ -1,3 +1,4 @@
+import { nativeIncidentRequest } from '../lib/incidentTransport';
 import {IncidentPanel} from './IncidentsPage';
 import { selectRuntimeSession, readStoredRuntimeSession } from "../lib/runtimeSessionSelection";
 import VisitsPanel from "../components/VisitsPanel";
@@ -438,7 +439,7 @@ export default function TrackerGpsPage() {
         </div>
 
         {ready && <VisitsPanel key={runtimeSession.orgId+runtimeSession.trackerUserId} orgId={runtimeSession.orgId} runtime={runtimeSession} />}
-        {ready && window.location.hostname === PREVIEW_HOSTNAME && <details className="mt-4 text-left"><summary className="rounded-xl bg-emerald-700 p-3 text-white cursor-pointer">{t('app.tabs.incidents')}</summary><IncidentPanel key={'incidents:'+runtimeSession.orgId+runtimeSession.trackerUserId} org={runtimeSession.orgId} identityUser={runtimeSession.trackerUserId} runtime={runtimeSession}/></details>}
+        {ready && ["preview.tugeocercas.com", "app.tugeocercas.com"].includes(window.location.hostname) && nativeIncidentRequest() && <details className="mt-4 text-left"><summary className="rounded-xl bg-emerald-700 p-3 text-white cursor-pointer">{t('app.tabs.incidents')}</summary><IncidentPanel key={'incidents:'+runtimeSession.orgId+runtimeSession.trackerUserId} org={runtimeSession.orgId} identityUser={runtimeSession.trackerUserId} runtime={runtimeSession}/></details>}
 
         {!!msg && !sessionUnavailable && (
           <div style={noteStyle}>
