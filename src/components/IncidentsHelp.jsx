@@ -52,10 +52,17 @@ export default function IncidentsHelp({ detailed = false }) {
   if (typeof window === "undefined" || !["preview.tugeocercas.com", "app.tugeocercas.com"].includes(window.location.hostname)) return null;
   const lang = (i18n.resolvedLanguage || i18n.language || "es").slice(0, 2);
   const text = copy[lang] || copy.es;
+  const reportHelp = {
+    es: 'En Preview, propietarios y administradores disponen de Reportes dentro de Incidencias. Pulsa Generar para consultar registros sincronizados y filtrar por fechas de observación, parcela, autor, categoría, afectación, estado y título. Exportar CSV descarga todos los resultados filtrados. Las fechas de los filtros usan la hora local del navegador y el CSV conserva UTC.',
+    en: 'In Preview, owners and administrators can use Reports inside Incidents. Select Generate to load synced records and filter by observation dates, plot, author, category, severity, status and title. Export CSV downloads all filtered results. Date filters use browser local time and CSV dates retain UTC.',
+    fr: 'Dans Preview, les propriétaires et administrateurs disposent de Rapports dans Incidents. Générer charge les dossiers synchronisés, filtrables par dates d’observation, parcelle, auteur, catégorie, gravité, état et titre. Le CSV contient tous les résultats filtrés. Les filtres utilisent l’heure locale du navigateur et le CSV conserve UTC.'
+  };
+
   return <article id={detailed ? "incidencias" : undefined} className="rounded-2xl border border-emerald-200 bg-white p-6 text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
     <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">{text.badge}</span>
     <h2 className="mt-4 text-xl font-bold">{text.title}</h2>
     <p className="mt-3 text-sm leading-7">{text.summary}</p>
+    {window.location.hostname === "preview.tugeocercas.com" && <p className="mt-3 text-sm leading-7">{reportHelp[lang] || reportHelp.es}</p>}
     {detailed && text.sections.map(([title, body]) => <section key={title} className="mt-5"><h3 className="font-semibold">{title}</h3><p className="mt-2 text-sm leading-7">{body}</p></section>)}
     <Link className="mt-5 inline-flex rounded-xl bg-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-800" to={detailed ? "/incidencias" : "/help/instructions#incidencias"}>{detailed ? text.open : text.guide}</Link>
   </article>;

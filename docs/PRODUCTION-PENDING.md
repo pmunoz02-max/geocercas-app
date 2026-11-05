@@ -70,3 +70,6 @@ La API compara el entorno de Vercel con el proyecto Supabase esperado antes de a
 Deployment anterior de Producción: dpl_4BTnSrruUEpWL6V8vkabzbnSFnPr (15aad98e).
 
 Web publicada desde 0fca8789 (preview), Promote dpl_9tMnW7pBnW88yA3iZnk8mws8VpH9 READY. /incidencias respondió 200 y /api/incidents exigió autenticación (401). Se verificó en el cliente servido la configuración de Supabase Producción. Android 22 (1.4) compilado con R8, AAB con firma verificada, SHA256 971E5392F24A4EA5B2F3978A7AF09EFB78C703680F7A151101151130B9ED310C. Pendientes distribución por Play y prueba física en Producción.
+
+## Reportes de Incidencias — 2026-11-05
+- [ ] Sección web administrativa en Preview con filtros, conteos por estado y CSV. Reutiliza RPC autorizada, sin migración. Guarda explícita Preview en UI y API. Antes de promover Reportes, revisar ambas guardas. Límite operativo 10.000 registros completos y sin resultados parciales ante fallos. Ver INCIDENCIAS-CORE-PREVIEW.md.

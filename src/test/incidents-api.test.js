@@ -29,3 +29,36 @@ it('rejects disguised images and identity switches before writing',async()=>{
  const res=response();await handler(req({method:'POST',body:{org_id:org,action:'upload_photo',id,observation_id:id,evidence_id:id,photo:{type:'image/png',base64:Buffer.from('<script>').toString('base64'),attached_at:new Date().toISOString()}}}),res);expect(res.status).toHaveBeenCalledWith(422);expect(db.rpc).not.toHaveBeenCalled();
  const changed=response();await handler(req({headers:{authorization:'Bearer session','x-incident-user':id}}),changed);expect(changed.status).toHaveBeenCalledWith(403);
 });
+
+it('denies reports to trackers before reading data',async()=>{
+ identify.mockResolvedValue({userId:user,manager:false});
+ const res=response();
+ await handler(req({query:{org_id:org,report:'1'}}),res);
+ expect(res.status).toHaveBeenCalledWith(403);
+ expect(db.rpc).not.toHaveBeenCalled();
+});
+it('keeps reports Preview-only until promotion is authorized',async()=>{
+ const previous=process.env.VERCEL_ENV;
+ process.env.VERCEL_ENV='production';
+ try {
+  const res=response();
+  await handler(req({query:{org_id:org,report:'1'}}),res);
+  expect(res.status).toHaveBeenCalledWith(404);
+  expect(db.rpc).not.toHaveBeenCalled();
+ } finally {if(previous===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=previous;}
+});
+
+it('report labels use only names from the selected organization and preserve the cursor',async()=>{
+ const previous=process.env.VERCEL_ENV;process.env.VERCEL_ENV='preview';
+ const eq=vi.fn(),inside=vi.fn();
+ const q={select:()=>q,eq:(...args)=>{eq(...args);return q;},in:(...args)=>{inside(...args);return q;},order:()=>Promise.resolve({data:[{user_id:user,nombre:'Ana',apellido:'Pérez'}]})};
+ db.from.mockReturnValue(q);
+ db.rpc.mockResolvedValue({data:{items:Array.from({length:100},(_,n)=>({id:String(n),author_id:user,received_at:'2026-11-05T00:00:00Z'}))}});
+ try {
+  const res=response();await handler(req({query:{org_id:org,report:'1'}}),res);
+  expect(eq).toHaveBeenCalledWith('org_id',org);
+  expect(inside).toHaveBeenCalledWith('user_id',[user]);
+  expect(res.json.mock.calls[0][0].items[0].author_name).toBe('Ana Pérez');
+  expect(res.json.mock.calls[0][0].next.before_id).toBe('99');
+ } finally {if(previous===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=previous;}
+});

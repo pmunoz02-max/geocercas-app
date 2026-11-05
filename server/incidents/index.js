@@ -38,6 +38,9 @@ export function createIncidentHandler({makeDb,identify=identifyVisitActor,previe
     if(['configure','transition'].includes(body.action)&&!actor.manager)return res.status(403).json({error:'forbidden'});
     return res.status(200).json(check(await db.rpc('save_incident_core',{p_org:org,p_actor:actor.userId,p_operation:body.operation_id,p_action:body.action,p_data:body.data})));
    }
+   const report = req.query?.report === '1';
+   if (report && !actor.manager) return res.status(403).json({error:'forbidden'});
+   if (report && process.env.VERCEL_ENV !== 'preview') return res.status(404).json({error:'not_available'});
    const id=req.query?.id||null,before=req.query?.before||null,beforeId=req.query?.before_id||null;
    if((id&&!uuid(id))||(!!before!==!!beforeId)||(before&&(!Number.isFinite(Date.parse(before))||!uuid(beforeId))))return res.status(400).json({error:'invalid_request'});
    const result=check(await db.rpc('read_incident_core',{p_org:org,p_actor:actor.userId,p_id:id,p_before:before,p_before_id:beforeId}));
@@ -47,6 +50,21 @@ export function createIncidentHandler({makeDb,identify=identifyVisitActor,previe
      delete photo.object_path;
     }
     return res.status(200).json(result);
+   }
+   if (report) {
+    const items = result.items || [];
+    const authors = [...new Set(items.map(item => item.author_id))];
+    const people = authors.length ? check(await db.from('personal').select('user_id,nombre,apellido').eq('org_id',org).in('user_id',authors).order('id')) : [];
+    const names = new Map();
+    for (const person of people) {
+     if (!names.has(person.user_id)) names.set(person.user_id,[person.nombre,person.apellido].filter(Boolean).join(' ').trim());
+    }
+    const last = items.length === 100 ? items.at(-1) : null;
+    return res.status(200).json({
+     user_id:actor.userId,
+     items:items.map(item=>({...item,author_name:names.get(item.author_id)||null})),
+     next:last?{before:last.received_at,before_id:last.id}:null
+    });
    }
    let fences=check(await db.from('geofences').select('id,name').eq('org_id',org).eq('active',true).order('name'));
    if(!actor.manager){
