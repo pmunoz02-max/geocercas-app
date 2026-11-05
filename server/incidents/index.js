@@ -40,7 +40,6 @@ export function createIncidentHandler({makeDb,identify=identifyVisitActor,previe
    }
    const report = req.query?.report === '1';
    if (report && !actor.manager) return res.status(403).json({error:'forbidden'});
-   if (report && process.env.VERCEL_ENV !== 'preview') return res.status(404).json({error:'not_available'});
    const id=req.query?.id||null,before=req.query?.before||null,beforeId=req.query?.before_id||null;
    if((id&&!uuid(id))||(!!before!==!!beforeId)||(before&&(!Number.isFinite(Date.parse(before))||!uuid(beforeId))))return res.status(400).json({error:'invalid_request'});
    const result=check(await db.rpc('read_incident_core',{p_org:org,p_actor:actor.userId,p_id:id,p_before:before,p_before_id:beforeId}));

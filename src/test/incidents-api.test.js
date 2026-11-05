@@ -37,14 +37,14 @@ it('denies reports to trackers before reading data',async()=>{
  expect(res.status).toHaveBeenCalledWith(403);
  expect(db.rpc).not.toHaveBeenCalled();
 });
-it('keeps reports Preview-only until promotion is authorized',async()=>{
+it('allows authorized managers to read reports in production',async()=>{
  const previous=process.env.VERCEL_ENV;
  process.env.VERCEL_ENV='production';
  try {
   const res=response();
   await handler(req({query:{org_id:org,report:'1'}}),res);
-  expect(res.status).toHaveBeenCalledWith(404);
-  expect(db.rpc).not.toHaveBeenCalled();
+  expect(res.status).toHaveBeenCalledWith(200);
+  expect(db.rpc).toHaveBeenCalledWith('read_incident_core',expect.objectContaining({p_org:org,p_actor:user}));
  } finally {if(previous===undefined)delete process.env.VERCEL_ENV;else process.env.VERCEL_ENV=previous;}
 });
 

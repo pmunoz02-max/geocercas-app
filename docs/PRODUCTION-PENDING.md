@@ -73,3 +73,6 @@ Web publicada desde 0fca8789 (preview), Promote dpl_9tMnW7pBnW88yA3iZnk8mws8VpH9
 
 ## Reportes de Incidencias — 2026-11-05
 - [ ] Sección web administrativa en Preview con filtros, conteos por estado y CSV. Reutiliza RPC autorizada, sin migración. Guarda explícita Preview en UI y API. Antes de promover Reportes, revisar ambas guardas. Límite operativo 10.000 registros completos y sin resultados parciales ante fallos. Ver INCIDENCIAS-CORE-PREVIEW.md.
+
+## Promote autorizado de Reportes — 2026-11-05
+Usuario validó los reportes en Preview y autorizó Promote. Habilitación administrativa web en ambos dominios y API conservando autenticación, rol manager, organización y proyecto Supabase esperado. Ayuda ES/EN/FR actualizada. 23 pruebas aprobadas y compilación Vite correcta. No requiere migración. Registro del deployment tras verificar publicación.
