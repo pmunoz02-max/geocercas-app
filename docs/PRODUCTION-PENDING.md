@@ -68,3 +68,5 @@ Supabase de Producción registró el núcleo como 20261105020202 y las fotos pri
 La API compara el entorno de Vercel con el proyecto Supabase esperado antes de atender solicitudes. El cliente Android de Producción usa un canal limitado al marco principal de https://app.tugeocercas.com y los endpoints fijos de ese dominio. El panel del tracker requiere un puente compatible. El parche reproducible está en android-patches/incidents-production.patch. La prueba física con una foto sin red corresponde a Android Preview 21. La distribución y la prueba del paquete de Producción se registran por separado.
 
 Deployment anterior de Producción: dpl_4BTnSrruUEpWL6V8vkabzbnSFnPr (15aad98e).
+
+Web publicada desde 0fca8789 (preview), Promote dpl_9tMnW7pBnW88yA3iZnk8mws8VpH9 READY. /incidencias respondió 200 y /api/incidents exigió autenticación (401). Se verificó en el cliente servido la configuración de Supabase Producción. Android 22 (1.4) compilado con R8, AAB con firma verificada, SHA256 971E5392F24A4EA5B2F3978A7AF09EFB78C703680F7A151101151130B9ED310C. Pendientes distribución por Play y prueba física en Producción.
