@@ -2543,7 +2543,91 @@
       "noActiveOrgOrSession": "No hay organización activa o la sesión no está lista.",
       "invalidDateRange": "La fecha \"Desde\" no puede ser mayor que la fecha \"Hasta\".",
       "generateReport": "Error generando reporte.",
-      "exportNoData": "No hay datos para exportar."
+      "exportNoData": "No hay datos para exportar.",
+      "noDataToExport": "No hay datos para exportar.",
+      "missingStartEnd": "Selecciona las fechas de inicio y fin."
+    },
+    "sections": {
+      "filters": "Filtros",
+      "results": "Resultados"
+    },
+    "labels": {
+      "currentOrg": "Org actual",
+      "from": "Desde",
+      "to": "Hasta",
+      "tip": "Tip",
+      "reportType": "Tipo de reporte",
+      "assignment": "Asignación",
+      "selected": "seleccionados",
+      "multi": "múltiple"
+    },
+    "states": {
+      "loadingSession": "Cargando tu sesión…",
+      "noActiveSession": "No hay sesión activa. Inicia sesión nuevamente.",
+      "noActiveOrg": "No hay organización activa para este usuario.",
+      "loading": "Cargando…",
+      "generating": "Generando…",
+      "generatingReport": "Generando reporte…",
+      "rowsCount": "Filas: {{count}}",
+      "noDataYet": "Aún no hay datos. Ajusta filtros y genera.",
+      "noDataWithFilters": "No hay datos con los filtros seleccionados."
+    },
+    "actions": {
+      "generate": "Generar",
+      "reloadLists": "Recargar listas",
+      "reloadFilters": "Recargar filtros",
+      "clearSelectionsTitle": "Limpiar selecciones (no borra fechas)",
+      "clearSelections": "Limpiar selecciones",
+      "exportCsv": "Exportar CSV",
+      "clearFilter": "Limpiar filtro",
+      "clearGrouping": "Desagrupar",
+      "ungroup": "Desagrupar",
+      "expandAll": "Expandir todo",
+      "collapseAll": "Contraer todo"
+    },
+    "help": {
+      "filters": "Selecciona fechas y filtros. Luego pulsa Generar.",
+      "dropdownFilters": "Abre cada lista y marca uno o más valores. El panel de filtros permanece compacto.",
+      "assignmentsHumanLabels": "Las asignaciones muestran persona, geocerca y actividad para evitar códigos técnicos.",
+      "costNote": "Nota: el reporte híbrido usa el costo base administrativo y, cuando hay histórico técnico, incorpora confianza y estado de auditoría. Sin histórico GPS del período, el costo final es igual al costo base."
+    },
+    "tabs": {
+      "attendance": "Asistencia",
+      "costs": "Costos"
+    },
+    "grouping": {
+      "title": "Agrupar / totalizar",
+      "placeholder": "Sin agrupación: detalle completo",
+      "noOptions": "Sin columnas disponibles",
+      "row": "fila",
+      "rows": "filas",
+      "help": "Selecciona columnas en el orden deseado. Los grupos se pueden expandir y contraer como en Excel, con totales por nivel."
+    },
+    "totals": {
+      "general": "Total general"
+    },
+    "groupBy": {
+      "date": "Fecha",
+      "person": "Colaborador",
+      "activity": "Actividad",
+      "geofence": "Geocerca",
+      "hours": "Horas",
+      "baseCost": "Costo base",
+      "finalCost": "Costo final",
+      "tracker": "Tracker",
+      "km": "Km observados",
+      "hoursObserved": "Horas observadas",
+      "totalCost": "Costo total"
+    },
+    "placeholders": {
+      "geofences": "Selecciona geocercas",
+      "noGeofences": "Sin geocercas",
+      "people": "Selecciona personas",
+      "noPeople": "Sin personas",
+      "activities": "Selecciona actividades",
+      "noActivities": "Sin actividades",
+      "assignments": "Selecciona asignaciones",
+      "noAssignments": "Sin asignaciones"
     }
   },
   "activityAssignments": {

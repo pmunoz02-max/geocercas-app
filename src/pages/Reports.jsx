@@ -20,20 +20,20 @@ function toCsvValue(v) {
   return `"${s.replaceAll('"', '""')}"`;
 }
 
-function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendance") {
+function exportRowsToCSV(rows, filenameBase = "reporte", reportType = "attendance", t) {
   if (!rows?.length) {
     return false;
   }
 
   if (reportType === "cost") {
     const columns = [
-      { key: "work_date", label: "Fecha" },
-      { key: "personal_nombre", label: "Colaborador" },
-      { key: "activity_nombre", label: "Actividad" },
-      { key: "geofence_nombre", label: "Geocerca" },
-      { key: "horas", label: "Horas" },
-      { key: "costo_base", label: "Costo base" },
-      { key: "costo_final", label: "Costo final" },
+      { key: "work_date", label: t("reports.groupBy.date") },
+      { key: "personal_nombre", label: t("reports.groupBy.person") },
+      { key: "activity_nombre", label: t("reports.groupBy.activity") },
+      { key: "geofence_nombre", label: t("reports.groupBy.geofence") },
+      { key: "horas", label: t("reports.groupBy.hours") },
+      { key: "costo_base", label: t("reports.groupBy.baseCost") },
+      { key: "costo_final", label: t("reports.groupBy.finalCost") },
     ];
 
     const header = columns.map((c) => toCsvValue(c.label)).join(",");
@@ -629,7 +629,7 @@ export default function Reports() {
   }
 
   function handleExport() {
-    const ok = exportRowsToCSV(rows, "reportes", reportType);
+    const ok = exportRowsToCSV(rows, "reports", reportType, t);
     if (!ok) {
       setErrorMsg(tr("reports.errors.noDataToExport", "There is no data to export."));
     }
@@ -1006,7 +1006,7 @@ export default function Reports() {
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
             <div className="inline-flex items-center rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-50">
-              {tr("reports.sections.results", "Reportes")}
+              {t("reports.title")}
             </div>
             <div>
               <h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
@@ -1088,11 +1088,7 @@ export default function Reports() {
                   {tr("reports.sections.filters", "Filters")}
                 </h2>
                 <p className="text-xs text-gray-600">
-                  {tr("reports.help.filters", "Select ranges and lists. Then press")}{" "}
-                  <span className="font-medium text-gray-900">
-                    {tr("reports.actions.generate", "Generate")}
-                  </span>
-                  .
+                  {t("reports.help.filters")}
                 </p>
               </div>
 
@@ -1360,22 +1356,19 @@ export default function Reports() {
             ) : reportType === "cost" ? (
               <>
                 <div className="mx-4 mb-3 mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 px-4 py-3 text-xs leading-5 text-gray-700">
-                  <span className="font-medium">Nota:</span> El reporte híbrido usa{" "}
-                  <b>costo base administrativo</b> y, cuando existe histórico técnico, agrega{" "}
-                  <b>confianza</b> y <b>estado de auditoría</b>. Si no hay histórico GPS para el
-                  período, el costo final queda igual al costo base.
+                  {t("reports.help.costNote")}
                 </div>
 
                 <table className="min-w-full border-separate border-spacing-0 text-sm">
                   <thead className="bg-emerald-50/80 text-emerald-950">
                     <tr className="border-b border-emerald-100">
-                      <th className="p-2 text-left font-semibold">Fecha</th>
-                      <th className="p-2 text-left font-semibold">Colaborador</th>
-                      <th className="p-2 text-left font-semibold">Actividad</th>
-                      <th className="p-2 text-left font-semibold">Geocerca</th>
-                      <th className="p-2 text-right font-semibold">Horas</th>
-                      <th className="p-2 text-right font-semibold">Costo base</th>
-                      <th className="p-2 text-right font-semibold">Costo final</th>
+                      <th className="p-2 text-left font-semibold">{t("reports.groupBy.date")}</th>
+                      <th className="p-2 text-left font-semibold">{t("reports.groupBy.person")}</th>
+                      <th className="p-2 text-left font-semibold">{t("reports.groupBy.activity")}</th>
+                      <th className="p-2 text-left font-semibold">{t("reports.groupBy.geofence")}</th>
+                      <th className="p-2 text-right font-semibold">{t("reports.groupBy.hours")}</th>
+                      <th className="p-2 text-right font-semibold">{t("reports.groupBy.baseCost")}</th>
+                      <th className="p-2 text-right font-semibold">{t("reports.groupBy.finalCost")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1405,13 +1398,13 @@ export default function Reports() {
               <table className="min-w-full border-separate border-spacing-0 text-sm">
                 <thead className="bg-emerald-50/80 text-emerald-950">
                   <tr className="border-b border-emerald-100">
-                    <th className="p-2 text-left font-semibold">Fecha</th>
-                    <th className="p-2 text-left font-semibold">Tracker</th>
-                    <th className="p-2 text-left font-semibold">Geocerca</th>
-                    <th className="p-2 text-left font-semibold">Actividad</th>
-                    <th className="p-2 text-right font-semibold">Km observados</th>
-                    <th className="p-2 text-right font-semibold">Horas observadas</th>
-                    <th className="p-2 text-right font-semibold">Costo total</th>
+                    <th className="p-2 text-left font-semibold">{t("reports.groupBy.date")}</th>
+                    <th className="p-2 text-left font-semibold">{t("reports.groupBy.tracker")}</th>
+                    <th className="p-2 text-left font-semibold">{t("reports.groupBy.geofence")}</th>
+                    <th className="p-2 text-left font-semibold">{t("reports.groupBy.activity")}</th>
+                    <th className="p-2 text-right font-semibold">{t("reports.groupBy.km")}</th>
+                    <th className="p-2 text-right font-semibold">{t("reports.groupBy.hoursObserved")}</th>
+                    <th className="p-2 text-right font-semibold">{t("reports.groupBy.totalCost")}</th>
                   </tr>
                 </thead>
                 <tbody>

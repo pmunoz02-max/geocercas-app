@@ -2542,7 +2542,91 @@
       "noActiveOrgOrSession": "No active organization or session is not ready.",
       "invalidDateRange": "The \"From\" date cannot be later than the \"To\" date.",
       "generateReport": "Error generating report.",
-      "exportNoData": "No data to export."
+      "exportNoData": "No data to export.",
+      "noDataToExport": "No data to export.",
+      "missingStartEnd": "Select the start and end dates."
+    },
+    "sections": {
+      "filters": "Filters",
+      "results": "Results"
+    },
+    "labels": {
+      "currentOrg": "Current org",
+      "from": "From",
+      "to": "To",
+      "tip": "Tip",
+      "reportType": "Report type",
+      "assignment": "Assignment",
+      "selected": "selected",
+      "multi": "multiple"
+    },
+    "states": {
+      "loadingSession": "Loading your session…",
+      "noActiveSession": "No active session. Sign in again.",
+      "noActiveOrg": "No active organization for this user.",
+      "loading": "Loading…",
+      "generating": "Generating…",
+      "generatingReport": "Generating report…",
+      "rowsCount": "Rows: {{count}}",
+      "noDataYet": "No data yet. Adjust filters and generate.",
+      "noDataWithFilters": "No data for the selected filters."
+    },
+    "actions": {
+      "generate": "Generate",
+      "reloadLists": "Reload lists",
+      "reloadFilters": "Reload filters",
+      "clearSelectionsTitle": "Clear selections (does not clear dates)",
+      "clearSelections": "Clear selections",
+      "exportCsv": "Export CSV",
+      "clearFilter": "Clear filter",
+      "clearGrouping": "Ungroup",
+      "ungroup": "Ungroup",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    },
+    "help": {
+      "filters": "Select dates and filters. Then press Generate.",
+      "dropdownFilters": "Open each dropdown and select one or more values. The filter panel stays compact.",
+      "assignmentsHumanLabels": "Assignments show the person, geofence and activity instead of technical IDs.",
+      "costNote": "Note: the hybrid report uses the administrative base cost and, when technical history is available, includes confidence and audit status. Without GPS history for the period, the final cost equals the base cost."
+    },
+    "tabs": {
+      "attendance": "Attendance",
+      "costs": "Costs"
+    },
+    "grouping": {
+      "title": "Group / total",
+      "placeholder": "No grouping: full details",
+      "noOptions": "No columns available",
+      "row": "row",
+      "rows": "rows",
+      "help": "Select columns in the desired order. Groups can be expanded and collapsed as in Excel, with totals at each level."
+    },
+    "totals": {
+      "general": "Grand total"
+    },
+    "groupBy": {
+      "date": "Date",
+      "person": "Staff member",
+      "activity": "Activity",
+      "geofence": "Geofence",
+      "hours": "Hours",
+      "baseCost": "Base cost",
+      "finalCost": "Final cost",
+      "tracker": "Tracker",
+      "km": "Observed km",
+      "hoursObserved": "Observed hours",
+      "totalCost": "Total cost"
+    },
+    "placeholders": {
+      "geofences": "Select geofences",
+      "noGeofences": "No geofences",
+      "people": "Select people",
+      "noPeople": "No people",
+      "activities": "Select activities",
+      "noActivities": "No activities",
+      "assignments": "Select assignments",
+      "noAssignments": "No assignments"
     }
   },
   "activityAssignments": {
