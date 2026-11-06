@@ -121,13 +121,15 @@
   },
   "asignaciones": {
     "actions": {
-      "activate": "Activar",
-      "deactivate": "Desactivar",
-      "delete": "Eliminar",
-      "edit": "Editar",
+      "activate": "Activer",
+      "deactivate": "Désactiver",
+      "delete": "Supprimer",
+      "edit": "Modifier",
       "save": "Enregistrer l'affectation",
       "update": "Mettre à jour l'affectation",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "active": "Active",
+      "inactive": "Inactive"
     },
     "banner": {
       "created": "Affectation créée avec succès.",

@@ -238,7 +238,7 @@ export default function AsignacionesTable({
                 const fin = formatDateTimeLocal(row.end_time);
                 const rawStatus = String(row.status || row.estado || '').toLowerCase();
                 const isActive = rawStatus === 'active' || rawStatus === 'activa';
-                const isInactive = rawStatus === 'inactive' || rawStatus === 'inactiva';
+                const toggleLabel = t(isActive ? 'asignaciones.actions.deactivate' : 'asignaciones.actions.activate');
 
                 return (
                   <tr key={row.id} className="hover:bg-gray-50">
@@ -282,9 +282,9 @@ export default function AsignacionesTable({
                               : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200") +
                             " inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border focus:outline-none focus:ring-2 focus:ring-blue-500"
                           }
-                          title={isActive ? "Desactivar" : isInactive ? "Activar" : "Activar"}
+                          title={toggleLabel}
                         >
-                          {isActive ? "Desactivar" : isInactive ? "Activar" : "Activar"}
+                          {toggleLabel}
                         </button>
                       ) : (
                         <span

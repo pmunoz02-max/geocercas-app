@@ -157,13 +157,15 @@
   },
   "asignaciones": {
     "actions": {
-      "activate": "Activar",
-      "deactivate": "Desactivar",
-      "delete": "Eliminar",
-      "edit": "Editar",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "delete": "Delete",
+      "edit": "Edit",
       "save": "Save assignment",
       "update": "Update assignment",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "active": "Active",
+      "inactive": "Inactive"
     },
     "banner": {
       "created": "Assignment created successfully.",

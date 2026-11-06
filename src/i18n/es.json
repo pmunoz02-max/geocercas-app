@@ -156,7 +156,9 @@
       "edit": "Editar",
       "save": "Guardar asignación",
       "update": "Actualizar asignación",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "active": "Activa",
+      "inactive": "Inactiva"
     },
     "banner": {
       "created": "Asignación creada correctamente.",
