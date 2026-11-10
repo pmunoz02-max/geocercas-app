@@ -3037,5 +3037,34 @@
     "confirmTitle": "Confirmar cambio a {{plan}}",
     "confirmBody": "Tu suscripción actual cambiará al plan {{plan}}. El proveedor aplicará el prorrateo correspondiente con el método de pago existente. No se creará una segunda suscripción.",
     "alreadyActive": "Tu organización ya tiene este plan o uno superior."
+  },
+  "moduleHub": {
+    "badge": "Tu espacio de trabajo",
+    "title": "¿Qué quieres hacer hoy?",
+    "subtitle": "Todos tus módulos en un solo lugar. Elige una tarjeta para comenzar.",
+    "navigation": "Acceso a los módulos",
+    "groups": {
+      "field": "Operación en campo",
+      "analysis": "Planificación y análisis",
+      "account": "Cuenta y recursos"
+    },
+    "descriptions": {
+      "geocerca": "Crea y edita tus áreas de trabajo.",
+      "personal": "Organiza las personas de tu equipo.",
+      "actividades": "Define las tareas y sus tarifas.",
+      "asignaciones": "Asigna personas, actividades y geocercas.",
+      "visitas": "Documenta visitas con notas y fotografías.",
+      "incidents": "Registra y da seguimiento a incidencias.",
+      "tracker": "Consulta posiciones y estado de conexión.",
+      "invitarTracker": "Invita a tu equipo a compartir su ubicación.",
+      "planificacion": "Planifica el trabajo y compara su ejecución.",
+      "benchmarking": "Compara indicadores de desempeño.",
+      "reportes": "Filtra, agrupa y exporta resultados.",
+      "panelCostos": "Consulta y analiza los costos operativos.",
+      "pricing": "Compara planes y capacidades.",
+      "billing": "Gestiona la suscripción y la facturación.",
+      "resources": "Encuentra guías y materiales de ayuda.",
+      "admins": "Administra los accesos de gestión."
+    }
   }
 }

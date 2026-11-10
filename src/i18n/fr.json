@@ -3022,5 +3022,34 @@
     "confirmTitle": "Confirmer le passage à {{plan}}",
     "confirmBody": "Votre abonnement actuel passera à {{plan}}. Le fournisseur appliquera le prorata avec votre moyen de paiement existant. Aucun second abonnement ne sera créé.",
     "alreadyActive": "Votre organisation dispose déjà de ce forfait ou d’un forfait supérieur."
+  },
+  "moduleHub": {
+    "badge": "Votre espace de travail",
+    "title": "Que souhaitez-vous faire aujourd’hui ?",
+    "subtitle": "Tous vos modules au même endroit. Choisissez une carte pour commencer.",
+    "navigation": "Accès aux modules",
+    "groups": {
+      "field": "Opérations sur le terrain",
+      "analysis": "Planification et analyse",
+      "account": "Compte et ressources"
+    },
+    "descriptions": {
+      "geocerca": "Créez et modifiez vos zones de travail.",
+      "personal": "Gérez les membres de votre équipe.",
+      "actividades": "Définissez les tâches et leurs tarifs.",
+      "asignaciones": "Affectez des personnes, activités et géofences.",
+      "visitas": "Documentez les visites avec des notes et photos.",
+      "incidents": "Enregistrez et suivez les incidents.",
+      "tracker": "Consultez les positions et l’état de connexion.",
+      "invitarTracker": "Invitez votre équipe à partager sa position.",
+      "planificacion": "Planifiez le travail et comparez sa réalisation.",
+      "benchmarking": "Comparez les indicateurs de performance.",
+      "reportes": "Filtrez, regroupez et exportez les résultats.",
+      "panelCostos": "Consultez et analysez les coûts opérationnels.",
+      "pricing": "Comparez les offres et leurs fonctionnalités.",
+      "billing": "Gérez votre abonnement et la facturation.",
+      "resources": "Retrouvez les guides et ressources d’aide.",
+      "admins": "Gérez les accès administratifs."
+    }
   }
 }

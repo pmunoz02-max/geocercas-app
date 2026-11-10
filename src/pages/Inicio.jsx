@@ -1,3 +1,4 @@
+import HomeModules from "../components/HomeModules";
 import IncidentsHelp from "../components/IncidentsHelp";
 import VisitsInfoCard from "../components/VisitsInfoCard";
 ﻿// src/pages/Inicio.jsx
@@ -399,7 +400,7 @@ export default function Inicio() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-10 space-y-8">
+    <div className="mx-auto max-w-7xl py-2 space-y-8">
       {isPreviewEnv && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
           {t("home.previewEnvironment", { defaultValue: "Estás revisando un deployment Preview." })}
@@ -407,55 +408,11 @@ export default function Inicio() {
       )}
 
       <PageHero
-        badge={t("home.startBadge", { defaultValue: "Inicio" })}
-        title={t("dashboard.welcome")}
-        subtitle={t("dashboard.sessionAs", { role: roleLower })}
-      >
-        <div className="grid gap-3 text-sm sm:min-w-[320px]">
-          <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-50/80">
-              {t("dashboard.email")}
-            </p>
-            <p className="mt-1 break-all font-semibold text-white">{user.email}</p>
-          </div>
-          <div className="rounded-2xl border border-white/20 bg-white/15 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-50/80">
-              {t("dashboard.organizationId")}
-            </p>
-            <p className="mt-1 break-all font-mono text-xs font-semibold text-white">{currentOrgId}</p>
-          </div>
-        </div>
-      </PageHero>
-
-      <InfoPanel>
-        <div className="mb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-            {t("inicio.onboarding.badge", { defaultValue: "Onboarding" })}
-          </p>
-          <h2 className="mt-2 text-xl font-bold text-slate-950">
-            {t("inicio.onboarding.title", { defaultValue: "Empieza en 5 pasos" })}
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {[
-            { label: t("inicio.onboarding.stepGeocercas", { defaultValue: "1. Geocercas" }), to: "/geocerca" },
-            { label: t("inicio.onboarding.stepPersonal", { defaultValue: "2. Personal" }), to: "/personal" },
-            { label: t("inicio.onboarding.stepActividades", { defaultValue: "3. Actividades" }), to: "/actividades" },
-            { label: t("inicio.onboarding.stepAsignaciones", { defaultValue: "4. Asignaciones" }), to: "/asignaciones" },
-            { label: t("inicio.onboarding.stepInvitarTracker", { defaultValue: "5. Invitar tracker" }), to: "/invitar-tracker" },
-          ].map((step) => (
-            <button
-              key={step.to}
-              type="button"
-              onClick={() => navigate(step.to)}
-              className="rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-4 text-left text-sm font-semibold text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100"
-            >
-              {step.label}
-            </button>
-          ))}
-        </div>
-      </InfoPanel>
+        badge={t("moduleHub.badge")}
+        title={t("moduleHub.title")}
+        subtitle={t("moduleHub.subtitle")}
+      />
+      <HomeModules />
 
       <InfoPanel>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

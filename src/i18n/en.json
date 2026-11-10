@@ -3041,5 +3041,34 @@
     "confirmTitle": "Confirm change to {{plan}}",
     "confirmBody": "Your existing subscription will change to {{plan}}. The provider will apply proration using your existing payment method. No second subscription will be created.",
     "alreadyActive": "Your organization already has this plan or a higher plan."
+  },
+  "moduleHub": {
+    "badge": "Your workspace",
+    "title": "What would you like to do today?",
+    "subtitle": "All your modules in one place. Choose a card to get started.",
+    "navigation": "Module navigation",
+    "groups": {
+      "field": "Field operations",
+      "analysis": "Planning and analysis",
+      "account": "Account and resources"
+    },
+    "descriptions": {
+      "geocerca": "Create and edit your work areas.",
+      "personal": "Manage the people on your team.",
+      "actividades": "Define tasks and their rates.",
+      "asignaciones": "Assign people, activities and geofences.",
+      "visitas": "Document visits with notes and photos.",
+      "incidents": "Record and follow up on incidents.",
+      "tracker": "View positions and connection status.",
+      "invitarTracker": "Invite your team to share their location.",
+      "planificacion": "Plan work and compare actual execution.",
+      "benchmarking": "Compare performance indicators.",
+      "reportes": "Filter, group and export results.",
+      "panelCostos": "View and analyze operating costs.",
+      "pricing": "Compare plans and capabilities.",
+      "billing": "Manage your subscription and billing.",
+      "resources": "Find guides and help materials.",
+      "admins": "Manage administrative access."
+    }
   }
 }

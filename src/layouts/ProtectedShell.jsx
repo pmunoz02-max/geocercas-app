@@ -118,7 +118,7 @@ export default function ProtectedShell() {
       <TopTabs tabs={tabs} />
 
       <main className="max-w-7xl mx-auto px-4 py-6">
-        <Outlet />
+        <Outlet context={{ navigationTabs: tabs }} />
       </main>
     </div>
   );
