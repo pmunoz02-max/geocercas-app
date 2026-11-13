@@ -1,10 +1,11 @@
+import LanguageSwitcher from "../components/LanguageSwitcher";
 import { useTranslation } from "react-i18next";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import UpgradeToProButton from "@/components/Billing/UpgradeToProButton";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "@/lib/supabaseClient.js";
-import { getCheckoutSafetyLabel } from "@/config/billingCheckout";
+import { BILLING_CHECKOUT_MODE } from "@/config/billingCheckout";
 import { PRICING, PLAN_RANK, formatPlanPrice } from "@/config/pricing";
 
 
@@ -24,11 +25,11 @@ function isActivePaidStatus(status) {
   return ["active", "trialing"].includes(normalizePlanStatus(status));
 }
 
-function formatDate(value) {
+function formatDate(value, language) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("es-EC", {
+  return date.toLocaleDateString(language, {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -58,7 +59,8 @@ function PlanAction({
   currentPeriodEnd,
   highlighted,
 }) {
-  const buttonLabel = `Suscribirse a ${PRICING[plan].label}`;
+  const { t, i18n } = useTranslation();
+  const buttonLabel = t("publicPricing.subscribe", { plan: PRICING[plan].label });
   const currentPlanLabel = PRICING[currentPlanCode]?.label || "Free";
   const billingButtonClass = highlighted
     ? "mt-3 inline-flex w-full items-center justify-center rounded-xl bg-white px-6 py-3 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-100"
@@ -68,13 +70,13 @@ function PlanAction({
     : "inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500";
 
   if (authenticated && currentOrgId && hasActivePaidPlan && currentPlanCode === plan) {
-    const renewal = formatDate(currentPeriodEnd);
+    const renewal = formatDate(currentPeriodEnd, i18n.language);
     return (
       <CurrentPlanNotice highlighted={highlighted}>
-        <div className="font-semibold">Este es el plan activo de esta organización.</div>
-        {renewal ? <div className="mt-1">Renovación estimada: {renewal}</div> : null}
-        <Link to="/billing" className={billingButtonClass}>
-          Ver facturación
+        <div className="font-semibold">{t("publicPricing.activeNotice")}</div>
+        {renewal ? <div className="mt-1">{t("publicPricing.renewal", { date: renewal })}</div> : null}
+        <Link to={`/billing?lang=${i18n.language}`} className={billingButtonClass}>
+          {t("publicPricing.billing")}
         </Link>
       </CurrentPlanNotice>
     );
@@ -88,10 +90,10 @@ function PlanAction({
   ) {
     return (
       <CurrentPlanNotice highlighted={highlighted}>
-        <div className="font-semibold">Tu organización ya tiene {currentPlanLabel}.</div>
-        <div className="mt-1">No es necesario abrir otro checkout para este plan.</div>
-        <Link to="/billing" className={billingButtonClass}>
-          Ver facturación
+        <div className="font-semibold">{t("publicPricing.alreadyHas", { plan: currentPlanLabel })}</div>
+        <div className="mt-1">{t("publicPricing.noCheckout")}</div>
+        <Link to={`/billing?lang=${i18n.language}`} className={billingButtonClass}>
+          {t("publicPricing.billing")}
         </Link>
       </CurrentPlanNotice>
     );
@@ -100,11 +102,11 @@ function PlanAction({
   if (!authenticated || !currentOrgId) {
     return (
       <div className="space-y-2">
-        <Link to="/billing" className={checkoutButtonClass}>
-          Iniciar sesión para suscribirse
+        <Link to={`/billing?lang=${i18n.language}`} className={checkoutButtonClass}>
+          {t("publicPricing.signIn")}
         </Link>
         <p className={`text-xs ${highlighted ? "text-emerald-200" : "text-slate-500"}`}>
-          El checkout necesita una organización activa para asociar la suscripción.
+          {t("publicPricing.orgRequired")}
         </p>
       </div>
     );
@@ -156,17 +158,18 @@ function PlanCard({
         </div>
         {isCurrentPlan ? (
           <span className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-950">
-            Plan actual
+            {t("publicPricing.current")}
           </span>
         ) : highlighted ? (
           <span className="rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-950">
-            Recomendado
+            {t("publicPricing.recommended")}
           </span>
         ) : null}
       </div>
 
       <div className="mt-7">
         <div className={`text-4xl font-bold ${highlighted ? "text-white" : "text-emerald-950"}`}>{price}</div>
+        <p className="mt-1 text-sm">{t("publicPricing.perMonth")}</p>
         <p className={`mt-3 text-sm leading-6 ${highlighted ? "text-emerald-100" : "text-emerald-700"}`}>
           {description}
         </p>
@@ -176,7 +179,7 @@ function PlanCard({
         {features.map((feature) => (
           <li key={feature} className={`flex gap-3 text-sm ${highlighted ? "text-emerald-50" : "text-emerald-800"}`}>
             <span aria-hidden="true" className={highlighted ? "text-emerald-200" : "text-emerald-700"}>✓</span>
-            <span>{plan === "enterprise_100" && feature === "Hasta 100 trackers y 250 geocercas" ? t("plans100.limits") : feature}</span>
+            <span>{feature}</span>
           </li>
         ))}
       </ul>
@@ -197,7 +200,7 @@ function PlanCard({
 }
 
 export default function PublicPricing() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { authenticated, currentOrgId } = useAuth();
   const [billing, setBilling] = useState(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -250,33 +253,37 @@ export default function PublicPricing() {
 
   return (
     <main className="min-h-screen bg-slate-50 text-emerald-950">
-      <section className="mx-auto max-w-6xl px-6 py-12 sm:py-16">
+      <section className="mx-auto max-w-6xl px-6 py-8 sm:py-12">
+        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <Link to={`/inicio?lang=${i18n.language}`} className="font-semibold text-emerald-700 hover:underline">{t("publicPricing.back")}</Link>
+          <LanguageSwitcher />
+        </div>
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-3xl">
             <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Geocercas GPS</p>
             <h1 className="mt-3 text-4xl font-bold tracking-tight text-emerald-950 sm:text-5xl">
-              Precios simples para operaciones de campo autorizadas
+              {t("publicPricing.title")}
             </h1>
             <p className="mt-5 text-base leading-7 text-slate-700 sm:text-lg">
-              Elige un plan mensual para asistencia por geocercas, verificación de actividades de campo y reportes operativos. El checkout es externo y seguro; la app mantiene la gestión de planes de forma independiente del proveedor de pagos.
+              {t("publicPricing.intro")}
             </p>
           </div>
 
           <div className="space-y-3">
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <div className="font-semibold">Modo actual</div>
-              <div>{getCheckoutSafetyLabel()}</div>
+              <div className="font-semibold">{t("publicPricing.mode")}</div>
+              <div>{t("publicPricing.mode_" + (["test", "live"].includes(BILLING_CHECKOUT_MODE) ? BILLING_CHECKOUT_MODE : "preview"))}</div>
             </div>
 
             {authenticated && currentOrgId ? (
               <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-800 shadow-sm">
-                <div className="font-semibold">Organización actual</div>
+                <div className="font-semibold">{t("publicPricing.organization")}</div>
                 <div>
                   {billingLoading
-                    ? "Verificando plan..."
+                    ? t("publicPricing.checking")
                     : hasActivePaidPlan
-                      ? `Plan activo: ${currentPlanLabel}`
-                      : "Sin plan pagado activo"}
+                      ? t("publicPricing.activePlan", { plan: currentPlanLabel })
+                      : t("publicPricing.noPaidPlan")}
                 </div>
               </div>
             ) : null}
@@ -287,8 +294,8 @@ export default function PublicPricing() {
           <PlanCard
             plan="pro"
             title="Geocercas GPS PRO"
-            subtitle="Para equipos pequeños y medianos"
-            description="Para organizaciones que necesitan controlar asistencia, geocercas, trackers autorizados y reportes básicos de operación."
+            subtitle={t("publicPricing.proSubtitle")}
+            description={t("publicPricing.proDescription")}
             highlighted
             currentPlanCode={currentPlanCode}
             hasActivePaidPlan={hasActivePaidPlan}
@@ -296,30 +303,30 @@ export default function PublicPricing() {
             currentOrgId={currentOrgId}
             currentPeriodEnd={currentPeriodEnd}
             features={[
-              "Checkout mensual externo",
-              "Gestión de trackers autorizados",
-              "Geocercas y verificación de actividades",
-              "Reportes operativos para administradores",
-              "Android operativo sin compras dentro de la app",
+              t("publicPricing.monthlyCheckout"),
+              t("publicPricing.trackers"),
+              t("publicPricing.geofences"),
+              t("publicPricing.reports"),
+              t("publicPricing.android"),
             ]}
           />
 
           <PlanCard
             plan="enterprise"
             title="Geocercas GPS Enterprise"
-            subtitle="Para operaciones de mayor escala"
-            description="Para organizaciones que requieren mayor capacidad operativa, más control administrativo y una ruta de crecimiento comercial."
+            subtitle={t("publicPricing.enterpriseSubtitle")}
+            description={t("publicPricing.enterpriseDescription")}
             currentPlanCode={currentPlanCode}
             hasActivePaidPlan={hasActivePaidPlan}
             authenticated={authenticated}
             currentOrgId={currentOrgId}
             currentPeriodEnd={currentPeriodEnd}
             features={[
-              "Checkout mensual externo",
-              "Escalamiento para varios equipos de campo",
-              "Mayor capacidad operativa",
-              "Reportes y seguimiento para administración",
-              "Base preparada para soporte comercial y acuerdos especiales",
+              t("publicPricing.monthlyCheckout"),
+              t("publicPricing.teams"),
+              t("publicPricing.capacity"),
+              t("publicPricing.management"),
+              t("publicPricing.support"),
             ]}
           />
           <PlanCard
@@ -337,19 +344,19 @@ export default function PublicPricing() {
         </div>
 
         <div className="mt-10 rounded-3xl border border-emerald-100 bg-white p-6 text-sm leading-6 text-slate-700 shadow-sm">
-          <h2 className="text-lg font-semibold text-emerald-950">Uso autorizado de ubicación</h2>
+          <h2 className="text-lg font-semibold text-emerald-950">{t("publicPricing.authorizedTitle")}</h2>
           <p className="mt-2">
-            Geocercas GPS está diseñado para operaciones laborales autorizadas. No está destinado a rastreo encubierto, vigilancia personal, acoso o usos no comerciales. Las organizaciones usuarias son responsables de informar a sus trabajadores o contratistas y obtener los avisos o consentimientos requeridos por la normativa aplicable.
+            {t("publicPricing.authorizedBody")}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Link className="font-semibold text-emerald-700 hover:text-emerald-900" to="/authorized-location-use">
-              Política de uso de ubicación
+            <Link className="font-semibold text-emerald-700 hover:text-emerald-900" to={`/authorized-location-use?lang=${i18n.language}`}>
+              {t("publicPricing.locationPolicy")}
             </Link>
-            <Link className="font-semibold text-emerald-700 hover:text-emerald-900" to="/terms">
-              Términos
+            <Link className="font-semibold text-emerald-700 hover:text-emerald-900" to={`/terms?lang=${i18n.language}`}>
+              {t("publicPricing.terms")}
             </Link>
-            <Link className="font-semibold text-emerald-700 hover:text-emerald-900" to="/privacy">
-              Privacidad
+            <Link className="font-semibold text-emerald-700 hover:text-emerald-900" to={`/privacy?lang=${i18n.language}`}>
+              {t("publicPricing.privacy")}
             </Link>
           </div>
         </div>
