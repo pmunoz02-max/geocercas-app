@@ -1357,11 +1357,89 @@
       "withRole": "with the role"
     },
     "billing": {
-      "managePlan": "Manage plan",
-      "managePlanBody": "You can go to the Billing page to view and manage your subscription.",
-      "goToBilling": "Go to Billing",
-      "previewNote": ""
+    "errors": {
+      "loadPlanStatus": "Could not load plan status."
+    },
+    "cancel": {
+      "title": "Checkout cancelled",
+      "subtitle": "No charge was made.",
+      "backToBilling": "Back to Billing",
+      "goHome": "Go to Home"
+    },
+    "title": "Billing",
+    "authRequired": "Sign in to manage your plan.",
+    "previewNotice": {
+      "prefix": "Monetization in",
+      "middle": "(Subscription flow).",
+      "suffix": ""
+    },
+    "actions": {
+      "viewPlans": "View plans"
+    },
+    "labels": {
+      "email": "Email",
+      "orgId": "Organization ID"
+    },
+    "planState": {
+      "title": "Plan status"
+    },
+    "states": {
+      "loadingPlanStatus": "Loading plan status..."
+    },
+    "cards": {
+      "currentPlan": "Current plan",
+      "status": "Status",
+      "trialUntil": "Trial until",
+      "currentPeriodUntil": "Current period until"
+    },
+    "subscriptionManagement": {
+      "title": "Subscription management",
+      "description": "Open Billing to manage your subscription details.",
+      "cancelRenewal": "Cancel renewal",
+      "confirmCancelRenewal": "This will cancel automatic renewal. Your plan will remain active until the end of the current billing period. Do you want to continue?",
+      "cancelingRenewal": "Canceling renewal...",
+      "renewalCanceled": "Renewal canceled. Your plan will remain active until the end of the current billing period.",
+      "cancelRenewalError": "Could not cancel the renewal."
+    },
+    "messages": {
+      "cancelAtPeriodEnd": "Your subscription is set to cancel at the end of the current period.",
+      "activePlanExists": "An active plan already exists for this organization. The upgrade button is not shown."
+    },
+    "upgrade": {
+      "productTitle": "Geocercas PRO",
+      "orgIdLabel": "Org ID",
+      "notResolved": "(not resolved)",
+      "organizationInputLabel": "Organization ID (org_id)",
+      "organizationInputPlaceholder": "E.g. ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
+      "organizationInputHelp": "If it is not detected automatically, paste the organization UUID here.",
+      "subscribe": "Subscribe to PRO",
+      "processing": "Processing...",
+      "noticeTitle": "Notice",
+      "messages": {
+        "paddleError": "PAYMENT PROVIDER ERROR:\n{{details}}",
+        "checkoutUrlMissing": "CHECKOUT URL MISSING:\n{{details}}",
+        "paddleException": "PAYMENT PROVIDER EXCEPTION:\n{{details}}"
+      },
+      "errors": {
+        "invalidOrgId": "Invalid Org ID. Copy the Organization ID (UUID) and paste it here."
+      }
+    },
+    "compareBeforeUpgrade": {
+      "title": "Want to compare before upgrading?",
+      "description": "Review the plans page to compare Free, Pro and Enterprise."
+    },
+    "status": {
+      "trialing": "Trial",
+      "active": "Active",
+      "pastDue": "Past due",
+      "canceled": "Canceled",
+      "free": "Free"
+    },
+    "checkout": {
+      "testMode": "Test checkout",
+      "testNotice": "No real charge will be made."
     }
+  }
   },
   "inviteTracker": {
     "backToTracker": "Back to Tracker",

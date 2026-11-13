@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import {
   BILLING_CHECKOUT_MODE,
   BILLING_CHECKOUT_PROVIDER,
-  getCheckoutSafetyLabel,
   isCheckoutConfigured,
   type CheckoutPlanCode,
 } from "@/config/billingCheckout";
@@ -400,7 +399,7 @@ export default function UpgradeToProButton({ orgId, plan = "pro", className = ""
 
       {BILLING_CHECKOUT_MODE === "test" ? (
         <p className="mt-2 text-xs text-slate-500">
-          {getCheckoutSafetyLabel()}:{" "}
+          {t("billing.checkout.testMode")}:{" "}
           {t("billing.checkout.testNotice", { defaultValue: "no real charge will be made." })}
         </p>
       ) : null}

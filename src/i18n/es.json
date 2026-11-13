@@ -1359,11 +1359,89 @@
       "withRole": "con el rol"
     },
     "billing": {
-      "managePlan": "Administrar plan",
-      "managePlanBody": "Puedes entrar a la página Billing para ver y manejar tu suscripción.",
-      "goToBilling": "Ir a Billing",
-      "previewNote": ""
+    "errors": {
+      "loadPlanStatus": "No se pudo cargar el estado del plan."
+    },
+    "cancel": {
+      "title": "Checkout cancelado",
+      "subtitle": "No se realizó ningún cobro.",
+      "backToBilling": "Volver a Billing",
+      "goHome": "Ir a Inicio"
+    },
+    "title": "Facturación",
+    "authRequired": "Inicia sesión para administrar tu plan.",
+    "previewNotice": {
+      "prefix": "Monetización en",
+      "middle": "(Flujo de suscripción).",
+      "suffix": "No afecta producción."
+    },
+    "actions": {
+      "viewPlans": "Ver planes"
+    },
+    "labels": {
+      "email": "Correo",
+      "orgId": "ID de organización"
+    },
+    "planState": {
+      "title": "Estado del plan"
+    },
+    "states": {
+      "loadingPlanStatus": "Cargando estado del plan..."
+    },
+    "cards": {
+      "currentPlan": "Plan actual",
+      "status": "Estado",
+      "trialUntil": "Prueba hasta",
+      "currentPeriodUntil": "Periodo actual hasta"
+    },
+    "subscriptionManagement": {
+      "title": "Gestión de suscripción",
+      "description": "Abre Facturación para gestionar los detalles de tu suscripción.",
+      "cancelRenewal": "Cancelar renovación",
+      "confirmCancelRenewal": "Esto cancelará la renovación automática. Tu plan permanecerá activo hasta el final del periodo de facturación actual. ¿Deseas continuar?",
+      "cancelingRenewal": "Cancelando renovación...",
+      "renewalCanceled": "Renovación cancelada. El plan permanecerá activo hasta el final del periodo de facturación.",
+      "cancelRenewalError": "No se pudo cancelar la renovación."
+    },
+    "messages": {
+      "cancelAtPeriodEnd": "Tu suscripción está configurada para cancelarse al final del periodo actual.",
+      "activePlanExists": "Ya existe un plan activo para esta organización. El botón de actualización no se muestra."
+    },
+    "upgrade": {
+      "productTitle": "Geocercas PRO",
+      "orgIdLabel": "Org ID",
+      "notResolved": "(no resuelta)",
+      "organizationInputLabel": "Organization ID (org_id)",
+      "organizationInputPlaceholder": "Ej: ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
+      "organizationInputHelp": "Si no se detecta automáticamente, pega aquí el UUID de la organización.",
+      "subscribe": "Suscribirme a PRO",
+      "processing": "Procesando...",
+      "noticeTitle": "Aviso",
+      "messages": {
+        "paddleError": "ERROR DEL PROVEEDOR DE PAGOS:\n{{details}}",
+        "checkoutUrlMissing": "FALTA CHECKOUT URL:\n{{details}}",
+        "paddleException": "EXCEPCION DEL PROVEEDOR DE PAGOS:\n{{details}}"
+      },
+      "errors": {
+        "invalidOrgId": "Org ID inválido. Copia el Organization ID (UUID) y pégalo aquí."
+      }
+    },
+    "compareBeforeUpgrade": {
+      "title": "¿Quieres comparar antes de actualizar?",
+      "description": "Revisa la página de planes para comparar Free, Pro y Enterprise."
+    },
+    "status": {
+      "trialing": "Prueba",
+      "active": "Activo",
+      "pastDue": "Pago vencido",
+      "canceled": "Cancelado",
+      "free": "Gratis"
+    },
+    "checkout": {
+      "testMode": "Pago de prueba",
+      "testNotice": "No se realizará ningún cobro real."
     }
+  }
   },
   "inviteTracker": {
     "backToTracker": "Volver a Tracker",
