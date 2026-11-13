@@ -1320,89 +1320,11 @@
       "withRole": "con el rol"
     },
     "billing": {
-    "errors": {
-      "loadPlanStatus": "Impossible de charger l’état du plan."
-    },
-    "cancel": {
-      "title": "Paiement annulé",
-      "subtitle": "Aucun paiement n'a été effectué.",
-      "backToBilling": "Retour à la facturation",
-      "goHome": "Aller à l'accueil"
-    },
-    "title": "Facturation",
-    "authRequired": "Connectez-vous pour gérer votre plan.",
-    "previewNotice": {
-      "prefix": "Monétisation en",
-      "middle": "(Flux d'abonnement).",
-      "suffix": ""
-    },
-    "actions": {
-      "viewPlans": "Voir les plans"
-    },
-    "labels": {
-      "email": "E-mail",
-      "orgId": "ID de l’organisation"
-    },
-    "planState": {
-      "title": "État du plan"
-    },
-    "states": {
-      "loadingPlanStatus": "Chargement de l’état du plan..."
-    },
-    "cards": {
-      "currentPlan": "Plan actuel",
-      "status": "Statut",
-      "trialUntil": "Essai jusqu’au",
-      "currentPeriodUntil": "Période actuelle jusqu’au"
-    },
-    "subscriptionManagement": {
-      "title": "Gestion de l’abonnement",
-      "description": "Ouvrez la facturation pour gérer votre abonnement.",
-      "cancelRenewal": "Annuler le renouvellement",
-      "confirmCancelRenewal": "Cela annulera le renouvellement automatique. Votre forfait restera actif jusqu’à la fin de la période de facturation actuelle. Souhaitez-vous continuer ?",
-      "cancelingRenewal": "Annulation du renouvellement...",
-      "renewalCanceled": "Renouvellement annulé. Le forfait restera actif jusqu’à la fin de la période de facturation.",
-      "cancelRenewalError": "Impossible d’annuler le renouvellement."
-    },
-    "messages": {
-      "cancelAtPeriodEnd": "Votre abonnement sera annulé à la fin de la période actuelle.",
-      "activePlanExists": "Un plan actif existe déjà pour cette organisation. Le bouton d’upgrade est masqué."
-    },
-    "upgrade": {
-      "productTitle": "Geofences PRO",
-      "orgIdLabel": "ID org",
-      "notResolved": "(non résolu)",
-      "organizationInputLabel": "ID de l’organisation (org_id)",
-      "organizationInputPlaceholder": "Ex. ea4f7ebc-651a-48b9-9ac3-b0bdbee1db9a",
-      "organizationInputHelp": "Si l’ID n’est pas détecté automatiquement, collez ici l’UUID de l’organisation.",
-      "subscribe": "S’abonner à PRO",
-      "processing": "Traitement en cours...",
-      "noticeTitle": "Avis",
-      "messages": {
-        "paddleError": "ERREUR DU FOURNISSEUR DE PAIEMENT:\n{{details}}",
-        "checkoutUrlMissing": "URL CHECKOUT MANQUANTE:\n{{details}}",
-        "paddleException": "EXCEPTION DU FOURNISSEUR DE PAIEMENT:\n{{details}}"
-      },
-      "errors": {
-        "invalidOrgId": "ID d’organisation invalide. Copiez l’UUID et collez-le ici."
-      }
-    },
-    "compareBeforeUpgrade": {
-      "title": "Voulez-vous comparer avant de mettre à niveau ?",
-      "description": "Consultez la page des plans pour comparer Free, Pro et Enterprise."
-    },
-    "status": {
-      "trialing": "Essai",
-      "active": "Actif",
-      "pastDue": "Paiement en retard",
-      "canceled": "Annulé",
-      "free": "Gratuit"
-    },
-    "checkout": {
-      "testMode": "Paiement de test",
-      "testNotice": "Aucun paiement réel ne sera effectué."
+      "managePlan": "Gérer le plan",
+      "managePlanBody": "Vous pouvez accéder à la page Billing pour voir et gérer votre abonnement.",
+      "goToBilling": "Aller à Billing",
+      "previewNote": ""
     }
-  }
   },
   "inviteTracker": {
     "backToTracker": "Volver a Tracker",
@@ -2548,6 +2470,10 @@
       "pastDue": "Paiement en retard",
       "canceled": "Annulé",
       "free": "Gratuit"
+    },
+    "checkout": {
+      "testMode": "Paiement de test",
+      "testNotice": "Aucun paiement réel ne sera effectué."
     }
   },
   "reports": {
