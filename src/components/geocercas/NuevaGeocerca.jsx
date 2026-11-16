@@ -1074,7 +1074,7 @@ export default function NuevaGeocerca() {
               <button
                 onClick={handleDrawByVertices}
                 disabled={entitlementsLoading || !canCreateGeofence}
-                className="pointer-events-auto rounded-xl border border-cyan-500/50 bg-cyan-950/60 px-3 py-2.5 text-sm font-semibold text-cyan-100 hover:bg-cyan-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 enabled:hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-400"
                 type="button"
               >
                 {t("geocercas.buttonDrawByVertices", { defaultValue: "Dibujar por vértices" })}
@@ -1084,7 +1084,7 @@ export default function NuevaGeocerca() {
                   setCoordText("");
                   setCoordModalOpen(true);
                 }}
-                className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 hover:bg-slate-700"
+                className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 enabled:hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-400"
                 type="button"
               >
                 {t("geocercas.new.buttonDrawByCoords", { defaultValue: "Dibujar por coordenadas" })}
@@ -1093,11 +1093,7 @@ export default function NuevaGeocerca() {
               <button
                 onClick={handleDrawCircleByRadius}
                 disabled={entitlementsLoading || !canCreateGeofence}
-                className={`pointer-events-auto rounded-xl px-3 py-2.5 text-sm font-semibold ${
-                  entitlementsLoading || !canCreateGeofence
-                    ? "cursor-not-allowed border border-slate-700 bg-slate-800 text-slate-400"
-                    : "border border-cyan-500/50 bg-cyan-950/60 text-cyan-100 hover:bg-cyan-900/70"
-                }`}
+                className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 enabled:hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-400"
                 type="button"
               >
                 {t("geocercas.new.buttonCircleByRadius", { defaultValue: "Circle by radius" })}
@@ -1106,11 +1102,7 @@ export default function NuevaGeocerca() {
               <button
                 onClick={handleSave}
                 disabled={entitlementsLoading || (!editingGeofence && !canCreateGeofence)}
-                className={`pointer-events-auto rounded-xl px-3 py-2.5 text-sm font-semibold ${
-                  entitlementsLoading || (!editingGeofence && !canCreateGeofence)
-                    ? "cursor-not-allowed bg-slate-700 text-slate-300"
-                    : "bg-emerald-600 text-white hover:bg-emerald-500"
-                }`}
+                className="pointer-events-auto rounded-xl border border-slate-600 bg-slate-800 px-3 py-2.5 text-sm font-semibold text-slate-50 enabled:hover:bg-slate-700 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-400"
                 type="button"
               >
                 {t("geocercas.new.buttonSave", { defaultValue: "Guardar geocerca" })}
