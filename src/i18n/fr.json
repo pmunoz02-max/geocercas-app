@@ -602,6 +602,7 @@
     "buttonClearCanvas": "Effacer la carte",
     "buttonDeleteSelected": "Supprimer la sélection",
     "buttonDrawByCoords": "Dessiner par coordonnées",
+    "buttonDrawByVertices": "Dessiner par sommets",
     "buttonSave": "Enregistrer la géofence",
     "buttonShowAll": "Mostrar todas",
     "buttonShowOnMap": "Afficher sur la carte",

@@ -631,6 +631,7 @@
     "buttonClearCanvas": "Limpiar mapa",
     "buttonDeleteSelected": "Eliminar seleccionadas",
     "buttonDrawByCoords": "Dibujar por coordenadas",
+    "buttonDrawByVertices": "Dibujar por vértices",
     "buttonSave": "Guardar geocerca",
     "buttonShowAll": "Mostrar todas",
     "buttonShowOnMap": "Mostrar en mapa",

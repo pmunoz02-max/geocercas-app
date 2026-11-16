@@ -639,6 +639,7 @@
     "buttonClearCanvas": "Clear map",
     "buttonDeleteSelected": "Delete selected",
     "buttonDrawByCoords": "Draw by coordinates",
+    "buttonDrawByVertices": "Draw by vertices",
     "buttonSave": "Save geofence",
     "buttonShowAll": "Show all",
     "buttonShowOnMap": "Show on map",
