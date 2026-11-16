@@ -207,19 +207,27 @@ export default function Login() {
     return window.location.origin;
   }, []);
 
+  const activeLanguage = i18n.resolvedLanguage ?? i18n.language;
+
   const redirectTo = useMemo(() => {
     const next = safeNextPath(nextInput, "/inicio");
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", next);
+    if (activeLanguage === "es" || activeLanguage === "en" || activeLanguage === "fr") {
+      url.searchParams.set("lang", activeLanguage);
+    }
     return url.toString();
-  }, [siteUrl, nextInput]);
+  }, [siteUrl, nextInput, activeLanguage]);
 
   const resetRedirectTo = useMemo(() => {
     const url = new URL("/auth/callback", siteUrl);
     url.searchParams.set("next", "/reset-password");
     url.searchParams.set("rp_next", safeNextPath(nextInput, "/inicio"));
+    if (activeLanguage === "es" || activeLanguage === "en" || activeLanguage === "fr") {
+      url.searchParams.set("lang", activeLanguage);
+    }
     return url.toString();
-  }, [siteUrl, nextInput]);
+  }, [siteUrl, nextInput, activeLanguage]);
 
   async function bootstrapCookie(
     accessToken: string,
