@@ -50,6 +50,17 @@ function normalizeAuthErrorMessage(raw: string, t: (key: string, options?: any) 
   const low = msg.toLowerCase();
 
   if (
+    low.includes("pkce code verifier not found in storage") ||
+    low.includes("code verifier not found in storage")
+  ) {
+    return {
+      title: t("auth.callback.pkceVerifierMissingTitle"),
+      detail: t("auth.callback.pkceVerifierMissingDetail"),
+      tips: [],
+    };
+  }
+
+  if (
     low.includes("email link is invalid") ||
     low.includes("has expired") ||
     low.includes("invalid or has expired") ||
@@ -82,8 +93,8 @@ function normalizeAuthErrorMessage(raw: string, t: (key: string, options?: any) 
   }
 
   return {
-    title: t("auth.callback.loginFailedTitle"),
-    detail: msg,
+    title: t("auth.callback.unknownErrorTitle"),
+    detail: t("auth.callback.unknownErrorDetail"),
     tips: [] as string[],
   };
 }
@@ -108,7 +119,7 @@ async function waitForSession(authClient: typeof supabase | typeof supabaseTrack
 
 export default function AuthCallback() {
   const location = useLocation();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [status, setStatus] = useState<string>(t("auth.processing"));
   const [error, setError] = useState<string | null>(null);
   const [errorMeta, setErrorMeta] = useState<{
@@ -244,7 +255,6 @@ export default function AuthCallback() {
           window.history.replaceState({}, document.title, cleanUrl);
         } catch {}
 
-        // Si sessionStorage.trackerAcceptedRedirect existe, redirigir ahí y borrarlo
         const trackerAcceptedRedirect =
           typeof window !== "undefined"
             ? sessionStorage.getItem("trackerAcceptedRedirect")
@@ -275,8 +285,20 @@ export default function AuthCallback() {
   }, [isTrackerFlow, location.search, next]);
 
   const onGoLogin = () => {
-    window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+    const lang = i18n.resolvedLanguage ?? i18n.language ?? "es";
+    const nextParam = next && next !== "/login" ? `&next=${encodeURIComponent(next)}` : "";
+    const safeLang = lang === "es" || lang === "en" || lang === "fr" ? lang : "es";
+    window.location.assign(`/login?lang=${safeLang}${nextParam}`);
   };
+
+  const activeErrorMeta = errorMeta ??
+    (error
+      ? {
+          title: t("auth.callback.unknownErrorTitle"),
+          detail: t("auth.callback.unknownErrorDetail"),
+          tips: [],
+        }
+      : null);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200 p-6">
@@ -284,19 +306,14 @@ export default function AuthCallback() {
         <div className="text-lg font-semibold">{t("auth.callback.title")}</div>
         <div className="mt-2 text-sm opacity-80 whitespace-pre-line">{status}</div>
 
-        <div className="mt-4 text-xs opacity-60 break-all">
-          trackerFlow: {String(isTrackerFlow)}
-        </div>
-        <div className="mt-1 text-xs opacity-60 break-all">next: {next}</div>
-
-        {errorMeta && (
+        {activeErrorMeta && (
           <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm">
-            <div className="font-semibold">{errorMeta.title}</div>
-            <div className="mt-2 opacity-90">{errorMeta.detail}</div>
+            <div className="font-semibold">{activeErrorMeta.title}</div>
+            <div className="mt-2 opacity-90">{activeErrorMeta.detail}</div>
 
-            {errorMeta.tips?.length ? (
+            {activeErrorMeta.tips?.length ? (
               <ul className="mt-3 list-disc pl-5 opacity-90 space-y-1">
-                {errorMeta.tips.map((tip) => (
+                {activeErrorMeta.tips.map((tip) => (
                   <li key={tip}>{tip}</li>
                 ))}
               </ul>
@@ -307,30 +324,13 @@ export default function AuthCallback() {
                 onClick={onGoLogin}
                 className="rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 px-3 py-2 text-sm"
               >
-                Volver a Login
+                {t("auth.backToLogin")}
               </button>
               <button
                 onClick={() => window.location.reload()}
                 className="rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 px-3 py-2 text-sm"
               >
-                Reintentar
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!errorMeta && error && (
-          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm">
-            {error}
-            <div className="mt-2 opacity-80">
-              Intenta abrir de nuevo el link o vuelve a Login.
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={onGoLogin}
-                className="rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 px-3 py-2 text-sm"
-              >
-                Volver a Login
+                {t("auth.callback.retry")}
               </button>
             </div>
           </div>
