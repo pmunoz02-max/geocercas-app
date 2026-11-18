@@ -412,6 +412,7 @@ export default function Inicio() {
         title={t("moduleHub.title")}
         subtitle={t("moduleHub.subtitle")}
       />
+      <IncidentsHelp featured />
       <HomeModules />
 
       <InfoPanel>
@@ -488,7 +489,6 @@ export default function Inicio() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <IncidentsHelp />
           {helpCards.map((card) => (
             <HelpCard
               key={card.to}
