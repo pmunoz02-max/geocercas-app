@@ -7,4 +7,6 @@ ProtectedShell entrega sus navigationTabs mediante Outlet context. HomeModules c
 
 Incidencias y Mapa de incidencias usan las tarjetas del directorio. En el Centro de Ayuda de Inicio, la tarjeta de Incidencias enlaza a su sección de la guía web. En Preview, esa sección explica los gráficos y el registro de medidas, y ofrece el PDF y el video en el idioma activo desde `public/resources/preview-nov2026/`.
 
+Recursos muestra en Preview una tarjeta de Mapa de incidencias con acceso a la misma guía. Los administradores y propietarios con una organización seleccionada también tienen el enlace directo al mapa.
+
 Validar navegación de cada tarjeta, idioma conservado, diseño móvil y ausencia de enlaces administrativos cuando no figuran en las pestañas. Producción requiere Promote explícito.

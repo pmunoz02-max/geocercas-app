@@ -3,6 +3,7 @@ import VisitsInfoCard from "../components/VisitsInfoCard";
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useAuthSafe } from "@/context/auth.js";
 
 const LOCAL_COPY = {
   es: {
@@ -15,6 +16,7 @@ const LOCAL_COPY = {
     pdfDetails: "Español · 4 páginas · Septiembre 2026",
     pdfScope: "Este PDF cubre instalación y seguimiento GPS. Para fotos, uso sin conexión y Android de Incidencias, consulta la guía web de esta página.",
     openGuide: "Abrir guía",
+    openMap: "Abrir mapa",
     backHome: "Volver al inicio",
     cards: {
       pdf: {
@@ -26,6 +28,10 @@ const LOCAL_COPY = {
         title: "Guía de reportes",
         description:
           "Cómo interpretar actividad, posiciones y exportables para supervisión operativa.",
+      },
+      incidentMap: {
+        title: "Mapa de incidencias",
+        description: "Consulta la afectación con colores de semáforo, usa los filtros de fecha, parcela o estado y revisa los gráficos de evolución. La guía incluye cómo registrar las medidas tomadas.",
       },
     },
   },
@@ -39,6 +45,7 @@ const LOCAL_COPY = {
     pdfDetails: "English · 4 pages · September 2026",
     pdfScope: "This PDF covers setup and GPS tracking. For incident photos, offline use and Android access, read the web guide on this page.",
     openGuide: "Open guide",
+    openMap: "Open map",
     backHome: "Back to home",
     cards: {
       pdf: {
@@ -50,6 +57,10 @@ const LOCAL_COPY = {
         title: "Reports guide",
         description:
           "How to read activity, positions, and exports for field supervision.",
+      },
+      incidentMap: {
+        title: "Incident map",
+        description: "See severity at a glance, filter by date, plot or status, and review the charts. The guide also explains how to record actions taken.",
       },
     },
   },
@@ -63,6 +74,7 @@ const LOCAL_COPY = {
     pdfDetails: "Français · 4 pages · Septembre 2026",
     pdfScope: "Ce PDF décrit l’installation et le suivi GPS. Pour les photos, l’usage hors connexion et l’accès Android aux incidents, consultez le guide web de cette page.",
     openGuide: "Ouvrir le guide",
+    openMap: "Ouvrir la carte",
     backHome: "Retour à l'accueil",
     cards: {
       pdf: {
@@ -74,6 +86,10 @@ const LOCAL_COPY = {
         title: "Guide des rapports",
         description:
           "Comment lire activité, positions et exports pour le pilotage terrain.",
+      },
+      incidentMap: {
+        title: "Carte des incidents",
+        description: "Repérez la gravité par couleur, filtrez par date, parcelle ou statut, et consultez les graphiques. Le guide explique aussi comment consigner les mesures prises.",
       },
     },
   },
@@ -88,12 +104,21 @@ function resolveLang(value) {
 
 export default function ResourcesPage() {
   const { t, i18n } = useTranslation();
+  const { user, currentRole, role, currentOrgId, currentOrg, orgId } = useAuthSafe();
 
   const lang = resolveLang(i18n?.resolvedLanguage || i18n?.language);
   const copy = LOCAL_COPY[lang] || LOCAL_COPY.es;
+  const isPreview = typeof window !== "undefined" && window.location.hostname === "preview.tugeocercas.com";
+  const effectiveRole = String(currentRole || role || "").trim().toLowerCase();
+  const canOpenMap = Boolean(user && (currentOrgId || currentOrg?.id || orgId) && ["owner", "admin"].includes(effectiveRole));
 
   const cards = useMemo(
     () => [
+      ...(isPreview ? [{
+        key: "incidentMap",
+        format: "WEB",
+        href: `/help/instructions?lang=${lang}#incidencias`,
+      }] : []),
       {
         key: "pdf",
         format: "PDF",
@@ -105,7 +130,7 @@ export default function ResourcesPage() {
         href: "/help/reports",
       },
     ],
-    [lang]
+    [lang, isPreview]
   );
 
   return (
@@ -180,12 +205,23 @@ export default function ResourcesPage() {
                       </div>
                     </div>
                   ) : (
-                    <Link
-                      to={card.href}
-                      className="mt-5 inline-flex items-center justify-center rounded-lg border border-emerald-600 bg-emerald-500 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 dark:border-emerald-400 dark:bg-emerald-500 dark:hover:bg-emerald-400"
-                    >
-                      {copy.openGuide}
-                    </Link>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <Link
+                        to={card.href}
+                        aria-label={`${copy.openGuide}: ${title}`}
+                        className="inline-flex flex-1 items-center justify-center rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                      >
+                        {copy.openGuide}
+                      </Link>
+                      {card.key === "incidentMap" && canOpenMap && (
+                        <Link
+                          to={`/mapa-incidencias?lang=${lang}`}
+                          className="inline-flex flex-1 items-center justify-center rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                        >
+                          {copy.openMap}
+                        </Link>
+                      )}
+                    </div>
                   )}
                 </article>
               );
