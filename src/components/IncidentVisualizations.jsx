@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css';
 
 const severityStyles = {
   low: { color: '#15803d', radius: 6 },
-  medium: { color: '#b45309', radius: 10 },
+  medium: { color: '#facc15', radius: 10 },
   high: { color: '#b91c1c', radius: 14 },
   unknown: { color: '#64748b', radius: 5 },
 };
