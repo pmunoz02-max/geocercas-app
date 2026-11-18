@@ -101,7 +101,8 @@
       "tracker": "Tracker",
       "resources": "Ressources",
       "benchmarking": "Benchmarking",
-      "incidents": "Incidents"
+      "incidents": "Incidents",
+      "incidentMap": "Carte des incidents"
     },
     "title": "GeoField GPS"
   },
@@ -3051,6 +3052,7 @@
       "asignaciones": "Affectez des personnes, activités et géofences.",
       "visitas": "Documentez les visites avec des notes et photos.",
       "incidents": "Enregistrez et suivez les incidents.",
+      "incidentMap": "Consultez la carte, appliquez des filtres et suivez le statut de chaque incident.",
       "tracker": "Consultez les positions et l’état de connexion.",
       "invitarTracker": "Invitez votre équipe à partager sa position.",
       "planificacion": "Planifiez le travail et comparez sa réalisation.",

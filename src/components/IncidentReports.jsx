@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {filterIncidentReport, incidentCsv, loadIncidentReport} from '../lib/incidentReport';
 import {IncidentMap} from './IncidentVisualizations';
 
@@ -17,7 +17,6 @@ export default function IncidentReports({org,user,request,words:w,language,onOpe
  const [loaded,setLoaded] = useState('');
  const [page,setPage] = useState(0);
  const controller = useRef(null);
- useEffect(()=>()=>controller.current?.abort(),[]);
  const invalid = filters.from && filters.to && filters.from > filters.to;
  const filtered = useMemo(() => invalid ? [] : filterIncidentReport(rows || [],filters), [rows, filters, invalid]);
  const names = new Map((rows || []).map(row=>[row.author_id,row.author_name || text.unknown+' '+row.author_id]));
@@ -26,8 +25,7 @@ export default function IncidentReports({org,user,request,words:w,language,onOpe
  const button='rounded-lg bg-emerald-700 px-4 py-2 text-white disabled:opacity-50';
  const stamp=value=>value?new Date(value).toLocaleString(language):'—';
  const change=(key,value)=>{setFilters(old=>({...old,[key]:value}));setPage(0);};
- async function generate() {
-  if (busy) return;
+ const generate = useCallback(async () => {
   controller.current?.abort();
   const task = new AbortController();
   controller.current=task;
@@ -38,7 +36,11 @@ export default function IncidentReports({org,user,request,words:w,language,onOpe
   } catch (e) {
    if (!task.signal.aborted) setError(e.message === 'report_limit'?text.limit:text.error);
   } finally {if (!task.signal.aborted) setBusy(false);}
- }
+ }, [request, org, user, text.limit, text.error]);
+ useEffect(() => {
+  generate();
+  return () => controller.current?.abort();
+ }, [generate]);
  function download() {
   const header=[w.name,w.observed+' (UTC)',w.recorded+' (UTC)',w.plot,text.author,w.category,w.severity,w.status,'Lat','Lng',w.precision+' (m)','ID'];
   const values=filtered.map(row=>[row.title,row.observed_at,row.received_at,row.geofence_name_snapshot,names.get(row.author_id),w.categories[row.category],w.severities[row.severity],w.states[row.status],row.lat,row.lng,row.accuracy_m,row.id]);

@@ -8,6 +8,7 @@ const modules = {
   visitas: [Camera, "field"], incidents: [TriangleAlert, "field"],
   tracker: [Radio, "field"], invitarTracker: [UserPlus, "field"],
   planificacion: [CalendarDays, "analysis"], benchmarking: [ChartNoAxesCombined, "analysis"],
+  incidentMap: [MapPinned, "analysis"],
   reportes: [FileChartColumn, "analysis"], panelCostos: [Wallet, "analysis"],
   pricing: [Tags, "account"], billing: [CreditCard, "account"],
   resources: [BookOpen, "account"], admins: [Shield, "account"],

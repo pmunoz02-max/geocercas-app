@@ -44,6 +44,9 @@ function buildTabs({ role, isAppRoot, isAdmin, resourcesPath }) {
     { path: "/asignaciones", labelKey: "app.tabs.asignaciones" },
     { path: "/visitas", labelKey: "app.tabs.visitas" },
     ...(incidentsAvailable ? [{path:"/incidencias",labelKey:"app.tabs.incidents"}] : []),
+    ...(incidentsAvailable && ["owner", "admin"].includes(r)
+      ? [{ path: "/mapa-incidencias", labelKey: "app.tabs.incidentMap" }]
+      : []),
     { path: "/planificacion", labelKey: "app.tabs.planificacion" },
     { path: "/benchmarking", labelKey: "app.tabs.benchmarking" },
     { path: "/reportes", labelKey: "app.tabs.reportes" },
