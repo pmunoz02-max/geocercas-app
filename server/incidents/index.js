@@ -34,8 +34,13 @@ export function createIncidentHandler({makeDb,identify=identifyVisitActor,previe
     return res.status(200).json({ok:true,id:body.evidence_id});
    }
    if(req.method==='POST'){
-    if(!uuid(body.operation_id)||!['configure','create','observe','transition'].includes(body.action)||!body.data||typeof body.data!=='object'||Array.isArray(body.data))return res.status(400).json({error:'invalid_request'});
-    if(['configure','transition'].includes(body.action)&&!actor.manager)return res.status(403).json({error:'forbidden'});
+    if(!uuid(body.operation_id)||!['configure','create','observe','transition','record_measure'].includes(body.action)||!body.data||typeof body.data!=='object'||Array.isArray(body.data))return res.status(400).json({error:'invalid_request'});
+    if(['configure','transition','record_measure'].includes(body.action)&&!actor.manager)return res.status(403).json({error:'forbidden'});
+    if(body.action==='record_measure'){
+     const {id,note}=body.data;
+     if(!uuid(id)||typeof note!=='string'||!note.trim()||note.length>4000||Object.keys(body.data).length!==2)return res.status(422).json({error:'invalid_request'});
+     return res.status(200).json(check(await db.rpc('record_incident_measure',{p_org:org,p_actor:actor.userId,p_operation:body.operation_id,p_incident:id,p_note:note.trim()})));
+    }
     return res.status(200).json(check(await db.rpc('save_incident_core',{p_org:org,p_actor:actor.userId,p_operation:body.operation_id,p_action:body.action,p_data:body.data})));
    }
    const report = req.query?.report === '1';

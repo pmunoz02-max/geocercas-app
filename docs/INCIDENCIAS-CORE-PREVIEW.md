@@ -60,6 +60,8 @@ Se corrige el ancho mínimo del fieldset/input/file/imagenes para evitar desbord
 
 ### Mapa y evolución
 
+
+
 La pestaña «Mapa de incidencias» aparece junto a «Incidencias» y en la sección de análisis de Inicio para propietarios y administradores. La ruta /mapa-incidencias carga el reporte automáticamente. «Generar / actualizar reporte» vuelve a consultar los registros sincronizados de la organización. El mapa, la tabla y el CSV comparten filtros por fecha observada (hora local), título, parcela, autor, categoría, afectación y estado. El círculo verde pequeño representa afectación baja, el amarillo mediano representa afectación media y el rojo grande representa afectación alta. El gris indica afectación no determinada. El mapa se encuadra con los resultados y se puede desplazar o ampliar. Los registros sin coordenadas válidas siguen disponibles en la tabla.
 
 Al pie del reporte, «Incidencias a lo largo del tiempo» muestra barras con el número de incidencias observadas en los resultados filtrados. Agrupa por día, mes o año según el intervalo entre la primera y la última observación filtrada, e incluye los períodos intermedios sin incidencias.
@@ -71,3 +73,7 @@ La página del mapa ofrece consulta y exportación. El registro, las observacion
 Generar consulta páginas de 100 hasta terminar, deduplica IDs y cancela al desmontar/cambiar organización. No exporta resultados parciales. Límite operativo de 10.000 registros con error explícito. Es una consulta paginada en vivo, sin snapshot transaccional entre páginas. La hora de consulta queda visible y Generar vuelve a consultar los estados actuales.
 
 Filtros combinables por fecha observada (días completos en zona del navegador), parcela, registrado por, categoría, afectación, estado y título. Vista paginada de 50, conteos sobre el resultado filtrado, CSV UTF-8 con fechas UTC y coordenadas, escapado de fórmulas. CSV incluye todos los resultados filtrados. Detalle existente para fotos/observaciones. Pendientes offline no forman parte del informe. Sin nueva migración ni paquete Android.
+
+### Medidas tomadas
+
+En el detalle de /incidencias, los administradores y propietarios de la organización pueden agregar medidas tomadas, aun si la incidencia está cerrada. El historial conserva el texto, la fecha y el identificador de la cuenta que lo registró. Quien tenga acceso al detalle puede leer las medidas. El servidor y la función de base de datos validan el rol de escritura en esa organización. Cada anotación queda como evento `measure_recorded` y admite reintento con el mismo ID. Registrar una medida mantiene el estado y la versión de la incidencia.

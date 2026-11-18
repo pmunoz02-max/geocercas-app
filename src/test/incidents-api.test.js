@@ -10,7 +10,15 @@ it('rejects production before creating a client',async()=>{const makeDb=vi.fn();
 it('rejects missing credentials without database calls',async()=>{const res=response();await handler(req({headers:{}}),res);expect(res.status).toHaveBeenCalledWith(401);expect(db.rpc).not.toHaveBeenCalled();});
 it('rejects invalid membership without reading records',async()=>{identify.mockResolvedValue(null);const res=response();await handler(req(),res);expect(res.status).toHaveBeenCalledWith(403);expect(db.rpc).not.toHaveBeenCalled();});
 it('uses verified actor rather than body user_id',async()=>{db.rpc.mockResolvedValue({data:{ok:true}});const res=response();await handler(req({method:'POST',body:{org_id:org,user_id:id,operation_id:id,action:'create',data:{id}}}),res);expect(db.rpc).toHaveBeenCalledWith('save_incident_core',expect.objectContaining({p_org:org,p_actor:user,p_operation:id}));expect(res.status).toHaveBeenCalledWith(200);});
-it('denies tracker configure/transition before RPC',async()=>{identify.mockResolvedValue({userId:user,manager:false});for(const action of ['configure','transition']){const res=response();await handler(req({method:'POST',body:{org_id:org,operation_id:id,action,data:{}}}),res);expect(res.status).toHaveBeenCalledWith(403);}expect(db.rpc).not.toHaveBeenCalled();});
+it('denies tracker configure, transition, and measure recording before RPC',async()=>{identify.mockResolvedValue({userId:user,manager:false});for(const action of ['configure','transition','record_measure']){const res=response();await handler(req({method:'POST',body:{org_id:org,operation_id:id,action,data:{id,note:'Applied treatment'}}}),res);expect(res.status).toHaveBeenCalledWith(403);}expect(db.rpc).not.toHaveBeenCalled();});
+
+it('records a measure using the verified manager and operation ID',async()=>{
+ db.rpc.mockResolvedValue({data:{ok:true}});
+ const res=response();
+ await handler(req({method:'POST',body:{org_id:org,operation_id:id,action:'record_measure',data:{id,note:' Applied treatment '}}}),res);
+ expect(db.rpc).toHaveBeenCalledWith('record_incident_measure',{p_org:org,p_actor:user,p_operation:id,p_incident:id,p_note:'Applied treatment'});
+ expect(res.status).toHaveBeenCalledWith(200);
+});
 it('passes detail identity to protected RPC and never queries catalogs',async()=>{db.rpc.mockResolvedValue({data:{incident:{id}}});await handler(req({query:{org_id:org,id}}),response());expect(db.rpc).toHaveBeenCalledWith('read_incident_core',expect.objectContaining({p_id:id,p_actor:user,p_org:org}));expect(db.from).not.toHaveBeenCalled();});
 it('returns conflicts without SQL details',async()=>{db.rpc.mockResolvedValue({error:{code:'40001',message:'version_conflict',details:'secret'}});const res=response();await handler(req(),res);expect(res.status).toHaveBeenCalledWith(409);expect(res.json).toHaveBeenCalledWith({error:'version_conflict'});});
 it('rejects malformed JSON and incomplete cursors',async()=>{for(const r of [req({method:'POST',body:'{'}),req({query:{org_id:org,before:'2026-11-04T00:00:00Z'}})]){const res=response();await handler(r,res);expect(res.status).toHaveBeenCalledWith(400);}expect(db.rpc).not.toHaveBeenCalled();});
