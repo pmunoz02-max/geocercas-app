@@ -1,5 +1,6 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {filterIncidentReport, incidentCsv, loadIncidentReport} from '../lib/incidentReport';
+import {IncidentMap} from './IncidentVisualizations';
 
 const copy = {
  es: {title:'Reportes',load:'Generar / actualizar reporte',from:'Desde',to:'Hasta',author:'Registrado por',all:'Todos',search:'Buscar por título',clear:'Limpiar filtros',export:'Exportar CSV',total:'Resultados',scope:'Fecha de observación · hora local del navegador. Reporte de registros sincronizados. Pulsa Generar para consultar el historial.',error:'No se pudo completar el reporte. Revisa la conexión y vuelve a generar.',limit:'El historial supera 10.000 registros. Solicita un reporte por períodos al administrador.',invalid:'La fecha Desde debe ser anterior o igual a Hasta.',loaded:'Consulta realizada',previous:'Anterior',next:'Siguiente',unknown:'Usuario',empty:'Sin resultados para estos filtros.'},
@@ -18,7 +19,7 @@ export default function IncidentReports({org,user,request,words:w,language,onOpe
  const controller = useRef(null);
  useEffect(()=>()=>controller.current?.abort(),[]);
  const invalid = filters.from && filters.to && filters.from > filters.to;
- const filtered = invalid ? [] : filterIncidentReport(rows || [],filters);
+ const filtered = useMemo(() => invalid ? [] : filterIncidentReport(rows || [],filters), [rows, filters, invalid]);
  const names = new Map((rows || []).map(row=>[row.author_id,row.author_name || text.unknown+' '+row.author_id]));
  const fences = new Map((rows || []).map(row=>[row.geofence_id,row.geofence_name_snapshot]));
  const input='w-full min-w-0 rounded-lg border border-emerald-200 bg-white p-2 text-slate-900';
@@ -58,6 +59,7 @@ export default function IncidentReports({org,user,request,words:w,language,onOpe
   {invalid&&<p role="alert" className="text-red-700">{text.invalid}</p>}
   <div className="flex flex-wrap gap-3"><button className={button} onClick={()=>{setFilters(emptyFilters);setPage(0);}}>{text.clear}</button><button className={button} disabled={busy||!rows||!!invalid||!filtered.length} onClick={download}>{text.export}</button></div>
   {rows&&<><p className="font-semibold">{text.total}: {filtered.length}</p><div className="flex flex-wrap gap-4 text-sm">{Object.entries(w.states).map(([state,label])=><span key={state}>{label}: {filtered.filter(row=>row.status===state).length}</span>)}</div>
+   {filtered.length>0&&<IncidentMap rows={filtered} words={w} language={language} onOpen={onOpen}/>}
    {!filtered.length?<p>{text.empty}</p>:<div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{[w.name,w.observed,w.plot,text.author,w.category,w.severity,w.status].map(label=><th className="p-2 border-b" key={label}>{label}</th>)}</tr></thead><tbody>{filtered.slice(page*50,page*50+50).map(row=><tr key={row.id}><td className="p-2 border-b"><button className="text-emerald-800 underline" onClick={()=>onOpen(row.id)}>{row.title}</button></td>{[stamp(row.observed_at),row.geofence_name_snapshot,names.get(row.author_id),w.categories[row.category],w.severities[row.severity],w.states[row.status]].map((cell,index)=><td className="p-2 border-b" key={index}>{cell}</td>)}</tr>)}</tbody></table></div>}
    {filtered.length>50&&<div className="flex items-center gap-3"><button className={button} disabled={page===0} onClick={()=>setPage(page-1)}>{text.previous}</button><span>{page+1} / {Math.ceil(filtered.length/50)}</span><button className={button} disabled={(page+1)*50>=filtered.length} onClick={()=>setPage(page+1)}>{text.next}</button></div>}
   </>}
