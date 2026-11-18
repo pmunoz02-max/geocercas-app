@@ -1,9 +1,28 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { readdirSync, readFileSync } from "node:fs";
+
+function previewResources() {
+  const source = path.resolve(__dirname, "preview-resources/nov2026");
+  return {
+    name: "preview-resources",
+    apply: "build",
+    generateBundle() {
+      for (const filename of readdirSync(source)) {
+        this.emitFile({
+          type: "asset",
+          fileName: `resources/preview-nov2026/${filename}`,
+          source: readFileSync(path.join(source, filename)),
+        });
+      }
+    },
+  };
+}
 
 export default defineConfig(() => {
   const DEBUG_BUILD = process.env.VITE_DEBUG_BUILD === "1";
+  const isPreview = process.env.VERCEL_ENV === "preview";
 
   const BUILD_SHA =
     process.env.VERCEL_GIT_COMMIT_SHA ||
@@ -12,7 +31,7 @@ export default defineConfig(() => {
     "local";
 
   return {
-    plugins: [react()],
+    plugins: [react(), ...(isPreview ? [previewResources()] : [])],
 
     resolve: {
       alias: {
@@ -40,8 +59,8 @@ export default defineConfig(() => {
 
     // --- Build config: preview vs producción ---
     build: {
-      sourcemap: process.env.VERCEL_ENV === "preview" ? true : false,
-      minify: process.env.VERCEL_ENV === "preview" ? false : "esbuild",
+      sourcemap: isPreview,
+      minify: isPreview ? false : "esbuild",
       target: "es2020",
     },
 

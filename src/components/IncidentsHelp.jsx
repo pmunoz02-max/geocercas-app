@@ -88,7 +88,7 @@ export default function IncidentsHelp({ detailed = false }) {
   const lang = copy[language] ? language : "es";
   const text = copy[lang];
   const features = followUp[lang];
-  const showFollowUp = preview && detailed;
+  const showFollowUp = detailed;
   const routes = path => `${path}?lang=${lang}`;
 
   return (
@@ -111,7 +111,7 @@ export default function IncidentsHelp({ detailed = false }) {
         <Link className={actionClass} to={detailed ? routes("/incidencias") : `${routes("/help/instructions")}#incidencias`}>
           {detailed ? text.open : text.guide}
         </Link>
-        {showFollowUp && (
+        {preview && detailed && (
           <>
             <a className={linkClass} href={`/resources/preview-nov2026/guide-${lang}.pdf`} target="_blank" rel="noreferrer">
               <FileText size={18} aria-hidden="true" />{features.guide}

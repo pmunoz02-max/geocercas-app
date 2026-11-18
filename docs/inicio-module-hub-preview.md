@@ -5,8 +5,8 @@ Inicio presenta un directorio adaptable de tarjetas con iconos, descripción y e
 
 ProtectedShell entrega sus navigationTabs mediante Outlet context. HomeModules consume exactamente esa lista, excepto Inicio, para preservar las condiciones actuales de rol, administración y disponibilidad de Incidencias. No se alteran rutas, permisos, datos ni activación de módulos opcionales.
 
-Incidencias y Mapa de incidencias usan las tarjetas del directorio. En el Centro de Ayuda de Inicio, la tarjeta de Incidencias enlaza a su sección de la guía web. En Preview, esa sección explica los gráficos y el registro de medidas, y ofrece el PDF y el video en el idioma activo desde `public/resources/preview-nov2026/`.
+Incidencias y Mapa de incidencias usan las tarjetas del directorio. En el Centro de Ayuda de Inicio, la tarjeta de Incidencias enlaza a la guía web de gráficos y registro de medidas. Los PDF y videos rotulados Preview se guardan en `preview-resources/nov2026/`. Vite los publica en `/resources/preview-nov2026/` exclusivamente al construir para Vercel Preview.
 
-Recursos muestra en Preview una tarjeta de Mapa de incidencias con acceso a la misma guía. Los administradores y propietarios con una organización seleccionada también tienen el enlace directo al mapa.
+Recursos muestra una tarjeta de Mapa de incidencias con acceso a la misma guía. Los administradores y propietarios con una organización seleccionada también tienen el enlace directo al mapa.
 
 Validar navegación de cada tarjeta, idioma conservado, diseño móvil y ausencia de enlaces administrativos cuando no figuran en las pestañas. Producción requiere Promote explícito.

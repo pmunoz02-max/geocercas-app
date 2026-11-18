@@ -108,13 +108,14 @@ export default function ResourcesPage() {
 
   const lang = resolveLang(i18n?.resolvedLanguage || i18n?.language);
   const copy = LOCAL_COPY[lang] || LOCAL_COPY.es;
-  const isPreview = typeof window !== "undefined" && window.location.hostname === "preview.tugeocercas.com";
+  const hostname = typeof window === "undefined" ? "" : window.location.hostname;
+  const incidentsAvailable = ["preview.tugeocercas.com", "app.tugeocercas.com"].includes(hostname);
   const effectiveRole = String(currentRole || role || "").trim().toLowerCase();
   const canOpenMap = Boolean(user && (currentOrgId || currentOrg?.id || orgId) && ["owner", "admin"].includes(effectiveRole));
 
   const cards = useMemo(
     () => [
-      ...(isPreview ? [{
+      ...(incidentsAvailable ? [{
         key: "incidentMap",
         format: "WEB",
         href: `/help/instructions?lang=${lang}#incidencias`,
@@ -130,7 +131,7 @@ export default function ResourcesPage() {
         href: "/help/reports",
       },
     ],
-    [lang, isPreview]
+    [lang, incidentsAvailable]
   );
 
   return (
