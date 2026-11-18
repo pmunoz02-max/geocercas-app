@@ -1,7 +1,7 @@
 import React from "react";
-import { Link, useOutletContext } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { FileText, MapPinned, PlayCircle } from "lucide-react";
+import { FileText, PlayCircle } from "lucide-react";
 
 const copy = {
   es: {
@@ -78,9 +78,8 @@ const followUp = {
 const actionClass = "inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600";
 const linkClass = "inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 dark:border-emerald-800 dark:text-emerald-200 dark:hover:bg-emerald-950";
 
-export default function IncidentsHelp({ detailed = false, featured = false }) {
+export default function IncidentsHelp({ detailed = false }) {
   const { i18n } = useTranslation();
-  const { navigationTabs = [] } = useOutletContext() || {};
   const hostname = typeof window === "undefined" ? "" : window.location.hostname;
   const preview = hostname === "preview.tugeocercas.com";
   if (!preview && hostname !== "app.tugeocercas.com") return null;
@@ -89,11 +88,7 @@ export default function IncidentsHelp({ detailed = false, featured = false }) {
   const lang = copy[language] ? language : "es";
   const text = copy[lang];
   const features = followUp[lang];
-  const incidents = navigationTabs.find(tab => tab.path === "/incidencias");
-  const map = navigationTabs.find(tab => tab.path === "/mapa-incidencias");
-  if (featured && !incidents) return null;
-
-  const showFollowUp = preview && (detailed || (featured && map));
+  const showFollowUp = preview && detailed;
   const routes = path => `${path}?lang=${lang}`;
 
   return (
@@ -112,21 +107,11 @@ export default function IncidentsHelp({ detailed = false, featured = false }) {
           </section>
         </div>
       )}
-      {detailed && text.sections.map(([title, body]) => (
-        <section key={title} className="mt-5">
-          <h3 className="font-semibold">{title}</h3>
-          <p className="mt-2 text-sm leading-7">{body}</p>
-        </section>
-      ))}
       <div className="mt-5 flex flex-wrap gap-3">
-        {featured && map && preview && (
-          <Link className={actionClass} to={routes(map.path)}><MapPinned size={18} aria-hidden="true" />{features.map}</Link>
-        )}
-        {(featured || detailed) && (
-          <Link className={featured && map && preview ? linkClass : actionClass} to={routes("/incidencias")}>{text.open}</Link>
-        )}
-        {!detailed && <Link className={featured ? linkClass : actionClass} to={`${routes("/help/instructions")}#incidencias`}>{text.guide}</Link>}
-        {featured && preview && (
+        <Link className={actionClass} to={detailed ? routes("/incidencias") : `${routes("/help/instructions")}#incidencias`}>
+          {detailed ? text.open : text.guide}
+        </Link>
+        {showFollowUp && (
           <>
             <a className={linkClass} href={`/resources/preview-nov2026/guide-${lang}.pdf`} target="_blank" rel="noreferrer">
               <FileText size={18} aria-hidden="true" />{features.guide}
@@ -137,6 +122,12 @@ export default function IncidentsHelp({ detailed = false, featured = false }) {
           </>
         )}
       </div>
+      {detailed && text.sections.map(([title, body]) => (
+        <section key={title} className="mt-5">
+          <h3 className="font-semibold">{title}</h3>
+          <p className="mt-2 text-sm leading-7">{body}</p>
+        </section>
+      ))}
     </article>
   );
 }

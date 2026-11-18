@@ -5,6 +5,6 @@ Inicio presenta un directorio adaptable de tarjetas con iconos, descripción y e
 
 ProtectedShell entrega sus navigationTabs mediante Outlet context. HomeModules consume exactamente esa lista, excepto Inicio, para preservar las condiciones actuales de rol, administración y disponibilidad de Incidencias. No se alteran rutas, permisos, datos ni activación de módulos opcionales.
 
-Inicio destaca Incidencias bajo la cabecera. En el dominio de Preview, si las pestañas de la organización incluyen Mapa de incidencias, se muestran el acceso al mapa y las instrucciones para consultar el gráfico de barras, la línea de estado y registrar medidas. La tarjeta enlaza al módulo, a la guía web, a la guía completa en PDF y al video del idioma activo. Los PDF y MP4 de esta edición están en `public/resources/preview-nov2026/`.
+Incidencias y Mapa de incidencias usan las tarjetas del directorio. En el Centro de Ayuda de Inicio, la tarjeta de Incidencias enlaza a su sección de la guía web. En Preview, esa sección explica los gráficos y el registro de medidas, y ofrece el PDF y el video en el idioma activo desde `public/resources/preview-nov2026/`.
 
 Validar navegación de cada tarjeta, idioma conservado, diseño móvil y ausencia de enlaces administrativos cuando no figuran en las pestañas. Producción requiere Promote explícito.

@@ -1,10 +1,9 @@
 import HomeModules from "../components/HomeModules";
-import IncidentsHelp from "../components/IncidentsHelp";
 import VisitsInfoCard from "../components/VisitsInfoCard";
 ﻿// src/pages/Inicio.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useOutletContext } from "react-router-dom";
 import { useAuth } from "@/context/auth.js";
 import { supabase } from "../lib/supabaseClient.js";
 import { getAsignacionesBundle } from "../lib/asignacionesApi";
@@ -88,6 +87,9 @@ export default function Inicio() {
 
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
+  const { navigationTabs = [] } = useOutletContext() || {};
+  const incidentsAvailable = navigationTabs.some(tab => tab.path === "/incidencias");
+  const lang = (i18n.resolvedLanguage || i18n.language || "es").slice(0, 2);
 
   const { loading, ready, user, role, currentOrgId, authenticated } = useAuth();
   const [signingOut, setSigningOut] = useState(false);
@@ -412,7 +414,6 @@ export default function Inicio() {
         title={t("moduleHub.title")}
         subtitle={t("moduleHub.subtitle")}
       />
-      <IncidentsHelp featured />
       <HomeModules />
 
       <InfoPanel>
@@ -489,6 +490,14 @@ export default function Inicio() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {incidentsAvailable && (
+            <HelpCard
+              title={t("app.tabs.incidents")}
+              description={t("moduleHub.descriptions.incidents")}
+              cta={t("dashboard.help.quickGuide.title")}
+              to={`/help/instructions?lang=${lang}#incidencias`}
+            />
+          )}
           {helpCards.map((card) => (
             <HelpCard
               key={card.to}
