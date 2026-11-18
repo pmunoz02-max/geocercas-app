@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet';
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { incidentObservationSeries } from '../lib/incidentReport';
 import 'leaflet/dist/leaflet.css';
 
 const severityStyles = {
@@ -11,9 +12,9 @@ const severityStyles = {
 };
 const states = ['detected', 'treating', 'controlled', 'closed'];
 const copy = {
-  es: { map: 'Mapa de incidencias', missing: 'Sin ubicación válida', progress: 'Evolución del estado' },
-  en: { map: 'Incident map', missing: 'No valid location', progress: 'Status over time' },
-  fr: { map: 'Carte des incidents', missing: 'Sans position valide', progress: 'Évolution du statut' },
+  es: { map: 'Mapa de incidencias', missing: 'Sin ubicación válida', progress: 'Evolución del estado', trend: 'Incidencias a lo largo del tiempo', count: 'Incidencias observadas' },
+  en: { map: 'Incident map', missing: 'No valid location', progress: 'Status over time', trend: 'Incidents over time', count: 'Observed incidents' },
+  fr: { map: 'Carte des incidents', missing: 'Sans position valide', progress: 'Évolution du statut', trend: 'Incidents au fil du temps', count: 'Incidents observés' },
 };
 
 function mapPoint(row) {
@@ -65,6 +66,36 @@ export function IncidentMap({ rows, words, language, onOpen }) {
             </CircleMarker>
           ))}
         </MapContainer>
+      )}
+    </section>
+  );
+}
+
+export function IncidentObservationChart({ rows, language, empty }) {
+  const text = copy[language?.slice(0, 2)] || copy.es;
+  const { points, unit } = useMemo(() => incidentObservationSeries(rows), [rows]);
+  const options = unit === 'day' ? { day: 'numeric', month: 'short' } : unit === 'month' ? { month: 'short', year: 'numeric' } : { year: 'numeric' };
+  const tick = new Intl.DateTimeFormat(language, { ...options, timeZone: 'UTC' });
+  const tooltipDate = new Intl.DateTimeFormat(language, { ...options, year: 'numeric', timeZone: 'UTC' });
+
+  return (
+    <section className="min-w-0 space-y-2 border-t border-slate-200 pt-4" aria-label={text.trend}>
+      <h3 className="text-lg font-semibold text-slate-900">{text.trend}</h3>
+      {points.length === 0 ? <p className="text-sm text-slate-600">{empty}</p> : (
+        <>
+          <p className="text-sm text-slate-600">{text.count}</p>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={points} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="date" tickFormatter={date => tick.format(date)} minTickGap={20} tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} width={34} tick={{ fontSize: 11 }} />
+                <Tooltip labelFormatter={date => tooltipDate.format(date)} />
+                <Bar dataKey="count" name={text.count} fill="#047857" maxBarSize={48} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
       )}
     </section>
   );

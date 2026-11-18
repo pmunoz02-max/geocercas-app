@@ -1,5 +1,24 @@
 import {it,expect,vi} from 'vitest';
-import {filterIncidentReport,incidentCsv,loadIncidentReport} from '../lib/incidentReport';
+import {filterIncidentReport,incidentCsv,incidentObservationSeries,loadIncidentReport} from '../lib/incidentReport';
+
+it('counts observations by local calendar day and fills missing days',()=>{
+ const row=(day,hour)=>({observed_at:new Date(2026,10,day,hour).toISOString()});
+ expect(incidentObservationSeries([row(5,1),row(3,8),row(3,23)])).toEqual({
+  unit:'day',
+  points:[{date:Date.UTC(2026,10,3),count:2},{date:Date.UTC(2026,10,4),count:0},{date:Date.UTC(2026,10,5),count:1}],
+ });
+ expect(incidentObservationSeries([]).points).toEqual([]);
+});
+
+it('groups distant observations by month or year',()=>{
+ const row=(year,month)=>({observed_at:new Date(year,month,15,12).toISOString()});
+ const first=row(2023,10);
+ expect(incidentObservationSeries([first,row(2024,0)]).points.map(({count})=>count)).toEqual([1,0,1]);
+ expect(incidentObservationSeries([first,row(2026,10)])).toEqual({
+  unit:'year',
+  points:[{date:Date.UTC(2023,0),count:1},{date:Date.UTC(2024,0),count:0},{date:Date.UTC(2025,0),count:0},{date:Date.UTC(2026,0),count:1}],
+ });
+});
 it('loads every cursor page and fails closed on an identity change',async()=>{
  const first={id:'1',title:'A'},second={id:'2',title:'B'};
  const request=vi.fn().mockResolvedValueOnce({ok:true,json:async()=>({user_id:'u',items:[first],next:{before:'time',before_id:'1'}})}).mockResolvedValueOnce({ok:true,json:async()=>({user_id:'u',items:[second],next:null})});
