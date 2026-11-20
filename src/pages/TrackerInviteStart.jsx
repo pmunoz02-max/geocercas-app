@@ -229,7 +229,7 @@ export default function TrackerInviteStart() {
     }
 
     console.log("[tracker-invite] params", {
-      inviteToken: latest.inviteToken || inviteToken || null,
+      hasInviteToken: !!(latest.inviteToken || inviteToken),
       orgId: latest.orgId || orgId || null,
     });
   }, [inviteToken, orgId]);
@@ -311,7 +311,6 @@ export default function TrackerInviteStart() {
         hasRuntimeToken: !!runtimeToken,
         hasTrackerUserId: !!resolvedTrackerUserId,
         hasOrgId: !!persistedOrgId,
-        data,
       });
       throw new Error("accept_response_missing_runtime_fields");
     }
@@ -443,7 +442,7 @@ export default function TrackerInviteStart() {
       redirectToTrackerGps(session);
       return session;
     } catch (error) {
-      console.error("[tracker-invite] claim pairing code failed", error);
+      console.error("[tracker-invite] claim pairing code failed");
       setStatus("claim_pairing_failed");
       setPairingClaimError(error?.message || "claim_pairing_code_failed");
       return null;
@@ -477,7 +476,7 @@ export default function TrackerInviteStart() {
 
       return true;
     } catch (error) {
-      console.warn("[tracker-invite] Android bridge failed; continuing in web GPS page", error);
+      console.warn("[tracker-invite] Android bridge failed; continuing in web GPS page");
       return false;
     }
   }
@@ -489,7 +488,10 @@ export default function TrackerInviteStart() {
     setStorageItem("trackerAcceptedOrgId", session.orgId);
     setStorageItem("trackerAcceptedRedirect", url);
 
-    console.log("[tracker-invite] redirecting to tracker gps", url);
+    console.log("[tracker-invite] redirecting to tracker gps", {
+      destination: "/tracker-gps",
+      hasRuntimeToken: !!session.runtimeToken,
+    });
     window.location.replace(url);
   }
 
@@ -512,7 +514,7 @@ export default function TrackerInviteStart() {
       redirectToTrackerGps(session);
       return session;
     } catch (error) {
-      console.error("[tracker-invite] accept failed", error);
+      console.error("[tracker-invite] accept failed");
       setStatus("accept_failed");
       setAcceptError(error?.message || "accept_tracker_invite_failed");
       return null;
@@ -563,7 +565,7 @@ export default function TrackerInviteStart() {
 
       setStatus("geo_permission_step");
     } catch (error) {
-      console.error("[tracker-invite] permission step failed", error);
+      console.error("[tracker-invite] permission step failed");
       setStatus("geo_permission_step");
     }
   }
@@ -584,7 +586,7 @@ export default function TrackerInviteStart() {
 
       await acceptInviteAndContinue();
     } catch (error) {
-      console.error("[tracker-invite] handleGrantLocation failed", error);
+      console.error("[tracker-invite] handleGrantLocation failed");
       setStatus("geo_permission_required");
       setAcceptError(t("tracker.invite.errors.locationUnavailableShort"));
     } finally {
