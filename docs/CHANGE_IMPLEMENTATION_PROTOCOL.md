@@ -173,10 +173,13 @@ Bloque actual:
 
 ```ts
 // código existente
+```
 
 Bloque nuevo:
 
+```ts
 // código actualizado
+```
 
 Objetivo:
 
@@ -278,13 +281,13 @@ Cada tarea importante debe cerrar con un informe técnico, incluso cuando el res
 
 Cuando esté autorizada la escritura documental:
 
-- Usar la plantilla \`docs/templates/TECHNICAL_CHANGE_RECORD.md\`.
-- Registrar cada tarea coherente en \`docs/changes/AAAA-MM-DD-tema-entorno.md\` (usar \`multientorno\` si abarca varios entornos).
-- Identificar la tarea con un ID estable \`GEO-AAAA-MM-DD-tema-breve\` desde su apertura. Buscar primero ese ID para actualizar el registro existente y no duplicarlo.
+- Usar la plantilla `docs/templates/TECHNICAL_CHANGE_RECORD.md`.
+- Registrar cada tarea coherente en `docs/changes/AAAA-MM-DD-tema-entorno.md` (usar `multientorno` si abarca varios entornos).
+- Identificar la tarea con un ID estable `GEO-AAAA-MM-DD-tema-breve` desde su apertura. Buscar primero ese ID para actualizar el registro existente y no duplicarlo.
 - Conservar la ruta del registro en las continuaciones, nuevas pruebas o publicaciones de la misma tarea.
 - Si un documento específico ya documenta esa tarea, completarlo y enlazarlo en vez de crear documentación duplicada.
-- Actualizar \`docs/README_CURRENT.md\` únicamente cuando cambie un estado vigente, una restricción operativa o el próximo paso necesario.
-- Consultar \`docs/README.md\`, la nota maestra y solo los documentos canónicos directamente relacionados; no reprocesar todo el histórico.
+- Actualizar `docs/README_CURRENT.md` únicamente cuando cambie un estado vigente, una restricción operativa o el próximo paso necesario.
+- Consultar `docs/README.md`, la nota maestra y solo los documentos canónicos directamente relacionados; no reprocesar todo el histórico.
 
 Registrar separadamente implementación, pruebas y publicación, para Local, Preview y Producción:
 
@@ -296,7 +299,7 @@ Registrar separadamente implementación, pruebas y publicación, para Local, Pre
 
 Cada estado debe acompañarse de evidencia verificable o de la razón por la que no se dispone de ella. Un commit no acredita publicación; una prueba en Preview no valida Producción; una publicación no acredita pruebas superadas. Si Git no puede consultarse con fiabilidad, indicarlo sin inventar revisión o estado.
 
-\`scripts/docs-draft.mjs\` puede servir para identificar archivos e impactos; no sustituye el registro completo. En tareas de solo lectura o sin autorización para escribir, proporcionar el borrador en el chat e indicar la ruta sugerida. El registro documental no autoriza por sí mismo commits, push, migraciones, deployments ni promociones. No incluir secretos ni datos personales.
+`scripts/docs-draft.mjs` puede servir para identificar archivos e impactos; no sustituye el registro completo. En tareas de solo lectura o sin autorización para escribir, proporcionar el borrador en el chat e indicar la ruta sugerida. El registro documental no autoriza por sí mismo commits, push, migraciones, deployments ni promociones. No incluir secretos ni datos personales.
 
 Fase 10 — Preparar Promoción a Producción
 
