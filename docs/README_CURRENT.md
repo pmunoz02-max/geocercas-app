@@ -8,7 +8,7 @@ Este bloque resume exclusivamente estados vigentes confirmados con evidencia ide
 |---|---|---|---|---|---|---|
 | *Sin estados nuevos verificados en esta actualización documental* | No aplica | No aplica | No aplica | No aplica | Completar al cerrar una tarea con evidencia | No aplica |
 
-**Mantenimiento:** agregar o actualizar únicamente las filas de la tarea y entorno afectados, con su ID estable y enlace al registro específico en \`docs/changes/\` o al documento canónico ya existente. Mantener por separado la evidencia de implementación, pruebas y publicación. No transferir resultados de Preview a Producción ni convertir afirmaciones históricas en estado confirmado sin verificarlas.
+**Mantenimiento:** agregar o actualizar únicamente las filas de la tarea y entorno afectados, con su ID estable y enlace al registro específico en `docs/changes/` o al documento canónico ya existente. Mantener por separado la evidencia de implementación, pruebas y publicación. No transferir resultados de Preview a Producción ni convertir afirmaciones históricas en estado confirmado sin verificarlas.
 
 ## Notas históricas existentes (contenido conservado)
 
